@@ -2,7 +2,7 @@
 //!
 //! This is an internal beta, not a generally supported or statistically validated
 //! production sampler. It is limited to deterministic, smooth densities in
-//! unconstrained `f64` coordinates and performs no adaptation. Student-t and
+//! unconstrained `f64` coordinates. Adaptation is opt-in. Student-t and
 //! other heavy-tailed targets, constrained transforms, hierarchical targets,
 //! and real models have not been validated. Only this facade is public; the
 //! numerical implementation remains private.
@@ -11,8 +11,9 @@
 //!
 //! Revision [`ALGORITHM_REVISION`] freezes step size `0.6`, minimum micro-step
 //! count `1`, at most `2` refinement levels, local error threshold `1.0`, and
-//! maximum tree depth `3`. There is no warmup adaptation: `discarded` merely
-//! labels initial fixed-kernel transitions whose positions are omitted.
+//! maximum tree depth `3`. By default, `discarded` merely labels initial
+//! fixed-kernel transitions. [`WarmupConfig`] opts those transitions into
+//! step-size and diagonal-mass adaptation.
 //! Maximum-depth stops are valid completed transitions, but frequent stops
 //! indicate a truncated trajectory. Use
 //! [`RunConfig::with_maximum_depth_stop_limit`] to turn that health signal into
@@ -120,7 +121,8 @@ use rayon::prelude::*;
 
 use crate::kernel::{
     Direction, FixedTuning, Rejection, SpanStop, TransitionInput, TransitionRng, TransitionStop,
-    TransitionTuning, TransitionWorkTelemetry, Uniform01, transition_w_with_telemetry,
+    TransitionTuning, TransitionWorkTelemetry, Uniform01, transition_w_traced_with_telemetry,
+    transition_w_with_telemetry,
 };
 use crate::types::ValidationError;
 
@@ -133,15 +135,198 @@ use crate::types::ValidationError;
 /// algorithms across dependency updates.
 pub const ALGORITHM_REVISION: &str = "walnutpie-fixed-diagonal-tau0.6-m1-r2-e1-d3-v2";
 
-const STEP_SIZE: f64 = 0.6;
-const MAX_REFINEMENT_LEVELS: usize = 2;
-const MIN_MICRO_STEPS: usize = 1;
-const MAX_ERROR: f64 = 1.0;
-const MAX_DEPTH: usize = 3;
-const MAX_LEAVES_PER_TRANSITION: usize = (1 << MAX_DEPTH) - 1;
-// Initial call plus a deliberately conservative bound for all forward/reverse
-// calls made by the frozen two-level leaf.
-const MAX_TARGET_CALLS_PER_TRANSITION: usize = 1 + MAX_LEAVES_PER_TRANSITION * 16;
+/// Qualified default micro-step size.
+pub const DEFAULT_STEP_SIZE: f64 = 0.6;
+/// Default maximum number of refinement levels.
+pub const DEFAULT_MAX_REFINEMENT_LEVELS: usize = 2;
+/// Default number of micro steps at the coarsest level.
+pub const DEFAULT_MIN_MICRO_STEPS: usize = 1;
+/// Default inclusive Hamiltonian-error tolerance.
+pub const DEFAULT_MAX_ERROR: f64 = 1.0;
+/// Default maximum transition-tree depth.
+pub const DEFAULT_MAX_DEPTH: usize = 3;
+
+const TARGET_CALLS_PER_MAX_MICRO_STEP: usize = 8;
+
+/// Validated fixed-kernel tuning.
+///
+/// [`KernelTuning::default`] preserves the qualified tuning associated with
+/// [`ALGORITHM_REVISION`] and therefore preserves historical replay behavior.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KernelTuning {
+    step_size: f64,
+    max_depth: usize,
+    min_micro_steps: usize,
+    max_refinement_levels: usize,
+    max_error: f64,
+}
+
+// All floating-point fields are finite by construction.
+impl Eq for KernelTuning {}
+
+impl Default for KernelTuning {
+    fn default() -> Self {
+        Self {
+            step_size: DEFAULT_STEP_SIZE,
+            max_depth: DEFAULT_MAX_DEPTH,
+            min_micro_steps: DEFAULT_MIN_MICRO_STEPS,
+            max_refinement_levels: DEFAULT_MAX_REFINEMENT_LEVELS,
+            max_error: DEFAULT_MAX_ERROR,
+        }
+    }
+}
+
+impl KernelTuning {
+    pub fn new(
+        step_size: f64,
+        max_depth: NonZeroUsize,
+        min_micro_steps: NonZeroUsize,
+        max_refinement_levels: NonZeroUsize,
+        max_error: f64,
+    ) -> Result<Self, Error> {
+        if !step_size.is_finite() || step_size <= 0.0 {
+            return Err(Error::configuration(
+                "kernel step size must be finite and positive",
+            ));
+        }
+        if !max_error.is_finite() || max_error <= 0.0 {
+            return Err(Error::configuration(
+                "kernel maximum error must be finite and positive",
+            ));
+        }
+        let tuning = Self {
+            step_size,
+            max_depth: max_depth.get(),
+            min_micro_steps: min_micro_steps.get(),
+            max_refinement_levels: max_refinement_levels.get(),
+            max_error,
+        };
+        tuning.max_leaves_per_transition()?;
+        tuning.maximum_micro_steps()?;
+        tuning.max_target_calls_per_transition()?;
+        Ok(tuning)
+    }
+
+    pub fn step_size(&self) -> f64 {
+        self.step_size
+    }
+    pub fn max_depth(&self) -> usize {
+        self.max_depth
+    }
+    pub fn min_micro_steps(&self) -> usize {
+        self.min_micro_steps
+    }
+    pub fn max_refinement_levels(&self) -> usize {
+        self.max_refinement_levels
+    }
+    pub fn max_error(&self) -> f64 {
+        self.max_error
+    }
+
+    fn maximum_micro_steps(&self) -> Result<usize, Error> {
+        let shift = u32::try_from(self.max_refinement_levels - 1)
+            .map_err(|_| Error::configuration("kernel refinement level count is too large"))?;
+        let multiplier = 1usize
+            .checked_shl(shift)
+            .ok_or_else(|| Error::configuration("kernel micro-step count overflows usize"))?;
+        self.min_micro_steps
+            .checked_mul(multiplier)
+            .ok_or_else(|| Error::configuration("kernel micro-step count overflows usize"))
+    }
+
+    fn max_leaves_per_transition(&self) -> Result<usize, Error> {
+        let shift = u32::try_from(self.max_depth)
+            .map_err(|_| Error::configuration("kernel maximum depth is too large"))?;
+        1usize
+            .checked_shl(shift)
+            .and_then(|leaves| leaves.checked_sub(1))
+            .ok_or_else(|| Error::configuration("kernel maximum depth overflows leaf count"))
+    }
+
+    fn max_target_calls_per_transition(&self) -> Result<usize, Error> {
+        let calls_per_leaf = self
+            .maximum_micro_steps()?
+            .checked_mul(TARGET_CALLS_PER_MAX_MICRO_STEP)
+            .ok_or_else(Error::overflow)?;
+        self.max_leaves_per_transition()?
+            .checked_mul(calls_per_leaf)
+            .and_then(|calls| calls.checked_add(1))
+            .ok_or_else(Error::overflow)
+    }
+
+    fn transition_tuning(&self) -> TransitionTuning {
+        TransitionTuning {
+            leaf: FixedTuning {
+                step_size: self.step_size,
+                max_refinement_levels: self.max_refinement_levels,
+                min_micro_steps: self.min_micro_steps,
+                max_error: self.max_error,
+            },
+            max_depth: self.max_depth,
+        }
+    }
+}
+const MIN_ADAPTATION_VARIANCE: f64 = 1.0e-12;
+
+/// Opt-in adaptation performed during the discarded transitions.
+///
+/// Step size uses Nesterov dual averaging with the standard Hoffman--Gelman
+/// constants. The diagonal mass is estimated by Welford's algorithm and
+/// regularized toward unit variance and inverted to obtain momentum covariance
+/// (the API's mass convention). Adaptation ends before the first retained
+/// transition, so retained draws use one fixed kernel.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WarmupConfig {
+    target_acceptance: f64,
+    adapt_step_size: bool,
+    adapt_mass: bool,
+}
+
+impl Default for WarmupConfig {
+    fn default() -> Self {
+        Self {
+            target_acceptance: 0.8,
+            adapt_step_size: true,
+            adapt_mass: true,
+        }
+    }
+}
+
+impl WarmupConfig {
+    pub fn new(target_acceptance: f64) -> Result<Self, Error> {
+        if !target_acceptance.is_finite() || target_acceptance <= 0.0 || target_acceptance >= 1.0 {
+            return Err(Error::configuration(
+                "warmup target acceptance must be finite and strictly between zero and one",
+            ));
+        }
+        Ok(Self {
+            target_acceptance,
+            ..Self::default()
+        })
+    }
+
+    pub fn with_step_size_adaptation(mut self, enabled: bool) -> Self {
+        self.adapt_step_size = enabled;
+        self
+    }
+
+    pub fn with_mass_adaptation(mut self, enabled: bool) -> Self {
+        self.adapt_mass = enabled;
+        self
+    }
+
+    pub fn target_acceptance(&self) -> f64 {
+        self.target_acceptance
+    }
+
+    pub fn adapts_step_size(&self) -> bool {
+        self.adapt_step_size
+    }
+
+    pub fn adapts_mass(&self) -> bool {
+        self.adapt_mass
+    }
+}
 
 /// Error returned by a user target.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -348,13 +533,15 @@ impl ResourceLimits {
 }
 
 /// Fixed-count run configuration. Discarded transitions do not adapt anything.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RunConfig {
     discarded: usize,
     retained: usize,
     seed: u64,
     max_maximum_depth_stops: usize,
     limits: ResourceLimits,
+    tuning: KernelTuning,
+    warmup: Option<WarmupConfig>,
 }
 
 impl RunConfig {
@@ -365,11 +552,25 @@ impl RunConfig {
             seed,
             max_maximum_depth_stops: usize::MAX,
             limits: ResourceLimits::default(),
+            tuning: KernelTuning::default(),
+            warmup: None,
         }
     }
 
     pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
         self.limits = limits;
+        self
+    }
+
+    /// Use validated fixed-kernel tuning for this run.
+    pub fn with_tuning(mut self, tuning: KernelTuning) -> Self {
+        self.tuning = tuning;
+        self
+    }
+
+    /// Enable adaptation during `discarded` transitions.
+    pub fn with_warmup(mut self, warmup: WarmupConfig) -> Self {
+        self.warmup = Some(warmup);
         self
     }
 
@@ -393,6 +594,12 @@ impl RunConfig {
     }
     pub fn limits(&self) -> &ResourceLimits {
         &self.limits
+    }
+    pub fn tuning(&self) -> &KernelTuning {
+        &self.tuning
+    }
+    pub fn warmup(&self) -> Option<&WarmupConfig> {
+        self.warmup.as_ref()
     }
 }
 
@@ -599,6 +806,10 @@ pub struct RunMetadata {
     initial_position: Vec<f64>,
     thread_count: usize,
     mass_diagonal: Vec<f64>,
+    initial_mass_diagonal: Vec<f64>,
+    warmup: Option<WarmupConfig>,
+    tuning: KernelTuning,
+    initial_tuning: KernelTuning,
     limits: ResourceLimits,
 }
 
@@ -656,6 +867,18 @@ impl RunMetadata {
     }
     pub fn mass_diagonal(&self) -> &[f64] {
         &self.mass_diagonal
+    }
+    pub fn initial_mass_diagonal(&self) -> &[f64] {
+        &self.initial_mass_diagonal
+    }
+    pub fn warmup(&self) -> Option<&WarmupConfig> {
+        self.warmup.as_ref()
+    }
+    pub fn tuning(&self) -> &KernelTuning {
+        &self.tuning
+    }
+    pub fn initial_tuning(&self) -> &KernelTuning {
+        &self.initial_tuning
     }
     pub fn limits(&self) -> &ResourceLimits {
         &self.limits
@@ -886,15 +1109,88 @@ impl TransitionRng for KernelRng<'_, '_> {
     }
 }
 
+#[cfg(test)]
 fn tuning() -> TransitionTuning {
-    TransitionTuning {
-        leaf: FixedTuning {
-            step_size: STEP_SIZE,
-            max_refinement_levels: MAX_REFINEMENT_LEVELS,
-            min_micro_steps: MIN_MICRO_STEPS,
-            max_error: MAX_ERROR,
-        },
-        max_depth: MAX_DEPTH,
+    KernelTuning::default().transition_tuning()
+}
+
+struct DualAveraging {
+    target: f64,
+    mu: f64,
+    log_step: f64,
+    log_step_bar: f64,
+    h_bar: f64,
+    iteration: usize,
+}
+
+impl DualAveraging {
+    fn new(step: f64, target: f64) -> Self {
+        Self {
+            target,
+            mu: (10.0 * step).ln(),
+            log_step: step.ln(),
+            log_step_bar: step.ln(),
+            h_bar: 0.0,
+            iteration: 0,
+        }
+    }
+
+    fn update(&mut self, acceptance: f64) -> f64 {
+        self.iteration += 1;
+        let t = self.iteration as f64;
+        let eta = 1.0 / (t + 10.0);
+        self.h_bar = (1.0 - eta) * self.h_bar + eta * (self.target - acceptance);
+        self.log_step = self.mu - t.sqrt() / 0.05 * self.h_bar;
+        let weight = t.powf(-0.75);
+        self.log_step_bar = weight * self.log_step + (1.0 - weight) * self.log_step_bar;
+        self.log_step.exp().clamp(f64::MIN_POSITIVE, 1.0e6)
+    }
+
+    fn final_step(&self) -> f64 {
+        self.log_step_bar.exp().clamp(f64::MIN_POSITIVE, 1.0e6)
+    }
+}
+
+struct DiagonalVariance {
+    count: usize,
+    mean: Vec<f64>,
+    m2: Vec<f64>,
+}
+
+impl DiagonalVariance {
+    fn new(dimension: usize) -> Self {
+        Self {
+            count: 0,
+            mean: vec![0.0; dimension],
+            m2: vec![0.0; dimension],
+        }
+    }
+
+    fn update(&mut self, position: &[f64]) {
+        self.count += 1;
+        let n = self.count as f64;
+        for ((mean, m2), value) in self.mean.iter_mut().zip(&mut self.m2).zip(position) {
+            let delta = value - *mean;
+            *mean += delta / n;
+            *m2 += delta * (value - *mean);
+        }
+    }
+
+    fn regularized_mass(&self) -> Option<Vec<f64>> {
+        if self.count < 2 {
+            return None;
+        }
+        let n = self.count as f64;
+        Some(
+            self.m2
+                .iter()
+                .map(|m2| {
+                    ((n / (n + 5.0)) * (m2 / (n - 1.0)) + 5.0 / (n + 5.0))
+                        .max(MIN_ADAPTATION_VARIANCE)
+                        .recip()
+                })
+                .collect(),
+        )
     }
 }
 
@@ -937,6 +1233,11 @@ where
             "target and diagonal mass dimensions differ",
         ));
     }
+    if config.warmup.is_some() && config.discarded == 0 {
+        return Err(Error::configuration(
+            "warmup requires at least one discarded transition",
+        ));
+    }
     if chain_count == 0 || chain_count > config.limits.max_chains {
         return Err(Error::resource("chain count exceeds its resource limit"));
     }
@@ -961,7 +1262,7 @@ where
         ));
     }
     let evaluations = total_transitions
-        .checked_mul(MAX_TARGET_CALLS_PER_TRANSITION)
+        .checked_mul(config.tuning.max_target_calls_per_transition()?)
         .ok_or_else(Error::overflow)?;
     if evaluations > config.limits.max_target_evaluations {
         return Err(Error::resource(
@@ -979,7 +1280,7 @@ where
         .ok_or_else(Error::overflow)?;
     let metadata_vector_bytes = chain_count
         .checked_mul(dimension)
-        .and_then(|value| value.checked_mul(size_of::<f64>() * 2))
+        .and_then(|value| value.checked_mul(size_of::<f64>() * 3))
         .ok_or_else(Error::overflow)?;
     let result_bytes = sample_bytes
         .checked_add(diagnostics_bytes)
@@ -1041,7 +1342,18 @@ fn run_chain<T: Target>(
         .discarded
         .checked_add(config.retained)
         .ok_or_else(Error::overflow)?;
-    let inverse_mass = inverse_mass(mass)?;
+    let initial_mass = mass.diagonal.clone();
+    let mut active_mass = mass.clone();
+    let mut inverse_mass = inverse_mass(&active_mass)?;
+    let mut active_tuning = config.tuning;
+    let mut dual_averaging = config
+        .warmup
+        .as_ref()
+        .filter(|warmup| warmup.adapt_step_size)
+        .map(|warmup| DualAveraging::new(active_tuning.step_size, warmup.target_acceptance));
+    let mut variance = DiagonalVariance::new(dimension);
+    let mass_window_start = config.discarded / 5;
+    let mass_window_end = config.discarded.saturating_sub(config.discarded / 5);
     let sample_len = config
         .retained
         .checked_mul(dimension)
@@ -1067,7 +1379,7 @@ fn run_chain<T: Target>(
         momentum
             .try_reserve_exact(dimension)
             .map_err(|_| Error::resource("momentum allocation failed"))?;
-        for (mass_value, inverse_mass_value) in mass.diagonal().iter().zip(&inverse_mass) {
+        for (mass_value, inverse_mass_value) in active_mass.diagonal().iter().zip(&inverse_mass) {
             let normal: f64 = StandardNormal.sample(&mut rng);
             let mass_scale = mass_value.sqrt();
             if !normal.is_finite()
@@ -1138,22 +1450,53 @@ fn run_chain<T: Target>(
             }
         };
         let mut rng_stop = None;
-        let result = {
+        let (result, work, acceptance) = {
             let mut kernel_rng = KernelRng {
                 rng: &mut rng,
                 control,
                 stopped: &mut rng_stop,
             };
-            transition_w_with_telemetry(
-                &mut kernel_rng,
-                TransitionInput {
-                    theta: position,
-                    rho: momentum,
-                },
-                &inverse_mass,
-                tuning(),
-                &mut eval,
-            )
+            let input = TransitionInput {
+                theta: position,
+                rho: momentum,
+            };
+            if config.warmup.is_some() && transition_index < config.discarded {
+                let traced = transition_w_traced_with_telemetry(
+                    &mut kernel_rng,
+                    input,
+                    &inverse_mass,
+                    active_tuning.transition_tuning(),
+                    &mut eval,
+                );
+                match traced {
+                    Ok(output) => {
+                        let (sum, count) = output
+                            .events
+                            .iter()
+                            .filter_map(|event| event.adaptation_value)
+                            .fold((0.0, 0usize), |(sum, count), value| {
+                                (sum + value, count + 1)
+                            });
+                        (
+                            Ok(output.result),
+                            Some(output.work),
+                            (count != 0).then_some(sum / count as f64),
+                        )
+                    }
+                    Err(error) => (Err(error), None, None),
+                }
+            } else {
+                match transition_w_with_telemetry(
+                    &mut kernel_rng,
+                    input,
+                    &inverse_mass,
+                    active_tuning.transition_tuning(),
+                    &mut eval,
+                ) {
+                    Ok(output) => (Ok(output.result), Some(output.work), None),
+                    Err(error) => (Err(error), None, None),
+                }
+            }
         };
         if control_failure.is_none()
             && rng_stop.is_none()
@@ -1187,8 +1530,10 @@ fn run_chain<T: Target>(
         let result = result
             .map_err(Error::internal)
             .map_err(|error| error.at_transition(transition_index))?;
-        position = result.result.selected.theta;
-        let internal = result.result.diagnostics;
+        let work =
+            work.ok_or_else(|| Error::new(ErrorKind::Internal, "missing transition work"))?;
+        position = result.selected.theta;
+        let internal = result.diagnostics;
         let public = TransitionDiagnostics {
             depth: internal.depth,
             stop: map_stop(internal.stop),
@@ -1204,10 +1549,10 @@ fn run_chain<T: Target>(
             samples.extend_from_slice(&position);
             &mut telemetry.retained
         };
-        partition.add_transition(dimension, &result.work, internal.uniform_draws)?;
+        partition.add_transition(dimension, &work, internal.uniform_draws)?;
         telemetry
             .total
-            .add_transition(dimension, &result.work, internal.uniform_draws)?;
+            .add_transition(dimension, &work, internal.uniform_draws)?;
         if telemetry.total.maximum_depth_stops > config.max_maximum_depth_stops {
             return Err(Error::new(
                 ErrorKind::Unhealthy,
@@ -1216,6 +1561,40 @@ fn run_chain<T: Target>(
             .at_transition(transition_index));
         }
         diagnostics.push(public);
+
+        if transition_index < config.discarded
+            && let Some(warmup) = &config.warmup
+        {
+            if warmup.adapt_mass
+                && transition_index >= mass_window_start
+                && transition_index < mass_window_end
+            {
+                variance.update(&position);
+            }
+            if warmup.adapt_step_size
+                && let (Some(dual), Some(acceptance)) = (&mut dual_averaging, acceptance)
+            {
+                active_tuning.step_size = dual.update(acceptance);
+            }
+            if warmup.adapt_mass
+                && transition_index + 1 == mass_window_end
+                && let Some(diagonal) = variance.regularized_mass()
+            {
+                active_mass = DiagonalMass::from_diagonal(diagonal)?;
+                inverse_mass = self::inverse_mass(&active_mass)?;
+                if warmup.adapt_step_size {
+                    dual_averaging = Some(DualAveraging::new(
+                        active_tuning.step_size,
+                        warmup.target_acceptance,
+                    ));
+                }
+            }
+            if transition_index + 1 == config.discarded
+                && let Some(dual) = &dual_averaging
+            {
+                active_tuning.step_size = dual.final_step();
+            }
+        }
     }
     control.check().map_err(control_error)?;
 
@@ -1236,14 +1615,18 @@ fn run_chain<T: Target>(
             discarded: config.discarded,
             retained: config.retained,
             maximum_depth_stop_limit: config.max_maximum_depth_stops,
-            step_size: STEP_SIZE,
-            min_micro_steps: MIN_MICRO_STEPS,
-            max_refinement_levels: MAX_REFINEMENT_LEVELS,
-            max_error: MAX_ERROR,
-            max_depth: MAX_DEPTH,
+            step_size: active_tuning.step_size,
+            min_micro_steps: active_tuning.min_micro_steps,
+            max_refinement_levels: active_tuning.max_refinement_levels,
+            max_error: active_tuning.max_error,
+            max_depth: active_tuning.max_depth,
             initial_position: initial_position.to_vec(),
             thread_count,
-            mass_diagonal: mass.diagonal.clone(),
+            mass_diagonal: active_mass.diagonal.clone(),
+            initial_mass_diagonal: initial_mass,
+            warmup: config.warmup.clone(),
+            tuning: active_tuning,
+            initial_tuning: config.tuning,
             limits: config.limits.clone(),
         },
     })
@@ -1712,6 +2095,8 @@ mod tests {
             seed: 0,
             max_maximum_depth_stops: usize::MAX,
             limits: ResourceLimits::default(),
+            tuning: KernelTuning::default(),
+            warmup: None,
         };
         let mass = DiagonalMass::identity(NonZeroUsize::new(1).unwrap());
         assert_eq!(
@@ -1757,7 +2142,7 @@ mod tests {
         let retained = 1;
         let result_bytes = retained * 2 * size_of::<f64>()
             + retained * size_of::<TransitionDiagnostics>()
-            + 2 * 2 * size_of::<f64>()
+            + 2 * 3 * size_of::<f64>()
             + size_of::<ChainOutput>()
             + size_of::<MultiChainOutput>()
             + size_of::<RunTelemetry>();
@@ -2027,11 +2412,14 @@ mod tests {
             metadata.maximum_depth_stop_limit(),
             run.maximum_depth_stop_limit()
         );
-        assert_eq!(metadata.qualified_step_size(), STEP_SIZE);
-        assert_eq!(metadata.min_micro_steps(), MIN_MICRO_STEPS);
-        assert_eq!(metadata.max_refinement_levels(), MAX_REFINEMENT_LEVELS);
-        assert_eq!(metadata.max_error(), MAX_ERROR);
-        assert_eq!(metadata.max_depth(), MAX_DEPTH);
+        assert_eq!(metadata.qualified_step_size(), DEFAULT_STEP_SIZE);
+        assert_eq!(metadata.min_micro_steps(), DEFAULT_MIN_MICRO_STEPS);
+        assert_eq!(
+            metadata.max_refinement_levels(),
+            DEFAULT_MAX_REFINEMENT_LEVELS
+        );
+        assert_eq!(metadata.max_error(), DEFAULT_MAX_ERROR);
+        assert_eq!(metadata.max_depth(), DEFAULT_MAX_DEPTH);
         assert_eq!(metadata.initial_position(), &[0.1, -0.2]);
         assert_eq!(metadata.thread_count(), 1);
         assert_eq!(metadata.mass_diagonal(), mass.diagonal());
@@ -2045,6 +2433,83 @@ mod tests {
         assert_eq!(
             metadata.seed_derivation(),
             "splitmix64(base_seed + chain_index)"
+        );
+    }
+
+    #[test]
+    fn opt_in_warmup_is_deterministic_and_preserves_provenance() {
+        let target = Gaussian(2);
+        let mass = DiagonalMass::from_diagonal(vec![0.5, 2.0]).unwrap();
+        let run = RunConfig::new(80, NonZeroUsize::new(20).unwrap(), 0xada7)
+            .with_warmup(WarmupConfig::default());
+        let first = sample(&target, &[0.2, -0.3], &mass, &run).unwrap();
+        let second = sample(&target, &[0.2, -0.3], &mass, &run).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.metadata().initial_mass_diagonal(), mass.diagonal());
+        assert_eq!(first.metadata().warmup(), run.warmup());
+        assert!(
+            first.metadata().qualified_step_size().is_finite()
+                && first.metadata().qualified_step_size() > 0.0
+        );
+        assert_ne!(first.metadata().mass_diagonal(), mass.diagonal());
+    }
+
+    #[test]
+    fn diagonal_warmup_tracks_gaussian_scales() {
+        struct ScaledGaussian([f64; 2]);
+        impl Target for ScaledGaussian {
+            fn dimension(&self) -> usize {
+                2
+            }
+            fn log_density_gradient(
+                &self,
+                position: &[f64],
+                gradient: &mut [f64],
+            ) -> Result<f64, TargetError> {
+                let mut log_density = 0.0;
+                for ((value, gradient), scale) in position.iter().zip(gradient).zip(self.0) {
+                    let variance = scale * scale;
+                    *gradient = -*value / variance;
+                    log_density -= 0.5 * value * value / variance;
+                }
+                Ok(log_density)
+            }
+        }
+
+        let target = ScaledGaussian([0.5, 2.0]);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        let run = RunConfig::new(600, NonZeroUsize::new(50).unwrap(), 991)
+            .with_warmup(WarmupConfig::default());
+        let output = sample(&target, &[0.1, -0.1], &mass, &run).unwrap();
+        let adapted = output.metadata().mass_diagonal();
+        assert!(adapted[0] > adapted[1]);
+        assert!((adapted[0] - 4.0).abs() < 2.5);
+        assert!((adapted[1] - 0.25).abs() < 0.25);
+    }
+
+    #[test]
+    fn warmup_validation_and_fixed_mode_compatibility_are_explicit() {
+        assert!(WarmupConfig::new(0.0).is_err());
+        assert!(WarmupConfig::new(1.0).is_err());
+        let target = Gaussian(1);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(1).unwrap());
+        let no_discard = RunConfig::new(0, NonZeroUsize::new(1).unwrap(), 1)
+            .with_warmup(WarmupConfig::default());
+        assert_eq!(
+            sample(&target, &[0.0], &mass, &no_discard)
+                .unwrap_err()
+                .kind(),
+            ErrorKind::Configuration
+        );
+
+        let legacy = config(44);
+        let output = sample(&target, &[0.0], &mass, &legacy).unwrap();
+        assert!(output.metadata().warmup().is_none());
+        assert_eq!(output.metadata().initial_mass_diagonal(), mass.diagonal());
+        assert_eq!(output.metadata().mass_diagonal(), mass.diagonal());
+        assert_eq!(
+            output.metadata().qualified_step_size(),
+            legacy.tuning().step_size()
         );
     }
 }
