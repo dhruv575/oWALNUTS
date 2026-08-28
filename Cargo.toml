@@ -1,0 +1,42 @@
+[package]
+name = "owalnuts"
+version = "0.1.0-beta.1"
+edition = "2024"
+rust-version = "1.88"
+description = "Internal-beta fixed-diagonal oWALNUTS sampling kernel"
+license = "MIT"
+readme = "README.md"
+documentation = "https://docs.rs/owalnuts"
+authors = ["oWALNUTS contributors"]
+keywords = ["mcmc", "monte-carlo", "statistics", "sampling"]
+categories = ["algorithms", "mathematics", "science"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/oracle/**",
+    "/examples/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/SECURITY.md",
+    "/LICENSE",
+    "/NOTICE",
+    "/THIRD_PARTY.md",
+]
+
+[lib]
+name = "owalnuts"
+path = "src/lib.rs"
+
+[dependencies]
+rand = { version = "0.9", features = ["small_rng"] }
+rand_distr = "0.5"
+rayon = "1.10"
+
+[[example]]
+name = "gaussian"
+path = "examples/gaussian.rs"
+
+[dev-dependencies]
+serde_json = "1"
