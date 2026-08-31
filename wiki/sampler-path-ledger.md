@@ -361,3 +361,19 @@ On 2026-08-30, before redesign edits:
   compatibility.
 * Shared reductions and error selection are ordered by chain index.
 * Preflight and telemetry do not consume target callbacks or RNG.
+
+## 2026-08-31 paper adaptation v2/v3 milestone (WP9)
+
+* `PaperAdaptationConfig` gained `PaperStepStatistic` and
+  `PaperRestartPolicy`; `PaperAdaptationUpdate` gained `step_statistic`,
+  `dual_averaging_restarted`, `transitions_without_statistic`.
+* `v2`: unrefined fraction over built leaves only (new kernel
+  `refinement_level_built` histogram), no step update from leaf-less
+  transitions, paper-mode step bounded to `PAPER_STEP_RELATIVE_BOUND` = 1e3 ×
+  the initial step (`cfd813b`).
+* `v3`: continuing dual averaging through δ installations is the default
+  (`8cadd94`), selected by `STUDIES/paper_funnel_adaptive_v2` (ledger entry
+  WP9-PAPER-H-RULE-STABILISATION-V2).
+* Validation: 103 lib + 43 facade tests, strict all-target/all-feature Clippy,
+  `fmt --check`, `-D warnings` rustdoc; acceptance-driven fingerprints
+  unchanged.
