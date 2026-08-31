@@ -219,3 +219,82 @@ useful subset.
    published as a crate with the official `bridgestan` crate as an optional
    backend where libclang exists.
 3. Track `rustup component add enzyme`; re-run `probe/` when it appears.
+
+## Python callable targets (WP15b)
+
+Package: `integrations/python` — `owalnuts` (PyO3 0.28 + maturin, editable
+build verified on Python 3.11/Windows, GNU 1.88 toolchain,
+`pyo3/generate-import-lib`). Kernel v10, extension `0.1.0b2`. 10 pytest
+adapter/behaviour tests pass; strict Clippy and `fmt --check` clean.
+
+### Design
+
+* Lowest common denominator: `owalnuts.sample(logp_and_grad, dim, ...)` with
+  `f(q: float64[dim]) -> (float, float64[dim])`; adapters `from_jax`
+  (`jit(value_and_grad)`, x64 forced), `from_torch` (autograd, float64),
+  `from_pymc` (`model.logp_dlogp_function(ravel_inputs=True)` + an `unravel`
+  helper), `from_numpy`.
+* GIL: the Python thread `detach`es for the whole run; each kernel callback
+  re-`attach`es from the Rust worker. Python targets are therefore
+  GIL-serialised: `threads=4` on a numpy target was *slower* than
+  `threads=1` (measured attach-fraction 3.4 = workers queueing), while the
+  built-in native targets scale ~2.9× at `threads=4`.
+* Error mapping: exceptions in {`ZeroDensityError`, `FloatingPointError`,
+  `OverflowError`, `ZeroDivisionError`, `ValueError`} and `-inf`/NaN outputs
+  → `TargetError::recoverable` (deterministic zero-density contract, v10
+  refine-through semantics; verified by a truncated-Gaussian moment test with
+  zero `invalid_evaluation` stops); other exceptions and
+  `nonfinite="fatal"` → fatal, with the Python message carried into the
+  raised error (the facade `Error` itself does not transport it — see
+  proposals). Structured metrics exposed as block dicts plus
+  `tridiagonal_precision_mass(diag, off)`; ArviZ `InferenceData` export with
+  depth/stops/divergences/refinement-level sample_stats.
+
+### Measured overhead (BENCH.md; fresh seeds 93001–93003, shared machine)
+
+Per fused call: native ~0.6–0.8 µs; PyMC compiled ~6 µs; numpy ~10–13 µs;
+JAX jit dispatch ~26–84 µs (dimension-dependent); PyTorch ~170–290 µs.
+ESS per call is backend-independent (same kernel; last-bit gradient
+differences de-synchronise chains without changing quality; all agreement
+z ≤ 2.44). Geomean min-bulk-ESS/s over three seeds:
+
+| target | native | numpy | jax | torch | pymc | NumPyro NUTS (warm) |
+|---|---:|---:|---:|---:|---:|---:|
+| Eight Schools (v38 settings) | 15,226 (44,749 @4 threads) | 1,029 | 414 | 50 | **1,439** | 897 |
+| Local level T=100, identity | 11,272 | 2,582 | 405 | 130 | — | 2,245 |
+| Local level T=100, precision metric | 28,199 | **9,712** | 1,777 | 572 | — | — |
+| Local level T=1000, identity | 927 | 471 | 151 | — | — | 720 |
+| Local level T=1000, precision metric | 3,293 | **2,455** | 801 | 428 | — | — |
+
+Zero divergences/caps everywhere; worst R-hat 1.0061.
+
+### Verdict: when does the Python package beat NumPyro?
+
+* **On NumPyro's own ground (JAX log density): no.** JAX dispatch (~26–64 µs
+  × ~15 calls/transition) leaves oWALNUTS+`from_jax` at ~0.2–0.5× NumPyro,
+  whose whole transition stays inside one XLA program.
+* **With a compiled non-JAX gradient: yes.** PyMC-compiled and plain numpy
+  targets beat warm NumPyro at equal settings (1.4–1.6× Eight Schools,
+  1.15–3.4× local level), and the structured precision metric — which
+  NumPyro cannot express — is 3.4× NumPyro at T=1000 even from Python.
+* **Against nutpie on PyMC models: not yet.** nutpie (numba `cfunc`, no GIL,
+  4 cores) reached 17,844–25,043 ESS/s vs our 1,298–2,120 (1 core,
+  GIL-bound); per-gradient efficiency is comparable (0.028–0.039 exact vs
+  0.041–0.048 proxy). The entire gap is callback transport + parallelism,
+  not the sampler.
+
+### Facade/package proposals (no `src/` changed by WP15b)
+
+1. `TargetError` message propagation: `Error` should carry the originating
+   target message (currently a generic "target evaluation failed"); the
+   wrapper works around it with a side channel.
+2. A GIL-free raw entry point — `unsafe fn(dim, *const f64, *mut f64) -> f64`
+   or a `RawTarget` trait object — so numba/Cython `cfunc` and PyMC's
+   compiled functions can be called from parallel chains without attaching.
+   This is the single change that closes the nutpie gap; everything else is
+   already in place.
+3. Optional: free-threaded CPython (3.13t) build and a per-chain
+   subprocess/shared-memory mode as fallbacks where (2) is impossible.
+
+Artifacts: `integrations/python/bench/artifacts/{summary.json,pymc-compare.json}`
+(quick-run duplicate under `artifacts-quick/`), full log `bench/artifacts-full.log`.

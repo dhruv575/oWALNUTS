@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "owalnuts"
+version = "0.1.0b2"
+description = "oWALNUTS (within-orbit adaptive leapfrog NUTS) for Python callables, JAX, PyTorch and PyMC models"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+arviz = ["arviz>=0.17"]
+jax = ["jax>=0.4"]
+torch = ["torch>=2.0"]
+pymc = ["pymc>=5.10"]
+test = ["pytest>=7", "arviz>=0.17", "jax>=0.4", "torch>=2.0", "pymc>=5.10"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "owalnuts._owalnuts"
+features = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

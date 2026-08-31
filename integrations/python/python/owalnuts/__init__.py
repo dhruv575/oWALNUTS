@@ -1,0 +1,460 @@
+"""oWALNUTS for Python: within-orbit adaptive leapfrog NUTS on any differentiable target.
+
+The lowest common denominator is a callable ``f(q) -> (log_density, gradient)``
+taking and returning ``float64`` numpy arrays. Adapters wrap JAX, PyTorch and
+PyMC models into that shape. Every run goes through the Rust ``walnutpie``
+facade; this module only marshals arrays and configuration.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable, Sequence
+
+import numpy as np
+
+from . import _owalnuts
+
+ALGORITHM_REVISION: str = _owalnuts.ALGORITHM_REVISION
+PAPER_ADAPTATION_REVISION: str = _owalnuts.PAPER_ADAPTATION_REVISION
+STOP_CODES: tuple[str, ...] = tuple(_owalnuts.STOP_CODES)
+
+LogpGrad = Callable[[np.ndarray], tuple[float, np.ndarray]]
+
+
+class ZeroDensityError(Exception):
+    """Raise from a target to declare the position outside the support.
+
+    The kernel treats it as an infinite endpoint energy error: the macro step
+    is refined, and only if every refinement level still fails does the leaf
+    receive zero weight. Returning ``-np.inf`` has the same effect.
+    """
+
+
+# ── Configuration ────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class PaperAdaptation:
+    """JMLR Appendix C adaptation: K-quantile rule for the local error
+    threshold and a Gamma-target rule for the macro step."""
+
+    global_energy_bound: float = 2.0
+    quantile_probability: float = 0.95
+    unrefined_fraction_target: float = 0.8
+    adapt_local_error: bool = True
+    minimum_orbits: int | None = None
+    step_statistic: str | None = None  # "per_transition" | "cumulative"
+    restart_policy: str | None = None  # "continue" | "restart"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass(frozen=True)
+class Tuning:
+    """Kernel tuning. ``step_size`` is the macro step ``h``; ``max_error`` is
+    the local energy-error threshold ``delta``."""
+
+    step_size: float = 0.1
+    max_depth: int = 8
+    min_micro_steps: int = 1
+    max_refinement_levels: int = 4
+    max_error: float = 1.0
+    divergence_threshold: float = 1000.0
+
+
+@dataclass(frozen=True)
+class Adaptation:
+    """Warmup adaptation during the discarded transitions."""
+
+    target_accept: float = 0.8
+    adapt_step_size: bool = True
+    adapt_mass: bool = True
+    paper: PaperAdaptation | None = None
+
+
+@dataclass
+class SampleResult:
+    samples: np.ndarray  # (chains, draws, dim)
+    chains: list[dict[str, Any]]
+    algorithm_revision: str
+    wall_seconds: float
+    target_calls: int
+    target_recoverable_failures: int
+    target_attached_seconds: float
+    config: dict[str, Any] = field(default_factory=dict)
+
+    # convenience --------------------------------------------------------
+    @property
+    def depth(self) -> np.ndarray:
+        return np.stack([c["depth"] for c in self.chains])
+
+    @property
+    def divergent(self) -> np.ndarray:
+        return np.stack([c["divergent"] for c in self.chains])
+
+    @property
+    def retained_target_calls(self) -> int:
+        return int(sum(c["work_retained"]["target_calls_total"] for c in self.chains))
+
+    @property
+    def final_step_size(self) -> np.ndarray:
+        return np.array([c["metadata"]["final_step_size"] for c in self.chains])
+
+    @property
+    def final_max_error(self) -> np.ndarray:
+        return np.array([c["metadata"]["final_max_error"] for c in self.chains])
+
+    def to_inferencedata(self, var_names: Sequence[str] | None = None, warmup: int | None = None):
+        return to_inferencedata(self, var_names=var_names, warmup=warmup)
+
+
+# ── Core entry points ────────────────────────────────────────────────────
+
+
+def _config_dict(
+    *,
+    warmup: int,
+    draws: int,
+    seed: int,
+    threads: int,
+    tuning: Tuning,
+    adaptation: Adaptation | None,
+    mass: Any,
+    max_target_evaluations: int | None,
+    max_depth_stop_limit: int | None,
+) -> dict[str, Any]:
+    cfg: dict[str, Any] = {
+        "warmup": int(warmup),
+        "draws": int(draws),
+        "seed": int(seed),
+        "threads": int(threads),
+        "step_size": float(tuning.step_size),
+        "max_depth": int(tuning.max_depth),
+        "min_micro_steps": int(tuning.min_micro_steps),
+        "max_refinement_levels": int(tuning.max_refinement_levels),
+        "max_error": float(tuning.max_error),
+        "divergence_threshold": float(tuning.divergence_threshold),
+        "mass": _normalize_mass(mass),
+        "max_target_evaluations": max_target_evaluations,
+        "max_depth_stop_limit": max_depth_stop_limit,
+    }
+    if adaptation is None:
+        cfg["adapt"] = False
+    else:
+        cfg["adapt"] = True
+        cfg["target_accept"] = float(adaptation.target_accept)
+        cfg["adapt_step_size"] = bool(adaptation.adapt_step_size)
+        cfg["adapt_mass"] = bool(adaptation.adapt_mass)
+        cfg["paper_adaptation"] = adaptation.paper.to_dict() if adaptation.paper else None
+    return cfg
+
+
+def _normalize_mass(mass: Any) -> Any:
+    if mass is None:
+        return None
+    if isinstance(mass, np.ndarray):
+        return np.ascontiguousarray(mass, dtype=np.float64)
+    if isinstance(mass, (list, tuple)):
+        blocks = []
+        for block in mass:
+            block = dict(block)
+            for key in ("diagonal", "subdiagonal", "scale"):
+                if key in block:
+                    block[key] = np.ascontiguousarray(block[key], dtype=np.float64)
+            blocks.append(block)
+        return blocks
+    raise TypeError("mass must be None, a 1-D float64 array (momentum covariance diagonal), or a list of block dicts")
+
+
+def _starts(init: Any, dim: int, chains: int, seed: int, jitter: float) -> np.ndarray:
+    if init is None:
+        rng = np.random.default_rng(seed)
+        starts = rng.uniform(-jitter, jitter, size=(chains, dim))
+    else:
+        starts = np.asarray(init, dtype=np.float64)
+        if starts.ndim == 1:
+            rng = np.random.default_rng(seed)
+            starts = starts[None, :] + rng.uniform(-jitter, jitter, size=(chains, dim))
+    starts = np.ascontiguousarray(starts, dtype=np.float64)
+    if starts.shape != (chains, dim):
+        raise ValueError(f"init must have shape ({chains}, {dim}); got {starts.shape}")
+    return starts
+
+
+def wrap_callable(fn: LogpGrad) -> LogpGrad:
+    """Coerce a target's outputs to ``(float, contiguous float64 array)``."""
+
+    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+        value, grad = fn(q)
+        return float(value), np.ascontiguousarray(grad, dtype=np.float64).reshape(-1)
+
+    return target
+
+
+def sample(
+    logp_and_grad: LogpGrad,
+    dim: int,
+    *,
+    init: Any = None,
+    chains: int = 4,
+    warmup: int = 1000,
+    draws: int = 1000,
+    seed: int = 0,
+    threads: int = 1,
+    tuning: Tuning = Tuning(),
+    adaptation: Adaptation | None = Adaptation(),
+    mass: Any = None,
+    nonfinite: str = "zero_density",
+    max_target_evaluations: int | None = None,
+    max_depth_stop_limit: int | None = None,
+    init_jitter: float = 2.0,
+    coerce: bool = True,
+) -> SampleResult:
+    """Sample ``logp_and_grad`` with oWALNUTS.
+
+    ``mass`` is the momentum covariance: ``None`` (identity), a 1-D array
+    (diagonal), or a list of structured blocks such as
+    ``tridiagonal_precision_mass(...)``. Diagonal mass adaptation is disabled
+    automatically for structured masses (the facade does not adapt them).
+    """
+    starts = _starts(init, dim, chains, seed, init_jitter)
+    cfg = _config_dict(
+        warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning,
+        adaptation=adaptation, mass=mass, max_target_evaluations=max_target_evaluations,
+        max_depth_stop_limit=max_depth_stop_limit,
+    )
+    target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
+    raw = _owalnuts.sample_callable(target, starts, cfg, nonfinite)
+    return _result(raw, cfg)
+
+
+def preflight(
+    dim: int,
+    *,
+    chains: int = 4,
+    warmup: int = 1000,
+    draws: int = 1000,
+    seed: int = 0,
+    threads: int = 1,
+    tuning: Tuning = Tuning(),
+    adaptation: Adaptation | None = Adaptation(),
+    mass: Any = None,
+    max_target_evaluations: int | None = None,
+) -> dict[str, int]:
+    """Zero-callback admission check: worst-case target evaluations vs ceiling."""
+    starts = np.zeros((chains, dim))
+    cfg = _config_dict(
+        warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning,
+        adaptation=adaptation, mass=mass, max_target_evaluations=max_target_evaluations,
+        max_depth_stop_limit=None,
+    )
+    return dict(_owalnuts.preflight_callable(starts, cfg))
+
+
+def _result(raw: dict[str, Any], cfg: dict[str, Any]) -> SampleResult:
+    return SampleResult(
+        samples=np.asarray(raw["samples"]),
+        chains=list(raw["chains"]),
+        algorithm_revision=raw["algorithm_revision"],
+        wall_seconds=float(raw["wall_seconds"]),
+        target_calls=int(raw["target_calls"]),
+        target_recoverable_failures=int(raw["target_recoverable_failures"]),
+        target_attached_seconds=float(raw["target_attached_seconds"]),
+        config=cfg,
+    )
+
+
+# ── Structured metrics ───────────────────────────────────────────────────
+
+
+def tridiagonal_cholesky(diag: np.ndarray, off: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Lower-bidiagonal Cholesky factor ``L`` of a symmetric positive-definite
+    tridiagonal matrix with main diagonal ``diag`` and sub-diagonal ``off``."""
+    diag = np.asarray(diag, dtype=np.float64)
+    off = np.asarray(off, dtype=np.float64)
+    n = diag.shape[0]
+    if off.shape[0] != n - 1:
+        raise ValueError("off must have length len(diag) - 1")
+    l_diag = np.empty(n)
+    l_sub = np.empty(max(n - 1, 0))
+    l_diag[0] = np.sqrt(diag[0])
+    for i in range(1, n):
+        l_sub[i - 1] = off[i - 1] / l_diag[i - 1]
+        v = diag[i] - l_sub[i - 1] ** 2
+        if not v > 0:
+            raise ValueError("matrix is not positive definite")
+        l_diag[i] = np.sqrt(v)
+    return l_diag, l_sub
+
+
+def tridiagonal_precision_mass(diag: np.ndarray, off: np.ndarray) -> list[dict[str, Any]]:
+    """Momentum covariance ``M = H`` for a tridiagonal target precision ``H``
+    (the whitening metric for a Gaussian path block), as a structured block."""
+    l_diag, l_sub = tridiagonal_cholesky(diag, off)
+    return [{"type": "bidiagonal_cholesky", "diagonal": l_diag, "subdiagonal": l_sub}]
+
+
+def diagonal_block(diagonal: np.ndarray) -> dict[str, Any]:
+    return {"type": "diagonal", "diagonal": np.asarray(diagonal, dtype=np.float64)}
+
+
+# ── Adapters ─────────────────────────────────────────────────────────────
+
+
+def from_numpy(logp: Callable[[np.ndarray], float], grad: Callable[[np.ndarray], np.ndarray]) -> LogpGrad:
+    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+        return float(logp(q)), np.asarray(grad(q), dtype=np.float64)
+
+    return target
+
+
+def from_jax(logp_fn: Callable[[Any], Any], *, jit: bool = True) -> LogpGrad:
+    """Wrap a JAX scalar log density. Enables x64 (the kernel is binary64)."""
+    import jax
+    import jax.numpy as jnp
+
+    jax.config.update("jax_enable_x64", True)
+    vg = jax.value_and_grad(logp_fn)
+    if jit:
+        vg = jax.jit(vg)
+
+    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+        value, grad = vg(jnp.asarray(q))
+        return float(value), np.asarray(grad, dtype=np.float64)
+
+    return target
+
+
+def from_torch(logp_fn: Callable[[Any], Any], *, device: str = "cpu") -> LogpGrad:
+    """Wrap a PyTorch scalar log density taking a float64 tensor."""
+    import torch
+
+    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+        x = torch.from_numpy(np.array(q, dtype=np.float64)).to(device).requires_grad_(True)
+        value = logp_fn(x)
+        (grad,) = torch.autograd.grad(value, x)
+        return float(value.detach().cpu().item()), grad.detach().cpu().numpy().astype(np.float64)
+
+    return target
+
+
+def from_pymc(model: Any, *, mode: str | None = None) -> tuple[LogpGrad, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
+    """Wrap a PyMC model's compiled joint log density and gradient over the
+    raveled unconstrained (transformed) variables.
+
+    Returns ``(target, dim, initial_point, var_names, unravel)`` where
+    ``unravel`` maps a raveled draw back to a dict of transformed values.
+    """
+    import pymc as pm  # noqa: F401
+
+    fn = model.logp_dlogp_function(ravel_inputs=True, mode=mode)
+    fn.set_extra_values({})
+    initial = model.initial_point()
+    names: list[str] = []
+    sizes: list[int] = []
+    flat_parts = []
+    for rv in model.value_vars:
+        value = np.asarray(initial[rv.name], dtype=np.float64)
+        names.append(rv.name)
+        sizes.append(int(value.size))
+        flat_parts.append(value.ravel())
+    q0 = np.concatenate(flat_parts) if flat_parts else np.zeros(0)
+    dim = int(q0.size)
+
+    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+        logp, grad = fn(np.asarray(q, dtype=np.float64))
+        return float(logp), np.asarray(grad, dtype=np.float64)
+
+    offsets = np.cumsum([0, *sizes])
+
+    def unravel(q: np.ndarray) -> dict[str, np.ndarray]:
+        return {name: q[..., offsets[i]:offsets[i + 1]] for i, name in enumerate(names)}
+
+    return target, dim, q0, names, unravel
+
+
+# ── ArviZ ────────────────────────────────────────────────────────────────
+
+
+def to_inferencedata(result: SampleResult, var_names: Sequence[str] | None = None, warmup: int | None = None):
+    """Build an ``arviz.InferenceData`` with ``posterior`` and ``sample_stats``.
+
+    ``sample_stats`` carries ``tree_depth``, ``diverging``, ``n_steps`` (fused
+    target calls), ``energy_error``, ``stop_reason`` (code, see ``STOP_CODES``),
+    ``refinement_level`` and ``zero_density_evaluations`` for retained draws.
+    """
+    import arviz as az
+
+    chains, draws, dim = result.samples.shape
+    if var_names is None:
+        var_names = [f"q{i}" for i in range(dim)]
+    posterior = {name: result.samples[:, :, i] for i, name in enumerate(var_names)} if len(var_names) == dim else {
+        "q": result.samples
+    }
+    n_discarded = int(result.config.get("warmup", 0)) if warmup is None else int(warmup)
+
+    def retained(key: str) -> np.ndarray:
+        return np.stack([np.asarray(c[key])[n_discarded:] for c in result.chains])
+
+    stats = {
+        "tree_depth": retained("depth").astype(np.int64),
+        "diverging": retained("divergent").astype(bool),
+        "n_steps": retained("target_evaluations").astype(np.int64),
+        "energy_error": retained("max_abs_energy_error"),
+        "stop_reason": retained("stop").astype(np.int64),
+        "refinement_level": retained("selected_refinement_level").astype(np.int64),
+        "zero_density_evaluations": retained("zero_density_evaluations").astype(np.int64),
+    }
+    dims = {"q": ["q_dim"]} if "q" in posterior else None
+    idata = az.from_dict(posterior=posterior, sample_stats=stats, dims=dims,
+                         attrs={"algorithm_revision": result.algorithm_revision,
+                                "sampler": "owalnuts", "wall_seconds": result.wall_seconds,
+                                "target_calls": result.target_calls})
+    return idata
+
+
+# ── Built-in native targets (for benchmarking against hand-written Rust) ─
+
+
+def sample_native_eight_schools(y: np.ndarray, se: np.ndarray, *, init: Any, chains: int = 4, warmup: int = 1000,
+                                draws: int = 1000, seed: int = 0, threads: int = 1, tuning: Tuning = Tuning(),
+                                adaptation: Adaptation | None = Adaptation(), mass: Any = None,
+                                max_target_evaluations: int | None = None) -> SampleResult:
+    y = np.ascontiguousarray(y, dtype=np.float64)
+    se = np.ascontiguousarray(se, dtype=np.float64)
+    dim = 2 + y.size
+    starts = _starts(init, dim, chains, seed, 0.0)
+    cfg = _config_dict(warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning, adaptation=adaptation,
+                       mass=mass, max_target_evaluations=max_target_evaluations, max_depth_stop_limit=None)
+    return _result(_owalnuts.sample_eight_schools(y, se, starts, cfg), cfg)
+
+
+def sample_native_local_level(y: np.ndarray, r: np.ndarray, *, init: Any, chains: int = 4, warmup: int = 500,
+                              draws: int = 2000, seed: int = 0, threads: int = 1, tuning: Tuning = Tuning(),
+                              adaptation: Adaptation | None = Adaptation(), mass: Any = None,
+                              m0: float = 0.0, tau0: float = 1.0, mu: float = 0.01, sigma_x: float = 0.08,
+                              max_target_evaluations: int | None = None) -> SampleResult:
+    y = np.ascontiguousarray(y, dtype=np.float64)
+    r = np.ascontiguousarray(r, dtype=np.float64)
+    dim = y.size
+    starts = _starts(init, dim, chains, seed, 0.0)
+    cfg = _config_dict(warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning, adaptation=adaptation,
+                       mass=mass, max_target_evaluations=max_target_evaluations, max_depth_stop_limit=None)
+    return _result(_owalnuts.sample_local_level(y, r, starts, cfg, m0, tau0, mu, sigma_x), cfg)
+
+
+def eight_schools_logp_grad(y: np.ndarray, se: np.ndarray, q: np.ndarray) -> tuple[float, np.ndarray]:
+    return _owalnuts.eight_schools_logp_grad(np.ascontiguousarray(y, dtype=np.float64),
+                                              np.ascontiguousarray(se, dtype=np.float64),
+                                              np.ascontiguousarray(q, dtype=np.float64))
+
+
+__all__ = [
+    "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "ZeroDensityError",
+    "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
+    "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
+    "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",
+    "sample_native_eight_schools", "sample_native_local_level", "eight_schools_logp_grad",
+]

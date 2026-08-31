@@ -1,0 +1,23 @@
+[package]
+name = "owalnuts-python"
+version = "0.1.0-beta.2"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+description = "Python bindings for the oWALNUTS walnutpie facade (callable, JAX, PyTorch, PyMC targets)"
+license = "MIT"
+
+[lib]
+name = "_owalnuts"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+owalnuts = { path = "../.." }
+pyo3 = { version = "0.28", features = ["extension-module", "generate-import-lib"] }
+numpy = "0.28"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
