@@ -157,3 +157,64 @@ Entries follow the Polyscope ledger template. Newest last.
 - Artifacts: `STUDIES/eight_schools_v9_rebench_v1/{protocol.json,PREREGISTRATION.md,README.md,RELEASE-NOTE.md,src/main.rs,analyze.py,artifacts/cell-*.json,artifacts/summary.json,artifacts/RESULTS.md,CHECKSUMS.sha256}`; `artifacts/summary.json` SHA-256 `4d8aa7aaae504797040097975ede57bd9126ee277822abf6a4a1ea31e0ce3765`; `src/main.rs` `fa52c079bb4c35b913b2fe22f5a1d399ebe5e9d64c80831236163f3624bd93d8`; `analyze.py` `8b69c706a8236a342ea02416f118002dd45451a095767946444b175aeaa77904`.
 - Conclusion: supported — "fastest among strict matched competitors tested locally" on the v38 track holds on v9 with a ≥2× margin under the true conservative minimum; v9 does not change Eight Schools efficiency per gradient. Not supported — the specific published figures 19,054.65 / 14,494.34 as "conservative minima" (they are medians; the correct v7 minima were 8,634 / 5,949), and any wall-based v9 number as a clean-machine measurement.
 - Next decision: publish the erratum drafted in `RELEASE-NOTE.md` with the v9 re-measured numbers; any future release package must compute the oWALNUTS aggregation with the same `minima()` rule as competitors. Re-measure on an idle machine before quoting v9 ESS/s externally.
+
+### WP2b-SW-REPRO-V1 — paper Stock–Watson SV reproduction on simulated data
+- Ordered time: 2026-08-31, sampling approximately 02:50–02:55 local (UTC−4);
+  preflight (zero callbacks) preceded sampling; seven preregistration
+  amendments were all recorded before any evidence was interpreted.
+- Protocol/config: `STUDIES/paper_stock_watson_reproduction_v1/protocol.json`
+  SHA-256 `fbb03f47384685f5a09af0c1aff0065730aec4df57e4ce28b70229965742cbc9`;
+  `PREREGISTRATION.md` `7b73806c…edf9ef`; runner `src/main.rs` `505b0f72…26ad1`;
+  kernel `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v9` (`src/walnutpie.rs`
+  `22928d30…54e2a40`, `src/kernel.rs` `23fd69c4…720eac` at checksum time).
+  Target: JMLR §4.4 eqs. 35–38, shared σ, `σ⁻² ~ Gamma(5, .5)`, innovation
+  parameterization, identity mass, dimension 756; simulated series (data seed
+  2026083120 by preregistered range rule, `data.json` `df90ca84…a70b4`);
+  starts on the simulated true paths with `φ` offsets ±0.2/±0.6 and 0.01
+  jitter; 4 chains, 500 discarded / 2,000 retained, 4 threads; finite-penalty
+  target policy emulating the reference's `−∞` failure semantics. Arms:
+  F fixed paper tuning (h=.1, δ=.3, min 8 micro, 8 levels, depth 10);
+  N NUTS-like control (h=.002, one level, δ=1000); A Appendix C adaptation
+  from δ=1, h=.05 (Δ=2, p_a=.95, Γ=.8, no mass adaptation).
+- Seeds: 84001 (F), 84002 (N), 84003 (A) consumed once for evidence; 84004
+  consumed by non-evidence smoke arm S. Superseded start-rule/fixture runs
+  reused 84001–84003 before any retained evidence existed (recorded in
+  `PREREGISTRATION.md` amendments 1–7).
+- Status: exploratory sampling evidence (preregistered; one seed per arm).
+- Outcome: **paper claim not reproduced; adaptive arm passes.** F: all
+  statistical gates pass (max R-hat 1.0016, min bulk 2,156, min tail 1,777)
+  but 1 retained refinement exhaustion and 13.2% of orbits with
+  `max H − min H > 2` (gate ≤ 1%). N: 1 divergence, 1 exhaustion, 99.99%
+  depth-10 caps, only 0.10% of orbits above 2 (gate for the claim > 10%).
+  A: all gates pass (max R-hat 1.0031, min bulk 1,363, min tail 2,088, zero
+  health events), 2.0% of orbits above Δ = 2.
+- Diagnostics: retained calls F 20,753,272 / N 8,191,457 / A 6,445,520; wall
+  90.4 / 85.0 / 45.9 s; min bulk ESS per million calls 103.9 / 157.6 / 211.4;
+  per second 23.9 / 15.2 / 29.7. F selected levels 4–5 (micro 7.8e-4–3.9e-4)
+  on 86% of transitions with 44% reverse-coarser rejections; A landed
+  δ = .567/.389/.362/.367 and h = .00371/.00424/.00515/.00419 (coarsest micro
+  ≈ 5e-4) with window unrefined fractions .77–.81. Posterior means agree
+  across arms within Monte-Carlo error.
+- Artifacts: `artifacts/summary.json`
+  `b0c9f88be9d551cf9ac939fab22a4551bdfaf92818c79d778d599ea1184abca3`;
+  `F.json` `f77f1c51…adf1f6`, `N.json` `16a3b2bb…5feafe`, `A.json`
+  `30c983f0…21abcd5`; all pinned in `CHECKSUMS.sha256`.
+- Conclusion: on a simulated Stock–Watson series with paper-like latent
+  ranges, the paper's fixed WALNUTS tuning is far too coarse (every macro
+  step refines 4–5 halvings below h/8) and its orbit energy ranges exceed 2
+  in 13% of orbits, while the fixed-step NUTS control is stable — so the
+  Figure 16 contrast is data-specific and not supported here. The Appendix C
+  adaptation implemented by WP1 finds a self-consistent δ/h, passes every
+  gate, and is 2.0× more efficient per call than the paper tuning and 1.3×
+  than the NUTS control. Not supported: any claim about the real series;
+  cross-seed replication; comparison with an adapted external NUTS.
+- Defects: (1) kernel parity — non-finite/recoverable evaluations stop the
+  transition instead of failing the micro tolerance and halving as the
+  reference does; the study had to emulate `−∞` semantics target-side.
+  (2) Γ-rule counts transitions with zero built leaves as unrefined and drove
+  h to the 1e6 bound under all-invalid transitions. (3) Per-transition
+  Hamiltonian range for exhausted transitions is constant per chain.
+- Next decision: fix defect (1) in the kernel (treat non-finite coarse
+  attempts as failed tolerance), exclude zero-leaf transitions from the
+  Γ statistic, then replicate arm A on fresh seeds and, if the real series
+  can be obtained, on the paper's data.
