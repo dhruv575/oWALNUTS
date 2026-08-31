@@ -57,24 +57,35 @@
 //! unnormalized log density and finite gradient. It must be deterministic,
 //! thread-safe, and free of hidden cross-chain state. A
 //! [`TargetError::recoverable`] result at a proposed position treats that
-//! position as zero density and follows the kernel's ordinary
-//! [`StopReason::InvalidEvaluation`] rejection path. Returning a fatal
-//! [`TargetError`], returning nonfinite data, or panicking fails the whole call.
-//! The initial/current position must always be evaluable. Every public
-//! sampling function is all-or-error: no samples, diagnostics, telemetry, or
-//! partially completed chains are returned in [`Error`].
+//! position as a zero-density point with a zero gradient, exactly as upstream
+//! walnutpie maps a failed evaluation (`logp = -inf`, `grad = 0`). Returning
+//! a fatal [`TargetError`], returning nonfinite data (`NaN`, `+inf`, or a
+//! nonfinite gradient), or panicking fails the whole call. The
+//! initial/current position must always be evaluable. Every public sampling
+//! function is all-or-error: no samples, diagnostics, telemetry, or partially
+//! completed chains are returned in [`Error`].
 //!
 //! Recoverable failures define a deterministic zero-density region: for the
 //! same position the target must always return the same classification.
-//! Invalid leaves are assigned zero transition weight and retain the current
-//! state. This is the limiting Metropolis decision for `log_density = -inf`;
-//! it changes neither the proposal construction nor the reverse replay. In
-//! particular, the same failed fused call is counted in its forward or reverse
-//! phase, integration stops immediately, and no acceptance uniform is drawn.
-//! Therefore the accepted-state transition kernel and its detailed-balance
-//! argument are unchanged for the target restricted to the representable
-//! region. Misclassifying a finite-density region as recoverable instead
-//! samples a truncated target and is a target-definition error.
+//! Since kernel revision `v10` a micro-step that ends at a zero-density point
+//! has an infinite endpoint Hamiltonian error, so it fails the `max_error`
+//! tolerance and the leaf refines to the next level like any over-tolerance
+//! step; the leaf is rejected (refinement exhaustion, zero weight, extension
+//! stops in that direction) only when every level ends in the region.
+//! Interior micro-steps of an attempt that ends at a finite-density point do
+//! not by themselves reject the attempt, and integration continues through
+//! them with the zero gradient; this is the upstream `macro_step` rule, which
+//! overwrites the log density at every micro-step and tests only the last.
+//! Because the leapfrog map with a position-dependent gradient field (zero on
+//! the region) is still a reversible volume-preserving involution and the
+//! accept/reject decision depends only on the two endpoint Hamiltonians,
+//! detailed balance for the target restricted to its support is unchanged;
+//! the reverse coarsening check treats a zero-density endpoint identically
+//! (it is never "within tolerance"), so forward and reverse selections agree.
+//! The same fused call is counted in its forward or reverse phase and no
+//! acceptance uniform is drawn for a rejected leaf. Misclassifying a
+//! finite-density region as recoverable instead samples a truncated target
+//! and is a target-definition error.
 //!
 //! [`ChainOutput::samples`] is flat draw-major `[draw][parameter]` data and
 //! excludes the initial position and discarded transitions.
@@ -198,9 +209,17 @@ use crate::types::{State, ValidationError};
 /// the endpoint departure `|H(end) - H(start)|` exactly as upstream
 /// `walnutpie::macro_step`/`within_tolerance`, which restores the pinned
 /// upstream macro-leaf oracle and a 4,000-leaf funnel differential oracle.
+///
+/// `v10` (2026-08-31) corrects recoverable-failure semantics. Through `v9` a
+/// [`TargetError::recoverable`] result stopped the whole transition
+/// (`StopReason::InvalidEvaluation`) on the failed call. Upstream maps a
+/// failed evaluation to `logp = -inf`, `grad = 0`, so the micro-step merely
+/// fails the endpoint tolerance and the leaf refines; `v10` does the same and
+/// rejects only on refinement exhaustion. Runs whose target never returns a
+/// recoverable error are bit-identical to `v9`.
 /// Path-wide Hamiltonian extrema remain telemetry only. Runs that never
 /// refine (`max_refinement_levels == 1`, single-step leaves) are unchanged.
-pub const ALGORITHM_REVISION: &str = "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v9";
+pub const ALGORITHM_REVISION: &str = "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10";
 /// Execution revision for explicitly original-coordinate metric APIs.
 ///
 /// This stream is deterministic within the same build and lockfile, but is
@@ -1506,9 +1525,13 @@ pub enum TargetErrorKind {
     Fatal,
     /// A mathematically negligible proposed region that is not representable.
     ///
-    /// The kernel treats the proposed point as zero density and rejects through
-    /// its normal invalid-evaluation path. This must not be used for bugs,
-    /// panics, incorrect gradients, or malformed target output.
+    /// The kernel treats the proposed point as a zero-density point with a
+    /// zero gradient (`logp = -inf`, `grad = 0`, exactly as upstream
+    /// walnutpie maps a failed evaluation): the micro-step fails the endpoint
+    /// tolerance and the leaf refines; only when every refinement level still
+    /// ends in the region is the leaf rejected as refinement exhaustion. This
+    /// must not be used for bugs, panics, incorrect gradients, or malformed
+    /// target output.
     Recoverable,
 }
 
@@ -3254,6 +3277,16 @@ impl RunConfig {
     }
 }
 
+/// Why a transition stopped extending its orbit.
+///
+/// Since kernel revision `v10`, [`TargetError::recoverable`] results no longer
+/// produce `InvalidEvaluation`: a zero-density point fails the endpoint
+/// tolerance and refines like any over-tolerance micro-step, so a leaf that
+/// cannot escape the zero-density region at any level stops as
+/// [`StopReason::RefinementExhausted`]. `InvalidEvaluation` is retained for
+/// API compatibility and for internal abort paths (cancellation, deadline,
+/// target budget, observer panic); a successful run cannot report it because
+/// those paths all fail the call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum StopReason {
@@ -3276,6 +3309,7 @@ pub struct TransitionDiagnostics {
     leaves_attempted: usize,
     leaves_built: usize,
     recoverable_target_failures: usize,
+    zero_density_evaluations: usize,
     initial_hamiltonian: f64,
     minimum_hamiltonian: f64,
     maximum_hamiltonian: f64,
@@ -3314,6 +3348,12 @@ impl TransitionDiagnostics {
     /// Recoverable target failures encountered by this transition.
     pub fn recoverable_target_failures(&self) -> usize {
         self.recoverable_target_failures
+    }
+    /// Fused calls that returned a zero-density point and therefore refined
+    /// (or exhausted refinement) instead of stopping the transition. Equal to
+    /// [`Self::recoverable_target_failures`] for facade-run targets.
+    pub fn zero_density_evaluations(&self) -> usize {
+        self.zero_density_evaluations
     }
     pub fn initial_hamiltonian(&self) -> f64 {
         self.initial_hamiltonian
@@ -3380,6 +3420,7 @@ pub struct WorkTotals {
     uniform_draws: usize,
     maximum_depth_stops: usize,
     recoverable_target_failures: usize,
+    zero_density_evaluations: usize,
     divergences: usize,
     invalid_evaluation_stops: usize,
     refinement_exhaustion_stops: usize,
@@ -3439,6 +3480,11 @@ impl WorkTotals {
     /// Recoverable target failures in this work partition.
     pub fn recoverable_target_failures(&self) -> usize {
         self.recoverable_target_failures
+    }
+    /// Fused calls that returned a zero-density point and refined instead of
+    /// stopping a transition (kernel revision `v10` semantics).
+    pub fn zero_density_evaluations(&self) -> usize {
+        self.zero_density_evaluations
     }
     pub fn divergences(&self) -> usize {
         self.divergences
@@ -3500,6 +3546,10 @@ impl WorkTotals {
         add!(uniform_draws, uniform_draws);
         add!(maximum_depth_stops, work.stops.max_depth);
         add!(recoverable_target_failures, recoverable_target_failures);
+        add!(
+            zero_density_evaluations,
+            diagnostics.zero_density_evaluations
+        );
         add!(divergences, usize::from(diagnostics.divergent));
         add!(
             invalid_evaluation_stops,
@@ -4868,7 +4918,8 @@ fn search_step_from_evaluated<T: Target>(
                     }
                     Ok(Err(error)) if error.kind == TargetErrorKind::Recoverable => {
                         telemetry.recoverable_target_failures += 1;
-                        (f64::NAN, ProposalTargetOutcome::Recoverable)
+                        gradient.fill(0.0);
+                        (f64::NEG_INFINITY, ProposalTargetOutcome::Recoverable)
                     }
                     Ok(Err(error)) => {
                         fatal = Some(error);
@@ -5093,7 +5144,9 @@ fn search_initial_step<T: Target>(
                     }
                     Err(error) if error.kind == TargetErrorKind::Recoverable => {
                         telemetry.recoverable_target_failures += 1;
-                        (f64::NAN, gradient)
+                        // Upstream semantics: a failed evaluation is a
+                        // zero-density point with a zero gradient.
+                        (f64::NEG_INFINITY, vec![0.0; theta.len()])
                     }
                     Err(error) => {
                         target_failure = Some(error);
@@ -5405,7 +5458,12 @@ fn run_chain<T: Target>(
                     recoverable_target_failures += 1;
                     recoverable_target_failure = Some(error);
                     observe!(ProposalTargetOutcome::Recoverable, None, gradient);
-                    (f64::NAN, gradient)
+                    // Upstream semantics (`walnutpie/util.hpp`): a failed
+                    // evaluation is a zero-density point with a zero
+                    // gradient. The kernel refines through it instead of
+                    // stopping the transition.
+                    gradient.fill(0.0);
+                    (f64::NEG_INFINITY, gradient)
                 }
                 Err(error) => {
                     target_failure = Some(error);
@@ -5605,6 +5663,7 @@ fn run_chain<T: Target>(
             leaves_attempted: internal.leaves_attempted,
             leaves_built: internal.leaves_built,
             recoverable_target_failures,
+            zero_density_evaluations: internal.zero_density_evaluations,
             initial_hamiltonian: internal.initial_hamiltonian,
             minimum_hamiltonian: internal.minimum_hamiltonian,
             maximum_hamiltonian: internal.maximum_hamiltonian,

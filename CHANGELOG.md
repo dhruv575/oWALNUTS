@@ -20,6 +20,28 @@ All notable changes to oWALNUTS will be documented here.
 
 ### Changed
 
+- **Recoverable target failures refine instead of stopping (kernel revision
+  `v10`).** Through `v9` a [`TargetError::recoverable`] result stopped the
+  whole transition (`StopReason::InvalidEvaluation`, counted as a divergence)
+  on the failed call, so a stiff model whose coarse micro-steps overshoot into
+  a non-representable region produced no-op transitions
+  (`STUDIES/paper_stock_watson_reproduction_v1` saw 65–100% no-ops until the
+  target emulated the reference semantics itself). Upstream walnutpie maps a
+  failed evaluation to `logp = -inf`, `grad = 0` (`walnutpie/util.hpp`), so
+  the micro-step merely fails the endpoint tolerance and the leaf refines;
+  only when every level ends in the region is the leaf rejected as refinement
+  exhaustion. `v10` does exactly that: zero-density points are excluded from
+  the Hamiltonian extrema and the divergence statistic, reported per
+  transition and per partition as `zero_density_evaluations`, and a successful
+  run can no longer report `StopReason::InvalidEvaluation` (retained in the
+  enum for compatibility). Nonfinite *returned* values (`NaN`, `+inf`, or a
+  nonfinite gradient) remain fatal. Runs whose target never returns a
+  recoverable error are bit-identical to `v9`. Verified by a 4,000-leaf
+  differential oracle generated from the unmodified upstream headers with a
+  throwing target (`oracle/walnutpie/f5bba365_invalid_leaves`; before the
+  change every wall-touching leaf disagreed) and by
+  `STUDIES/invalid_evaluation_parity_v1`.
+
 - **Paper adaptation default restart policy
   (`walnutpie-paper-adaptation-kquantile-gamma-v3`).**
   `PaperAdaptationConfig::default()` now continues one dual-averaging stream

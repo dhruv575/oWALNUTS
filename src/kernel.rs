@@ -275,6 +275,14 @@ pub struct FixedTuning {
 }
 
 /// Why a deterministic leaf was rejected.
+///
+/// `InvalidEvaluation` is a malformed evaluation (NaN or `+inf` log density,
+/// nonfinite or wrong-length gradient, or a NaN Hamiltonian); integration stops
+/// on that call. A log density of exactly `-inf` with a finite gradient is a
+/// zero-density point, not an invalid evaluation: it fails the endpoint
+/// tolerance like any over-tolerance micro-step and refines, ending in
+/// `RefinementExhausted` only when every level fails, exactly as upstream
+/// walnutpie treats a failed evaluation (`logp = -inf`, `grad = 0`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rejection {
     RefinementExhausted,
@@ -1220,6 +1228,9 @@ pub struct TransitionDiagnostics {
     pub outer_metropolis_draws: usize,
     pub leaves_attempted: usize,
     pub leaves_built: usize,
+    /// Fused calls that returned a zero-density point (`-inf` log density,
+    /// finite gradient) and therefore refined instead of stopping.
+    pub zero_density_evaluations: usize,
     pub initial_hamiltonian: f64,
     pub minimum_hamiltonian: f64,
     pub maximum_hamiltonian: f64,
@@ -1298,6 +1309,10 @@ pub struct TransitionWorkTelemetry {
     pub reverse_micro_steps_executed: usize,
     pub leaves_attempted: usize,
     pub leaves_built: usize,
+    /// Fused calls that returned a zero-density point (`-inf` log density
+    /// with a finite gradient). Such calls refine like any over-tolerance
+    /// micro-step; they never stop a transition by themselves.
+    pub zero_density_evaluations: usize,
     pub rejections: RejectionCounts,
     pub stops: StopCounts,
     pub direction_draws: usize,
@@ -1385,6 +1400,7 @@ impl TransitionWorkTelemetry {
         add!(reverse_micro_steps_executed);
         add!(leaves_attempted);
         add!(leaves_built);
+        add!(zero_density_evaluations);
         add!(rejections.refinement_exhausted);
         add!(rejections.reverse_coarser_accepted);
         add!(rejections.invalid_forward_evaluation);
@@ -1977,6 +1993,7 @@ where
                 outer_metropolis_draws: counts.outer_metropolis_draws,
                 leaves_attempted: counts.leaves_attempted,
                 leaves_built: counts.leaves_built,
+                zero_density_evaluations: work.zero_density_evaluations,
                 initial_hamiltonian: work.initial_hamiltonian,
                 minimum_hamiltonian: work.minimum_hamiltonian,
                 maximum_hamiltonian: work.maximum_hamiltonian,
@@ -2225,6 +2242,7 @@ where
         outer_metropolis_draws: counts.outer_metropolis_draws,
         leaves_attempted: counts.leaves_attempted,
         leaves_built: counts.leaves_built,
+        zero_density_evaluations: work.zero_density_evaluations,
         initial_hamiltonian: work.initial_hamiltonian,
         minimum_hamiltonian: work.minimum_hamiltonian,
         maximum_hamiltonian: work.maximum_hamiltonian,
@@ -2378,7 +2396,7 @@ where
     )
 }
 
-fn macro_leaf_observed<F, M: MassOperator + ?Sized>(
+pub(crate) fn macro_leaf_observed<F, M: MassOperator + ?Sized>(
     start: &State,
     mass: &M,
     tuning: FixedTuning,
@@ -2439,6 +2457,8 @@ where
         last_integration = Some(integration);
         let attempted = integration.attempted;
         let valid = integration.valid;
+        work.zero_density_evaluations =
+            checked_add_work(work.zero_density_evaluations, integration.zero_density)?;
         work.forward_micro_steps_executed =
             checked_add_work(work.forward_micro_steps_executed, attempted)?;
         work.fused_calls.forward = checked_add_work(work.fused_calls.forward, attempted)?;
@@ -2502,6 +2522,8 @@ where
                 );
                 let attempted = integration.attempted;
                 let valid = integration.valid;
+                work.zero_density_evaluations =
+                    checked_add_work(work.zero_density_evaluations, integration.zero_density)?;
                 work.reverse_micro_steps_executed =
                     checked_add_work(work.reverse_micro_steps_executed, attempted)?;
                 work.fused_calls.reverse = checked_add_work(work.fused_calls.reverse, attempted)?;
@@ -2711,7 +2733,12 @@ struct IntegrationObservation {
     /// Departure of the final micro-step from the initial Hamiltonian. This
     /// is the upstream `within_tolerance` acceptance statistic; it is
     /// symmetric under time reversal, which the path-wide maximum is not.
+    /// It is `+inf` when the final micro-step landed in the zero-density
+    /// region.
     endpoint_error: f64,
+    /// Fused calls in this attempt that returned a zero-density point
+    /// (log density exactly `-inf` with a finite gradient).
+    zero_density: usize,
 }
 
 fn integrate<F, M: MassOperator + ?Sized>(
@@ -2733,6 +2760,7 @@ where
     let mut maximum = initial_hamiltonian;
     let mut maximum_absolute_error = 0.0_f64;
     let mut endpoint_error = 0.0_f64;
+    let mut zero_density = 0usize;
     for evaluation in 0..count {
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
@@ -2750,10 +2778,19 @@ where
             initial_hamiltonian: Some(initial_hamiltonian),
         });
         let (log_prob, gradient) = eval(&state.theta);
-        if gradient.len() != state.theta.len()
-            || !log_prob.is_finite()
-            || gradient.iter().any(|value| !value.is_finite())
-        {
+        let gradient_finite =
+            gradient.len() == state.theta.len() && gradient.iter().all(|value| value.is_finite());
+        if log_prob == f64::NEG_INFINITY && gradient_finite {
+            // Zero-density point (upstream maps a failed evaluation to
+            // `logp = -inf`, `grad = 0`). Integration continues with the
+            // supplied gradient; the endpoint statistic becomes `+inf` only if
+            // this is the final micro-step, exactly as upstream
+            // `macro_step`/`within_tolerance`, which overwrite the log density
+            // at every micro-step and test the final one.
+            zero_density += 1;
+            state.log_prob = f64::NEG_INFINITY;
+            state.grad.copy_from_slice(&gradient);
+        } else if !log_prob.is_finite() || !gradient_finite {
             state.log_prob = f64::NEG_INFINITY;
             state.grad.fill(0.0);
             return IntegrationObservation {
@@ -2763,6 +2800,7 @@ where
                 maximum: f64::INFINITY,
                 maximum_absolute_error: f64::INFINITY,
                 endpoint_error: f64::INFINITY,
+                zero_density,
             };
         } else {
             state.log_prob = log_prob;
@@ -2772,7 +2810,7 @@ where
             *momentum += half_step * gradient;
         }
         let energy = -joint_log_density(state, mass);
-        if !energy.is_finite() {
+        if energy.is_nan() {
             return IntegrationObservation {
                 attempted: evaluation + 1,
                 valid: false,
@@ -2780,11 +2818,18 @@ where
                 maximum: f64::INFINITY,
                 maximum_absolute_error: f64::INFINITY,
                 endpoint_error: f64::INFINITY,
+                zero_density,
             };
         }
-        minimum = minimum.min(energy);
-        maximum = maximum.max(energy);
-        maximum_absolute_error = maximum_absolute_error.max((energy - initial_hamiltonian).abs());
+        if energy.is_finite() {
+            // Zero-density points have infinite energy; they are excluded from
+            // the Hamiltonian extrema and the divergence statistic because
+            // they are a target-support boundary, not a numerical blow-up.
+            minimum = minimum.min(energy);
+            maximum = maximum.max(energy);
+            maximum_absolute_error =
+                maximum_absolute_error.max((energy - initial_hamiltonian).abs());
+        }
         endpoint_error = (energy - initial_hamiltonian).abs();
     }
     IntegrationObservation {
@@ -2794,6 +2839,7 @@ where
         maximum,
         maximum_absolute_error,
         endpoint_error,
+        zero_density,
     }
 }
 
@@ -3234,6 +3280,176 @@ mod tests {
         assert_eq!(result.rejection, Some(Rejection::InvalidEvaluation));
         assert_eq!(result.evaluations, 1);
         assert_eq!(calls, 1);
+    }
+
+    /// Zero-density endpoint at the coarsest level refines to the next level
+    /// and is accepted there; the level-0 adaptation statistic is `exp(-inf)`.
+    /// The coarse step overshoots into the wall in both directions (calls 1
+    /// and 4), so the reverse coarsening check is not within tolerance and
+    /// the finer leaf is reversible.
+    #[test]
+    fn zero_density_endpoint_refines_instead_of_stopping() {
+        let mut calls = 0;
+        let mut work = TransitionWorkTelemetry::default();
+        let result = macro_leaf_observed(
+            &state(0.0, 1.0),
+            &[1.0],
+            tuning(0.2, 3, 1, 1.0),
+            Direction::Forward,
+            &mut |theta: &[f64]| {
+                calls += 1;
+                if calls == 1 || calls == 4 {
+                    (f64::NEG_INFINITY, vec![0.0; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+            &mut work,
+        )
+        .unwrap();
+        assert!(result.accepted(), "{:?}", result.rejection);
+        assert_eq!(result.selected_refinement_level, Some(1));
+        assert_eq!(result.micro_steps, 2);
+        assert_eq!(result.adaptation_value, 0.0);
+        // Level 0 (1 call) + level 1 (2 calls) + reverse coarser check (1 call).
+        assert_eq!(result.forward_evaluations, 3);
+        assert_eq!(result.reverse_evaluations, 1);
+        assert_eq!(work.zero_density_evaluations, 2);
+        assert_eq!(work.rejections.invalid_forward_evaluation, 0);
+        assert_eq!(work.rejections.invalid_reverse_evaluation, 0);
+        assert!(result.maximum_absolute_energy_error.is_finite());
+        assert!(result.maximum_hamiltonian.is_finite());
+    }
+
+    /// The same leaf with a valid coarse reverse step is rejected as
+    /// non-reversible (the coarser level would have been selected in
+    /// reverse), exactly as any finite over-tolerance forward level.
+    #[test]
+    fn zero_density_forward_with_valid_coarse_reverse_is_not_reversible() {
+        let mut calls = 0;
+        let result = macro_leaf(
+            &state(0.0, 1.0),
+            &[1.0],
+            tuning(0.2, 3, 1, 1.0),
+            Direction::Forward,
+            &mut |theta: &[f64]| {
+                calls += 1;
+                if calls == 1 {
+                    (f64::NEG_INFINITY, vec![0.0; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(result.rejection, Some(Rejection::ReverseCoarserAccepted));
+        assert_eq!(result.forward_evaluations, 3);
+        assert_eq!(result.reverse_evaluations, 1);
+    }
+
+    /// Every level ending in the zero-density region is refinement
+    /// exhaustion, never an invalid-evaluation stop.
+    #[test]
+    fn zero_density_at_every_level_is_refinement_exhaustion() {
+        let mut work = TransitionWorkTelemetry::default();
+        let result = macro_leaf_observed(
+            &state(0.0, 1.0),
+            &[1.0],
+            tuning(0.2, 3, 1, 1.0),
+            Direction::Forward,
+            &mut |theta: &[f64]| {
+                if theta[0] > 0.04 {
+                    (f64::NEG_INFINITY, vec![0.0; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+            &mut work,
+        )
+        .unwrap();
+        assert_eq!(result.rejection, Some(Rejection::RefinementExhausted));
+        assert_eq!(result.refinement_attempts, 3);
+        assert_eq!(result.forward_evaluations, 1 + 2 + 4);
+        assert_eq!(result.reverse_evaluations, 0);
+        assert_eq!(work.rejections.refinement_exhausted, 1);
+        assert_eq!(work.rejections.invalid_forward_evaluation, 0);
+        assert_eq!(work.zero_density_evaluations, 1 + 2 + 4);
+    }
+
+    /// Upstream `macro_step` overwrites the log density at every micro-step
+    /// and tests only the last one: an interior zero-density point followed
+    /// by a finite endpoint does not by itself reject the attempt.
+    #[test]
+    fn interior_zero_density_with_finite_endpoint_follows_upstream_rule() {
+        let mut calls = 0;
+        let mut work = TransitionWorkTelemetry::default();
+        let result = macro_leaf_observed(
+            &state(0.0, 1.0),
+            &[1.0],
+            tuning(0.2, 1, 4, 1.0),
+            Direction::Forward,
+            &mut |theta: &[f64]| {
+                calls += 1;
+                if calls == 2 {
+                    (f64::NEG_INFINITY, vec![0.0; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+            &mut work,
+        )
+        .unwrap();
+        assert!(result.accepted(), "{:?}", result.rejection);
+        assert_eq!(result.forward_evaluations, 4);
+        assert_eq!(work.zero_density_evaluations, 1);
+        assert!(result.maximum_absolute_energy_error.is_finite());
+    }
+
+    /// A zero-density endpoint during the reverse coarsening check is never
+    /// "within tolerance", so the coarser level is not selected in reverse
+    /// and the finer forward leaf stays accepted.
+    #[test]
+    fn zero_density_reverse_coarser_check_keeps_forward_leaf() {
+        let mut calls = 0;
+        let mut work = TransitionWorkTelemetry::default();
+        let result = macro_leaf_observed(
+            &state(1.0, 0.0),
+            &[1.0],
+            tuning(3.48, 2, 1, 0.8178),
+            Direction::Forward,
+            &mut |theta: &[f64]| {
+                calls += 1;
+                if calls == 4 {
+                    (f64::NEG_INFINITY, vec![0.0; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+            &mut work,
+        )
+        .unwrap();
+        assert!(result.accepted(), "{:?}", result.rejection);
+        assert_eq!(result.forward_evaluations, 3);
+        assert_eq!(result.reverse_evaluations, 1);
+        assert_eq!(work.zero_density_evaluations, 1);
+        assert_eq!(work.rejections.invalid_reverse_evaluation, 0);
+        assert_eq!(work.rejections.reverse_coarser_accepted, 0);
+    }
+
+    /// A `-inf` log density with a nonfinite gradient is malformed, not a
+    /// zero-density point.
+    #[test]
+    fn negative_infinity_with_nonfinite_gradient_is_invalid() {
+        let result = macro_leaf(
+            &state(0.0, 1.0),
+            &[1.0],
+            tuning(0.1, 3, 2, 1.0),
+            Direction::Forward,
+            &mut |theta: &[f64]| (f64::NEG_INFINITY, vec![f64::NAN; theta.len()]),
+        )
+        .unwrap();
+        assert_eq!(result.rejection, Some(Rejection::InvalidEvaluation));
+        assert_eq!(result.evaluations, 1);
     }
 
     #[test]

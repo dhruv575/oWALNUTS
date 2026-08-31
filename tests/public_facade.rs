@@ -1090,12 +1090,28 @@ fn recoverable_target_failures_are_deterministic_rejections_with_exact_partition
             .map(|diagnostic| diagnostic.recoverable_target_failures())
             .sum()
     );
+    // Kernel revision v10: recoverable failures are zero-density points that
+    // refine like any over-tolerance micro-step. They never stop a transition
+    // as an invalid evaluation, never count as divergences, and are reported
+    // one-to-one as zero-density evaluations.
     assert!(first.diagnostics().iter().all(|diagnostic| {
-        diagnostic.recoverable_target_failures() == 0
-            || (diagnostic.stop() == owalnuts::walnutpie::StopReason::InvalidEvaluation
-                && diagnostic.divergent()
-                && diagnostic.maximum_absolute_energy_error().is_infinite())
+        diagnostic.stop() != owalnuts::walnutpie::StopReason::InvalidEvaluation
+            && diagnostic.zero_density_evaluations() == diagnostic.recoverable_target_failures()
+            && diagnostic.maximum_absolute_energy_error().is_finite()
     }));
+    assert_eq!(
+        first.telemetry().total().zero_density_evaluations(),
+        first.telemetry().total().recoverable_target_failures()
+    );
+    assert_eq!(first.telemetry().total().invalid_evaluation_stops(), 0);
+    assert!(
+        first
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.recoverable_target_failures() > 0
+                && diagnostic.leaves_built() > 0),
+        "some transition must both hit the wall and still build leaves"
+    );
     assert_eq!(
         first.telemetry().total().divergences(),
         first.diagnostics().iter().filter(|d| d.divergent()).count()
@@ -1108,6 +1124,91 @@ fn recoverable_target_failures_are_deterministic_rejections_with_exact_partition
             .map(|diagnostic| diagnostic.target_evaluations())
             .sum()
     );
+}
+
+/// Standard normal in two dimensions truncated to `x_0 > 0` through a
+/// recoverable error. Exact moments: `E[x_0] = sqrt(2/pi)`,
+/// `Var[x_0] = 1 - 2/pi`, `E[x_1] = 0`, `Var[x_1] = 1`.
+struct HalfSpaceGaussian;
+
+impl Target for HalfSpaceGaussian {
+    fn dimension(&self) -> usize {
+        2
+    }
+
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        if position[0] <= 0.0 {
+            return Err(TargetError::recoverable("outside the half space"));
+        }
+        gradient[0] = -position[0];
+        gradient[1] = -position[1];
+        Ok(-0.5 * (position[0] * position[0] + position[1] * position[1]))
+    }
+}
+
+/// Zero-density points refine rather than stop, and the retained draws are
+/// stationary for the truncated target: detailed balance survives the
+/// upstream `-inf` rule.
+#[test]
+fn zero_density_boundary_keeps_truncated_target_stationary() {
+    use owalnuts::walnutpie::{KernelTuning, StopReason};
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let tuning = KernelTuning::new(
+        0.9,
+        NonZeroUsize::new(5).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(4).unwrap(),
+        0.5,
+    )
+    .unwrap();
+    let retained = 12_000usize;
+    let config =
+        RunConfig::new(200, NonZeroUsize::new(retained).unwrap(), 0x7a10).with_tuning(tuning);
+    let output = sample(&HalfSpaceGaussian, &[0.7, 0.0], &mass, &config).unwrap();
+    let total = output.telemetry().total();
+    assert!(total.recoverable_target_failures() > 0);
+    assert_eq!(
+        total.zero_density_evaluations(),
+        total.recoverable_target_failures()
+    );
+    assert_eq!(total.invalid_evaluation_stops(), 0);
+    assert_eq!(total.divergences(), 0);
+    assert!(
+        output
+            .diagnostics()
+            .iter()
+            .all(|d| d.stop() != StopReason::InvalidEvaluation)
+    );
+    // The wall stops orbits by exhaustion, but most transitions still move.
+    let moved = output
+        .samples()
+        .chunks(2)
+        .zip(output.samples().chunks(2).skip(1))
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(moved > retained / 2, "moved {moved} of {retained}");
+    let x0: Vec<f64> = output.samples().chunks(2).map(|p| p[0]).collect();
+    let x1: Vec<f64> = output.samples().chunks(2).map(|p| p[1]).collect();
+    assert!(x0.iter().all(|value| *value > 0.0));
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+    let var = |v: &[f64], m: f64| v.iter().map(|x| (x - m) * (x - m)).sum::<f64>() / v.len() as f64;
+    let m0 = mean(&x0);
+    let m1 = mean(&x1);
+    let v0 = var(&x0, m0);
+    let v1 = var(&x1, m1);
+    let exact_m0 = (2.0 / std::f64::consts::PI).sqrt();
+    let exact_v0 = 1.0 - 2.0 / std::f64::consts::PI;
+    // Generous Monte-Carlo tolerances (autocorrelated draws): a biased kernel
+    // of the pre-v10 kind moves these by O(0.1); the tolerances are far
+    // tighter than that yet several standard errors wide.
+    assert!((m0 - exact_m0).abs() < 0.04, "E[x0] {m0} vs {exact_m0}");
+    assert!((v0 - exact_v0).abs() < 0.04, "Var[x0] {v0} vs {exact_v0}");
+    assert!(m1.abs() < 0.06, "E[x1] {m1}");
+    assert!((v1 - 1.0).abs() < 0.10, "Var[x1] {v1}");
 }
 
 #[test]
