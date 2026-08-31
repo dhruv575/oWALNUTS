@@ -7,8 +7,8 @@ const COLORS = {
   band: "#9b8fc0", median: "#6f5fa0",
   nutpie: "#37352f", pymc: "#3b6fb6",
 };
-const BACKEND_LABEL = { native: "oWALNUTS (Rust)", pymc: "oWALNUTS (PyMC bridge)", nutpie: "nutpie", numpyro: "NumPyro NUTS" };
-const BACKEND_DOT = { native: COLORS.owalnuts, pymc: COLORS.owalnuts, nutpie: "#8a877f", numpyro: COLORS.numpyro };
+const BACKEND_LABEL = { native: "oWALNUTS (Rust)", native8c: "oWALNUTS (Rust, 8 chains pooled · 2× compute)", pymc: "oWALNUTS (PyMC bridge)", pymc8c: "oWALNUTS (PyMC bridge, 8 chains pooled · 2× compute)", pymcB: "oWALNUTS (PyMC bridge, fallback B)", nutpie: "nutpie", numpyro: "NumPyro NUTS" };
+const BACKEND_DOT = { native: COLORS.owalnuts, native8c: COLORS.owalnuts, pymc: COLORS.owalnuts, pymc8c: COLORS.owalnuts, pymcB: COLORS.owalnuts, nutpie: "#8a877f", numpyro: COLORS.numpyro };
 const ASSET_NAMES = { BTC: "Bitcoin", ETH: "Ethereum", XRP: "XRP", BNB: "BNB", SOL: "Solana" };
 
 const tooltip = document.getElementById("tooltip");
@@ -224,12 +224,12 @@ function comparison(D) {
   const mount = document.getElementById("comparison");
   for (const sym of ["BTC", "ETH", "XRP", "BNB", "SOL"]) {
     const rows = D.cells.filter(c => c.asset === sym);
-    const order = { native: 0, pymc: 1, nutpie: 2, numpyro: 3 };
+    const order = { native: 0, native8c: 1, pymc: 2, pymc8c: 3, pymcB: 4, nutpie: 5, numpyro: 6 };
     rows.sort((a, b) => order[a.cell] - order[b.cell] || a.seed - b.seed);
     const fastest = Math.min(...rows.map(r => r.wall));
     const div = document.createElement("div");
     div.className = "cmp-asset";
-    div.innerHTML = `<div class="cmp-head"><h3>${ASSET_NAMES[sym]}</h3><span>T = ${fmt(D.assets[sym].T, 0)} days · seeds ${rows.some(r=>r.seed===97002)?"97001–97003 (oWALNUTS), 97001 (references)":"97001"}</span></div>`;
+    div.innerHTML = `<div class="cmp-head"><h3>${ASSET_NAMES[sym]}</h3><span>T = ${fmt(D.assets[sym].T, 0)} days · ${D.meta.seeds}</span></div>`;
     const wrap = document.createElement("div");
     wrap.className = "table-wrap";
     wrap.innerHTML = `<table>
