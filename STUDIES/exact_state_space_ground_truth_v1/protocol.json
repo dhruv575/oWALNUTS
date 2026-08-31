@@ -1,0 +1,70 @@
+{
+ "schema": "exact-state-space-ground-truth-v1/protocol",
+ "frozen_utc": "2026-08-31T06:35:14Z",
+ "sampler": {
+  "commit": "bc49ffb43be2a852c412b752e1ead92d932c47e2",
+  "walnutpie_rs_sha256": "1b1bcbc57e8f2f6d3e6b593f354c1dcc88f3d4924ef91f0f1ca93628d912ef95",
+  "kernel_rs_sha256": "e6cf7700e5f5bed6c7a4a43edc63c3b25ba4451a876515bf17713ec88b9680f6",
+  "cargo_lock_sha256": "39850c2492abb3c23ff344c99f7bdae9e4feecbcf1ff242752831d73fdaf24f3",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "build": "git archive snapshot of the commit; live src was mid-edit"
+ },
+ "target": {
+  "m0": 0.0,
+  "tau0": 1.0,
+  "mu": 0.01,
+  "sigma_x": 0.08,
+  "obs_base": 0.0125,
+  "data_seed": 2026083101,
+  "T": [
+   100,
+   1000
+  ],
+  "coordinates": "centered path x_1..x_T, globals fixed"
+ },
+ "kernel": {
+  "initial_step": 0.1,
+  "max_depth": 8,
+  "min_micro_steps": 1,
+  "max_refinement_levels": 3,
+  "max_error": 1.0,
+  "divergence_threshold": 1000.0
+ },
+ "warmup": {
+  "discarded": 500,
+  "target_acceptance": 0.8,
+  "adapt_step_size": true,
+  "adapt_mass": false,
+  "initial_step_search": "default (4 probes, 16 steps, 1024 calls)",
+  "windows": "default 75/25/50"
+ },
+ "execution": {
+  "retained": 2000,
+  "chains": 4,
+  "threads": 4,
+  "starts": "prior random walk, seed*1000003+chain"
+ },
+ "arms": {
+  "I": "identity",
+  "D": "diag(1/Var_post)",
+  "P": "posterior precision H, BidiagonalCholesky",
+  "Q": "prior precision Q_rw, BidiagonalCholesky"
+ },
+ "seeds": {
+  "T100": [
+   83001,
+   83003
+  ],
+  "T1000": [
+   83002,
+   83004
+  ]
+ },
+ "gates": "see PREREGISTRATION.md",
+ "files": {
+  "PREREGISTRATION.md": "c74e8ef8e61fa160d3dd789c813cf3cbd82dc60b04883d30f65050e24b207517",
+  "src/main.rs": "ee11f3e3d4640972338b3a94bd5bfc515a1b7fbf3d0c88141b80b821ca46e9b9",
+  "analyze.py": "30e12217d00c9d2371303035865b138f1c806dfc2bf5e64489f57b686da68e4a",
+  "Cargo.toml": "a0876d7cf61e1b485892fa3a13ed7c2c9b04419311031cdc9ad2f5abfb2b5fe0"
+ }
+}
