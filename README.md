@@ -33,7 +33,7 @@ change or a guarantee that a target callback can be forcibly interrupted.
 ## Paper adaptation
 
 `WarmupConfig::with_paper_adaptation(PaperAdaptationConfig::default())` opts
-into the JMLR Appendix C rules (`walnutpie-paper-adaptation-kquantile-gamma-v1`)
+into the JMLR Appendix C rules (`walnutpie-paper-adaptation-kquantile-gamma-v2`)
 instead of acceptance-driven dual averaging:
 
 * `delta` (`KernelTuning::max_error`) is set at the initial-fast boundary and
@@ -41,11 +41,27 @@ instead of acceptance-driven dual averaging:
   `K = (H_max - H_min) / delta` is the orbit energy-range inflation factor
   (defaults `Delta = 2`, `p_a = 0.95`);
 * `h` (`KernelTuning::step_size`) is dual averaged so that a fraction
-  `Gamma = 0.8` of macro leaves needs no refinement.
+  `Gamma = 0.8` of built macro leaves needs no refinement; transitions that
+  build no leaf contribute no sample, and the installed step stays within
+  `PAPER_STEP_RELATIVE_BOUND` (1e3) of the configured initial step.
 
 Both rules are frozen before the first retained transition, consume no random
 draws or target callbacks, and report `PaperAdaptationUpdate` telemetry.
-Default warmup is unchanged. Deep refinement with deep trees exceeds the
+Default warmup is unchanged.
+
+The `h` rule has two additive options. `PaperStepStatistic::Cumulative` feeds
+dual averaging the running mean of the unrefined fraction over all discarded
+transitions since the end of the initial fast phase instead of each
+transition's own fraction, and
+`PaperRestartPolicy::ContinueThroughLocalErrorInstall` keeps the dual
+averaging state across `delta` installations (mass installations still
+restart it). Their defaults reproduce the `v1` `h` rule except for the
+built-leaf statistic and the step bound above. On Neal's funnel the
+per-transition statistic is position dependent and every restart returns dual
+averaging to its aggressive early iterations, so the default `h` rule ends at
+chain-specific steps (`STUDIES/paper_funnel_adaptive_v1`);
+`STUDIES/paper_funnel_adaptive_v2` measures the options. The installed step is
+always the dual-averaging averaged iterate. Deep refinement with deep trees exceeds the
 conservative constructor bound; admit such runs with
 `sample_chains_with_target_budget` and an explicit
 `TargetEvaluationAdmissionLimit`, or the research ceiling.

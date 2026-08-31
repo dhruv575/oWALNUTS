@@ -470,6 +470,12 @@ where
     match (result.end_state, result.rejection) {
         (Some(state), None) => {
             increment(&mut work.leaves_built)?;
+            if let Some(level) = result.selected_refinement_level {
+                if work.histograms.refinement_level_built.len() <= level {
+                    work.histograms.refinement_level_built.resize(level + 1, 0);
+                }
+                increment(&mut work.histograms.refinement_level_built[level])?;
+            }
             Ok(BuildLeafResult::Built {
                 span: Span::from_state(state, mass)?,
                 micro_steps: result.micro_steps,
@@ -1271,6 +1277,8 @@ pub struct WorkHistogramBin {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WorkHistogram {
     pub refinement_level_attempts: Vec<usize>,
+    /// Built leaves by the refinement level at which they were accepted.
+    pub refinement_level_built: Vec<usize>,
     pub forward_micro_steps: Vec<WorkHistogramBin>,
     pub reverse_micro_steps: Vec<WorkHistogramBin>,
 }
@@ -1312,6 +1320,7 @@ impl TransitionWorkTelemetry {
         Self {
             histograms: WorkHistogram {
                 refinement_level_attempts: Vec::with_capacity(levels),
+                refinement_level_built: Vec::with_capacity(levels),
                 forward_micro_steps: Vec::with_capacity(levels),
                 reverse_micro_steps: Vec::with_capacity(levels.saturating_sub(1)),
             },
@@ -1406,6 +1415,21 @@ impl TransitionWorkTelemetry {
             .refinement_level_attempts
             .iter_mut()
             .zip(&other.histograms.refinement_level_attempts)
+        {
+            *target = checked_add_work(*target, *value)?;
+        }
+        if self.histograms.refinement_level_built.len()
+            < other.histograms.refinement_level_built.len()
+        {
+            self.histograms
+                .refinement_level_built
+                .resize(other.histograms.refinement_level_built.len(), 0);
+        }
+        for (target, value) in self
+            .histograms
+            .refinement_level_built
+            .iter_mut()
+            .zip(&other.histograms.refinement_level_built)
         {
             *target = checked_add_work(*target, *value)?;
         }

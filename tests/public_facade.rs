@@ -1705,7 +1705,8 @@ fn conservative_bound_overflow_fails_before_target_callbacks() {
 // ── JMLR Appendix C paper adaptation ─────────────────────────────────────────
 
 use owalnuts::walnutpie::{
-    PAPER_ADAPTATION_REVISION, PaperAdaptationConfig, PaperAdaptationOutcome,
+    PAPER_ADAPTATION_REVISION, PAPER_STEP_RELATIVE_BOUND, PaperAdaptationConfig,
+    PaperAdaptationOutcome, PaperRestartPolicy, PaperStepStatistic,
 };
 
 /// Ten-dimensional Neal funnel: `omega ~ N(0, 3^2)`, `x_i | omega ~ N(0, e^omega)`.
@@ -1895,6 +1896,244 @@ fn paper_adaptation_is_parallel_sequential_identical_and_preflights_without_call
         assert_eq!(a.metadata().tuning(), b.metadata().tuning());
         assert!(!a.telemetry().paper_adaptation_updates().is_empty());
     }
+}
+
+#[test]
+fn paper_step_options_are_additive_and_continue_or_pool_as_configured() {
+    let mass = DiagonalMass::identity(NonZeroUsize::new(10).unwrap());
+    let limit = ResearchTargetEvaluationLimit::new(
+        NonZeroUsize::new(RESEARCH_MAX_TARGET_EVALUATIONS).unwrap(),
+    )
+    .unwrap();
+    let discarded = 400;
+    let run = |paper: PaperAdaptationConfig| {
+        let config = RunConfig::new(discarded, NonZeroUsize::new(10).unwrap(), 0x5eed_9001)
+            .with_tuning(paper_tuning(0.1, 1.0, 8, 6))
+            .with_research_target_evaluation_limit(limit)
+            .with_warmup(
+                WarmupConfig::default()
+                    .with_mass_adaptation(false)
+                    .with_telemetry_checkpoints((0..discarded).collect())
+                    .unwrap()
+                    .with_paper_adaptation(paper),
+            );
+        sample(&NealFunnel, &[0.0; 10], &mass, &config).unwrap()
+    };
+
+    // Explicit defaults are bit-identical to the implicit default.
+    let implicit = run(PaperAdaptationConfig::default());
+    let explicit = run(PaperAdaptationConfig::default()
+        .with_step_statistic(PaperStepStatistic::PerTransition)
+        .with_restart_policy(PaperRestartPolicy::RestartOnLocalErrorInstall));
+    assert_eq!(implicit.samples(), explicit.samples());
+    assert_eq!(implicit.telemetry(), explicit.telemetry());
+    let installed = implicit
+        .telemetry()
+        .paper_adaptation_updates()
+        .iter()
+        .filter(|update| update.outcome() == PaperAdaptationOutcome::Installed)
+        .count();
+    assert!(
+        installed >= 2,
+        "the funnel smoke must install delta repeatedly"
+    );
+    for update in implicit.telemetry().paper_adaptation_updates() {
+        assert_eq!(
+            update.dual_averaging_restarted(),
+            update.outcome() == PaperAdaptationOutcome::Installed
+        );
+        // Per-transition statistic equals the checkpoint's unrefined fraction.
+        let checkpoint = &implicit.telemetry().warmup_checkpoints()[update.transition()];
+        assert_eq!(update.step_statistic(), checkpoint.unrefined_fraction());
+    }
+
+    // Continue policy: delta still installs, dual averaging never restarts,
+    // and its iteration counter keeps growing across installations.
+    let continued = run(PaperAdaptationConfig::default()
+        .with_restart_policy(PaperRestartPolicy::ContinueThroughLocalErrorInstall));
+    let updates = continued.telemetry().paper_adaptation_updates();
+    assert!(
+        updates
+            .iter()
+            .filter(|update| update.outcome() == PaperAdaptationOutcome::Installed)
+            .count()
+            >= 2
+    );
+    assert!(
+        updates
+            .iter()
+            .all(|update| !update.dual_averaging_restarted())
+    );
+    let checkpoints = continued.telemetry().warmup_checkpoints();
+    let iterations: Vec<usize> = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.dual_averaging().unwrap().iteration())
+        .collect();
+    assert!(iterations.windows(2).all(|pair| pair[1] >= pair[0]));
+    // Every transition with a statistic advanced the single dual-averaging
+    // stream; statistic-free transitions advanced nothing.
+    assert_eq!(
+        *iterations.last().unwrap(),
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.unrefined_fraction().is_some())
+            .count()
+    );
+    assert!(*iterations.last().unwrap() > discarded / 2);
+    let restarted_iterations: Vec<usize> = implicit
+        .telemetry()
+        .warmup_checkpoints()
+        .iter()
+        .map(|checkpoint| checkpoint.dual_averaging().unwrap().iteration())
+        .collect();
+    assert!(
+        restarted_iterations
+            .windows(2)
+            .any(|pair| pair[1] < pair[0])
+    );
+    assert_ne!(continued.samples(), implicit.samples());
+
+    // Cumulative statistic: the reported statistic is the running mean of the
+    // checkpoint fractions since the initial-fast boundary.
+    let pooled =
+        run(PaperAdaptationConfig::default().with_step_statistic(PaperStepStatistic::Cumulative));
+    let checkpoints = pooled.telemetry().warmup_checkpoints();
+    let initial_fast_end = pooled
+        .telemetry()
+        .paper_adaptation_updates()
+        .iter()
+        .find(|update| update.window_index().is_none())
+        .unwrap()
+        .transition();
+    for update in pooled
+        .telemetry()
+        .paper_adaptation_updates()
+        .iter()
+        .filter(|update| update.window_index().is_some())
+    {
+        let fractions: Vec<f64> = checkpoints[initial_fast_end + 1..=update.transition()]
+            .iter()
+            .filter_map(|checkpoint| checkpoint.unrefined_fraction())
+            .collect();
+        let mean = fractions.iter().sum::<f64>() / fractions.len() as f64;
+        assert!((update.step_statistic().unwrap() - mean).abs() < 1e-12);
+    }
+    assert_ne!(pooled.samples(), implicit.samples());
+
+    // Sequential/parallel identity holds with both options enabled.
+    let both = PaperAdaptationConfig::default()
+        .with_step_statistic(PaperStepStatistic::Cumulative)
+        .with_restart_policy(PaperRestartPolicy::ContinueThroughLocalErrorInstall);
+    let config = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 0x5eed_9002)
+        .with_tuning(paper_tuning(0.1, 1.0, 8, 6))
+        .with_research_target_evaluation_limit(limit)
+        .with_warmup(
+            WarmupConfig::default()
+                .with_mass_adaptation(false)
+                .with_paper_adaptation(both),
+        );
+    let positions = vec![vec![0.0; 10], vec![1.0; 10]];
+    let sequential = sample_chains(
+        &NealFunnel,
+        &positions,
+        &mass,
+        &config,
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .unwrap();
+    let parallel = sample_chains(
+        &NealFunnel,
+        &positions,
+        &mass,
+        &config,
+        NonZeroUsize::new(2).unwrap(),
+    )
+    .unwrap();
+    for (a, b) in sequential.chains().iter().zip(parallel.chains()) {
+        assert_eq!(a.samples(), b.samples());
+        assert_eq!(a.telemetry(), b.telemetry());
+        assert_eq!(
+            a.metadata().warmup().unwrap().paper_adaptation(),
+            Some(&both)
+        );
+    }
+}
+
+#[test]
+fn paper_step_never_updates_from_transitions_without_built_leaves() {
+    // Every proposed position is a recoverable failure, so no leaf is ever
+    // built: the step must stay at its initial value instead of running to
+    // the dual-averaging ceiling, and every transition is reported as
+    // statistic-free.
+    struct Wall;
+    impl Target for Wall {
+        fn dimension(&self) -> usize {
+            2
+        }
+        fn log_density_gradient(
+            &self,
+            position: &[f64],
+            gradient: &mut [f64],
+        ) -> Result<f64, TargetError> {
+            if position != [0.0, 0.0] {
+                return Err(TargetError::recoverable("outside the representable region"));
+            }
+            gradient.fill(0.0);
+            Ok(0.0)
+        }
+    }
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let discarded = 200;
+    let config = RunConfig::new(discarded, NonZeroUsize::new(5).unwrap(), 0x5eed_9003)
+        .with_tuning(paper_tuning(0.1, 1.0, 3, 3))
+        .with_warmup(
+            WarmupConfig::default()
+                .with_mass_adaptation(false)
+                .with_paper_adaptation(PaperAdaptationConfig::default()),
+        );
+    let output = sample(&Wall, &[0.0, 0.0], &mass, &config).unwrap();
+    // The averaged iterate of a never-updated stream is the initial step
+    // (up to exp(ln(h)) roundoff).
+    assert!((output.metadata().tuning().step_size() - 0.1).abs() < 1e-15);
+    assert_eq!(output.telemetry().total().leaves_built(), 0);
+    let updates = output.telemetry().paper_adaptation_updates();
+    assert!(!updates.is_empty());
+    let mut counted = 0;
+    for update in updates {
+        assert_eq!(update.step_statistic(), None);
+        assert_eq!(update.unrefined_fraction_mean(), None);
+        assert!((update.step_after() - 0.1).abs() < 1e-15);
+        counted += update.transitions_without_statistic();
+    }
+    assert_eq!(counted, updates.last().unwrap().transition() + 1);
+    assert!(
+        output
+            .telemetry()
+            .warmup_checkpoints()
+            .iter()
+            .all(|checkpoint| checkpoint.unrefined_fraction().is_none())
+    );
+
+    // A permanently unrefined statistic is held at the relative bound rather
+    // than the dual-averaging ceiling.
+    let gaussian = sample(
+        &Gaussian,
+        &[0.0, 0.0],
+        &mass,
+        &RunConfig::new(3_000, NonZeroUsize::new(5).unwrap(), 0x5eed_9004)
+            .with_tuning(paper_tuning(1.0e-3, 1.0e4, 2, 2))
+            .with_warmup(
+                WarmupConfig::default()
+                    .with_mass_adaptation(false)
+                    .with_paper_adaptation(
+                        PaperAdaptationConfig::default().with_local_error_adaptation(false),
+                    ),
+            ),
+    )
+    .unwrap();
+    let step = gaussian.metadata().tuning().step_size();
+    assert!(step <= 1.0e-3 * PAPER_STEP_RELATIVE_BOUND + 1e-12);
+    assert!(step > 1.0e-3);
 }
 
 #[test]

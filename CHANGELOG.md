@@ -9,8 +9,29 @@ All notable changes to oWALNUTS will be documented here.
 - Minimal standalone `owalnuts` crate containing the fixed-diagonal internal-beta facade.
 - Bounded Gaussian example, facade tests, resource controls, telemetry, and run identity metadata.
 - Private parity tests and pinned upstream oracle fixtures with provenance.
+- Opt-in JMLR Appendix C paper adaptation (`WarmupConfig::with_paper_adaptation`,
+  `PaperAdaptationConfig`, `PaperAdaptationUpdate` telemetry,
+  `PAPER_ADAPTATION_REVISION`).
+- `PaperStepStatistic` (per-transition or cumulative unrefined fraction) and
+  `PaperRestartPolicy` (restart or continue dual averaging at `delta`
+  installations) on `PaperAdaptationConfig`, with
+  `PaperAdaptationUpdate::step_statistic` and
+  `PaperAdaptationUpdate::dual_averaging_restarted` telemetry. Defaults are
+  unchanged.
 
 ### Fixed
+
+- **Paper adaptation `h` statistic (`walnutpie-paper-adaptation-kquantile-gamma-v2`).**
+  The `v1` unrefined fraction was `(attempts at level 0 − attempts at level 1) /
+  attempts at level 0`, so leaves rejected as invalid at the coarsest level
+  counted as unrefined and an all-invalid transition read as fraction `1.0`;
+  under sustained invalid transitions dual averaging drove `h` to its 1e6
+  ceiling (observed in `STUDIES/paper_stock_watson_reproduction_v1`). The
+  fraction is now taken over built leaves only, a transition without built
+  leaves contributes no sample and no step update
+  (`PaperAdaptationUpdate::transitions_without_statistic`), and the installed
+  paper-mode step is bounded to `PAPER_STEP_RELATIVE_BOUND` (1e3) times the
+  configured initial step. Acceptance-driven warmup is unchanged.
 
 - **Micro-step acceptance statistic (kernel revision `v9`).** Through `v8` a
   refinement level was accepted when the largest Hamiltonian departure of any

@@ -32,6 +32,12 @@
 //! need no refinement. Updates happen only at the initial-fast boundary and
 //! nonterminal slow-window ends, consume no random draws or callbacks, and
 //! are frozen before retention; see [`PaperAdaptationUpdate`] telemetry.
+//! [`PaperStepStatistic`] selects the per-transition (default) or cumulative
+//! unrefined-fraction statistic and [`PaperRestartPolicy`] selects whether
+//! `delta` installations restart dual averaging (default) or continue it.
+//! The unrefined fraction is taken over built leaves only and the paper-mode
+//! step is bounded by [`PAPER_STEP_RELATIVE_BOUND`] around the initial step
+//! (revision `v2`).
 //! Deep refinement (`max_refinement_levels >= 8`) with deep trees exceeds
 //! the conservative constructor bound; admit such runs through
 //! [`sample_chains_with_target_budget`] and
@@ -393,7 +399,15 @@ pub enum DualAveragingAcceptance {
 /// Identity of the opt-in JMLR Appendix C adaptation rules.
 ///
 /// Default warmup does not use these rules and keeps [`ALGORITHM_REVISION`].
-pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v1";
+///
+/// `v2` counts the unrefined fraction over *built* leaves only (a transition
+/// without built leaves contributes no statistic, so all-invalid transitions
+/// no longer read as fully unrefined) and bounds the paper-mode step to
+/// [`PAPER_STEP_RELATIVE_BOUND`] times the initial step in either direction.
+pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v2";
+/// Paper-mode step bound relative to the initial step: dual averaging never
+/// installs `h` outside `[h_0 / bound, h_0 * bound]`.
+pub const PAPER_STEP_RELATIVE_BOUND: f64 = 1.0e3;
 /// Default global orbit energy-error bound `Delta` (Appendix C.1).
 pub const DEFAULT_PAPER_GLOBAL_ENERGY_BOUND: f64 = 2.0;
 /// Default quantile level `p_a` for the inflation factor `K` (Appendix C.1).
@@ -416,14 +430,30 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 /// * `h` (the kernel's `step_size`): dual averaging keeps the standard
 ///   Hoffman--Gelman constants but its statistic is the per-transition fraction
 ///   of attempted macro leaves that needed no refinement, targeted at
-///   `Gamma`. A leaf counts as unrefined when its coarsest level was never
-///   followed by a finer attempt. Dual averaging restarts around the current
-///   step after every `delta` or mass installation.
+///   `Gamma`. The fraction is taken over built leaves: a built leaf counts
+///   as unrefined when it was accepted at its coarsest level, rejected
+///   attempts count on neither side, and a transition that built no leaf
+///   contributes no sample and no step update. The installed step never
+///   leaves [`PAPER_STEP_RELATIVE_BOUND`] times the configured initial step
+///   in either direction. By default the statistic is the
+///   per-transition fraction ([`PaperStepStatistic::PerTransition`]) and dual
+///   averaging restarts around the current step after every `delta` or mass
+///   installation ([`PaperRestartPolicy::RestartOnLocalErrorInstall`]).
+///   [`PaperStepStatistic::Cumulative`] feeds the running mean of the
+///   fraction over all discarded transitions since the end of the initial
+///   fast phase instead, and
+///   [`PaperRestartPolicy::ContinueThroughLocalErrorInstall`] keeps the dual
+///   averaging state across `delta` installations (mass installations still
+///   restart it). Both options exist because the per-transition statistic is
+///   position dependent on multi-scale targets and repeated restarts keep
+///   dual averaging in its aggressive early iterations; see
+///   `STUDIES/paper_funnel_adaptive_v2`.
 ///
 /// Both rules are applied only during discarded transitions and are frozen
 /// before the first retained transition. They consume no random draws and no
 /// target callbacks. Windows with fewer completed orbits than the minimum
 /// leave `delta` unchanged and report [`PaperAdaptationOutcome::InsufficientOrbits`].
+/// The installed step is always the dual-averaging averaged iterate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PaperAdaptationConfig {
     global_energy_bound: f64,
@@ -431,6 +461,34 @@ pub struct PaperAdaptationConfig {
     unrefined_fraction_target: f64,
     adapt_local_error: bool,
     minimum_orbits: usize,
+    step_statistic: PaperStepStatistic,
+    restart_policy: PaperRestartPolicy,
+}
+
+/// Which unrefined-fraction statistic drives the paper `h` rule.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum PaperStepStatistic {
+    /// Each discarded transition feeds its own unrefined leaf fraction.
+    #[default]
+    PerTransition,
+    /// Each discarded transition feeds the running mean of the unrefined
+    /// leaf fraction over all discarded transitions since the end of the
+    /// initial fast phase (since the first transition before that boundary).
+    Cumulative,
+}
+
+/// Whether a paper `delta` installation restarts dual averaging.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum PaperRestartPolicy {
+    /// Restart dual averaging around the current step after every `delta`
+    /// installation.
+    #[default]
+    RestartOnLocalErrorInstall,
+    /// Keep the dual averaging state across `delta` installations; only mass
+    /// installations restart it.
+    ContinueThroughLocalErrorInstall,
 }
 
 impl Default for PaperAdaptationConfig {
@@ -441,6 +499,8 @@ impl Default for PaperAdaptationConfig {
             unrefined_fraction_target: DEFAULT_PAPER_UNREFINED_FRACTION_TARGET,
             adapt_local_error: true,
             minimum_orbits: DEFAULT_PAPER_MINIMUM_ORBITS,
+            step_statistic: PaperStepStatistic::PerTransition,
+            restart_policy: PaperRestartPolicy::RestartOnLocalErrorInstall,
         }
     }
 }
@@ -492,6 +552,25 @@ impl PaperAdaptationConfig {
         self
     }
 
+    /// Select the unrefined-fraction statistic that drives the `h` rule.
+    pub fn with_step_statistic(mut self, statistic: PaperStepStatistic) -> Self {
+        self.step_statistic = statistic;
+        self
+    }
+
+    /// Select whether `delta` installations restart dual averaging.
+    pub fn with_restart_policy(mut self, policy: PaperRestartPolicy) -> Self {
+        self.restart_policy = policy;
+        self
+    }
+
+    pub fn step_statistic(&self) -> PaperStepStatistic {
+        self.step_statistic
+    }
+    pub fn restart_policy(&self) -> PaperRestartPolicy {
+        self.restart_policy
+    }
+
     pub fn global_energy_bound(&self) -> f64 {
         self.global_energy_bound
     }
@@ -538,9 +617,27 @@ pub struct PaperAdaptationUpdate {
     step_before: f64,
     step_after: f64,
     outcome: PaperAdaptationOutcome,
+    step_statistic: Option<f64>,
+    dual_averaging_restarted: bool,
+    transitions_without_statistic: usize,
 }
 
 impl PaperAdaptationUpdate {
+    /// The statistic value fed to the `h` rule by the transition at which
+    /// this update was applied (the running mean under
+    /// [`PaperStepStatistic::Cumulative`]).
+    pub fn step_statistic(&self) -> Option<f64> {
+        self.step_statistic
+    }
+    /// Transitions in this window that built no macro leaf and therefore
+    /// contributed no unrefined-fraction sample and no step update.
+    pub fn transitions_without_statistic(&self) -> usize {
+        self.transitions_without_statistic
+    }
+    /// Whether dual averaging was restarted at this update point.
+    pub fn dual_averaging_restarted(&self) -> bool {
+        self.dual_averaging_restarted
+    }
     /// Zero-based discarded transition after which the update was applied.
     pub fn transition(&self) -> usize {
         self.transition
@@ -583,16 +680,30 @@ impl PaperAdaptationUpdate {
     }
 }
 
-/// Fraction of attempted macro leaves that never proceeded past their
-/// coarsest refinement level. `None` when the transition attempted no leaf.
+/// Fraction of built macro leaves that were accepted at their coarsest
+/// refinement level. `None` when the transition built no leaf, so rejected
+/// (invalid, exhausted, or non-reversible) attempts never count as
+/// unrefined and an all-invalid transition contributes no statistic.
 fn unrefined_leaf_fraction(work: &TransitionWorkTelemetry) -> Option<f64> {
-    let attempts = &work.histograms.refinement_level_attempts;
-    let coarsest = *attempts.first()?;
-    if coarsest == 0 {
+    if work.leaves_built == 0 {
         return None;
     }
-    let refined = attempts.get(1).copied().unwrap_or(0);
-    Some(coarsest.saturating_sub(refined) as f64 / coarsest as f64)
+    let unrefined = work
+        .histograms
+        .refinement_level_built
+        .first()
+        .copied()
+        .unwrap_or(0)
+        .min(work.leaves_built);
+    Some(unrefined as f64 / work.leaves_built as f64)
+}
+
+/// Bound a paper-mode step to [`PAPER_STEP_RELATIVE_BOUND`] around `initial`.
+fn clamp_paper_step(step: f64, initial: f64) -> f64 {
+    step.clamp(
+        initial / PAPER_STEP_RELATIVE_BOUND,
+        initial * PAPER_STEP_RELATIVE_BOUND,
+    )
 }
 
 /// Linear-interpolation sample quantile of finite values; `None` when empty.
@@ -609,11 +720,16 @@ fn sample_quantile(values: &mut [f64], probability: f64) -> Option<f64> {
 }
 
 /// Per-chain state for the paper `delta` rule: orbit energy ranges and
-/// unrefined fractions collected since the last update point.
+/// unrefined fractions collected since the last update point, plus the
+/// running mean of the unrefined fraction for
+/// [`PaperStepStatistic::Cumulative`].
 struct PaperWindow {
     energy_ranges: Vec<f64>,
     unrefined_sum: f64,
     unrefined_count: usize,
+    without_statistic: usize,
+    cumulative_sum: f64,
+    cumulative_count: usize,
 }
 
 impl PaperWindow {
@@ -622,6 +738,9 @@ impl PaperWindow {
             energy_ranges: Vec::new(),
             unrefined_sum: 0.0,
             unrefined_count: 0,
+            without_statistic: 0,
+            cumulative_sum: 0.0,
+            cumulative_count: 0,
         }
     }
 
@@ -629,14 +748,43 @@ impl PaperWindow {
         if energy_range.is_finite() && energy_range >= 0.0 {
             self.energy_ranges.push(energy_range);
         }
-        if let Some(fraction) = unrefined_fraction {
-            self.unrefined_sum += fraction;
-            self.unrefined_count += 1;
+        match unrefined_fraction {
+            Some(fraction) => {
+                self.unrefined_sum += fraction;
+                self.unrefined_count += 1;
+            }
+            None => self.without_statistic += 1,
         }
     }
 
     fn unrefined_mean(&self) -> Option<f64> {
         (self.unrefined_count > 0).then(|| self.unrefined_sum / self.unrefined_count as f64)
+    }
+
+    /// Fold one transition's unrefined fraction into the running mean and
+    /// return the statistic to feed to the `h` rule under the given policy.
+    fn step_statistic(
+        &mut self,
+        statistic: PaperStepStatistic,
+        unrefined_fraction: Option<f64>,
+    ) -> Option<f64> {
+        if let Some(fraction) = unrefined_fraction {
+            self.cumulative_sum += fraction;
+            self.cumulative_count += 1;
+        }
+        match statistic {
+            PaperStepStatistic::Cumulative => self.cumulative_mean(),
+            _ => unrefined_fraction,
+        }
+    }
+
+    fn cumulative_mean(&self) -> Option<f64> {
+        (self.cumulative_count > 0).then(|| self.cumulative_sum / self.cumulative_count as f64)
+    }
+
+    fn reset_cumulative(&mut self) {
+        self.cumulative_sum = 0.0;
+        self.cumulative_count = 0;
     }
 
     /// Candidate `delta` from this window; consumes the collected orbits.
@@ -688,6 +836,7 @@ impl PaperWindow {
         self.energy_ranges.clear();
         self.unrefined_sum = 0.0;
         self.unrefined_count = 0;
+        self.without_statistic = 0;
     }
 }
 
@@ -5538,8 +5687,8 @@ fn run_chain<T: Target>(
             if warmup.adapt_mass && window_index.is_some() {
                 variance.update(&position);
             }
-            let step_statistic = if warmup.paper_adaptation.is_some() {
-                unrefined_fraction
+            let step_statistic = if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                paper_window.step_statistic(paper.step_statistic, unrefined_fraction)
             } else {
                 acceptance
             };
@@ -5547,6 +5696,10 @@ fn run_chain<T: Target>(
                 && let (Some(dual), Some(statistic)) = (&mut dual_averaging, step_statistic)
             {
                 active_tuning.step_size = dual.update(statistic);
+                if warmup.paper_adaptation.is_some() {
+                    active_tuning.step_size =
+                        clamp_paper_step(active_tuning.step_size, config.tuning.step_size);
+                }
             }
             if warmup.adapt_mass
                 && let Some(window_index) = window_index
@@ -5643,14 +5796,19 @@ fn run_chain<T: Target>(
                     let max_error_before = active_tuning.max_error;
                     let (orbits, inflation_quantile, energy_range_quantile, candidate, outcome) =
                         paper_window.candidate(paper, max_error_before);
+                    let mut dual_averaging_restarted = false;
                     if let Some(max_error) = candidate {
                         active_tuning.max_error = max_error;
-                        if warmup.adapt_step_size {
+                        if warmup.adapt_step_size
+                            && paper.restart_policy
+                                == PaperRestartPolicy::RestartOnLocalErrorInstall
+                        {
                             dual_averaging = Some(DualAveraging::restart(
                                 active_tuning.step_size,
                                 paper.unrefined_fraction_target,
                                 warmup.research_restart_reference_multiplier,
                             ));
+                            dual_averaging_restarted = true;
                         }
                     }
                     telemetry
@@ -5667,14 +5825,26 @@ fn run_chain<T: Target>(
                             step_before,
                             step_after: active_tuning.step_size,
                             outcome,
+                            step_statistic,
+                            dual_averaging_restarted,
+                            transitions_without_statistic: paper_window.without_statistic,
                         });
                     paper_window.reset();
+                    if window_index.is_none() {
+                        // End of the initial fast phase: the cumulative
+                        // statistic starts afresh from the first slow window.
+                        paper_window.reset_cumulative();
+                    }
                 }
             }
             if transition_index + 1 == config.discarded
                 && let Some(dual) = &dual_averaging
             {
                 active_tuning.step_size = dual.final_step();
+                if warmup.paper_adaptation.is_some() {
+                    active_tuning.step_size =
+                        clamp_paper_step(active_tuning.step_size, config.tuning.step_size);
+                }
             }
             if warmup
                 .warmup_telemetry_checkpoints
@@ -9871,6 +10041,61 @@ mod tests {
     }
 
     #[test]
+    fn paper_step_statistic_pools_cumulatively_and_resets_once() {
+        let mut window = PaperWindow::new();
+        // Per-transition: the statistic is the fraction itself; the running
+        // mean still accumulates in the background.
+        assert_eq!(
+            window.step_statistic(PaperStepStatistic::PerTransition, Some(1.0)),
+            Some(1.0)
+        );
+        assert_eq!(
+            window.step_statistic(PaperStepStatistic::PerTransition, None),
+            None
+        );
+        assert_eq!(window.cumulative_mean(), Some(1.0));
+        // Cumulative: running mean over recorded fractions; `None` inputs
+        // neither count nor clear the mean.
+        assert_eq!(
+            window.step_statistic(PaperStepStatistic::Cumulative, Some(0.0)),
+            Some(0.5)
+        );
+        assert_eq!(
+            window.step_statistic(PaperStepStatistic::Cumulative, None),
+            Some(0.5)
+        );
+        let third = window
+            .step_statistic(PaperStepStatistic::Cumulative, Some(0.5))
+            .unwrap();
+        assert!((third - 0.5).abs() < 1e-15);
+        // Window resets do not touch the running mean; only the explicit
+        // initial-fast reset does.
+        window.record(1.0, Some(0.25));
+        window.reset();
+        assert_eq!(window.cumulative_mean(), Some(0.5));
+        window.reset_cumulative();
+        assert_eq!(window.cumulative_mean(), None);
+        assert_eq!(
+            window.step_statistic(PaperStepStatistic::Cumulative, None),
+            None
+        );
+        let config = PaperAdaptationConfig::default();
+        assert_eq!(config.step_statistic(), PaperStepStatistic::PerTransition);
+        assert_eq!(
+            config.restart_policy(),
+            PaperRestartPolicy::RestartOnLocalErrorInstall
+        );
+        let config = config
+            .with_step_statistic(PaperStepStatistic::Cumulative)
+            .with_restart_policy(PaperRestartPolicy::ContinueThroughLocalErrorInstall);
+        assert_eq!(config.step_statistic(), PaperStepStatistic::Cumulative);
+        assert_eq!(
+            config.restart_policy(),
+            PaperRestartPolicy::ContinueThroughLocalErrorInstall
+        );
+    }
+
+    #[test]
     fn paper_step_rule_moves_with_the_unrefined_fraction() {
         let mut too_few_refinements = DualAveraging::new(0.1, 0.8);
         let mut step = 0.1;
@@ -9893,15 +10118,53 @@ mod tests {
     }
 
     #[test]
-    fn unrefined_fraction_reads_the_coarsest_level_histogram() {
+    fn unrefined_fraction_counts_built_leaves_only() {
         let mut work = TransitionWorkTelemetry::default();
         assert_eq!(unrefined_leaf_fraction(&work), None);
+        // Eight leaves attempted, all invalid at the coarsest level: nothing
+        // was built, so no statistic (this previously read as 1.0).
         work.histograms.refinement_level_attempts = vec![8];
-        assert_eq!(unrefined_leaf_fraction(&work), Some(1.0));
-        work.histograms.refinement_level_attempts = vec![8, 2, 1];
-        assert_eq!(unrefined_leaf_fraction(&work), Some(0.75));
-        work.histograms.refinement_level_attempts = vec![0, 0];
+        work.leaves_attempted = 8;
+        work.rejections.invalid_forward_evaluation = 8;
         assert_eq!(unrefined_leaf_fraction(&work), None);
+        // Eight built at the coarsest level.
+        work.rejections.invalid_forward_evaluation = 0;
+        work.leaves_built = 8;
+        work.histograms.refinement_level_built = vec![8];
+        assert_eq!(unrefined_leaf_fraction(&work), Some(1.0));
+        // Six built at level 0, one at level 1, one rejected: the rejected
+        // attempt is in neither numerator nor denominator.
+        work.histograms.refinement_level_attempts = vec![8, 2, 1];
+        work.leaves_built = 7;
+        work.histograms.refinement_level_built = vec![6, 1];
+        assert_eq!(unrefined_leaf_fraction(&work), Some(6.0 / 7.0));
+        // A missing built histogram never yields a fraction above one.
+        work.histograms.refinement_level_built = vec![];
+        assert_eq!(unrefined_leaf_fraction(&work), Some(0.0));
+        work.histograms.refinement_level_built = vec![9];
+        assert_eq!(unrefined_leaf_fraction(&work), Some(1.0));
+    }
+
+    #[test]
+    fn paper_step_is_bounded_relative_to_the_initial_step() {
+        assert_eq!(clamp_paper_step(0.5, 0.1), 0.5);
+        assert_eq!(
+            clamp_paper_step(1.0e9, 0.1),
+            0.1 * PAPER_STEP_RELATIVE_BOUND
+        );
+        assert_eq!(
+            clamp_paper_step(1.0e-9, 0.1),
+            0.1 / PAPER_STEP_RELATIVE_BOUND
+        );
+        // Dual averaging alone would run to its absolute ceiling under a
+        // permanently unrefined statistic; the paper-mode bound holds it.
+        let mut dual = DualAveraging::new(0.1, 0.8);
+        let mut step = 0.1;
+        for _ in 0..2_000 {
+            step = clamp_paper_step(dual.update(1.0), 0.1);
+        }
+        assert_eq!(step, 0.1 * PAPER_STEP_RELATIVE_BOUND);
+        assert!(dual.final_step() > step);
     }
 
     #[test]
