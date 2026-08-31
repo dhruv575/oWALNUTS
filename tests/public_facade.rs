@@ -1920,51 +1920,38 @@ fn paper_step_options_are_additive_and_continue_or_pool_as_configured() {
         sample(&NealFunnel, &[0.0; 10], &mass, &config).unwrap()
     };
 
-    // Explicit defaults are bit-identical to the implicit default.
+    // Explicit defaults are bit-identical to the implicit default, which
+    // since `v3` continues one dual-averaging stream through every `delta`
+    // installation: delta still installs, no restart is ever reported, and
+    // the iteration counter grows monotonically.
     let implicit = run(PaperAdaptationConfig::default());
     let explicit = run(PaperAdaptationConfig::default()
         .with_step_statistic(PaperStepStatistic::PerTransition)
-        .with_restart_policy(PaperRestartPolicy::RestartOnLocalErrorInstall));
+        .with_restart_policy(PaperRestartPolicy::ContinueThroughLocalErrorInstall));
     assert_eq!(implicit.samples(), explicit.samples());
     assert_eq!(implicit.telemetry(), explicit.telemetry());
-    let installed = implicit
-        .telemetry()
-        .paper_adaptation_updates()
-        .iter()
-        .filter(|update| update.outcome() == PaperAdaptationOutcome::Installed)
-        .count();
-    assert!(
-        installed >= 2,
-        "the funnel smoke must install delta repeatedly"
-    );
-    for update in implicit.telemetry().paper_adaptation_updates() {
-        assert_eq!(
-            update.dual_averaging_restarted(),
-            update.outcome() == PaperAdaptationOutcome::Installed
-        );
-        // Per-transition statistic equals the checkpoint's unrefined fraction.
-        let checkpoint = &implicit.telemetry().warmup_checkpoints()[update.transition()];
-        assert_eq!(update.step_statistic(), checkpoint.unrefined_fraction());
-    }
-
-    // Continue policy: delta still installs, dual averaging never restarts,
-    // and its iteration counter keeps growing across installations.
-    let continued = run(PaperAdaptationConfig::default()
-        .with_restart_policy(PaperRestartPolicy::ContinueThroughLocalErrorInstall));
-    let updates = continued.telemetry().paper_adaptation_updates();
+    let updates = implicit.telemetry().paper_adaptation_updates();
     assert!(
         updates
             .iter()
             .filter(|update| update.outcome() == PaperAdaptationOutcome::Installed)
             .count()
-            >= 2
+            >= 2,
+        "the funnel smoke must install delta repeatedly"
     );
     assert!(
         updates
             .iter()
             .all(|update| !update.dual_averaging_restarted())
     );
-    let checkpoints = continued.telemetry().warmup_checkpoints();
+    let checkpoints = implicit.telemetry().warmup_checkpoints();
+    for update in updates {
+        // Per-transition statistic equals the checkpoint's unrefined fraction.
+        assert_eq!(
+            update.step_statistic(),
+            checkpoints[update.transition()].unrefined_fraction()
+        );
+    }
     let iterations: Vec<usize> = checkpoints
         .iter()
         .map(|checkpoint| checkpoint.dual_averaging().unwrap().iteration())
@@ -1980,7 +1967,26 @@ fn paper_step_options_are_additive_and_continue_or_pool_as_configured() {
             .count()
     );
     assert!(*iterations.last().unwrap() > discarded / 2);
-    let restarted_iterations: Vec<usize> = implicit
+
+    // Restart policy: every installation restarts dual averaging, so the
+    // iteration counter drops somewhere and the draws differ.
+    let restarted = run(PaperAdaptationConfig::default()
+        .with_restart_policy(PaperRestartPolicy::RestartOnLocalErrorInstall));
+    let restarted_updates = restarted.telemetry().paper_adaptation_updates();
+    assert!(
+        restarted_updates
+            .iter()
+            .filter(|update| update.outcome() == PaperAdaptationOutcome::Installed)
+            .count()
+            >= 2
+    );
+    for update in restarted_updates {
+        assert_eq!(
+            update.dual_averaging_restarted(),
+            update.outcome() == PaperAdaptationOutcome::Installed
+        );
+    }
+    let restarted_iterations: Vec<usize> = restarted
         .telemetry()
         .warmup_checkpoints()
         .iter()
@@ -1991,7 +1997,7 @@ fn paper_step_options_are_additive_and_continue_or_pool_as_configured() {
             .windows(2)
             .any(|pair| pair[1] < pair[0])
     );
-    assert_ne!(continued.samples(), implicit.samples());
+    assert_ne!(restarted.samples(), implicit.samples());
 
     // Cumulative statistic: the reported statistic is the running mean of the
     // checkpoint fractions since the initial-fast boundary.

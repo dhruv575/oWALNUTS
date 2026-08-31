@@ -16,8 +16,20 @@ All notable changes to oWALNUTS will be documented here.
   `PaperRestartPolicy` (restart or continue dual averaging at `delta`
   installations) on `PaperAdaptationConfig`, with
   `PaperAdaptationUpdate::step_statistic` and
-  `PaperAdaptationUpdate::dual_averaging_restarted` telemetry. Defaults are
-  unchanged.
+  `PaperAdaptationUpdate::dual_averaging_restarted` telemetry.
+
+### Changed
+
+- **Paper adaptation default restart policy
+  (`walnutpie-paper-adaptation-kquantile-gamma-v3`).**
+  `PaperAdaptationConfig::default()` now continues one dual-averaging stream
+  across `delta` installations instead of restarting it. The preregistered
+  funnel study `STUDIES/paper_funnel_adaptive_v2` found that restarting left
+  chain-specific final steps (max/min 1.7–2.8×) while continuing gave ≤ 1.3×
+  with equal or better efficiency in both `Delta` families; the cumulative
+  statistic option was falsified as a stabiliser. Select
+  `PaperRestartPolicy::RestartOnLocalErrorInstall` to reproduce the earlier
+  behaviour. Acceptance-driven warmup is unchanged.
 
 ### Fixed
 

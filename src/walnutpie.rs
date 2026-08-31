@@ -34,10 +34,10 @@
 //! are frozen before retention; see [`PaperAdaptationUpdate`] telemetry.
 //! [`PaperStepStatistic`] selects the per-transition (default) or cumulative
 //! unrefined-fraction statistic and [`PaperRestartPolicy`] selects whether
-//! `delta` installations restart dual averaging (default) or continue it.
-//! The unrefined fraction is taken over built leaves only and the paper-mode
-//! step is bounded by [`PAPER_STEP_RELATIVE_BOUND`] around the initial step
-//! (revision `v2`).
+//! `delta` installations continue dual averaging (default since `v3`) or
+//! restart it. The unrefined fraction is taken over built leaves only and
+//! the paper-mode step is bounded by [`PAPER_STEP_RELATIVE_BOUND`] around
+//! the initial step (since `v2`).
 //! Deep refinement (`max_refinement_levels >= 8`) with deep trees exceeds
 //! the conservative constructor bound; admit such runs through
 //! [`sample_chains_with_target_budget`] and
@@ -404,7 +404,10 @@ pub enum DualAveragingAcceptance {
 /// without built leaves contributes no statistic, so all-invalid transitions
 /// no longer read as fully unrefined) and bounds the paper-mode step to
 /// [`PAPER_STEP_RELATIVE_BOUND`] times the initial step in either direction.
-pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v2";
+///
+/// `v3` makes [`PaperRestartPolicy::ContinueThroughLocalErrorInstall`] the
+/// default: dual averaging is no longer restarted at `delta` installations.
+pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v3";
 /// Paper-mode step bound relative to the initial step: dual averaging never
 /// installs `h` outside `[h_0 / bound, h_0 * bound]`.
 pub const PAPER_STEP_RELATIVE_BOUND: f64 = 1.0e3;
@@ -436,18 +439,21 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 ///   contributes no sample and no step update. The installed step never
 ///   leaves [`PAPER_STEP_RELATIVE_BOUND`] times the configured initial step
 ///   in either direction. By default the statistic is the
-///   per-transition fraction ([`PaperStepStatistic::PerTransition`]) and dual
-///   averaging restarts around the current step after every `delta` or mass
-///   installation ([`PaperRestartPolicy::RestartOnLocalErrorInstall`]).
-///   [`PaperStepStatistic::Cumulative`] feeds the running mean of the
-///   fraction over all discarded transitions since the end of the initial
-///   fast phase instead, and
-///   [`PaperRestartPolicy::ContinueThroughLocalErrorInstall`] keeps the dual
-///   averaging state across `delta` installations (mass installations still
-///   restart it). Both options exist because the per-transition statistic is
-///   position dependent on multi-scale targets and repeated restarts keep
-///   dual averaging in its aggressive early iterations; see
-///   `STUDIES/paper_funnel_adaptive_v2`.
+///   per-transition fraction ([`PaperStepStatistic::PerTransition`]) and one
+///   dual-averaging stream continues across `delta` installations
+///   ([`PaperRestartPolicy::ContinueThroughLocalErrorInstall`]); mass
+///   installations still restart it. The alternatives
+///   [`PaperRestartPolicy::RestartOnLocalErrorInstall`] (restart around the
+///   current step after every `delta` installation, the `v1`/`v2`
+///   behaviour) and [`PaperStepStatistic::Cumulative`] (feed the running
+///   mean of the fraction since the end of the initial fast phase) remain
+///   selectable. `STUDIES/paper_funnel_adaptive_v2` measured all four
+///   combinations on Neal's funnel: restarting left chain-specific final
+///   steps (spread 1.7–2.8×) because each restart returns dual averaging to
+///   its aggressive early iterations, continuing gave spread ≤ 1.3× with
+///   equal or better efficiency, and the cumulative statistic was harmful
+///   (spread 15–95×) because dual averaging integrates its lag as a
+///   persistent offset.
 ///
 /// Both rules are applied only during discarded transitions and are frozen
 /// before the first retained transition. They consume no random draws and no
@@ -483,11 +489,11 @@ pub enum PaperStepStatistic {
 #[non_exhaustive]
 pub enum PaperRestartPolicy {
     /// Restart dual averaging around the current step after every `delta`
-    /// installation.
-    #[default]
+    /// installation (the `v1`/`v2` behaviour).
     RestartOnLocalErrorInstall,
     /// Keep the dual averaging state across `delta` installations; only mass
-    /// installations restart it.
+    /// installations restart it (default since `v3`).
+    #[default]
     ContinueThroughLocalErrorInstall,
 }
 
@@ -500,7 +506,7 @@ impl Default for PaperAdaptationConfig {
             adapt_local_error: true,
             minimum_orbits: DEFAULT_PAPER_MINIMUM_ORBITS,
             step_statistic: PaperStepStatistic::PerTransition,
-            restart_policy: PaperRestartPolicy::RestartOnLocalErrorInstall,
+            restart_policy: PaperRestartPolicy::ContinueThroughLocalErrorInstall,
         }
     }
 }
@@ -10083,15 +10089,15 @@ mod tests {
         assert_eq!(config.step_statistic(), PaperStepStatistic::PerTransition);
         assert_eq!(
             config.restart_policy(),
-            PaperRestartPolicy::RestartOnLocalErrorInstall
+            PaperRestartPolicy::ContinueThroughLocalErrorInstall
         );
         let config = config
             .with_step_statistic(PaperStepStatistic::Cumulative)
-            .with_restart_policy(PaperRestartPolicy::ContinueThroughLocalErrorInstall);
+            .with_restart_policy(PaperRestartPolicy::RestartOnLocalErrorInstall);
         assert_eq!(config.step_statistic(), PaperStepStatistic::Cumulative);
         assert_eq!(
             config.restart_policy(),
-            PaperRestartPolicy::ContinueThroughLocalErrorInstall
+            PaperRestartPolicy::RestartOnLocalErrorInstall
         );
     }
 

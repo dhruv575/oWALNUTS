@@ -33,7 +33,7 @@ change or a guarantee that a target callback can be forcibly interrupted.
 ## Paper adaptation
 
 `WarmupConfig::with_paper_adaptation(PaperAdaptationConfig::default())` opts
-into the JMLR Appendix C rules (`walnutpie-paper-adaptation-kquantile-gamma-v2`)
+into the JMLR Appendix C rules (`walnutpie-paper-adaptation-kquantile-gamma-v3`)
 instead of acceptance-driven dual averaging:
 
 * `delta` (`KernelTuning::max_error`) is set at the initial-fast boundary and
@@ -49,18 +49,17 @@ Both rules are frozen before the first retained transition, consume no random
 draws or target callbacks, and report `PaperAdaptationUpdate` telemetry.
 Default warmup is unchanged.
 
-The `h` rule has two additive options. `PaperStepStatistic::Cumulative` feeds
-dual averaging the running mean of the unrefined fraction over all discarded
-transitions since the end of the initial fast phase instead of each
-transition's own fraction, and
-`PaperRestartPolicy::ContinueThroughLocalErrorInstall` keeps the dual
-averaging state across `delta` installations (mass installations still
-restart it). Their defaults reproduce the `v1` `h` rule except for the
-built-leaf statistic and the step bound above. On Neal's funnel the
-per-transition statistic is position dependent and every restart returns dual
-averaging to its aggressive early iterations, so the default `h` rule ends at
-chain-specific steps (`STUDIES/paper_funnel_adaptive_v1`);
-`STUDIES/paper_funnel_adaptive_v2` measures the options. The installed step is
+The `h` rule runs one dual-averaging stream across `delta` installations
+(`PaperRestartPolicy::ContinueThroughLocalErrorInstall`, the default since
+`v3`; mass installations still restart it) and feeds it each transition's own
+unrefined fraction (`PaperStepStatistic::PerTransition`). The alternatives
+`PaperRestartPolicy::RestartOnLocalErrorInstall` (the `v1`/`v2` behaviour)
+and `PaperStepStatistic::Cumulative` are selectable but not recommended:
+on Neal's funnel (`STUDIES/paper_funnel_adaptive_v2`) restarting left
+chain-specific final steps (spread 1.7–2.8×) because each restart returns dual
+averaging to its aggressive early iterations, continuing gave spread ≤ 1.3×
+with equal or better efficiency than the paper's fixed funnel tuning, and the
+cumulative statistic was harmful (spread 15–95×). The installed step is
 always the dual-averaging averaged iterate. Deep refinement with deep trees exceeds the
 conservative constructor bound; admit such runs with
 `sample_chains_with_target_budget` and an explicit
