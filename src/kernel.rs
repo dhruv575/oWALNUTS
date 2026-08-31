@@ -267,7 +267,8 @@ pub struct FixedTuning {
     pub max_refinement_levels: usize,
     /// Leapfrog steps in the first attempt. Must be positive.
     pub min_micro_steps: usize,
-    /// Inclusive full-trajectory Hamiltonian-error tolerance.
+    /// Inclusive endpoint Hamiltonian-error tolerance (`|H(end) - H(start)|`
+    /// per macro step, the upstream `within_tolerance` statistic).
     pub max_error: f64,
     /// Maximum absolute trajectory energy error before a transition is divergent.
     pub divergence_threshold: f64,
@@ -2323,9 +2324,16 @@ fn validate_transition_input<M: MassOperator + ?Sized>(
 
 /// Build one fixed-tuning macro leaf using a diagonal inverse mass.
 ///
-/// Refinement tests the maximum absolute Hamiltonian departure over every
-/// visited micro-step. A candidate is accepted only if no admissible coarser
-/// reverse trajectory also meets the same inclusive trajectory tolerance.
+/// Refinement tests the endpoint Hamiltonian departure `|H(end) - H(start)|`
+/// of each attempted level, exactly as upstream `walnutpie::macro_step`. The
+/// statistic is symmetric under time reversal, so the reverse selection from
+/// the accepted endpoint reproduces the forward level; a candidate is then
+/// accepted only if no admissible coarser reverse trajectory also meets the
+/// same inclusive endpoint tolerance. Path-wide Hamiltonian extrema are still
+/// recorded for telemetry and divergence classification but never decide
+/// acceptance: a path-wide criterion measured from the start state is not
+/// reversible and biased the deterministic kernel toward the Neal-funnel
+/// neck (revision v9 correction).
 pub fn macro_leaf<F, M: MassOperator + ?Sized>(
     start: &State,
     mass: &M,
@@ -2432,10 +2440,10 @@ where
             });
         }
         if level == 0 {
-            last_adaptation_value = (-integration.maximum_absolute_error).exp();
+            last_adaptation_value = (-integration.endpoint_error).exp();
         }
 
-        if integration.maximum_absolute_error <= tuning.max_error {
+        if integration.endpoint_error <= tuning.max_error {
             increment(&mut work.forward_refinement_accepted)?;
             work.accepted_forward_micro_steps =
                 checked_add_work(work.accepted_forward_micro_steps, micro_steps)?;
@@ -2502,7 +2510,7 @@ where
                         maximum_absolute_energy_error: work.maximum_absolute_energy_error,
                     });
                 }
-                if integration.maximum_absolute_error <= tuning.max_error {
+                if integration.endpoint_error <= tuning.max_error {
                     increment(&mut work.reverse_coarsening_accepted)?;
                     increment(&mut work.rejections.reverse_coarser_accepted)?;
                     return Ok(MacroLeafResult {
@@ -2673,7 +2681,13 @@ struct IntegrationObservation {
     valid: bool,
     minimum: f64,
     maximum: f64,
+    /// Largest departure of any visited micro-step from the initial
+    /// Hamiltonian. Telemetry and divergence classification only.
     maximum_absolute_error: f64,
+    /// Departure of the final micro-step from the initial Hamiltonian. This
+    /// is the upstream `within_tolerance` acceptance statistic; it is
+    /// symmetric under time reversal, which the path-wide maximum is not.
+    endpoint_error: f64,
 }
 
 fn integrate<F, M: MassOperator + ?Sized>(
@@ -2694,6 +2708,7 @@ where
     let mut minimum = initial_hamiltonian;
     let mut maximum = initial_hamiltonian;
     let mut maximum_absolute_error = 0.0_f64;
+    let mut endpoint_error = 0.0_f64;
     for evaluation in 0..count {
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
@@ -2723,6 +2738,7 @@ where
                 minimum: f64::NEG_INFINITY,
                 maximum: f64::INFINITY,
                 maximum_absolute_error: f64::INFINITY,
+                endpoint_error: f64::INFINITY,
             };
         } else {
             state.log_prob = log_prob;
@@ -2739,11 +2755,13 @@ where
                 minimum: f64::NEG_INFINITY,
                 maximum: f64::INFINITY,
                 maximum_absolute_error: f64::INFINITY,
+                endpoint_error: f64::INFINITY,
             };
         }
         minimum = minimum.min(energy);
         maximum = maximum.max(energy);
         maximum_absolute_error = maximum_absolute_error.max((energy - initial_hamiltonian).abs());
+        endpoint_error = (energy - initial_hamiltonian).abs();
     }
     IntegrationObservation {
         attempted: count,
@@ -2751,6 +2769,7 @@ where
         minimum,
         maximum,
         maximum_absolute_error,
+        endpoint_error,
     }
 }
 
@@ -3021,7 +3040,10 @@ mod tests {
     }
 
     #[test]
-    fn interior_energy_spike_is_rejected_even_when_endpoint_returns_close() {
+    fn interior_energy_spike_is_accepted_when_endpoint_returns_close() {
+        // Upstream `within_tolerance` semantics: acceptance is decided by the
+        // endpoint Hamiltonian departure only. The interior excursion is still
+        // reported through the path-wide telemetry fields.
         let result = macro_leaf(
             &state(1.0, 0.0),
             &[1.0],
@@ -3030,10 +3052,14 @@ mod tests {
             &mut gaussian,
         )
         .unwrap();
-        assert_eq!(result.rejection, Some(Rejection::RefinementExhausted));
+        assert!(result.accepted());
         assert_eq!(result.micro_steps, 2);
         assert_eq!(result.evaluations, 2);
         assert!(result.maximum_absolute_energy_error > 1e-4);
+        let end = result.end_state.unwrap();
+        let endpoint_error =
+            (joint_log_density(&end, &[1.0]) - joint_log_density(&state(1.0, 0.0), &[1.0])).abs();
+        assert!(endpoint_error <= 1e-4);
     }
 
     #[test]

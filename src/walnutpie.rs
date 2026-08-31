@@ -181,7 +181,20 @@ use crate::types::{State, ValidationError};
 /// `Cargo.lock`, target architecture, inputs, and revision. In particular,
 /// `rand`'s `SmallRng` and `rand_distr::StandardNormal` are not upstream-stable
 /// algorithms across dependency updates.
-pub const ALGORITHM_REVISION: &str = "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v8";
+///
+/// `v9` (2026-08-31) corrects the micro-step acceptance statistic. Revisions
+/// through `v8` accepted a refinement level when the largest Hamiltonian
+/// departure of any visited micro-step from the *start* state was within
+/// `max_error`. That statistic is not symmetric under time reversal, so the
+/// deterministic reverse selection could disagree with the forward selection
+/// and the kernel accepted non-reversible leaves; on Neal's funnel this put
+/// about twice the correct mass below `omega = -5`. `v9` decides acceptance on
+/// the endpoint departure `|H(end) - H(start)|` exactly as upstream
+/// `walnutpie::macro_step`/`within_tolerance`, which restores the pinned
+/// upstream macro-leaf oracle and a 4,000-leaf funnel differential oracle.
+/// Path-wide Hamiltonian extrema remain telemetry only. Runs that never
+/// refine (`max_refinement_levels == 1`, single-step leaves) are unchanged.
+pub const ALGORITHM_REVISION: &str = "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v9";
 /// Execution revision for explicitly original-coordinate metric APIs.
 ///
 /// This stream is deterministic within the same build and lockfile, but is
