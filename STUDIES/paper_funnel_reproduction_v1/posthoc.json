@@ -1,0 +1,16 @@
+{
+  "schema": "owalnuts-paper-funnel-reproduction-posthoc/v1",
+  "note": "Post-hoc, non-preregistered diagnostics written after the preregistered arms completed. Not evidence for the reproduction claim; mechanism probes only.",
+  "target": {"name": "funnel-or-gaussian", "dimension": 10},
+  "starts": [[-3.0, 0,0,0,0,0,0,0,0,0], [-1.0, 0,0,0,0,0,0,0,0,0], [1.0, 0,0,0,0,0,0,0,0,0], [3.0, 0,0,0,0,0,0,0,0,0]],
+  "chains": 4,
+  "threads": 1,
+  "runtime_callback_cap": 1000000000,
+  "wall_cap_seconds_per_arm": 1200,
+  "arms": {
+    "FT":  {"sampler": "owalnuts", "target": "funnel", "trace": true, "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 10, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81001},
+    "G":   {"sampler": "owalnuts", "target": "gaussian", "trace": false, "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 10, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81401},
+    "S":   {"sampler": "owalnuts", "target": "funnel", "trace": true, "step_size": 0.005625, "max_error": 0.21, "max_refinement_levels": 1, "max_depth": 14, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81501},
+    "M8":  {"sampler": "owalnuts", "target": "funnel", "trace": true, "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 7, "min_micro_steps": 8, "max_depth": 10, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81601}
+  }
+}

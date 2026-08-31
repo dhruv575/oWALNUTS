@@ -1,0 +1,2891 @@
+arXiv:2506.18746v1  [stat.CO]  23 Jun 2025
+The Within-Orbit Adaptive Leapfrog No-U-Turn Sampler
+Nawaf Bou-Rabee* Bob Carpenter† Tore Selland Kleppe‡ Sifan Liu§
+June 24, 2025
+Abstract
+Locally adapting parameters within Markov chain Monte Carlo methods while preserving reversibility
+is notoriously difficult. The success of the No-U-Turn Sampler (NUTS) largely stems from its clever local
+adaptation of the integration time in Hamiltonian Monte Carlo via a geometric U-turn condition. However,
+posterior distributions frequently exhibit multi-scale geometries with extreme variations in scale, making
+it necessary to also adapt the leapfrog integrator’s step size locally and dynamically. Despite its practical
+importance, this problem has remained largely open since the introduction of NUTS by Hoffman and
+Gelman (2014). To address this issue, we introduce the Within-orbit Adaptive Leapfrog No-U-Turn Sampler
+(WALNUTS), a generalization of NUTS that adapts the leapfrog step size at fixed intervals of simulated
+time as the orbit evolves. At each interval, the algorithm selects the largest step size from a dyadic schedule
+that keeps the energy error below a user-specified threshold. Like NUTS, WALNUTS employs biased
+progressive state selection to favor states with positions that are further from the initial point along the orbit.
+Empirical evaluations on multiscale target distributions, including Neal’s funnel and the Stock-Watson
+stochastic volatility time-series model, demonstrate that WALNUTS achieves substantial improvements in
+sampling efficiency and robustness compared to standard NUTS.
+1 Introduction & Motivation
+Hamiltonian Monte Carlo and the Role of Discretization Hamiltonian Monte Carlo (HMC) is a Markov
+chain Monte Carlo (MCMC) method for sampling from probability distributions with continuously differen-
+tiable densities µ : Rd→ R that are known up to normalization [18, 40]. HMC generates proposals by simu-
+lating a measure-preserving flow on an extended phase space. This is done by introducing an auxiliary mo-
+mentum variable ρ∈ Rd and a positive-definite mass matrix M∈ Rd×d, and evolving the system according
+to the Hamiltonian dynamics corresponding to the Hamiltonian function H(θ, ρ) =− log µ(θ) + 1
+2 ρ⊤M−1ρ.
+At all times, both forward and backward, the resulting Hamiltonian flow is time-reversible, exactly conserves
+phase-space volume and, in the absence of discretization error, the total energy. Hence, this flow preserves
+the probability measure on R2d with density proportional to e−H(θ, ρ).
+This measure-preserving property makes Hamiltonian flows a natural tool for constructing MCMC methods.
+However, in most cases, the Hamiltonian flow cannot be computed analytically and must be approximated
+numerically, most commonly using the leapfrog integrator [27, 6]. Leapfrog is a time-reversible method
+that preserves volume exactly but only approximately conserves energy. These geometric properties makes
+it a natural choice for constructing Metropolis proposals, as we briefly review in Section 2.4. Crucially,
+however, the leapfrog algorithm is only conditionally stable. The numerical trajectory may diverge if the
+step size is too large relative to the local curvature of the log target density, log µ, as quantified by the largest
+*Department of Mathematical Sciences, Rutgers University, nawaf.bourabee@rutgers.edu
+†Center for Computational Mathematics, Flatiron Institute, bcarpenter@flatironinstitute.org
+‡Department of Mathematics and Physics, University of Stavanger, tore.kleppe@uis.no
+§Center for Computational Mathematics, Flatiron Institute, sliu@flatironinstitute.org
+1
+Figure 1: The line indicates a one-sigma contour of a bivariate Gaussian target. The dots represent an orbit of
+consecutive leapfrog iterates in position space. The large purple dot and arrow mark the initial position and
+momentum, while the asterisk marks the next state selected by the sampler. In this illustration, the U-turn
+condition in NUTS successfully detects the local scale of the target and terminates the trajectory accordingly.
+eigenvalue in magnitude of its Hessian [7]. This imposes constraints on step size selection, and highlights
+the importance of carefully discretizing the Hamiltonian dynamics to ensure efficient sampling.
+The No-U-T urn Sampler Two tuning decisions are especially critical to the performance of HMC,
+• how far to integrate Hamilton’s equations (the integration time), and
+• how finely to discretize the dynamics (the step size).
+The No-U-Turn Sampler (NUTS) [29] addresses the first question by eliminating the need to tune the
+integration time a priori. Instead, NUTS adaptively constructs an orbit by simulating Hamiltonian dynamics
+in both forward and backward time directions. The orbit is built recursively using a doubling procedure: at
+each iteration, a direction (forward or backward) is chosen uniformly at random, and the orbit is extended in
+that direction by doubling its length. The result is a balanced binary tree of candidate states, where internal
+nodes represent recursive doubling stages and leaves correspond to individual states.
+The iteration continues until a U-turn condition is met (see Figure 1). This condition checks whether the orbit
+has begun to reverse direction by evaluating inner products between momentum and position vectors across
+pairs of states, as we briefly review in Section 2.7. To ensure reversibility, this condition is applied recursively
+across all pairs of left and right subtrees in the binary tree built during orbit expansion. This construction
+ensures that the probability of any given orbit is independent of the starting point within the orbit.
+Once the orbit is constructed, a proposal is sampled from the candidate states using a biased progressive
+sampling scheme that preserves detailed balance [29, 3]. By adapting the integration time to the local
+geometry of the target distribution, NUTS achieves robust performance without requiring manual tuning.
+This local adaptivity of integration time has made NUTS one of the most widely used MCMC methods for
+sampling from distributions with continuously differentiable densities [29, 3, 14, 11].
+The Limitations of a Fixed Step Size While NUTS effectively eliminates the need to tune the integration
+time by adapting the orbit length to the local geometry, it still uses a single, fixed step size throughout
+the entire sampling process. This global step size can be limiting in multiscale settings, where the local
+curvature of the target distribution may vary dramatically across regions. Because the leapfrog integrator is
+only conditionally stable, a step size that performs well in flat regions may lead to numerical divergence or
+large energy errors in regions of high curvature. Conversely, calibrating the step size to accommodate the
+worst-case curvature results in unnecessarily fine discretization and inefficient exploration in flatter regions.
+Recent work has introduced orbit-level adaptive step-size variants of NUTS that adjust the leapfrog step size
+globally for each orbit while preserving detailed balance [8]. However, these methods do not address the
+need for finer-grained step size adaptation within each orbit.
+2
+Introducing WALNUTS To address this limitation, we introduce WALNUTS (Within-orbit Adaptive
+Leapfrog No-U-Turn Sampler), a generalization of NUTS that incorporates local step size adaptation within
+each orbit. The key idea is to allow the leapfrog step size to adapt dynamically to local geometric features of
+the target distribution, rather than relying on a single, globally calibrated step size. WALNUTS selects the
+step size independently at each integration step of the orbit, ensuring numerical stability and controlling
+energy error as the orbit moves through regions of varying curvature. This enables the sampler to integrate
+stably through high-curvature regions while progressing efficiently through flatter ones without sacrificing
+detailed balance or requiring manual step size tuning.
+To formalize this adaptivity, we distinguish between macro steps and micro steps. A macro step is the
+unit of simulated time over which candidate states are generated and added to the orbit. Each macro
+step is implemented by applying the leapfrog integrator over a sequence of micro steps. The micro step
+size is chosen from a dyadic schedule so that the total energy error over the macro step remains below
+a user-specified threshold. At each macro step, WALNUTS searches for the coarsest micro step size that
+satisfies this energy-based criterion. This allows different segments of the orbit to be integrated at different
+resolutions, depending on local curvature and stability requirements.
+The resulting orbit consists of a sequence of states lying on a fixed macro grid, with each macro step
+integrated using a locally adapted micro step size. Importantly, although the micro step size may vary from
+one macro step to the next, the map from one candidate state to the next remains volume-preserving: an
+essential property for maintaining reversibility and correctness, as detailed in Section 3.4. Once the full
+orbit is constructed, WALNUTS samples a single state from among the macro steps using the same biased
+progressive scheme as NUTS, which preserves detailed balance and ensures correctness. This local adaptivity
+allows the algorithm to remain both stable in regions of high curvature and efficient in flatter regions without
+requiring a globally tuned step size.
+Visualization of a WALNUTS Transition Step Figure 2 illustrates the mechanics of a WALNUTS transition.
+Each panel shows a different realization, all starting from the same initial condition, in a 2D slice of Neal’s
+funnel distribution. The orbit is color-coded according to the locally selected micro step size, with red
+indicating larger values and blue smaller ones. These gradients visually demonstrate how WALNUTS
+adjusts its numerical resolution in response to local curvature. Insets display the corresponding weight
+profiles used during biased progressive sampling. These weights incorporate not only the target density at
+each state, as in standard NUTS, but also account for the possibility that the reverse trajectory may follow a
+different step-size schedule — ensuring that detailed balance is preserved under local step-size adaptivity.
+General Applicability and Theoretical Considerations Although we present adaptive leapfrog integration
+in the context of NUTS, the underlying idea is more broadly applicable. The same energy-controlled leapfrog
+step size adaptation can be incorporated, with minimal modification, into other Hamiltonian-based samplers
+such as standard HMC, multinomial HMC, and other reversible variants, and also non-reversible variants
+such as the Metropolis-adjusted Kinetic Langevin Algorithm [10] and generalized HMC [30, 46]. The idea
+may also be relevant for related Hamiltonian descent optimization methods [20].
+More generally, while it is well known in geometric integration theory that symplectic integrators with
+variable step sizes may fail to preserve energy over very long trajectories [44, 13], this limitation is less
+restrictive in the context of MCMC. The goals of MCMC differ fundamentally: rather than requiring long-
+time energy conservation, what matters is the preservation of the correct invariant distribution. For this
+purpose, it is sufficient that, conditional on the locally chosen micro step size, the sequence of leapfrog micro
+steps used to perform a single macro integration step remains volume-preserving. This property ensures that
+the overall transition kernel is reversible with respect to the target distribution, as established in Section 3.4.
+3
+-5 0 5
+-10
+-5
+0
+larger smaller
+-1 0 1
+time
+weight
+weight profile
+-5 0 5
+-10
+-5
+0
+larger smaller
+-2 -1 0
+time
+weight
+weight profile
+-5 0 5
+-10
+-5
+0
+larger smaller
+-1 0 1 2
+time
+weight
+weight profile
+Figure 2: Three stochastic realizations of a WALNUTS transition from the same initial point in a 2D slice
+of Neal’s funnel, each generated using a different random seed. The purple dot and arrow indicate the
+initial position and velocity, and the asterisk marks the selected next state. Each panel shows a full orbit
+represented by a sequence of white dots constructed. Each macro step is color-coded according to the micro
+step size required to keep the energy error below a user-specified threshold, with a red-to-blue gradient
+indicating larger to smaller micro step sizes. Insets show the corresponding weight profiles used in biased
+progressive sampling. Differences between panels reflect the stochastic nature of state selection and orbit
+construction forward and backward in time.
+Main Contributions This paper introduces WALNUTS, a step-size-adaptive generalization of the No-U-
+Turn Sampler (NUTS) that dynamically adjusts the leapfrog step size within each macro step of an orbit. The
+main contributions of the paper are:
+• Within-orbit step size adaptation. We propose a principled framework for dynamic step size selection
+within Hamiltonian trajectories. At each integration interval (macro step), WALNUTS chooses the
+coarsest step size from a dyadic schedule that keeps the accumulated energy error below a user-
+specified threshold. This enables stable integration through high-curvature regions while accelerating
+through flatter regions. In contrast to global or orbit-level adaptation, this within-orbit mechanism
+provides the fine-grained control needed to handle multiscale targets effectively. To our knowledge,
+this level of local adaptivity has not previously been achieved in reversible HMC-based samplers.
+• Reversibility under local adaptivity. We establish that WALNUTS satisfies detailed balance with
+respect to the target distribution (Theorem 3). To do so, we lift the algorithm to an extended state space
+A and introduce a carefully designed involution Ψ : A→ A, i.e., Ψ◦ Ψ is the identity map (see (24)).
+As shown in Lemma 2, Ψ preserves the reference measure ζ on A. Lemma 6 further shows that the
+extended target density is invariant under Ψ. Together, these properties imply that WALNUTS satisfies
+detailed balance without requiring a Metropolis correction—just as in standard NUTS.
+This is a subtle and nontrivial result: while individual leapfrog steps are time-reversible and volume-
+preserving, their composition with locally varying step sizes typically breaks both properties. A key
+contribution of our analysis is the careful design of the measure-preserving involutionΨ, which situates
+WALNUTS firmly within the auxiliary-variable-and-involution framework developed in recent work
+[1, 22, 9, 23], and provides a rigorous foundation for incorporating within-orbit local adaptivity into
+Hamiltonian-based MCMC samplers.
+• Empirical improvements across multiscale targets. We benchmark WALNUTS on challenging poste-
+rior geometries, including Neal’s funnel and the Stock-Watson time-series model, and demonstrate
+substantial gains in sampling efficiency over standard NUTS. The results highlight that WALNUTS
+adapts effectively to local curvature without interfering with the integration-time adaptivity central to
+NUTS. Moreover, WALNUTS successfully fits complex hierarchical Bayesian models that standard
+NUTS fails to handle reliably.
+4
+• Accessible and efficient implementations. To promote adoption and reproducibility, we provide both
+a pedagogically transparent implementation in python that mirrors the pseudocode in the manuscript,
+and a memory-efficient C++ version optimized for large-scale applications. These complementary
+implementations are designed to support both practical deployment and future research. The results
+and plots can be reproduced from these implementations, which are available from GitHub under a
+permissive open-source license.1
+T uning Considerations. WALNUTS requires three user-specified parameters: a mass matrix, the energy
+error threshold that controls the micro step size selection at each macro step, and the macro step size itself,
+which determines the temporal spacing between states along the final orbit. Since the theoretical foundations
+of warmup adaptation remain underdeveloped, we explore practical strategies for selecting the energy error
+threshold and macro step size during an initial warmup phase in Appendix C. This phase is used solely
+to calibrate algorithmic parameters prior to collecting posterior samples. Tuning the mass matrix presents
+additional challenges, particularly when it is restricted to be diagonal for computational reasons [31, 28,
+45]. One approach to diagonal mass matrix preconditioning is by approximating the target density with a
+multivariate normal distribution having a diagonal covariance matrix [36, 37].
+Related Work Here we situate this work in the broader context of locally adaptive HMC methods. The
+AutoMALA sampler has been proposed as a self-tuning version of the Metropolis-adjusted Langevin
+algorithm (MALA) [31, 4], which can be viewed as a one-step variant of HMC. These methods use a
+forward–reverse stochastic adaptation scheme that preserves detailed balance. The more recent AutoStep
+sampler [35] builds on similar principles and is closely related to earlier work on the GIST sampler [9], which
+provides a general framework for locally adaptive HMC (reviewed in Section 2.3).
+A different but related class of methods involves the delayed rejection algorithm [38, 25], which is a
+generalization of Metropolis-Hastings to a sequence of proposal moves that can start “bold” and become
+increasingly “timid” [26]; i.e., if a first proposal with a bold hyper-parameter is rejected, then a second
+proposal with a timider hyper-parameter is attempted, and so on. The hope is that the delayed rejection
+probability can be made arbitrarily small with increasingly timid proposals. This strategy has been applied
+to adaptively select orbit-level leapfrog step sizes in HMC [39], and more recently, to adapt the leapfrog step
+size within each generalized HMC step [46]. In both approaches, however, key tuning parameters such as
+path length and friction must be specified in advance and are not adapted locally.
+Organization of Paper The remainder of the paper is organized as follows. Section 2 reviews background
+on HMC and NUTS, introducing key concepts such as leapfrog integration, auxiliary variables, involutions,
+and orbits, and states a general reversibility theorem that provides the theoretical foundation for our method.
+Section 3 presents the WALNUTS algorithm, beginning with the construction of a variable step size leapfrog
+integrator in Section 3.1, and then describing the corresponding modifications to orbit construction in
+Section 3.2 and integration time selection in Section 3.3. Section 3.4 establishes the reversibility of WALNUTS
+by verifying the conditions of the general theorem introduced in Section 2. Sections 4.2 and 4.3 evaluate the
+performance of WALNUTS on multivariate Gaussian targets and Neal’s funnel distribution, respectively.
+Section 4.4 applies WALNUTS to a high-dimensional Bayesian inference problem in macroeconomics.
+Appendix A provides pseudocode to support conceptual understanding of the algorithm, while Appendix B
+outlines practical strategies for optimizing the implementation and Appendix C concludes with some
+approaches to parameter tuning to be applied during an initial warmup phase.
+1The code is distributed under the MIT License at https://github.com/bob-carpenter/walnuts.
+5
+2 Preliminaries
+We first provide some background on Hamiltonian Monte Carlo and its locally adaptive variants.
+2.1 Hamiltonian Flow
+Let µ be a given target probability measure on Rd with unnormalized density also denoted by µ. To
+sample from µ, HMC-type methods extend the state space Rd to phase space R2d by introducing an
+auxiliary momentum variable ρ∈ Rd and a symmetric positive-definite mass matrix M∈ Rd×d. The
+algorithm approximates a Hamiltonian flow in this extended phase space that preserves the joint distribution
+ˆµ = µ⊗N (0, M) with density
+ˆµ(θ, ρ) ∝ exp(−H(θ, ρ)) , where H(θ, ρ) =− log µ(θ) + 1
+2 ρ⊤M−1ρ . (1)
+The corresponding exact Hamiltonian flow φt : R2d→ R2d maps an initial state (θ, ρ)∈ R2d to (θt, ρt) at
+time t∈ R, where (θt, ρt) evolves according to the differential equations
+d
+dt θt = M−1ρt, d
+dt ρt =∇ log µ(θt), with (θ0, ρ0) = ( θ, ρ) . (2)
+This flow preserves the Hamiltonian function H and Lebesgue measure on R2d. Consequently, it preserves
+the extended target distribution ˆµ.
+2.2 Fixed Step Size Leapfrog Integrator
+Because the exact Hamiltonian flow in (2) cannot be computed in closed form for a general target µ, it is
+approximated numerically. HMC-type methods almost always use the leapfrog integrator for this purpose,
+as it is computationally efficient and preserves key geometric properties of the Hamiltonian flow.
+Fix a step size h > 0. The leapfrog integrator Φh : R2d→ R2d updates a state (θ, ρ) to (θ′, ρ′) = Φh(θ, ρ)
+according to
+θ′ = θ + M−1
+
+hρ + h2
+2∇ log µ(θ)
+
+, ρ′ = ρ + h
+2
+ 
+∇ log µ(θ) +∇ log µ(θ′)
+
+. (3)
+Besides being explicit, the leapfrog integrator has several important properties.
+• Volume preservation. The map preserves phase space volume, i.e., |det(DΦh)|≡ 1, where DΦh
+denotes the Jacobian of Φh.
+• Symmetry. The inverse map satisfies Φ−1
+h = Φ−h.
+• Time reversibility. The inverse map satisfies
+Φ−1
+h =F◦ Φh◦F
+whereF : R2d→ R2d is the momentum flip involution defined byF (θ, ρ) = ( θ,−ρ) for (θ, ρ)∈ R2d.
+In other words, applying a momentum flip before and after the integrator yields the inverse map.
+• Energy error. the Hamiltonian is not exactly conserved; in general, (H◦ Φh− H)̸≡ 0.
+For any L∈ Z, the L-step leapfrog map ΦL
+h : R2d→ R2d allows for both forward ( L > 0) and backward
+(L < 0) integration steps, and is defined recursively as
+ΦL+1
+h = Φh◦ ΦL
+h, ΦL−1
+h = Φ−1
+h ◦ ΦL
+h,
+6
+where Φ0
+h is the identity map. The time-reversibility of the leapfrog integrator extends to ΦL
+h: applying a mo-
+mentum flip before and after ΦL
+h yields its inverse. This property is captured by the following commutative
+diagram:
+(θ, ρ) (θ′, ρ′)
+(θ,−ρ) (θ′,−ρ′)
+ΦL
+h
+F F
+ΦL
+h
+It is important to note, however, that the composition of time-reversible maps is not necessarily time-
+reversible; see [6, Theorem 4.2]. This observation becomes relevant later when we consider compositions
+of variable step size leapfrog integrators: although each integrator in the composition is individually
+time-reversible, their composition generally is not.
+2.3 Gibbs Self-T uning for Locally Adaptive HMC
+A general and flexible strategy for constructing Markov chains that are reversible with respect to a given
+target distribution µ is to augment the state space with an auxiliary variable v∈ V, apply a measure-
+preserving involution on the augmented space A = Rd× V, and incorporate a Metropolis–Hastings
+correction. This auxiliary-variable-and-involution strategy underlies many advanced MCMC methods and
+has been formalized in recent literature [1, 22, 23].
+More recently, this strategy was extended to a broad class of locally adaptive HMC samplers through the
+GIST (Gibbs Self-Tuning) framework [9]. GIST constructs adaptive samplers by Gibbs sampling the HMC
+algorithm’s tuning parameters—such as path length, step size, and mass matrix—conditionally on the
+current state. This unifying framework includes randomized HMC [12, 5, 32], multinomial HMC [3, 49], the
+No-U-Turn Sampler [29, 3], and the Apogee-to-Apogee Path Sampler [42] as special cases.
+We now describe a single transition step of a GIST sampler. Let V denote the auxiliary variable space, and
+let pa(v| θ) be a conditional probability density on V given θ∈ Rd. In the locally adaptive HMC samplers
+we will study, v typically consists of the momentum variable ρ along with additional tuning parameters.
+The extended target density on the augmented space A = Rd× V is defined by
+ˆµ(θ, v) = µ(θ)pa(v| θ) ,
+interpreted as a density with respect to a reference measureζ on A. This reference measure specifies how we
+assign “volume” or “weight” to regions of the augmented state space. For the original state variable θ∈ Rd,
+we use the standard Lebesgue measure. For the auxiliary variable v∈ V, we use a measure which may be
+counting measure (if v is discrete) or Lebesgue measure (if v is continuous).
+Given the conditional density pa(v| θ), the extended density ˆµ(θ, v), an involution Ψ : A→ A and the
+current state θn∈ Rd, a transition step of a GIST sampler computes an updated state θn+1∈ Rd as follows:
+1. Auxiliary variable refreshment. Sample vn∼ pa(·| θn).
+2. Involution-based proposal. Compute a proposal ( ˜θn+1, ˜vn+1) = Ψ(θn, vn).
+3. Metropolis correction. Accept the proposal with probability
+α(θn, vn) = min
+
+1, ˆµ( ˜θn, ˜vn)
+ˆµ(θn, vn)
+
+and set
+θn+1 =
+( ˜θn with probability α(θn, vn),
+θn otherwise.
+7
+Consider the Markov chain on Rd obtained by iterating this GIST transition step from a given initial
+distribution. Since the auxiliary variables are fully resampled in each step and discarded after they are used,
+the marginal chain on θ inherits reversibility with respect to µ, as formalized below.
+Theorem 1 (e.g., [9]). Suppose Ψ : A→ A is an involution (i.e., Ψ2 = id) and preserves the reference measure ζ on
+A. Then, the Markov chain defined by the GIST sampler is reversible with respect to µ.
+In the following subsections, we illustrate how this GIST framework gives rise to increasingly sophisticated
+samplers, beginning with HMC with a fixed integration time, followed by biased progressive HMC with a
+randomized integration time, and culminating in the No-U-Turn Sampler.
+2.4 Fixed Integration Time Hamiltonian Monte Carlo
+Hamiltonian Monte Carlo (HMC) with a fixed integration time not only fits naturally into the auxiliary-
+variable framework based on measure-preserving involutions, it may well have inspired it. In this setting,
+the auxiliary variable is a momentum vector ρ∈ Rd with conditional density
+pa(ρ| θ) =N (ρ| 0, M) = 1
+(2π)d/2 det(M)1/2 exp
+
+− 1
+2 ρ⊤M−1ρ
+
+,
+corresponding to a Gaussian distribution with mean zero and covariance matrix M, independent of θ. The
+augmented space is A = R2d, the reference measure ζ is the standard Lebesgue measure on R2d, and the
+augmented target distribution is given by (1).
+The involution Ψ : A→ A is defined by simulating Hamiltonian dynamics using i∈ N leapfrog steps with
+a fixed step size h > 0, followed by a momentum flip:
+Ψ =F◦ Φi
+h,
+where Φi
+h is the i-step leapfrog integrator, andF (θ, ρ) = ( θ,−ρ) denotes the momentum-flip map. This
+composition defines a volume-preserving (i.e., ζ-preserving) involution on the augmented space A.
+Thus, HMC with fixed integration time corresponds to the following instance of a GIST sampler. The steps
+of this sampler are summarized below and illustrated schematically in the diagram that follows.
+1. Auxiliary variable refreshment. Sample ρn∼N (0, M).
+2. Involution-based proposal. Compute ( ˜θn+1, ˜ρn+1) = Ψ(θ, ρ) =F◦ Φi
+h(θn, ρn).
+3. Metropolis correction. Accept the proposal with probability
+α((θn, ρn), ( ˜θn+1, ˜ρn+1)) = min
+
+1, ˆµ( ˜θn+1, ˜ρn+1)
+ˆµ(θn, ρn)
+
+= min
+ 
+1, exp
+ 
+[H(θn, ρn)− H( ˜θn+1, ˜ρn+1)]
+
+.
+After the accept/reject step, the auxiliary variable is discarded. The proposal map Ψ =F◦ ΦL
+h is a volume-
+preserving involution: it satisfies Ψ2 = id and|det(DΨ)| = 1. By Theorem 1, it follows that the resulting
+Markov chain on θ is reversible with respect to µ.
+θn
+current state
+sample ρn∼N (0, M)
+auxiliary variable
+propose
+( ˜θn+1, ˜ρn+1) = Ψ(θn, ρn)
+accept/reject
+using ˆµ
+θn+1
+next state
+Gibbs refreshment involution: Ψ =F◦ Φi
+h corrects for energy error
+To better understand why the Metropolis correction is necessary, note that applying Ψ simply swaps the
+roles of the current and proposed states without changing phase space volume. If Ψ exactly preserved the
+8
+joint density (i.e., if ˆµ◦ Ψ = ˆµ), no Metropolis correction would be needed. However, because the leapfrog
+integrator introduces energy error, Ψ does not exactly preserve ˆµ, and the acceptance probability serves to
+correct for this discrepancy.
+By definition of the acceptance probability, we have
+ˆµ(θn, ρn) α((θn, ρn), ( ˜θn+1, ˜ρn+1)) = ˆµ( ˜θn+1, ˜ρn+1) α(( ˜θn+1, ˜ρn+1), (θn, ρn)),
+so the product ˆµ(θn, ρn) α((θn, ρn, ( ˜θn+1, ˜ρn+1)) is symmetric in the current state (θn, ρn) and the proposed
+state ( ˜θn+1, ˜ρn+1). This symmetry, combined with the volume-preserving and involutive nature ofΨ, ensures
+that HMC is reversible with respect to ˆµ, and thus that the marginal chain on θ is reversible with respect to µ.
+As we will see in the next subsection, this logic extends naturally to biased progressive HMC, where the
+auxiliary variables include a random integration time.
+2.5 Randomized Integration Time with Biased Progressive HMC
+Biased progressive HMC introduces randomness into the integration time while preserving reversibility.
+This is achieved through an extended set of auxiliary variables that consist of a leapfrog trajectory, called an
+orbit, and a randomly selected index that labels a point along this orbit. This index determines the next state
+of the chain and can be interpreted as a randomized integration time.
+We introduce precise notation and structure here not only to support the proofs that follow, but also because
+this perspective helps clarify key ideas underlying NUTS. In particular, it provides a clear view of how NUTS
+operates on an extended space, where randomized integration times emerge naturally and reversibility is
+maintained without Metropolis-style rejections.
+Let h > 0 be a fixed step size. Throughout this paper, an orbit refers to a sequence of phase space points
+computed using the leapfrog integrator and evaluated on a uniformly spaced time grid:
+tk := kh where k∈ Z .
+Definition 1. An orbitO⊂ R2d is a consecutive sequence of states generated by applying the leapfrog
+integrator with fixed step size h > 0 to a given initial condition (θ, ρ)∈ R2d. It takes the form:
+O = (( θa, ρa), (θa+1, ρa+1), . . . ,(θb, ρb)) ,
+where a, b∈ Z with a≤ b. Each pair (θk, ρk) = Φk
+k(θ, ρ) represents the state at time tk = kh obtained by
+applying leapfrog steps forward (if k > 0) or backward (if k < 0) in time from the initial point, for
+k∈ a:b ={a, a + 1, . . . ,b}.
+The length of the orbit, denoted|O|, is b− a + 1.
+We define a simple operation to concatenate orbits, which will be used in orbit construction.
+Definition 2. Let a, b, c∈ Z with a≤ b < c. Given two orbits
+O = (( θa, ρa), . . . ,(θb, ρb)) and eO = (( θb+1, ρb+1), . . . ,(θc, ρc)) ,
+their concatenation, denotedO⊙ eO, is defined as
+O⊙ eO = (( θa, ρa), . . . ,(θc, ρc)) ,
+with length|O⊙ eO| = c− a + 1.
+9
+Biased progressive HMC augments the state space with the following auxiliary variables:
+• a momentum vector ρ∈ Rd,
+• an orbitO⊂ R2d generated from the initial condition (θ, ρ) via forward and/or backward integration,
+• an index i∈ Z that selects a state withinO to serve as the next state of the Markov chain.
+We consider orbits of fixed length 2m for some fixed m∈ N. Each orbit is determined by an initial condition
+(θ, ρ) and the index b∈ 0:(2m− 1) labelling its rightmost element.
+The augmented state space is
+A := Rd× Rd× N× Z,
+with each augmented state denoted by z = ( θ, ρ, b, i)∈ A. Let ζ denote the reference measure on A, given
+by the product of Lebesgue measure on the continuous components and counting measure on the discrete
+components. The joint density on A takes the form
+pjoint(z) ∝ e−H(θ,ρ)· porbit(b| θ, ρ)· pindex(i| θ, ρ, b),
+where the proportionality symbol reflects that e−H(θ,ρ) may not be normalized. Here, porbit(b| θ, ρ) =
+Unif(b| 0:(2m− 1)), i.e. b is uniformly distributed over 0:(2m− 1), and pindex(i| θ, ρ, b) is defined implicitly
+by the orbit construction procedure. To construct the orbit, we draw m independent Bernoulli(1/2) random
+variables B1, . . . ,Bm, which determine the rightmost index of the orbit as
+b =
+m
+∑
+j=1
+Bj2j−1 ,
+and the leftmost index as a = b− 2m + 1. Given (θ, ρ), the orbitO and integration time index i are sampled
+through the following recursive procedure.
+1. Initialization. Start with the singleton orbitO0 = (( θ, ρ)), and set a0 = b0 = i0 = 0. Sample m i.i.d.
+Bernoulli(1/2) random variables B = ( B1, . . . ,Bm).
+2. Recursive construction. For each k = 0, 1, . . . ,m− 1:
+(a) Current orbit. LetOk be the current orbit with index range ak:bk.
+(b) Extension. Build an extension orbitOext
+k using leapfrog steps over the index range aext
+k :bext
+k where
+aext
+k =
+(
+bk + 1 if Bk+1 = 1,
+ak− 2k if Bk+1 = 0,
+bext
+k =
+(
+bk + 2k if Bk+1 = 1,
+ak− 1 if Bk+1 = 0.
+(c) Proposal index. Sample iext
+k from a categorical distribution over aext
+k :bext
+k with probabilities
+proportional to the weights wj ∝ e−H(θj,ρj) where j∈ aext
+k :bext
+k .
+(d) Metropolis acceptance. Accept iext
+k with probability:
+α((ak, bk), (aext
+k , bext
+k )) = min
+
+1,
+∑j∈aext
+k :bext
+k
+e−H(θj,ρj)
+∑j∈ak:bk e−H(θj,ρj)
+
+ . (4)
+If accepted, ik+1 = iext
+k ; otherwise, ik+1 = ik.
+(e) Update orbit. Concatenate to form the next orbit:
+Ok+1 =
+(
+Ok⊙O ext
+k if Bk+1 = 1,
+Oext
+k ⊙O k if Bk+1 = 0.
+10
+3. Output. Return the final orbitO of length 2m and index i = im.
+This recursive procedure samples ik+1 from the following mixture
+pindex(ik+1| θ, ρ, bk+1) = α((ak, bk), (aext
+k , bext
+k ))· e−H(θik+1 ,ρik+1 )
+∑j∈[aext
+k :bext
+k ] e−H(θj,ρj)· 1
+
+ik+1∈ aext
+k :bext
+k
+	
++
+
+1− α((ak, bk), (aext
+k , bext
+k ))
+
+· pindex(ik| θ, ρ, bk)· 1{ik+1∈ ak:bk},
+where α((ak, bk), (aext
+k , bext
+k )) is the Metropolis acceptance probability defined in (4). The key to reversibility
+is that α is symmetric with respect to swapping the current and extension orbits, provided each orbit is
+weighted by the total stationary probability it contributes; that is, the sum of e−H(θj,ρj) over its indices.
+More precisely, leti be the final index. Then either i = 0 or there exists k∈{ 1, . . . ,m} such that,
+i∈ aext
+k :bext
+k .
+In either case, we obtain the identity
+e−H(θ0,ρ0)e−H(θi,ρi)α((ak, bk), (aext
+k , bext
+k )) ∑
+j∈ak:bk
+e−H(θj,ρj)
+= e−H(θi,ρi)e−H(θ0,ρ0)α((aext
+k , bext
+k ), (ak, bk)) ∑
+j∈aext
+k :bext
+k
+e−H(θj,ρj) .
+(5)
+Additionally, the leapfrog identity Φb−i
+h (θi, ρi) = Φb
+h(θ, ρ) implies that the conditional density over orbits
+satisfies
+porbit(b| θ, ρ) = porbit(b− i| θi, ρi). (6)
+Now define the map Ψ : A→ A by
+Ψ(θ, ρ, b, i) = ( Φi
+h(θ, ρ), b− i,−i), (7)
+which is a ζ-preserving involution. Combining the identities (5) and (6), we find that the joint density is
+invariant under Ψ
+pjoint(θ, ρ, b, i) = pjoint◦ Ψ(θ, ρ, b, i).
+In other words, the map Ψ leaves the joint distribution unchanged. As a result, the acceptance probability in
+the corresponding GIST sampler is always equal to one, and no Metropolis correction is required.
+The diagram below summarizes the update steps of biased progressive HMC. It highlights the absence of a
+Metropolis step, since the proposal involution Ψ preserves both the reference measure ζ and the joint density.
+θn
+current state
+sample orbitO
+via doubling
+sample index i
+fromO
+apply involution
+Ψ(θn, ρn, b, i)
+θn+1
+next state
+No Metropolis correction step is required, because
+the involution Ψ preserves both ζ and the joint density
+By Theorem 1, the resulting Markov chain is reversible with respect to µ. We will return to this point in
+Section 3.4, where we extend this reversibility result to the full WALNUTS algorithm, which jointly adapts
+both the integration time and the step size. Before that, we consider a conceptually important special case of
+biased progressive HMC in which the leapfrog integrator is replaced by the exact Hamiltonian flow.
+11
+2.6 Idealized Case: Exact Biased Progressive HMC
+To better understand the behavior of biased progressive HMC, it is instructive to consider an idealized
+version in which the leapfrog integrator Φh with fixed step size h > 0 is replaced with the exact Hamiltonian
+flow φh. In this setting, no numerical integration error is introduced, and the Hamiltonian is conserved
+exactly at each point along the orbit. As a result, all the Metropolis-style acceptance probabilities are equal to
+one, and every proposal index is accepted.
+This idealization provides valuable insight into the behavior of biased progressive HMC when leapfrog
+integration errors are negligible. In particular, the distribution of the final integration time index i becomes
+independent of the target distribution, depending only on the randomized orbit construction procedure.
+This yields a clean mathematical description of the sampling law for i, and serves as a useful benchmark for
+understanding how the actual algorithm deviates from ideal behavior in practice.
+Under exact integration, the orbit is constructed by repeatedly applying the exact Hamiltonian flow map φh
+rather than the leapfrog integrator. The orbit construction follows the same recursive doubling procedure as
+before, but without any accept/reject steps. At each doubling step, 2k new states are generated by applying
+φh, either forward or backward in time with equal probability. After m such steps, the final orbit consists of
+2m consecutive states, each lying exactly on the Hamiltonian trajectory through the initial point.
+The integration time indexi is then drawn uniformly from the extension added during the final doubling step.
+Although this rule is simple (just uniform sampling from the last added segment) the resulting distribution
+of i is nonuniform, since the location of the final extension depends on the random sequence of doubling
+directions. We now briefly review this construction and describe its implications.
+Let m≥ 1 be the number of doublings. Begin with the singleton orbit O0 = (( θ, ρ)) and initial indices
+a0 = b0 = 0. For each doubling step k∈{ 0, . . ., m− 1}, extend the current orbit by appending2k consecutive
+states generated by repeatedly applying the exact Hamiltonian flow φh to either the left or right end, each
+with probability 1/2. After m doublings, the resulting orbit contains 2m phase space states indexed by
+consecutive integers that include 0.
+LetOext
+m−1 denote the extension added during the final doubling step (k = m− 1), with index range aext
+k :bext
+k
+and length 2m−1. The final integration time index is then sampled uniformly from this index range:
+i ∼ Unif
+ 
+aext
+k :bext
+k
+
+,
+giving each index in the last-added extension equal weight. The next results describe the distribution of i, as
+illustrated in Figure 3, and provide a closed-form expression for E[|i| ].
+Theorem 2. Fix an integer m≥ 1 and set N = 2m−1. Let i denote the integration time index selected by the exact
+biased progressive sampling procedure with uniform weights. Then i follows the symmetric discrete triangular law:
+Pr
+
+i = k
+
+= 1
+2N2 min(|k|, 2N−| k|) 1{1≤| k|≤ 2N− 1} (8)
+for k∈ (1− 2N):(2N− 1).
+Proof. At each doubling step (k = 0, . . ., m− 1), the Bernoulli variable Bk+1 indicates whether the extension
+orbitOext
+k of length 2k is appended to the right (Bk+1 = 1) or to the left (Bk+1 = 0) of the current orbitOk. In
+the final doubling step, the orbitOm−1 has length N = 2m−1 with right endpoint index:
+bm−1 =
+m−1
+∑
+j=1
+Bj 2j−1 .
+which implies bm−1∼ Unif(0:(N− 1)). The corresponding left endpoint index is am−1 = bm−1− N + 1.
+The final bit Bm determines whether the last extension of length N is appended to the right or left:
+12
+−N 0 N
+k
+Pr[i = k]
+Figure 3: Probability mass function of the integration time index i in exact biased progressive HMC with m = 5. The
+triangular shape reflects the random location of the final extension orbit from which i is uniformly sampled.
+• If Bm = 1, then aext
+m−1 = bm−1 + 1 and bext
+m−1 = bm−1 + N.
+• If Bm = 0, then aext
+m−1 = am−1− N and bext
+m−1 = am−1− 1.
+The index i is then sampled uniformly from this extension. Let c∼ Uniform(1:N), independent of all
+previous random variables. Then
+i = (bm−1 + c)Bm + (am−1− c)(1− Bm),
+= (bm−1 + c)· Bm + (bm−1− N + 1− c)· (1− Bm),
+where the second line uses the identity am−1 = bm−1− N + 1. This expression shows that i is distributed
+as the convolution of two independent discrete uniform variables, yielding the symmetric triangular PMF
+given in the theorem.
+The following corollary computes the expected magnitude of the integration time index under this distribu-
+tion, providing a simple benchmark for the typical integration time in this idealized setting.
+Corollary 1. It holds that E[|i| ] = 2m−1.
+Proof. From Theorem 2, the magnitude|i| has the triangular PMF:
+Pr[|i| = k] = 1
+N2 min(k, 2N− k)
+for k∈ 1:(2N− 1). By expanding the expectation using this PMF, and then re-indexing,
+E[|i|] =
+2N−1
+∑
+k=1
+k Pr[|i| = k] = 1
+N2
+2N−1
+∑
+k=1
+k min(k, 2N− k)
+= 1
+N2
+ 
+N
+∑
+k=1
+k2 +
+2N−1
+∑
+k=N+1
+k(2N− k)
+!
+= 1
+N2
+ 
+N
+∑
+k=1
+k2 +
+N−1
+∑
+k=1
+(k + N)(N− k)
+!
+= N
+as required.
+Next, we describe how the orbit length can be locally adapted without breaking reversibility using a
+geometric stopping rule based on a U-turn condition.
+13
+ρa
+ρb
+θb− θa
+min
+ 
+ρa· (θb− θa), ρb· (θb− θa)
+
+> 0
+ρa
+ρb
+θb− θa
+min
+ 
+ρa· (θb− θa), ρb· (θb− θa)
+
+< 0
+Figure 4: Position-space projections of two orbits: one that does not satisfy the U-turn condition (left), and
+one that does (right). For each case, the velocity vectors ρa and ρb, as well as the displacement vector θb− θa,
+are shown, assuming the mass matrix M = I.
+2.7 Locally Adaptive Path Length with The No-U-T urn Sampler
+The key innovation of the No-U-Turn Sampler (NUTS) is to locally adapt the orbit length, and thus integration
+time, by terminating the doubling procedure in biased progressive HMC when a U-turn condition is met
+(see Figure 4).
+Definition 3. An orbitO = (( θa, ρa), . . . ,(θb, ρb)) satisfies the U-turn condition if:
+min
+ 
+ρa· M−1(θb− θa), ρb· M−1(θb− θa)
+
+< 0 . (9)
+To ensure reversibility, NUTS also checks asub-U-turn condition. Because NUTS constructs orbits through
+iterative doubling, the orbit length is always a power of two:|O| = 2m for some m∈ N. For such orbits, we
+define a hierarchy of sub-orbits generated by recursive halving:
+n
+Oi,j : i∈
+
+0, 1, . . . , log2|O|
+	
+, j∈
+
+1, 2, . . . , 2i	o
+(10)
+where, for each i∈{ 0, 1, . . . , log2|O|},Oi,j are defined to be the unique orbits of size|O|2−i such that
+O = Oi,1⊙O i,2⊙···⊙O i,2i .
+Definition 4. An orbitO is said to satisfy the sub-U-turn condition if at least one of its sub-orbits, as defined
+in (10), satisfies the U-turn condition given in Definition 3.
+Sub-U-turn checks play a key role in ensuring reversibility. When the orbit construction procedure is rerun
+starting from the i-th point along the final orbit, the sequence of doubling steps required to recover the same
+final orbit is uniquely determined by the binary representation of b− i. However, if sub-U-turn checks are
+not enforced, the algorithm may terminate too early during this rerun, producing a different final orbit. This
+breaks the symmetry of the orbit construction with respect to the starting point along the orbit.
+Given an initial state (θ, ρ)∈ R2d and a maximum number of doublings mmax∈ N, NUTS constructs an
+adaptive-length orbit as follows.
+1. Initialization. Start with the singleton orbitO0 = (( θ, ρ)), and set the index range a0 = b0 = 0. Sample
+mmax i.i.d. Bernoulli(1/2) random variables B = ( B1, . . . ,Bmmax ).
+2. Doubling steps. For each step k∈ 0:(mmax− 1), perform the following:
+14
+(a) Current orbit. Let the current orbit be
+Ok =
+ 
+(θak, ρak ), . . . ,(θbk, ρbk )
+
+with length|Ok| = 2k and index range ak:bk.
+(b) Extension. Construct an orbitOext
+k of length 2k over the index range aext
+k :bext
+k , defined by the value
+of Bk+1:
+aext
+k =
+(
+bk + 1 if Bk+1 = 1,
+ak− 2k if Bk+1 = 0,
+bext
+k =
+(
+bk + 2k if Bk+1 = 1,
+ak− 1 if Bk+1 = 0.
+(c) Sub-U-turn check. IfOext
+k satisfies the sub-U-turn condition, terminate and setO =Ok.
+(d) Orbit update. If not, define the updated orbit:Ok+1 =
+(
+Om⊙O ext
+k if Bk+1 = 1,
+Oext
+k ⊙O k if Bk+1 = 0.
+(e) U-turn check. IfOk+1 satisfies the U-turn condition or if k + 1 = mmax, terminate and set
+O =Ok+1.
+3. Output. The final orbitO has length 2m for some m≤ mmax and is fully determined by its length and
+rightmost index.
+The integration time index is then selected exactly as in biased progressive HMC. For clarity, the integration
+time index selection has been omitted in the above description, as it follows identically from the biased
+progressive HMC case described in Section 2.5.
+3 WALNUTS
+WALNUTS addresses a key limitation in traditional NUTS: fixed step size integrators can fail to capture
+local variations in geometry, especially in stiff or funnel-shaped targets. By introducing a locally adaptive
+variable step size leapfrog integrator within a fixed macro time grid, WALNUTS improves robustness while
+maintaining reversibility. It does so using the auxiliary variable GIST framework introduced in Section 2.3,
+which provides a principled foundation for both path length and step size adaptation.
+At a high level, each transition step of WALNUTS uses a locally adaptive leapfrog integrator with variable
+micro step sizes to construct an orbitO along a macro time grid. Once the orbit is built, WALNUTS selects the
+next state by sampling a point inO, thereby randomizing the integration time. The general framework for
+orbit construction and state selection was introduced in Section 2; what follows highlights the modifications
+needed to incorporate a variable step size leapfrog integrator.
+3.1 Variable Step Size Leapfrog Integrator
+The leapfrog (or Verlet) integrator is the standard method used to numerically approximate Hamiltonian
+dynamics in HMC [6, 27, 34]. In this section, we develop a locally adaptive extension that varies the step size
+within each macro time interval based on local energy error.
+Macro/Micro grids and integration notation In our framework, we assume a uniform macro time grid
+to anchor the overall trajectory, while allowing for variablemicro step sizes within each macro interval to
+locally control integration errors. Each macro interval is subdivided into a number of micro steps, with finer
+subdivisions used in regions of high curvature or energy variation. This two-level structure enables local
+adaptivity while preserving a globally consistent time grid, as illustrated in Figure 5. We restrict attention to
+uniform macro grids throughout; the advantages of this choice for reversibility are discussed in Remark 3.
+15
+t−1 t0 t1 t2
+ℓ−1,0 = 4 ℓ0,1 = 2 ℓ1,2 = 8
+. . .. . .
+h/2
+h/8
+Figure 5: The time grid used to advance the numerical solution from t0 to t1 consists of two microsteps, each
+of size h/2. Similarly, the transition from t1 to t2 is achieved using eight microsteps, each of size h/8.
+To formalize this, we introduce a fixed macro step size h > 0 and define the evenly-spaced time grid
+tk := kh where k∈ Z .
+Each macro interval [tk, tk+1] is subdivided into ℓk,k+1 micro steps, each of size hℓ−1
+k,k+1. We denote by
+{ℓk,k+1}k∈Z the sequence of micro step counts associated with each macro interval. For any m, n∈ Z, the
+evolution of the numerical solution from time tn to tm using these variable step sizes is defined by the
+following composition of leapfrog maps:
+Φm,n =
+
+
+
+Φℓm−1,m
+hℓ−1
+m−1,m
+◦···◦ Φℓn,n+1
+hℓ−1
+n,n+1
+if m > n
+F◦ Φℓm,m+1
+hℓ−1
+m,m+1
+◦···◦ Φℓn−1,n
+hℓ−1
+n−1,n
+◦F if m < n
+(11)
+with Φm,m defined as the identity map andF denoting the momentum flip. The forward evolution (m > n)
+advances the numerical solution fromtn to tm using a sequence of forward leapfrog steps, while the backward
+evolution (m < n) requires a momentum flip before and after in order to advance the numerical solution
+using backward leapfrog steps.
+If the micro step counts{ℓk,k+1}k∈Z are fixed in advance or treated as auxiliary variables in an enlarged
+state space, then Φm,n is volume-preserving, as it is a composition of volume-preserving leapfrog maps [6,
+Proposition 2.3]. However, if{ℓk,k+1}k∈Z depends on the state during integration, then volume preservation
+is no longer guaranteed. In either case, Φm,n is not, in general, time-reversible: although each leapfrog step is
+time-reversible, the composition of time-reversible maps with varying step sizes does not, in general, yield a
+time-reversible map [6, Theorem 4.2].
+Micro step selection using local energy error In locally adaptive HMC, the primary goal of local step size
+adaptivity is to select the largest leapfrog step size that ensures the energy error remains below a specified
+threshold. Here, we describe a general procedure for determining such step sizes. Given an initial condition
+(θ, ρ)∈ R2d, a macro step size h, and a prescribed maximum allowable energy error δ > 0, we define
+micro(θ, ρ, µ, M, h, δ) := min{ℓ∈ 2N : H+
+ℓ − H−
+ℓ ≤ δ} (12)
+where 2N :={2n : n∈ N}. Here, H+
+ℓ and H−
+ℓ denote the maximum and minimum Hamiltonian values
+encountered along the leapfrog trajectory, starting from (θ, ρ) and integrated forward over [0, h] with micro
+step size hℓ−1. Specifically,
+H+
+ℓ = max{H(θ(j), ρ(j)), 0≤ j≤ ℓ}, H−
+ℓ = min{H(θ(j), ρ(j)), 0≤ j≤ ℓ}.
+The leapfrog iterates (θj, ρj) are obtained by applying j forward leapfrog steps with step size hℓ−1, i.e.,
+(θ(j), ρ(j)) = Φj
+hℓ−1 (θ, ρ) 0≤ j≤ ℓ .
+In other words, micro(θ, ρ, µ, M, h, δ) returns the minimal power of two such that the leapfrog trajectory
+stays within energy error δ.
+16
+Remark 1. In the optimized implementation of WALNUTS, the energy error used to assess the validity of
+a micro trajectory is computed as the absolute difference of the Hamiltonian evaluated at the endpoints,
+i.e.,|H(θ(0), ρ(0))− H(θ(ℓ), ρ(ℓ))|. This choice improves practical performance by reducing mismatches
+between forward and backward micro steps, and ensures that the energy error threshold δ has a consistent
+interpretation across different values of the step size reduction factor ℓ. While this simplification deviates
+slightly from the theoretical formulation, the core theoretical guarantees are expected to remain intact.
+The next lemma shows that the micro step size factor ℓ = micro(θ, ρ, µ, M, h, δ) is always greater than or
+equal to the value obtained by applying the same procedure at the endpoint of the corresponding forward
+trajectory, but with the momentum reversed.
+Lemma 1. For any (θ, ρ)∈ R2d, and energy error threshold δ > 0, the forward step size reduction factor satisfies:
+ℓ = micro(θ, ρ, µ, M, h, δ)≥ micro
+ 
+θ′,−ρ′, µ, M, h, δ
+
+, where (θ′, ρ′) = Φℓ
+hℓ−1 (θ, ρ) .
+Proof. Let ℓ = micro(θ, ρ, δ, h). By definition of micro in (12), we have:
+max{H(θ(j), ρ(j)) : 0≤ j≤ ℓ}− min{H(θ(j), ρ(j)) : 0≤ j≤ ℓ}≤ δ (13)
+where the leapfrog iterates are given by
+(θ(j), ρ(j)) = Φj
+hℓ−1 (θ, ρ), 0 ≤ j≤ ℓ .
+For the backward evolution, we consider the trajectory
+starting from (θ′, ρ′). As shown in the grey dots in the
+image on the right, by applying a momentum flipF,
+the backward orbit is given by:
+Φj
+hℓ−1◦F (θ′, ρ′) = ( θ(ℓ−j),−ρ(ℓ−j)) , 0 ≤ j≤ ℓ .
+(θ, ρ)
+(θ,−ρ)
+(θ′, ρ′)
+(θ′,−ρ′)
+F F
+Since H◦F ≡ H, it follows that the backward trajectory at step size hℓ−1 also satisfies (13). Thus, the
+backward critical step size reduction factor cannot exceed ℓ, ensuring that ℓ≥ micro (θ′,−ρ′, δ, h).
+Randomized step size selection within orbits On the same macro step, Lemma 1 suggests that the forward
+and backward step size reduction factors may differ. To address this issue, we introduce randomization in
+the step size selection process.
+Let pmicro be the distribution from which the step size reduction factor is sampled given the critical step size
+reduction factor. Given an initial point (θ, ρ) at time t0, we recursively define the sequence of points (θj, ρj)
+at times tj as follows:
+• Base case (j = 0):
+(θ0, ρ0) = ( θ, ρ).
+• Forward recursion (j > 0):
+(θj, ρj) = Φ
+ℓj−1,j
+hℓ−1
+j−1,j
+(θj−1, ρj−1),
+where the step size reduction factor ℓj−1,j is sampled from the conditional distribution:
+ℓj−1,j∼ pmicro(·| micro(θj−1, ρj−1, µ, M, h, δ)).
+17
+• Backward recursion (j < 0):
+(θj, ρj) =F◦ Φ
+ℓj,j+1
+hℓ−1
+j,j+1
+◦F (θj+1, ρj+1),
+where ℓj,j+1 is sampled from the analogous distribution:
+ℓj,j+1∼ pmicro(·| micro(θj+1,−ρj+1, µ, M, h, δ)).
+A simple choice for the distribution pmicro is a uniform distribution over two candidate micro step size
+factors: the deterministic baseline value eℓ = micro(θ, ρ, µ, M, h, δ), as defined in (12), and its immediate
+successoreℓ + 1. Specifically,
+pmicro(k|eℓ) = 1
+2 1{eℓ,eℓ+1}(k) .
+Note that the support of pmicro is limited to larger micro step size factors relative to eℓ. This restriction is
+justified by Lemma 1, which guarantees that the forward micro step size factor is always greater than or
+equal to the backward one over the same macro step. Therefore, if a given step size yields an acceptable
+energy error in the forward direction, it will also do so in the backward direction. This allows us to safely
+omit smaller micro step factors from consideration.
+Remark 2. The recently proposed step size adaptive NUTS algorithm [8] uses the same random number of
+leapfrog micro steps within each macro step. Specifically, for each macro step spanning the index range a:b,
+the number of microsteps is given by a random variable ℓ such that ℓa,a+1 = ℓa+1,a+2 =··· = ℓb−1,b = ℓ
+with ℓ drawn from a distribution that depends on (θ, ρ), a, and b.
+3.2 Orbit Construction with Variable Step Size Leapfrog Integration
+Orbit construction proceeds exactly as in NUTS, except that fixed step size leapfrog integration is replaced by
+variable step size leapfrog integration during the orbit extension steps described in Section 2.7. Specifically,
+by (11), the overall evolution from time t0 = 0 to time tj is given by
+Φj,0
+
+ℓ =
+
+
+
+Φ
+ℓj−1,j
+hℓ−1
+j−1,j
+◦···◦ Φℓ0,1
+hℓ−1
+0,1
+if j > 0
+F◦ Φ
+ℓj,j+1
+hℓ−1
+j,j+1
+◦···◦ Φℓ−1,0
+hℓ−1
+−1,0
+◦F if j < 0
+(14)
+where Φ0,0 is the identity map, and F denotes the momentum flip operator. Each composition uses a
+different number of micro steps, governed by the micro step size reduction factors ℓk,k+1 stored in the tuple
+ℓ. Given two endpoint indices a, b∈ Z with a≤ b, the orbit over the index range a:b ={a, a + 1, . . ., b},
+starting at (θ, ρ) at time t0 = 0, is defined by
+O = ( Φa,0|ℓ (θ, ρ), . . . ,Φb,0
+
+ℓ (θ, ρ)) = (( θa, ρa), . . . ,(θb, ρb)).
+The figure below illustrates this construction. Each macro-step interval [tk, tk+1] is subdivided into ℓk,k+1
+micro steps. The number of micro steps may vary across intervals, as shown by the differing densities
+of black points in the two macro-steps depicted. These locally adaptive refinements allow WALNUTS to
+dynamically adjust the resolution of leapfrog integration within each macro step:
+ta ta+1 tb−1 tb
+···
+ℓa,a+1 micro steps ℓb−1,b micro steps
+hℓ−1
+a,a+1 hℓ−1
+b−1,b
+18
+3.3 Randomized Integration Time via Biased Progressive Sampling
+In WALNUTS, the index of the next state in the Markov chain is selected via biased progressive sampling, as
+in biased progressive HMC. This index corresponds to a randomly chosen point along the orbit and may be
+interpreted as a randomized integration time.
+We use categorical(S, q) to denote the categorical distribution supported on a discrete set S with the proba-
+bility of selecting x∈ S proportional to q(x). In view of Lemma 1,
+pmicro(ℓk,k+1| micro(θk, ρk, µ, M, h, δ))
+may not equal
+pmicro(ℓk,k+1| micro(θk+1,−ρk+1, µ, M, h, δ)) .
+To ensure reversibility, we assign a weight to each point in the orbit, defined recursively as follows.
+• The initial weight is
+w0 = µ(θ0)e− 1
+2 ρ⊺
+0 M−1ρ0 . (15)
+• For j > 0,
+wj = µ(θj)e− 1
+2 (ρj)⊺M−1ρj
+µ(θj−1)e− 1
+2 (ρj−1)⊺M−1ρj−1
+pmicro(ℓj−1,j| micro(θj,−ρj, µ, M, h, δ))
+pmicro(ℓj−1,j| micro(θj−1, ρj−1, µ, M, h, δ)) wj−1 . (16)
+• While for j < 0,
+wj = µ(θj)e− 1
+2 (ρj)⊺M−1ρj
+µ(θj+1)e− 1
+2 (ρj+1)⊺M−1ρj+1
+pmicro(ℓj,j+1| micro(θj, ρj, µ, M, h, δ))
+pmicro(ℓj,j+1| micro(θj+1,−ρj+1, µ, M, h, δ)) wj+1 . (17)
+Given an orbit with endpoints indices a, b∈ Z, we define the corresponding collection of weights by
+W = (wa, . . . ,wb) .
+Biased progressive sampling in WALNUTS selects the index of the next state iteratively as follows. The
+process begins with the initial index i0 = 0. At the k-th doubling step (k∈{ 0, . . ., mmax− 1}), letOk,Wk
+denote the current orbit and its weights, andOext
+k ,W ext
+k denote the proposed extension and its weights. An
+extension index is sampled according to
+iext
+k ∼ categorical(aext
+k :bext
+k ,W ext
+k )
+and accepted with probability given by the acceptance function
+α(Wk,W ext
+k ) := min
+
+1, ∑W ext
+m
+∑Wm
+
+. (18)
+Here, the expression ∑W is shorthand for the sum of all the weights in the collectionW, i.e., ∑W = ∑w∈W w.
+The index update is:
+ik+1 =
+(
+iext
+k with probability α(Wk,W ext
+k ),
+ik otherwise.
+(19)
+This Metropolis-style rule favors integration times in the extension orbit while ensuring reversibility.
+19
+j
+0
+a b
+Figure 6: In WALNUTS, the probability of producing the same orbit starting from thei-th state in the orbit
+depends only on the transitions over the subintervals between min(i, 0) and max(i, 0). In the illustration,
+i = 4. Red arrows indicate the directions of macro steps starting from the initial state indexed at 0. Gray
+arrows represent the directions of macro steps starting from i in order to reach a and b. The dotted lines
+mark subintervals where the macro steps move in the same direction. On such intervals, the conditional
+distribution of the step size reduction factor remains unchanged.
+Remark 3. An key advantage of WALNUTS is its use of a fixed macro time grid: each call to the micro
+function in (12) targets the same segment of the exact Hamiltonian trajectory, but with successively finer
+resolution. This design substantially improves the probability of reversibility compared to methods that do
+not operate on a fixed macro grid. To highlight the contrast, consider an alternative approach [used e.g. by 4,
+31] that adaptively reduces the step size h until the energy error falls below a threshold, then performs a
+single integration step using the refined step size, and finally checks reversibility by integrating backward
+with successively smaller step sizes. If the forward step involves a reduction in step size, the backward
+checks will evaluate points that precede (in time) the original initial condition, regions of the trajectory that
+are not aligned with the forward pass. This temporal misalignment increases the likelihood of reversibility
+failures. In WALNUTS, by contrast, all refinements are anchored to the same macro grid, ensuring that both
+forward and backward trajectories traverse the same time intervals.
+3.4 Reversibility of WALNUTS
+We present a rigorous proof of the reversibility of WALNUTS by interpreting it as a GIST sampler, as
+described in Section 2.3, and verifying that it satisfies the conditions of Theorem 1. While the overall
+structure of the proof is concise, establishing reversibility requires careful handling of the variable step size
+leapfrog integrator and its interaction with orbit construction and state selection.
+To streamline the proof, we introduce some additional notation. For brevity, we writeℓj = ℓj,j+1 for the micro
+step size factor associated with the macro step interval [tj, tj+1]. By construction, ℓj denotes the step size
+reduction factor used when expanding the orbit away from the initial point (θ0, ρ0): forward from (θj, ρj) to
+(θj+1, ρj+1) if j > 0, and backward from (θj+1, ρj+1) to (θj, ρj) if j < 0. With this notation, (14) simplifies to:
+Φj,0
+
+ℓ =
+
+
+
+Φ
+ℓj−1
+hℓ−1
+j−1
+◦···◦ Φℓ0
+hℓ−1
+0
+if j > 0
+F◦ Φ
+ℓj
+hℓ−1
+j
+◦···◦ Φℓ−1
+hℓ−1
+−1
+◦F if j < 0
+(20)
+and Φ0,0 is the identity map.
+As described in Section 3.2, a WALNUTS orbit
+O = (( θa, ρa), . . . ,(θb, ρb))
+20
+is uniquely determined by:
+• an initial point (θ, ρ)∈ R2d;
+• m: the number of doublings;
+• b: the rightmost index of the orbit; and,
+• ℓ ={ℓj}a≤j≤b−1: a collection of 2m−1 micro step size factors, one for each macro step.
+The leftmost index is given by a = b− 2m + 1. Accordingly, we use (θ, ρ,O) and the tuple (θ, ρ, m, b, ℓ)
+interchangeably. Once the micro step size factors ℓ are sampled, they determine the sequence of forward and
+backward leapfrog steps used to generate the orbit from the initial point (θ, ρ).
+We treat m, b, ℓ and the integration time index i∈ a:b as auxiliary variables, and define the augmented state
+z := ( θ, ρ, m, b, ℓ, i)
+taking values in the augmented state space
+A := Rd× Rd× N× N× N2m−1× Z .
+We denote the conditional over the orbit byporbit(m, b, ℓ| θ, ρ), as defined by the orbit construction procedure
+in Section 3.2. The conditional over the integration timepindex(i| θ, ρ, m, b, ℓ) is defined by biased progressive
+sampling, as described in Section 3.3. To verify the conditions of Theorem 1, it is helpful to also consider a
+simpler alternative. To distinguish between these two integration time selection strategies, we introduce the
+following notation, which extends to the corresponding extended target distributions as well:
+• Biased progressive sampling (superscript BP) is the method used in WALNUTS. It defines pBP
+index
+recursively. LetOk denote the orbit at k-th doubling step andWk its associated weights. Then,
+pBP
+index(j| θ, ρ,Ok+1) = α(Wk,W ext
+k )· wj
+∑W ext
+k
+· 1
+
+j∈ aext
+k :bext
+k
+	
++
+ 
+1− α(Wk,W ext
+k )
+
+· pBP
+index(j| θ, ρ,Ok)· 1{j∈ ak:bk},
+(21)
+whereW ext
+k are the weights associated with the extension orbitOext
+k , and α(Wk,W ext
+k ) is the acceptance
+probability defined in (18).
+• Multinomial sampling (superscript MN) draws the integration time index from a categorical distribu-
+tion proportional to the orbit weights:
+pMN
+index(j| θ, ρ,O) = wj
+∑W , for j∈ a:b (22)
+whereW = (wa, . . . ,wb) are the weights associated with the orbitO.
+The superscripts BP and MN also apply to the corresponding extended target distributions. Let ζ denote
+the reference measure on A, given by the product of Lebesgue measure on the first two components and
+counting measure on the remaining components. The extended target density with respect to ζ under biased
+progressive sampling is given by
+pBP
+joint(z) ∝ e−H(θ,ρ)· porbit(m, b, ℓ| θ, ρ)· pBP
+index(i| θ, ρ, m, b, ℓ) (23)
+and the analogous definition pMN
+joint is obtained by replacing pBP
+index with pMN
+index. The proportionality symbol
+reflects that e−H(θ,ρ) is not necessarily normalized.
+For any integer k∈ Z, we introduce the shift operatorS k which acts on ℓ as follows:
+(S kℓ)j := ℓj−k .
+21
+This operator maps the micro step size factor associated with the macro step [tj, tj+1] to the one associated
+with [tj−k, tj−k+1]. In terms of this shift operator, define the map Ψ : A→ A by
+Ψ(z) = ( Φi,0|ℓ (θ, ρ), m, b− i,Siℓ,−i) . (24)
+This map is carefully designed to have the key properties stated in the lemmas that follow: in particular,Ψ will
+be shown to be a ζ-preserving involution (Lemma 2) under which the extended target distribution remains
+invariant (Lemma 6). These properties are essential for understanding the reversibility of WALNUTS.
+Lemma 2. The mapping Ψ is a ζ-preserving involution on A.
+Proof. The map Ψ is an involution, since for all z∈Z ,
+Ψ◦ Ψ(z) = Ψ( Φi,0|ℓ (θ, ρ), m, b− i,Siℓ,−i)
+= ( Φ−i,0|Siℓ (θi, ρi), m, b, ℓ, i) = z .
+In the last step, we used the identity
+Φ−i,0|Siℓ◦ Φ0,i|ℓ = idR2d ,
+which follows from the definition of Φ0,i|ℓ in (20) and the fact that (Siℓ)j = ℓj−i reindexes the micro step
+size factors appropriately for reversal. The following diagram summarizes the composition for i > 0, with
+red arrows indicating the forward trajectory constructed by Φ0,i|ℓ and gray arrows indicating the reversed
+trajectory constructed by Φ−i,0|Siℓ, which returns the state to its original position:
+(θ, ρ) (θ1, ρ1) ··· (θi−1, ρi−1) (θi, ρi)
+ℓ0 ℓ1 ℓi−2 ℓi−1
+(Siℓ)−1(Siℓ)−2(Siℓ)−i+1(Siℓ)−i
+The transition from (θ, ρ) to (θi, ρi) is a composition of multiple leapfrog steps, therefore the transition is
+measure preserving in the first two components. The counting measure on Z is invariant under reflection.
+The counting measure on N is invariant under translation. This proves that Ψ preserves ζ.
+For notational brevity, we define
+p+
+j = pmicro(ℓj| micro(θj, ρj, µ, M, h, δ)) ,
+p−
+j = pmicro(ℓj| micro(θj+1,−ρj+1, µ, M, h, δ)) .
+And for any integers j≤ k, we write
+p+
+j:k = p+
+j · p+
+j+1··· p+
+k ,
+p−
+j:k = p−
+j · p−
+j+1··· p−
+k .
+If j > k, we use the convention that p+
+j:k = 1 and p−
+j:k = 1.
+Lemma 3. The orbit selection kernel of WALNUTS is given by
+porbit(m, b, ℓ| θ, ρ) = 1
+2m· p+
+0:b−1· p−
+a:−1.
+22
+Proof of Lemma 3. A WALNUTS orbit is generated by first sampling a sequence of Bernoulli variablesB =
+(B1, . . ., Bmmax ) and micro step size factors{ℓj}ammax≤j<bmmax . Given B and{ℓj}ammax≤j<bmmax , the selection of
+O =Om is determined deterministically by the NUTS-style doubling procedure, and one of the following
+conditions must hold:
+1.Om does not satisfy the sub-U-turn condition, but its extensionOext
+m does;
+2.Om satisfies the U-turn condition, but none of its sub-orbits do;
+3. The maximum number of doublings is reached, i.e., m = mmax.
+Let us write this deterministic selection as Om = NUTS(B,{ℓj}ammax≤j<bmmax ). Then, the probability of
+selecting orbitOm is
+porbit(Om| θ, ρ) = ∑
+B′
+∑
+ℓ′
+p(B′)· p(ℓ′| B′)· 1
+
+NUTS(B′, ℓ′) =Om
+	
+,
+where the sums range over all possible values of B′∈{ 0, 1}mmax and ℓ′ ={ℓ′
+j}ammax≤j<bmmax , and where
+p(B′) = 1
+2mmax
+,
+p(ℓ′| B′) =
+bmax−1
+∏
+j=0
+pmicro(ℓ′
+j| micro(θ′
+j, ρ′
+j, µ, M, h, δ))·
+−1
+∏
+j=amax
+pmicro(ℓ′
+j| micro(θ′
+j+1,−ρ′
+j+1, µ, M, h, δ)),
+and (θ′
+j, ρ′
+j) represents the j-th state in the orbit constructed from B′, ℓ′.
+The indicator 1{NUTS(B′, ℓ′) =Om} is equal to 1 if and only if
+(B′
+1, . . . ,B′
+m) = ( B1, . . . ,Bm), and ℓ′
+j = ℓj for all am≤ j≤ bm− 1.
+Hence, the probability of selectingOm is equal to the probability of matching the first m Bernoulli steps and
+the corresponding micro step factors:
+1
+2m·
+bm−1
+∏
+j=0
+pmicro(ℓj| micro(θj, ρj, δ))·
+−1
+∏
+j=am
+pmicro(ℓj| micro(θj+1,−ρj+1, δ)) = 1
+2m· p+
+0:b−1· p−
+a:−1.
+Lemma 4. The index selection kernel for multinomial sampling is given by
+pMN
+index(j| θ, ρ,O) = e−H(θj,ρj)
+Z(θ, ρ,O)·
+
+
+
+p−
+0:j−1
+p+
+0:j−1
+0≤ j≤ b
+p+
+j:−1
+p−
+j:−1
+a≤ j < 0
+where the normalizing constant is given by
+Z(θ, ρ,O) =
+b
+∑
+j=0
+e−H(θj,ρj) p−
+0:j−1
+p+
+0:j−1
++
+−1
+∑
+j=a
+e−H(θj,ρj) p+
+j:−1
+p−
+j:−1
+.
+Lemma 4 follows directly from the definitions of pMN
+index in (22) and the weights wj in (15), (16) and (17).
+Lemma 5. The extended target density with multinomial sampling is invariant underΨ in (24), i.e., pMN
+joint◦ Ψ = pMN
+joint.
+23
+Proof. The case i = 0 is trivial, as Ψ is the identity. We therefore assume i > 0; the case i < 0 is analogous
+and omitted. By Lemmas 3 and 4, the extended target evaluated at z satisfies:
+pMN
+joint(z) ∝ e−H(θ,ρ)· 1
+2m p+
+0:b−1p−
+a:−1· 1
+Z(θ, ρ,O) e−H(θi,ρi) p−
+0:i−1
+p+
+0:i−1
+∝ e−H(θ,ρ)−H(θi,ρi) 1
+2m p−
+a:i−1p+
+i:b−1
+1
+Z(θ, ρ,O) . (25)
+Now consider the transformed point z′ = Ψ(z), which shifts the proposal index i to 0 and the initial index 0
+to−i, and reindexes the micro step size factors via the shift operator:Siℓ satisfies (Siℓ)j = ℓj−i. Thus, micro
+step factors and integration times in the reverse orbit are properly aligned, and hence, we simply write:
+(θi, ρi,O) = ( θi, ρi, m,Siℓ, b− i) which corresponds to the same orbit now viewed from the new initial point
+(θi, ρi). Evaluating the extended target at z′ yields:
+pMN
+joint(z′) ∝ e−H(θi,ρi)· 1
+2m p+
+i:b−1p−
+a:i−1· 1
+Z(θi, ρi,O) e−H(θ,ρ) p+
+0:i−1
+p−
+0:i−1
+∝ e−H(θ,ρ)−H(θi,ρi) 1
+2m p−
+a:−1p+
+0:b−1
+1
+Z(θi, ρi,O) . (26)
+Comparing (25) to (26), to prove pMN
+joint(z′) = pMN
+joint(z), it suffices to show
+Z(θi, ρi,O)· p−
+0:i−1 = Z(θ, ρ,O)· p+
+0:i−1 . (27)
+Let µj := e−H(θj,ρj) denote the unnormalized weight at index j. We first expand Z(θ, ρ,O):
+Z(θ, ρ,O)· p+
+0:i−1 =
+ b
+∑
+j=0
+µj
+p−
+0:j−1
+p+
+0:j−1
++
+−1
+∑
+j=a
+µj
+p+
+j:−1
+p−
+j:−1
+
+· p+
+0:i−1
+=
+i
+∑
+j=0
+µj p−
+0:j−1p+
+j:i−1 +
+b
+∑
+j=i+1
+µj
+p−
+0:j−1
+p+
+i:j−1
++
+−1
+∑
+j=a
+µj
+p+
+j:i−1
+p−
+j:−1
+=
+i−1
+∑
+j=0
+µj p−
+0:j−1p+
+j:i−1 +
+b
+∑
+j=i
+µj
+p−
+0:j−1
+p+
+i:j−1
++
+−1
+∑
+j=a
+µj
+p+
+j:i−1
+p−
+j:−1
+. (28)
+Here we used that p+
+j:k = 1 and p−
+j:k = 1, if j > k. Next, we expand Z(θi, ρi,O):
+Z(θi, ρi,O)· p−
+0:i−1 =
+ b
+∑
+j=i
+µj
+p−
+i:j−1
+p+
+i:j−1
++
+i−1
+∑
+j=a
+µj
+p+
+j:i−1
+p−
+j:i−1
+
+· p−
+0:i−1
+=
+b
+∑
+j=i
+µj
+p−
+0:j−1
+p+
+i:j−1
++
+i−1
+∑
+j=0
+µj p−
+0:j−1p+
+j:i−1 +
+−1
+∑
+j=a
+µj
+p+
+j:i−1
+p−
+j:−1
+. (29)
+The right-hand sides of (28) and (29) are identical term-by-term. Therefore, (27) holds, and the invariance
+pMN
+joint◦ Ψ = pMN
+joint follows.
+Lemmas 2 and 5 verify the conditions of Theorem 1 in the case of WALNUTS with multinomial integration
+time sampling. Consequently, the associated transition kernel is reversible. We do not state this as a separate
+theorem, however, since our primary focus is on WALNUTS with biased progressive sampling.
+The following result is key to understanding why WALNUTS, like biased progressive HMC and NUTS,
+always accepts the proposed next state without the need for a Metropolis correction. In the GIST framework
+24
+(Section 2.3), the acceptance probability for transitioning from one extended state to another is determined
+by a Metropolis ratio of extended target densities. Lemma 6 shows that this Metropolis ratio is always equal
+to one, thereby ensuring automatic acceptance and preserving detailed balance without the need to explicitly
+compute an acceptance probability.
+Lemma 6. The extended target density with biased progressive sampling in (23) is invariant under Ψ in (24), i.e.,
+pBP
+joint◦ Ψ = pBP
+joint.
+Proof. The proof is by induction on the number of doublings m. For the base case m = 1, assume a = 0,
+b = 1, and i = 1. The claim for i = 0 is trivial, and the proof for a =−1, b = 0 follows by symmetry.
+The orbit consists of two states, (θ0, ρ0) and (θ1, ρ1), and the orbit and index selection kernels under biased
+progressive sampling are:
+porbit(m, b, ℓ0| θ0, ρ0) = 1
+2 p+
+0 , porbit(m, b− 1, ℓ0| θ1, ρ1) = 1
+2 p−
+0 ,
+pBP
+index(1| θ0, ρ0,O) = min(1,
+e−H(θ1,ρ1) p−
+0
+p+
+0
+e−H(θ0,ρ0) ), pBP
+index(−1| θ1, ρ1,O) = min(1,
+e−H(θ0,ρ0) p+
+0
+p−
+0
+e−H(θ1,ρ1) ).
+Thus, the extended target evaluated at z = ( θ, ρ, m, b, ℓ, i) = ( θ, ρ, 1, 1,ℓ0, 1) is
+pBP
+joint(θ, ρ, 1, 1,ℓ0, 1) ∝ e−H(θ0,ρ0)· p+
+0· min(1,
+e−H(θ1,ρ1) p−
+0
+p+
+0
+e−H(θ0,ρ0) )
+= min(e−H(θ0,ρ0)· p+
+0 , e−H(θ1,ρ1)· p−
+0 ).
+Similarly, the extended target evaluated at z′ = Ψ(z) is
+pBP
+joint(θ1, ρ1, 1, 0,ℓ0,−1) ∝ e−H(θ1,ρ1)· p−
+0· min(1,
+e−H(θ0,ρ0) p+
+0
+p−
+0
+e−H(θ1,ρ1) )
+= min(e−H(θ0,ρ0)· p+
+0 , e−H(θ1,ρ1)· p−
+0 ).
+This confirms that the extended target is invariant under Ψ when the orbit contains two states.
+Assume that the claim is true whenO has size 2, 22, . . ., 2m. We now prove it holds whenO has size 2m+1.
+There are two cases depending on whether (θi, ρi) belongs toOext
+m orOm.
+Case 1: (θi, ρi)∈O ext
+m . By (21), the probability of choosing i under biased progressive sampling is
+pBP
+index(i| θ0, ρ0,Om+1) = α(Wm,W ext
+m )· wi
+∑W extm
+= α(Wm,W ext
+m )· wi
+∑Wm+1
+∑Wm+1
+∑W extm
+= α(Wm,W ext
+m )· pMN
+index(i| θ0, ρ0,Om+1)· ∑Wm+1
+∑W extm
+= pMN
+index(i| θ0, ρ0,Om+1)· min
+ 1
+∑W extm
+, 1
+∑Wm
+
+· ∑Wm+1.
+Thus,
+pBP
+joint(θ0, ρ0, m, b, ℓ, i)
+∝ e−H(θ0,ρ0)· porbit(m, b, ℓ| θ0, ρ0)· pMN
+index(i| θ0, ρ0,Om+1)· min
+ 1
+∑W extm
+, 1
+∑Wm
+
+· ∑Wm+1
+∝ pMN
+joint(θ0, ρ0,Om+1, i)· min
+ 1
+∑W extm
+, 1
+∑Wm
+
+· ∑Wm+1.
+25
+Similarly, for the transformed point:
+pBP
+index(−i| θi, ρi,Om+1) = pMN
+index(−i| θi, ρi,Om+1)· min
+ 1
+∑W extm
+, 1
+∑Wm
+
+· ∑Wm+1.
+and
+pBP
+joint(θi, ρi, m, b, ℓ,−i) = pMN
+joint(θi, ρi,O,−i)· min
+ 1
+∑W extm
+, 1
+∑Wm
+
+· ∑Wm+1.
+By Lemma 5, we have
+pMN
+joint(θ0, ρ0,O, i) = pMN
+joint(θi, ρi,O,−i),
+and hence, pBP
+joint(θ0, ρ0,O, i) = pBP
+joint(θi, ρi,O,−i). This concludes the proof for the case (θi, ρi)∈O ext
+m .
+Case 2: (θi, ρi)∈O m. By (21), we have
+pBP
+index(i| θ0, ρ0,Om+1) = ( 1− α(Wm,W ext
+m ))· pBP
+index(i| θ0, ρ0,Om).
+Applying the induction hypothesis toOm gives
+e−H(θ,ρ)· porbit(Om| θ, ρ)· pBP
+index(i| θ, ρ,Om) = e−H(θi,ρi)· porbit(Om| θi, ρi)· pBP
+index(−i| θi, ρi,Om).
+SupposeOext
+m is the right half ofOm+1, and let bm be the rightmost index ofOm. (The argument for the
+other direction is the same.) Then we have
+porbit(Om+1| θ, ρ) = 1
+2 porbit(Om| θ, ρ)·
+j=bm+1−1
+∏
+j=bm
+p+
+j ,
+porbit(Om+1| θi, ρi) = 1
+2 porbit(Om| θi, ρi)·
+j=bm+1−1
+∏
+j=bm
+p+
+j .
+Combining these identities confirms that
+pBP
+joint(θ, ρ,Om+1, i) = pBP
+joint(θi, ρi,Om+1,−i).
+Lemmas 2 and 6 verify the conditions of Theorem 1 for WALNUTS with biased progressive integration time
+sampling. As a result, the following reversibility result holds.
+Theorem 3. The WALNUTS transition kernel is reversible with respect to the target distribution µ.
+3.5 Pseudocode Implementation of WALNUTS
+WALNUTS requires the following inputs: an unnormalized target density µ, a mass matrix M, a macro
+step size h > 0, a maximum number of doublings mmax, and a leapfrog energy error threshold δ > 0.
+The probability distribution pmicro, which governs the sampling of micro step size reduction factors, is
+defined internally in terms of the output of the micro subroutine (see Listing 6). Complete pseudocode
+for all components is summarized below and detailed in Appendix A. We emphasize that, unlike NUTS,
+WALNUTS incorporates variable step size leapfrog integration as a central feature of its design.
+26
+The main WALNUTS algorithm is given in Listing 1, which implements orbit construction and biased
+progressive state selection. Orbit expansion is handled by the extend-orbit-forward and extend-
+orbit-backward procedures (Listings 4 and 5, respectively), which generate new segments of the variable
+step size leapfrog trajectory along with corresponding weights. The U-turn and sub-U-turn conditions used
+to terminate orbit growth are checked by theU-turn and sub-U-turn subroutines (Listings 2 and 3). Finally,
+the local step size selection is handled by the micro subroutine (Listing 6), which adaptively determines the
+number of micro steps needed to keep the energy error within the specified threshold δ.
+4 Empirical Evaluations
+The results and plots presented below can be reproduced using a Python implementation of WALNUTS,
+which is available on GitHub under a permissive open-source license.2
+4.1 Setup for Numerical Experiments
+Throughout this and the following sections, unless otherwise specified, WALNUTS is run with a default
+micro step distribution pmicro defined as follows. Given a current state (θ, ρ)∈ R2d, the function call
+eℓ = micro(θ, ρ, µ, M, h, δ)
+returns the smallest power of two eℓ∈ 2N such that the energy error of the leapfrog trajectory satisfies
+H+
+eℓ − H−
+eℓ ≤ δ, as defined in (12).
+The randomized two-point distribution is then defined by:
+pmicro(ℓ|eℓ) =
+
+
+
+2/3 if ℓ =eℓ,
+1/3 if ℓ =eℓ + 1,
+0 otherwise.
+(R2P)
+The corresponding WALNUTS method using this distribution is referred to asWALNUTS–R2P.
+In contrast, the deterministic variant corresponds to the degenerate case:
+pmicro(ℓ|eℓ) =
+(
+1 if ℓ =eℓ,
+0 otherwise.
+(D)
+The corresponding method is referred to as WALNUTS–D. These two variants will be compared in the
+numerical studies that follow.
+When measuring performance in terms of gradient evaluations, both the forward and backward micro-
+computations are counted, even though backward micro-computations may be run on different a processor
+and thus only adding negligible (wall clock) computation time.
+To avoid the looping phenomenon, we jitter the macro step size throughout. NUTS and WALNUTS rely on
+the U-turn condition to adaptively truncate their orbit lengths. However, for certain fixed step sizes, this
+condition can become ineffective: the orbit selection procedure may fail to detect a U-turn and instead expand
+to the maximum allowed orbit length and severely impair mixing [11, Figure 4(a) and 5(b)]. This behavior,
+known as the looping phenomenon, arises from resonance between the doubling procedure and a natural
+frequency of the underlying Hamiltonian dynamics, causing the physical orbit length to repeatedly miss the
+U-turn detection range. A simple and practical remedy is to jitter the leapfrog step size—either once per
+2The code is released under the MIT License and can be found at https://github.com/bob-carpenter/walnuts.
+27
+0 d
+d− α d + α
+α = O(
+√
+d)
+mode
+∥θ∥2
+density
+Figure 7: Concentration of High-Dimensional Gaussian. Illustration of the concentration of |θ|2 for
+θ∼N (0, Id). The shaded region shows the high-probability shell defined in (30), centered around|θ|2 = d
+with width O(
+√
+d). The mode at θ = 0, corresponding to|θ|2 = 0, lies well outside this concentration region.
+orbit or at each leapfrog step—to break this periodicity. As shown empirically, such randomization mitigates
+looping behavior and improves performance [11, Figure 5(c) and 5(d)]. Throughout our experiments, we
+uniformly jitter the macro step size by±20% at each integration step.
+4.2 High-Dimensional Gaussian
+Geometry of Gaussian concentration This part evaluates the performance of WALNUTS on a d-
+dimensional standard Gaussian target with densityµ(θ) ∝ exp(−|θ|2/2) for θ∈ Rd. We compare WALNUTS
+to the standard No-U-Turn Sampler (NUTS) using a fixed step size leapfrog integrator. Ad× d-identity mass
+matrix M = Id is used, so that ρ∼N (0, Id).
+It is well known that in high dimensions, the standard Gaussian concentrates its mass in a thin spherical
+shell around the sphere of radius
+√
+d. Specifically,
+µ(Dc
+α)≤ 2 exp(−α2/8d), Dα =
+n
+θ∈ Rd :
+∥θ∥2− d
+≤ α
+o
+, α > 0, (30)
+as shown, for example, in [47, Lemma 1]. This implies that most of the probability mass lies within a shell of
+width O(
+√
+d) around the sphere of radius
+√
+d. Figure 7 illustrates this concentration phenomenon.
+We consider two initialization strategies: one in which chains start at the mode θ = 0, which lies well outside
+the concentration region; and one in which chains are initialized from the stationary distribution. Cold starts
+introduce substantial transient behavior. For HMC-type methods with fixed step size leapfrog integrators,
+controlling the energy error during this transient phase typically requires step sizes of orderO(d−1/2). By
+contrast, once the chain enters the concentration region, step sizes of orderO(d−1/4) are sufficient for mixing,
+as quantified for NUTS in [11, Theorem 2]. We emphasize that this is a sufficient condition for mixing and
+not a stability condition: leapfrog integration remains stable uniformly in d as long as h≤ 2 in this example.
+To make this precise, let θ∈ Dα and ρ∼N (0, I). Then the leapfrog energy error after i steps satisfies
+H◦ Φi
+h(θ, ρ)− H(θ, ρ)
+ = 1
+8 h2
+|Π(Φi
+h(θ, ρ))|2−| θ|2
+ = O(h2d1/2), i∈ Z , (31)
+where Π is the projection on the position component. This bound follows from the fact that the leapfrog
+integrator preserves the modified Hamiltonian Hh(θ, ρ) = H(θ, ρ)− 1
+8 h2|θ|2, i.e., Hh◦ Φh≡ Hh, and that the
+leapfrog trajectory remains in a shell of comparable radius with high probability.
+This estimate highlights two distinct regimes. When the chain is initialized at the mode, |θ|2 = 0, while
+|Π(Φi
+h(θ, ρ))|2 = O(d) with high probability. As a result, the energy error is O(h2d) during the transient
+28
+0 5 10 15 20 25 30
+MCMC iteration #
+0
+500
+1000
+1500
+2000 T
+standard Gaussian, d = 2048
+WALNUTS-R2P
+NUTS
+0 5 10 15 20 25 30
+MCMC iteration #
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+0.16smallest h 1 (jittered)
+ h = d 1/4
+d 1/2
+smallest h 1
+0 5 10 15 20 25 30
+MCMC iteration #
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000# gradient evals
+WALNUTS-R2P
+NUTS
+0 5 10 15 20 25 30
+MCMC iteration #
+0
+2000
+4000
+6000
+8000
+standard Gaussian, d = 8192
+WALNUTS-R2P
+NUTS
+0 5 10 15 20 25 30
+MCMC iteration #
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+ h = d 1/4
+d 1/2
+smallest h 1
+0 5 10 15 20 25 30
+MCMC iteration #
+0
+2000
+4000
+6000
+8000
+10000
+12000
+14000
+ WALNUTS-R2P
+NUTS
+0 5 10 15 20 25 30
+MCMC iteration #
+0
+5000
+10000
+15000
+20000
+25000
+30000
+35000
+standard Gaussian, d = 32768
+WALNUTS-R2P
+NUTS
+0 5 10 15 20 25 30
+MCMC iteration #
+0.01
+0.02
+0.03
+0.04
+0.05
+0.06
+0.07
+0.08
+ h = d 1/4
+d 1/2
+smallest h 1
+0 5 10 15 20 25 30
+MCMC iteration #
+0
+5000
+10000
+15000
+20000
+25000
+30000
+ WALNUTS-R2P
+NUTS
+Figure 8: Cold-Start Behavior and Step Size Adaptation in High-Dimensional Gaussians. In all cases, 50
+independent chains were initialized at the mode θ = 0 and run for 30 MCMC iterations. WALNUTS was
+tuned for the stationary regime using h = d−1/4 and δ = 0.3, while NUTS was tuned specifically for the
+cold-start regime using h = d−1/2. The upper panels show|θ|2 per MCMC iteration for a standard Gaussian
+target distribution in the indicated dimension d. Red horizontal lines indicate the intervals covering 99% of
+the probability mass of|θ|2. The middle panels show the smallest value of h˜ℓ−1 observed within each orbit
+(jittered for readability), which may be interpreted as the local micro step size selected by micro. The lower
+panels show the cumulative gradient count after each MCMC iteration for the same simulations.
+phase. Once the chain reaches the concentration region Dα, both|θ|2 and|Π(Φi
+h(θ, ρ))|2 are close to d, and
+their difference is only O(d1/2) with high probability. This reduces the energy error toO(h2d1/2), allowing
+for larger step sizes and more efficient sampling.
+WALNUTS adapts to this variation in leapfrog energy error through its two-level step size mechanism. The
+macro step size h is tuned for efficient mixing in the high-density shell, i.e., h = O(d−1/4). The micro step
+size, on the other hand, is adjusted locally via the micro routine to ensure that the total energy error over
+each macro interval remains below a fixed threshold δ. When initialized far from the concentration region,
+like the mode, WALNUTS selects smaller micro step sizes to compensate for elevated energy error. Once
+29
+103 104 105
+dimension d
+101
+ESS per 1000 grandient evaluations
+WALNUTS R2P
+WALNUTS D
+NUTS
+d 1/4
+Figure 9: Efficiency of WALNUTS in High-Dimensional Gaussians. Effective sample size (ESS) per 1000
+gradient evaluations for a standard Gaussian target in varying dimensions, under warm-start initialization.
+Results for each dimension are based on 10 chains, each run for 1000 iterations. Mean ESS per 1000 gradient
+evaluations is indicated by symbols; vertical bars show 95% confidence intervals for the exact ESS. All
+methods used a step size of h = 1.4 d−1/4, which was found by trial and error to be near-optimal for NUTS.
+Both WALNUTS variants used δ = 0.3.
+the orbit enters the high-probability shell, the micro step size increases accordingly. In this way, WALNUTS
+dynamically adapts its step size based on local energy errors, maintaining energy accuracy cheaply.
+Numerical results for high-dimensional Gaussian The first set of simulations, summarized in Figure 8,
+considers a setting in which NUTS and WALNUTS-R2P chains are initialized at the mode of ad-dimensional
+standard Gaussian target. In these simulations, NUTS is tuned for the transient phase using a step size
+h = d−1/2, which, as discussed above, is optimal during the transient phase. WALNUTS-R2P is instead tuned
+for the stationary regime using a macro step size of macro step size h = d−1/4 (and δ = 0.3), corresponding
+to the optimal (fixed) step size in the stationary regime. From the upper set of plots in Figure 8, it is seen that
+transient-tuned NUTS arrives at the mode slightly faster in terms of MCMC iterations than WALNUTS, with
+the gap growing modestly with increasing dimension.
+The mid-level set of plots show the smallesth˜ℓ−1 used by WALNUTS in each orbit, which may be interpreted
+as the smallest micro step size used (modulus macro step size jittering and randomization of step size factors
+(R2P)) selected by micro. As seen in the plots, WALNUTS uses smaller step sizes during the transient phase
+and gradually transitions to behavior similar to optimally tuned NUTS in the stationary phase.
+The lower set of plots shows the cumulative number of gradient evaluations for WALNUTS and NUTS. As
+expected, due to the lack of step size adaptivity for NUTS, the benefit of small fixed step size during the
+transient phase is soon overwhelmed by the cost of such small step sizes in the stationary phase.
+Though it is seen that the initial WALNUTS step sizes are somewhat larger thanh−1/2 (indicated by black
+line in mid-level plots) for this choice of δ, and thereby arriving at the high probability shell somewhat
+slower than NUTS, this choice of δ appears to be a reasonable when computational cost is taken into account.
+Figure 9 shows the estimated effective sample size (ESS) per 1000 gradient evaluations for warm-start
+simulations targeting a standard Gaussian distribution, focusing on ESS for the scalar quantity|θ|2. All three
+30
+Neck
+Mouth
+x
+ω
+−4 −2 0 2 4
+0
+2
+4
+ω
+ln(λ)
+−4 −2 0 2 40
+2
+4
+6
+ω
+ln(κ)
+Figure 10: Curvature, Conditioning, and Scale Invariance in Neal’s Funnel. Illustration of Neal’s funnel
+geometry (left), along with the spectral radius λ(ω) = max(1/9, e−ω) (top right; see (33)) and the condition
+number κ(ω) = 9· max(eω, e−ω) (bottom right; see (34)) plotted as functions of the funnel axis variable ω.
+The neck and mouth regions have the same shape up to scale: the width at level ω is proportional to eω/2,
+with relative rate of change d
+dω width(ω) = 1
+2· width(ω). The translucent bands show a mouth segment
+and its horizontally rescaled copy overlaid on the neck, highlighting the funnel’s local scale invariance:
+each horizontal slice has the same shape up to scale. This structure makes it difficult for methods such as
+ensemble samplers to use local geometric cues to guide movement into or out of the neck.
+methods—NUTS, WALNUTS-D, and WALNUTS-R2P—used the same macro step sizeh = 1.4 d−1/4. For
+this relatively simple target, which is well-suited to fixed step size HMC methods like NUTS, WALNUTS-
+R2P exhibits somewhat lower efficiency, primarily due to the added cost of frequently applying higher
+simulation fidelity (i.e., using ℓ = ˜ℓ + 1). WALNUTS-D and NUTS show comparable efficiency overall. At
+higher dimensions, WALNUTS-D appears to slightly outperform NUTS in some cases, though the Monte
+Carlo variability is too large to support a definitive conclusion. The step-like pattern in the results reflects
+dimension-dependent shifts in the number of doublings used by the no-U-turn condition.
+To summarize these numerical results, WALNUTS demonstrates substantial promise in two key respects.
+First, it effectively handles transient regimes without getting stuck near the initialization point, avoiding
+the cold-start issues that can hinder other methods. Second, for target distributions where standard HMC-
+based methods like NUTS are known to perform well, WALNUTS achieves comparable efficiency. These
+results suggest that WALNUTS combines robustness to initialization with competitive performance in
+well-conditioned, high-dimensional settings.
+4.3 Neal’s Funnel
+Geometry of Neal’s funnel Consider the (d + 1)-dimensional funnel distribution introduced by Neal [41],
+defined over θ = ( ω, x) with ω∈ R and x = ( x1, . . . ,xd)∈ Rd, where
+ω∼N (0, 9), xi| ω∼N (0, exp(ω)) , i = 1, . . . ,d. (32)
+The joint distribution µ(ω, x) exhibits a funnel-like geometry, with ω forming the funnel axis and may be
+thought of as a model problem for Bayesian hierarchical models. Several authors [2, 32, 8] have found that
+HMC-like methods with fixed step sizes may fail to properly explore such target distributions.
+31
+9
+ 8
+ 7
+ 6
+ 5
+ 4
+ 3
+ theoretical quantiles
+9
+8
+7
+6
+5
+4
+3
+ MCMC output quantiles
+QQ-plots from 200k iterations (only left hand tail)
+WALNUTS
+NUTS
+0 200 400 600 800 1000
+MCMC iteration #
+7.5
+5.0
+2.5
+0.0
+2.5
+5.0
+7.5
+10.0
+trace plots (first 1000 iterations only)
+WALNUTS
+NUTS
+Figure 11: Tail accuracy and mixing in Neal’s funnel: WALNUTS vs. NUTS The left panel shows QQ-
+plots (restricted to the far left tail) for WALNUTS-R2P (black) and NUTS (gray), each based on 200,000
+iterations. WALNUTS was run with tuning parameters δ = 0.21 and h = 0.36, while NUTS used a step size
+hNUTS = 0.11, chosen so that the average orbit length matched the number of gradient evaluations used by
+WALNUTS. With comparable computational cost (NUTS used 104% of WALNUTS’s gradient evaluations),
+WALNUTS successfully explores the full support of the target, while NUTS fails to reach deep into the neck
+of the funnel. The right panel shows trace plots of ω, illustrating that both samplers mix very slowly. This
+poor mixing explains the variability in the QQ-plots, particularly in the far tail.
+This difficulty stems from the model’s extreme variation in scale: for large positive ω, the conditional
+variances Var(xi| ω) = eω are large and the target is wide and diffuse—this region corresponds to the
+mouth of the funnel. Conversely, for large negative ω, the conditional variances shrink exponentially,
+concentrating the mass near a narrow neck. These features are illustrated in Figure 10, where the funnel’s
+“wide mouth” and “narrow neck” encode this dramatic variation in scale.
+The challenge of sampling from Neal’s funnel can be quantified in terms of the curvature of the potential
+energy landscape associated with the target distribution. The potential energy is given by U(ω, x) =
+− log µ(ω, x), and its curvature varies drastically across regions of the domain. In particular, the Hessian
+evaluated along the funnel axis at (ω, 0) is diagonal:
+D2U(ω, 0) = diag
+
+1
+9, e−ω, . . . ,e−ω
+
+.
+The corresponding spectral radius, defined as the largest eigenvalue of the Hessian, is given by
+λ(ω) := max
+
+1
+9, e−ω
+
+. (33)
+This implies that the local Lipschitz constant L of∇U scales with λ(ω), and the leapfrog integrator is
+numerically stable only if
+h≤ 2√
+L
+≤ 2e−ω/2 .
+As a result, exploring the neck region (ω≪ 0) requires exponentially small step sizes to maintain stability,
+while larger step sizes are needed to mix efficiently in the mouth region (ω≫ 0).
+32
+10
+ 0 10
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+WALNUTS
+10
+ 0 10
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+NUTS
+10
+ 5
+ 0 5 10
+largest  in orbit
+2
+4
+6
+8
+10number of doublings in accepted orbit
+10
+ 5
+ 0 5 10
+smallest  in orbit
+0
+1
+2
+3
+4
+5
+6
+7
+8largest log2 ( ) in orbit
+Figure 12: Diagnostics for WALNUTS and NUTS on Neal’s Funnel.Various diagnostics for WALNUTS-R2P
+(auto-tuned with δ = 0.21, macro step size h = 0.36, 1 million iterations) applied to Neal’s funnel distribution
+(32). The left panel shows a histogram of sampledω values overlaid with the trueN(0, 9) density. The second
+panel shows the corresponding histogram for NUTS, using 104% of WALNUTS’s total gradient evaluations.
+The third panel plots (thinned and jittered) the number of doublings in accepted WALNUTS orbits versus
+the largest ω visited during each orbit. The right panel plots (thinned and jittered) the maximum number of
+micro step size doublings (log2(ℓ)) within each orbit versus the smallest ω visited. In both rightmost panels,
+nonparametric KNN regression curves are overlaid in red.
+Furthermore, the condition number of the Hessian matrix evaluated along the funnel axis (i.e., the ratio of the
+largest to smallest eigenvalue of D2U(ω, 0)) is given by
+κ(ω) := 9· max(eω, e−ω) , (34)
+which grows exponentially in|ω|. This makes the funnel an extreme example of an ill-conditioned target. Any
+fixed-step-size implementation of NUTS must adopt a small enough leapfrog step size to avoid numerical
+divergences in the neck, thereby incurring significant inefficiency in the mouth. Conversely, if tuned for the
+mouth, such a method becomes numerically unstable or inaccurate in the neck. Since both regions carry
+significant posterior mass, this trade-off cannot be ignored.
+These challenges make Neal’s funnel a rigorous test for samplers that adapt to local geometry. WALNUTS
+addresses this issue by dynamically adjusting the step sizewithin each leapfrog path. Specifically, WALNUTS
+first chooses a macro step size h that is suitable for the well-conditioned regions of the target (e.g., the mouth
+of the funnel), allowing rapid progress when the target is flat. Within each macro step, however, WALNUTS
+reduces the micro step size until the local energy error falls below the user-specified tolerance δ. This gives
+rise to a sequence of micro step sizes, each of which may vary depending on the local curvature along
+the orbit. As a result, the variable step size leapfrog integrator within WALNUTS automatically uses finer
+resolution when passing through stiff regions such as the narrow neck (where stability conditions are more
+restrictive), and coarser resolution in flatter regions where larger steps are feasible (see Figure 2).
+Remark 4 (Mode of Neal’s Funnel). Analogously to the case of a high-dimensional Gaussian, the potential
+energy U(ω, x) =− log µ(ω, x) attains its minimum at a mode that lies in a region of extremely low posterior
+33
+10
+ 5
+ 0 5 10
+largest  in orbit
+100
+101
+102
+(accepted) orbit length
+h = 0.15
+h = 0.3
+h = 0.6
+10
+ 5
+ 0 5 10
+smallest  in orbit
+10 2
+10 1
+micro step size h 1 required in orbit
+h = 0.15, smallest
+h = 0.15, largest
+h = 0.3 smallest
+h = 0.3 largest
+h = 0.6, smallest
+h = 0.6, largest
+0.0 0.2 0.4 0.6 0.8 1.0
+standardized distance from current state
+: density-scaled histogram of orbits
+h = 0.15
+h = 0.3
+h = 0.6
+Figure 13: Influence of macro-step size on WALNUTS in Neal’s Funnel.This figure illustrates the effect
+of the macro step size h on WALNUTS behavior when applied to Neal’s funnel distribution (32), based on
+50,000 MCMC iterations for each value ofh. The left panel shows KNN regression curves of orbit (integration
+time) length as a function of the largest ω encountered in the orbit, for three macro step sizes (h = 0.15, 0.3,
+0.6; shown as dotted lines), with δ = 0.1 fixed throughout. Orbit lengths are broadly similar across values of
+h, except in the left-hand tail, where many accepted orbits consist of a single integration step. The middle
+panel shows KNN regression curves of the largest and smallest micro step sizes hℓ−1 used in each accepted
+orbit, plotted against the smallest ω visited. For large ω, smaller macro step sizes act as a ceiling on hℓ−1,
+limiting step size even when larger values would be allowed by the energy error threshold. The right panel
+shows histograms of the relative time distance between the initial and selected states in each accepted orbit.
+The distributions are broadly consistent with the idealized triangular law from biased progressive HMC.
+mass. Completing the square in U, we find that the unique minimizer is given by
+(ω∗, x∗) =
+
+− 9d
+2 , 0
+
+.
+Indeed, expanding the expression for U,
+U(ω, x) = ω2
+18 +∥x∥2
+2eω + d
+2 ω + const ,
+we see that U is minimized at x = 0 and ω =− 9d
+2 . This mode lies deep in the neck of the funnel, far in the
+lower tail of the marginal ω∼N (0, 9), and hence, in a region with negligible posterior mass. Much like the
+mode of a high-dimensional standard Gaussian, it is not representative of typical samples from the target.
+Numerical results for Neal’s funnel Figure 11, left panel, shows QQ-plots of the marginal distribution of
+ω based on MCMC output using either WALNUTS-R2P or NUTS, with comparable computational budgets.
+WALNUTS provides a significantly more accurate representation of the far left tail, demonstrating its ability
+to explore high-curvature regions deep in the neck of the funnel. However, both methods exhibit slow
+mixing, as evidenced by the trace plots in the right panel of Figure 11. Notably, the poor mixing persists
+across the entire support of the target distribution, suggesting that the orbit length selection mechanism in
+34
+0 50 100 150 200 250 300
+MCMC iteration #
+30
+25
+20
+15
+10
+5
+0
+largest  in orbit
+smallest  in orbit
+ MCMC samples
+0 50 100 150 200 250 300
+MCMC iteration #
+10 7
+10 6
+10 5
+10 4
+10 3
+10 2
+10 1
+range of micro step sizes in orbit
+0 50 100 150 200 250 300
+MCMC iteration #
+10 4
+10 3
+10 2
+10 1
+100
+orbit energy error
+Figure 14: WALNUTS Diagnostics from a Cold Start Deep in the Neck of Neal’s Funnel.The left panel
+shows the first 300 WALNUTS samples of ω from a run on Neal’s funnel distribution, initialized in a cold
+state deep in the neck at ω =−30, with xi = 0 for i = 1, . . ., 10. Green dots indicate sampled values; solid
+lines show the ω-range of each orbit. The middle panel displays the range of micro step sizes hℓ−1 used
+per orbit, with the macro step size h = 0.3 shown as a horizontal grey line. The right panel shows the total
+energy error per orbit, defined as the difference between the largest and smallest Hamiltonian values. The
+local energy error tolerance δ = 0.3 is indicated by a dashed line.
+NUTS (and inherited by WALNUTS) tends to produce trajectories that are too short on average. Addressing
+this issue is an important direction for future work.
+Figure 12 presents diagnostic information from a warm-start run of WALNUTS applied to the funnel
+distribution (32), using 1 million MCMC iterations with auto-tuned parameters δ = 0.21 and macro step
+size h0 = 0.36. The far-left panel shows a histogram of sampled ω values, which indicates no apparent
+difficulty exploring the left-hand tail of the distribution (see also Figure 11). For comparison, the second
+panel from the left shows the corresponding histogram for NUTS, run at similar computational cost (104% of
+the gradient evaluations used by WALNUTS), which reveals a clear failure to explore the left-hand tail.
+The second panel from the right displays the number of orbit doublings used in each accepted orbit, plotted
+against the largest value of ω visited during that orbit. This shows that WALNUTS adapts by generating
+longer trajectories in the broad mouth of the funnel (i.e., regions with large ω), where the target is flatter and
+longer integration times are beneficial.
+The rightmost panel of Figure 12 shows the largest number of micro step size halvings (i.e.,log2(ℓ)) used
+within each orbit, plotted against the smallest value of ω visited in that orbit. It is evident that WALNUTS
+automatically selects smaller step sizes in the narrow neck of the funnel (i.e., regions with small ω), where
+stability constraints are more restrictive, while using larger step sizes in the broad mouth where the geometry
+is more forgiving.
+Figure 13 examines how the macro step size h influences orbit (integration time) length, micro step sizes,
+and the potential accumulation of local integration errors. The left panel shows KNN regressions of orbit
+length as a function of the largest ω visited within each orbit. For large values of ω, all considered macro
+35
+step sizes result in similar orbit lengths. In the narrow neck of the funnel, orbit lengths vary because they
+often consist of only a single integration step, and are therefore bounded below by the macro step size.
+The middle panel of Figure 13 shows KNN regressions of the largest and smallest micro step sizes used by
+micro in each orbit, plotted as a function of the smallest ω visited within that orbit. For small values of ω,
+all macro step sizes yield similar results, since the upper bound imposed by the macro step size on the micro
+step sizes is rarely active. As ω increases, however, the results begin to diverge because the macro step size
+increasingly constrains the allowable micro step sizes.
+The rightmost panel of Figure 13 presents histograms of the relative orbit time distance between the initial
+state (θ0, ρ0) and the selected state ( ˜θ, ˜ρ), normalized by the total accepted orbit time. In the idealized setting
+of biased progressive HMC with exact Hamiltonian simulation and fixed orbit length, this statistic follows a
+symmetric triangular distribution centered at 0.5 (see Theorem 2). The empirical histograms are broadly
+consistent with this behavior and do not exhibit signs of degeneracy. The peaks at standardized distances 0
+and 1 are attributable to orbits consisting of a single integration step, which occur more frequently as the
+macro step size increases.
+Figure 14 shows a single cold-start simulation consisting of 300 WALNUTS MCMC iterations, initialized
+at ω =−30 (i.e., 10 standard deviations below the mean) with xi = 0 for i = 1, . . ., 10. The left panel
+displays the MCMC samples as green dots, along with the extent of each orbit in the ω-direction. The
+sampler has no difficulty moving even through the highly ill-conditioned regions encountered early in
+the simulation. The middle panel shows the range of micro step sizes used in each orbit, again indicating
+that WALNUTS adapts as expected. The right panel plots the total energy error per orbit, defined as the
+difference between the largest and smallest Hamiltonian values, suggesting that energy errors do not exhibit
+problematic constructive accumulation.
+The choice of initial configuration is motivated by the fact that the funnel distribution has a single mode at
+ω =−45 and xi = 0 for all i (see Remark 4). While there is no theoretical obstacle to starting the chain at the
+mode, extrapolation from Figure 14 suggests that doing so would require micro step sizes near machine
+precision and would entail considerable computational effort.
+This example supports the conclusion that the proposed locally adaptive step size procedure functions as
+intended, successfully identifying regions that require smaller step sizes. As discussed above, however,
+orbit-length selection remains a challenge for this model: NUTS-based strategies lead to slow mixing, and
+WALNUTS is not immune to this issue. While this suggests that further refinement of orbit-length selection
+methods, particularly for multiscale target distributions, could improve performance, such developments
+are beyond the scope of the present work—more on this point in Section 5 below.
+4.4 The Stock-Watson model
+As a real-world example, we consider the Stock and Watson inflation rate model [43]. Quarterly US inflation
+rates yt, t = 1, . . ., T are modeled using three latent, nonlinearly coupled random walk factors (zt, xt, τt) as
+follows:
+zt|zt−1, σ ∼ N (zt−1, σ2), t = 2, . . . ,T− 1, (35)
+xt|xt−1, σ ∼ N (xt−1, σ2), t = 2, . . . ,T, (36)
+τt|τt−1, zt−1 ∼ N (τt−1, exp(zt−1)), t = 2, . . . ,T, (37)
+yt|τt, xt ∼ N (τt, exp(xt)), t = 1, . . . ,T. (38)
+The description of the model is completed with the prior σ−2∼ Gamma(5, 0.5), using the rate parameteriza-
+tion. The dataset used is the same as in [32], consisting of T = 252 observations between 1955 (first quarter)
+and 2018 (first quarter). Figure 16 provides posterior quantiles of the three latent processes, and it is seen that
+36
+0 50 100 150 200 250
+14
+12
+10
+8
+6
+4
+2
+0
+zt
+0 50 100 150 200 250
+5
+4
+3
+2
+1
+0
+1
+xt
+0 50 100 150 200 250
+3
+2
+1
+0
+1
+2
+3
+4
+t and observations
+Figure 15: Posterior distributions of the latent factors (z, x, τ) under the Stock Watson model. The top
+panel shows the 0.05, 0.5, and 0.95 quantiles of the persistent volatility factor zt: solid lines correspond to
+WALNUTS, and dotted lines to NUTS. The middle panel presents the same quantiles for the transient volatil-
+ity factor xt. The bottom panel displays the posterior median of τt along with the bands τt± 2 exp(0.5xt)
+(medians plotted), representing a scale-aware uncertainty interval. Observations yt are shown as dots.
+Results from WALNUTS-D are nearly identical and omitted for clarity.
+the balance between persistent volatility (i.e. exp(zt)) and transient volatility (i.e. exp(xt)) shows substantial
+temporal variation [see 43, who first pointed out these effects].
+Due to the nonlinear coupling of the latent factors, the posterior distribution of this model is known to
+exhibit substantial non-Gaussian structure, including pronounced funnel-like geometries. To facilitate
+sampling, we reparameterize the model in terms of the innovations of the latent processes: ([z1, (z2−
+z1)σ−1, . . ., (zT−1− zT−2)σ−1], [x1, (x2− x1)σ−1, . . ., (xT− xT−1)σ−1], [τ1, (τ2− τ1) exp(−0.5z1), . . ., (τT−
+τT−1) exp(−0.5zT−1)], log σ2). This transformation yields a posterior that can be sampled using an identity
+mass matrix. However, it is important to emphasize that the transformation does not eliminate the underlying
+37
+10 3
+ 10 2
+step size
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0proportion of orbits with step size
+R2P largest step size of orbit
+R2P smallest step size of orbit
+D largest step size of orbit
+D smallest step size of orbit
+NUTS step size
+0 2000 4000 6000 8000 10000
+MCMC iteration #
+10 2
+10 1
+100
+101
+102
+103
+max orbit energy error
+NUTS
+WALNUTS D
+WALNUTS R2P
+0.0 0.2 0.4 0.6 0.8 1.0
+standardized distance from current state
+: density-scaled histogram of orbits
+NUTS
+WALNUTS D
+WALNUTS R2P
+Figure 16: Distribution of step sizes and orbit energy errors for the Stock-Watson model. The left panel
+shows the distribution of the largest (dots) and smallest (squares) micro step sizes used in each WALNUTS
+orbit (both R2P and D variants). The red vertical line indicates the NUTS step size, while the dotted line
+marks the largest micro step size considered by WALNUTS ( h/8). The middle panel presents the total
+energy error per orbit, computed as maxj H(θ(j), ρ(j))− minj H(θ(j), ρ(j)), for NUTS and both versions of
+WALNUTS. Computational costs are comparable between WALNUTS-R2P and NUTS, while WALNUTS-D
+requires approximately 60% of the gradient evaluations of the former two. The right panel displays the
+integration time statistic normalized by orbit length. These distributions do not raise any concerns. Note
+that the smaller step size used by NUTS results in more frequent orbit doublings, which explains the more
+triangular-like distribution of this statistic.
+nonlinearities. In particular, this model with this parameterization is known to require very small step sizes
+when using fixed step size HMC, motivating more elaborate preconditioning strategies as explored in [33].
+Posterior summaries from runs of 10,000 iterations of NUTS (with fixed step size h = 0.002) and WALNUTS
+(with local error tolerance δ = 0.3, macro step size h = 0.1, and a minimum of 8 micro-steps per macro-step,
+enforced by starting the loop in micro at index 3 instead of 0) are shown in Figure 15. These parameter
+settings result in approximately equal computational cost. At first glance, the posterior estimates produced
+by NUTS and WALNUTS appear similar.
+However, Figure 16 reveals important differences in the energy error diagnostics. The energy errors from
+NUTS exhibit a substantial number of large deviations (e.g., greater than 2), indicating that many transitions
+diverge. This suggests that some regions of posterior support are effectively inaccessible to NUTS at this
+step size, even though such pathologies are not evident from the trace plots in Figure 15. A practitioner
+encountering such behavior would rightly be concerned about convergence.
+In contrast, WALNUTS shows no such issues: energy errors remain stable across iterations, even though
+only local error control is enforced. The left panel of Figure 16 shows the distribution of the largest and
+smallest micro step sizes used by the two variants of WALNUTS. Remarkably, despite frequently using step sizes
+larger than NUTS, WALNUTS maintains stable energy errors by selectively using smaller steps only where needed!
+38
+5 Conclusion & Outlook
+WALNUTS introduces a robust and flexible locally adaptive variant of HMC that performs well in difficult
+sampling problems where state-of-the-art methods like NUTS often struggle. Despite its locally adaptive
+nature, WALNUTS is not significantly more expensive than NUTS for well-conditioned targets, especially
+when warmup is appropriately tuned. When NUTS works, it works; but WALNUTS is designed for when
+it doesn’t. It offers a principled fallback that expands the range of models that can be reliably sampled
+without manual tuning or aggressive preconditioning. In the near term, WALNUTS can be integrated into
+probabilistic programming languages such as Stan, PyMC, or NumPyro, where its plug-and-play adaptivity
+and robustness offers practical benefits with minimal user tuning.
+Importantly, the error-controlled adaptive integration scheme at the heart of WALNUTS is not specific to
+NUTS. It is a general-purpose tool that can be incorporated into a wide variety of HMC-type methods,
+including standard HMC, randomized HMC [12, 17, 5] (and other Hamiltonian-based PDMPs [16]), kinetic
+Langevin samplers [10], and generalized HMC variants [46]. The approach we present here also opens
+up new directions for developing Hamiltonian-based samplers that remain robust and efficient even in
+challenging inference settings where the local geometry of the target distribution varies substantially. Below,
+we outline several promising directions for future work.
+• Mass matrix adaptivity. A natural extension is to introduce local adaptivity into the mass matrix,
+allowing it to vary with position to better capture heterogeneous curvature in the target distribution.
+This builds on ideas from Riemannian HMC [21] and recent advances in adaptive mass matrix tuning
+[31, 48, 28, 45], while aiming to retain the simplicity and computational efficiency of WALNUTS by
+avoiding expensive full Hessian evaluations.
+• Ensemble-based approaches. Another approach to preconditioning WALNUTS is to run an ensemble
+of chains, following the strategy of affine-invariant methods [19, 24], including the recently introduced
+affine-invariant HMC variant [15]. These methods leverage the positions of parallel chains to adapt
+proposals to the geometry of the target distribution. Global affine invariance is not sufficient to
+handle highly multiscale or hierarchical targets such as Neal’s funnel where local structure can vary
+dramatically across regions. Still, ensemble-based strategies are promising. They provide a natural way
+to estimate low-rank structure and local scaling, which might be hard to detect with a single locally
+adaptive chain. Combining these techniques with WALNUTS’ local step size adaptation could yield
+samplers that better capture local geometry.
+• Improving the U-T urn Diagnostic.Another important direction is to revisit the U-turn diagnostic,
+which remains a heuristic inherited from standard NUTS. A more principled approach to deciding
+when and how to truncate orbit construction could significantly improve both robustness and sampling
+efficiency. Indeed, Figure 11 illustrates the limitations of the current U-turn-based criterion: the left
+panel shows that WALNUTS more accurately captures the far left tail of the marginal distribution of ω,
+demonstrating its ability to explore high-curvature regions deep in the neck of the funnel. However, the
+trace plots in the right panel reveal slow mixing for both WALNUTS and NUTS, with poor performance
+persisting across the entire support. This suggests that the orbit length selection mechanism often
+terminates integration prematurely. Addressing this issue by developing other diagnostics than the
+U-turn one is a key direction for future work.
+Taken together, these directions suggest the potential for a new class of locally adaptive HMC methods
+that offer improved robustness and efficiency across a broad range of challenging scenarios, including
+models with extreme anisotropy, funnel geometries, or high dimensionality. They point toward a new
+generation of adaptive MCMC algorithms that more fully exploit local geometry, without relying on global
+approximations or heavy precomputations, and that remain effective across a diverse range of model classes
+and data regimes.
+39
+References
+[1] C. Andrieu, A. Lee, and S. Livingstone. A general perspective on the Metropolis-Hastings kernel . 2020.
+arXiv: 2012.14881 [stat.CO] (cit. on pp. 4, 7).
+[2] M. J. Betancourt and M. Girolami. Hamiltonian Monte Carlo for Hierarchical Models. 2013. arXiv: 1312.
+0906 [stat.ME] (cit. on p. 31).
+[3] M. Betancourt. A conceptual introduction to Hamiltonian Monte Carlo . 2017. arXiv: 1701 . 02434
+[stat.ME] (cit. on pp. 2, 7).
+[4] M. Biron-Lattes, N. Surjanovic, S. Syed, T. Campbell, and A. Bouchard-Côté. “autoMALA: Locally adap-
+tive Metropolis-adjusted Langevin algorithm”. In: 27th International Conference on Artificial Intelligence
+and Statistics. Vol. PMLR 238. 2024 (cit. on pp. 5, 20).
+[5] N. Bou-Rabee and A. Eberle. “Couplings for Andersen dynamics in high dimension”. In: Ann. Inst. H.
+Poincaré Probab. Statist 58.2 (2022), pp. 916–944 (cit. on pp. 7, 39).
+[6] N. Bou-Rabee and J. M. Sanz-Serna. “Geometric integrators and the Hamiltonian Monte Carlo Method”.
+In: Acta Numerica 27 (2018), pp. 113–206 (cit. on pp. 1, 7, 15, 16).
+[7] N. Bou-Rabee and E. Vanden-Eijnden. “A patch that imparts unconditional stability to explicit integra-
+tors for Langevin-like equations”. In: J Comput Phys 231 (2012), pp. 2565–2580 (cit. on p. 2).
+[8] N. Bou-Rabee, B. Carpenter, T. Kleppe, and M. Marsden. Incorporating Local Step-Size Adaptivity into the
+No-U-Turn Sampler using Gibbs Self Tuning. 2024. arXiv: 2408.08259 [stat.ME] (cit. on pp. 2, 18, 31,
+49).
+[9] N. Bou-Rabee, B. Carpenter, and M. Marsden. GIST: Gibbs self-tuning for locally adaptive Hamiltonian
+Monte Carlo. 2024. arXiv: 2404.15253 [stat.CO] (cit. on pp. 4, 5, 7, 8).
+[10] N. Bou-Rabee and S. Oberdörster. “Mixing of Metropolis-adjusted Markov chains via couplings: The
+high acceptance regime”. In: Electronic Journal of Probability 29 (2024), pp. 1–27 (cit. on pp. 3, 39).
+[11] N. Bou-Rabee and S. Oberdörster. Mixing of the No-U-Turn Sampler and the Geometry of Gaussian
+Concentration. 2024. arXiv: 2410.06978 (cit. on pp. 2, 27, 28).
+[12] N. Bou-Rabee and J. M. Sanz-Serna. “Randomized Hamiltonian Monte Carlo”. In: Ann. Appl. Probab.
+27.4 (2017), pp. 2159–2194 (cit. on pp. 7, 39).
+[13] M. P . Calvo and J. M. Sanz-Serna. “The development of variable-step symplectic integrators, with
+application to the two-body problem”. In: SIAM Journal on Scientific Computing 14.4 (1993), pp. 936–952
+(cit. on p. 3).
+[14] B. Carpenter, A. Gelman, M. Hoffman, D. Lee, B. Goodrich, M. Betancourt, M. A. Brubaker, J. Guo,
+P . Li, and A. Riddell. “Stan: A probabilistic programming language”. In:Journal of Statistical Software 20
+(2016), pp. 1–37 (cit. on p. 2).
+[15] Y. Chen. “New affine invariant ensemble samplers and their dimensional scaling”. In:arXiv preprint
+arXiv:2505.02987 (2025) (cit. on p. 39).
+[16] A. Chevallier, S. Power, and M. Sutton. “Towards practical PDMP sampling: Metropolis adjustments,
+locally adaptive step-sizes, and NUTS-based time lengths”. In: arXiv preprint 2503.11479 (2025) (cit. on
+p. 39).
+[17] G. Deligiannidis, D. Paulin, A. Bouchard-Côté, and A. Doucet. “Randomized Hamiltonian Monte
+Carlo as scaling limit of the bouncy particle sampler and dimension-free convergence rates”. In: The
+Annals of Applied Probability 31.6 (2021), pp. 2612–2662 (cit. on p. 39).
+[18] S. Duane, A. D. Kennedy, B. J. Pendleton, and D. Roweth. “Hybrid Monte-Carlo”. In: Physics Letters B
+195 (1987), pp. 216–222 (cit. on p. 1).
+[19] D. Foreman-Mackey, D. W. Hogg, D. Lang, and J. Goodman. “emcee: the MCMC hammer”. In:
+Publications of the Astronomical Society of the Pacific 125.925 (2013), p. 306 (cit. on p. 39).
+[20] Q. Fu and A. Wibisono. “Hamiltonian Descent Algorithms for Optimization: Accelerated Rates via
+Randomized Integration Time”. In: arXiv preprint arXiv:2505.12553 (2025) (cit. on p. 3).
+[21] M. Girolami and B. Calderhead. “Riemann manifold Langevin and Hamiltonian Monte Carlo methods”.
+In: J R Statist Soc B 73 (2011), pp. 123–214 (cit. on p. 39).
+40
+[22] N. Glatt-Holtz, J. Krometis, and C. Mondaini. “On the accept–reject mechanism for Metropo-
+lis–Hastings algorithms”. In: The Annals of Applied Probability 33.6B (2023). DOI: 10.1214/23-aap1948
+(cit. on pp. 4, 7).
+[23] N. E. Glatt-Holtz, A. J. Holbrook, J. A. Krometis, C. F. Mondaini, and A. Sheth. Sacred and Profane:
+from the Involutive Theory of MCMC to Helpful Hamiltonian Hacks. 2024. arXiv: 2410.17398 [stat.CO]
+(cit. on pp. 4, 7).
+[24] J. Goodman and J. Weare. “Ensemble samplers with affine invariance”. In:Communications in applied
+mathematics and computational science 5.1 (2010), pp. 65–80 (cit. on p. 39).
+[25] P . J. Green and A. Mira. “Delayed rejection in reversible jump Metropolis–Hastings”. In:Biometrika
+88.4 (2001), pp. 1035–1053 (cit. on p. 5).
+[26] H. Haario, M. Laine, A. Mira, and E. Saksman. “DRAM: efficient adaptive MCMC”. In: Statistics and
+Computing 16 (2006), pp. 339–354 (cit. on p. 5).
+[27] E. Hairer, C. Lubich, and G. Wanner. Geometric Numerical Integration. Springer, 2010 (cit. on pp. 1, 15).
+[28] M. Hird and S. Livingstone. “Quantifying the effectiveness of linear preconditioning in Markov chain
+Monte Carlo”. In: arXiv preprint arXiv:2312.04898 (2023) (cit. on pp. 5, 39).
+[29] M. D. Hoffman and A. Gelman. “The no-U-turn sampler: Adaptively setting path lengths in Hamilto-
+nian Monte Carlo”. In: Journal of Machine Learning Research 15.1 (2014), pp. 1593–1623 (cit. on pp. 2, 7,
+47).
+[30] A. M. Horowitz. “A Generalized Guided Monte-Carlo Algorithm”. In: Phys Lett B 268 (1991), pp. 247–
+252 (cit. on p. 3).
+[31] T. S. Kleppe. “Adaptive step size selection for Hessian-based manifold Langevin samplers”. In:
+Scandinavian Journal of Statistics 43.3 (2016), pp. 788–805 (cit. on pp. 5, 20, 39).
+[32] T. S. Kleppe. “Connecting the dots: Numerical randomized Hamiltonian Monte Carlo with state-
+dependent event rates”. In: Journal of Computational and Graphical Statistics 31.4 (2022), pp. 1238–1253
+(cit. on pp. 7, 31, 36).
+[33] T. S. Kleppe. “Dynamically Rescaled Hamiltonian Monte Carlo for Bayesian Hierarchical Models”. In:
+Journal of Computational and Graphical Statistics 28.3 (2019), pp. 493–507 (cit. on p. 38).
+[34] B. Leimkuhler and S. Reich. Simulating Hamiltonian Dynamics. Cambridge Monographs on Applied
+and Computational Mathematics. Cambridge University Press, 2004 (cit. on p. 15).
+[35] T. Liu, N. Surjanovic, M. Biron-Lattes, A. Bouchard-Côté, and T. Campbell. “AutoStep: Locally adaptive
+involutive MCMC”. In: arXiv preprint 2410.18929 (2024) (cit. on p. 5).
+[36] C. C. Margossian and L. K. Saul. “The shrinkage-delinkage trade-off: An analysis of factorized gaussian
+approximations for variational inference”. In:Uncertainty in Artificial Intelligence. PMLR. 2023, pp. 1358–
+1367 (cit. on p. 5).
+[37] C. C. Margossian and L. K. Saul. “Variational Inference in Location-Scale Families: Exact Recovery of
+the Mean and Correlation Matrix”. In: arXiv preprint arXiv:2410.11067 (2024) (cit. on p. 5).
+[38] A. Mira. “On Metropolis-Hastings algorithms with delayed rejection”. In:Metron 59.3-4 (2001), pp. 231–
+241 (cit. on p. 5).
+[39] C. Modi, A. Barnett, and B. Carpenter. “Delayed rejection Hamiltonian Monte Carlo for sampling
+multiscale distributions”. In: Bayesian Analysis 1.1 (2023), pp. 1–28 (cit. on p. 5).
+[40] R. M. Neal. “MCMC using Hamiltonian dynamics”. In: Handbook of Markov Chain Monte Carlo 2 (2011),
+pp. 113–162 (cit. on p. 1).
+[41] R. M. Neal. “Slice sampling”. In: The Annals of Statistics 31.3 (2003), pp. 705–767 (cit. on p. 31).
+[42] C. Sherlock, S. Urbas, and M. Ludkin. “The apogee to apogee path sampler”. In:Journal of Computational
+and Graphical Statistics 32.4 (2023), pp. 1436–1446 (cit. on p. 7).
+[43] J. H. Stock and M. W. Watson. “Why Has U.S. Inflation Become Harder to Forecast?” In: Journal of
+Money, Credit and Banking 39.s1 (2007), pp. 3–33 (cit. on pp. 36, 37).
+[44] D. M. Stofer. “Some geometric and numerical methods for perturbed integrable systems”. PhD thesis.
+ETH Zurich, 1988 (cit. on p. 3).
+41
+[45] J. H. Tran and T. S. Kleppe. “Tuning diagonal scale matrices for HMC”. In:Statistics and Computing 34.6
+(2024), p. 196 (cit. on pp. 5, 39).
+[46] G. Turok, C. Modi, and B. Carpenter.Sampling From Multiscale Densities With Delayed Rejection General-
+ized Hamiltonian Monte Carlo. 2024. arXiv: 2406.02741 [stat.CO] (cit. on pp. 3, 5, 39).
+[47] R. Vershynin. High-dimensional probability. Vol. 47. Cambridge Series in Statistical and Probabilistic
+Mathematics. Cambridge University Press, Cambridge, 2018 (cit. on p. 28).
+[48] P . A. Whalley, D. Paulin, and B. Leimkuhler. “Randomized time Riemannian manifold Hamiltonian
+Monte Carlo”. In: Statistics and Computing 34.1 (2024), p. 48 (cit. on p. 39).
+[49] K. Xu, T. E. Fjelde, C. Sutton, and H. Ge. “Couplings for Multinomial Hamiltonian Monte Carlo”. In:
+International Conference on Artificial Intelligence and Statistics. PMLR. 2021, pp. 3646–3654 (cit. on p. 7).
+42
+A Pseudocode Implementation of WALNUTS
+WALNUTS(θ, µ, M, h, mmax, δ)
+Inputs: θ∈ Rd initial state
+µ : Rd→ (0, ∞) unnormalized target density
+M∈ Rd×d mass matrix
+h > 0 macro step size
+mmax∈ N maximum number of doublings
+δ > 0 maximum energy error
+Return: ˜θ∈ Rd next state
+ρ∼N (0, M)
+( ˜θ, ˜ρ) = ( θ0, ρ0) = ( θ, ρ)
+w0 = µ(θ0) e− 1
+2 ρ⊺
+0 M−1ρ0
+O = ((θ0, ρ0))
+W = (w0)
+B∼ Unif({0, 1}mmax )
+for i from 1 to mmax:
+Oold =O = ((θa, ρa), . . . ,(θb, ρb))
+W old =W = (wa, . . . ,wb)
+if Bi = 1:
+Oext,W ext = extend-orbit-forward(θb, ρb, wb, µ, M, h, δ, 2i−1)
+O =Oold⊙O ext
+W =W old⊙W ext
+else:
+Oext,W ext = extend-orbit-backward(θa, ρa, wa, µ, M, h, δ, 2i−1)
+O =Oext⊙O old
+W =W ext⊙W old
+if sub-U-turn(Oext, M):
+break
+u∼ Unif((0, 1))
+if u≤ ∑W ext
+∑W old :
+( ˜θ, ˜ρ)∼ categorical
+ 
+Oext,W ext
+if U-turn(O, M):
+break
+return ˜θ
+Listing 1: WALNUTS algorithm with biased progressive state selection.
+43
+U-turn(O, M)
+Inputs: O =
+
+(θleft, ρleft), . . . ,(θright, ρright)
+
+orbit, with|O| a power of 2
+return (ρright)⊤M−1(θright− θleft) < 0 or (ρleft)⊤M−1(θright− θleft) < 0
+Listing 2: Check if the orbitO satisfies the U-turn condition in Definition 3.
+sub-U-turn(O, M)
+Inputs: O =Oleft⊙O right orbit, with|Oleft| =|Oright| a power of 2
+if length(O) < 2: return False
+return U-turn(O, M) or sub-U-turn(Oleft, M) or sub-U-turn(Oright, M)
+Listing 3: Check if the orbitO satisfies the sub-U-turn condition. The function U-turn is given in Listing 2.
+extend-orbit-forward(θb, ρb, wb, µ, M, h, δ, L)
+Inputs: (θb, ρb)∈ R2d initial position, momentum
+wb∈ R≥0 initial weight
+µ : Rd→ (0, ∞) unnormalized target density
+M∈ Rd×d mass matrix
+h > 0 macro step size
+δ > 0 maximum energy error
+L∈ N number of macro steps
+Return: Oext∈
+
+R2d
+L
+orbit
+W ext∈ (R≥0)L weights
+for i from b + 1 to b + L:
+ℓ∼ pmicro(·| micro(θi−1, ρi−1, µ, M, h, δ))
+(θi, ρi) = Φℓ
+hℓ−1 (θi−1, ρi−1)
+wi = µ(θi)e− 1
+2 (ρi)⊺M−1ρi
+µ(θi−1)e− 1
+2 (ρi−1)⊺M−1ρi−1
+pmicro(ℓ| micro(θi,−ρi, µ, M, h, δ))
+pmicro(ℓ| micro(θi−1, ρi−1, µ, M, h, δ)) wi−1
+returnOext = ((θb+1, ρb+1), (θb+2, ρb+2), . . . ,(θb+L, ρb+L)) andW ext = (wb+1, wb+2, . . . ,wb+L)
+Listing 4: Generates an orbit of L macro steps and associated weights over the index range (b + 1):(b + L).
+44
+extend-orbit-backward (θa, ρa, wa, µ, M, h, δ, L)
+Inputs: (θa, ρa)∈ R2d initial position, momentum
+wa∈ R≥0 initial weight
+µ : Rd→ (0, ∞) unnormalized target density
+M∈ Rd×d mass matrix
+h > 0 macro step size
+δ > 0 maximum energy error
+L∈ N number of macro steps
+Return: Oext∈
+
+R2d
+L
+orbit
+W ext∈ RL weights
+for i from a− 1 down to a− L:
+ℓ∼ pmicro(·| micro(θi+1,−ρi+1, µ, M, h, δ))
+(θi, ρi) =F◦ Φℓ
+hℓ−1◦F (θi+1, ρi+1)
+wi = µ(θi)e− 1
+2 (ρi)⊺M−1ρi
+µ(θi+1)e− 1
+2 (ρi+1)⊺M−1ρi+1
+pmicro(ℓ| micro(θi, ρi, µ, M, h, δ))
+pmicro(ℓ| micro(θi+1,−ρi+1, µ, M, h, δ)) wi+1
+returnOext = ((θa−L, ρa−L), . . . ,(θa−2, ρa−2), (θa−1, ρa−1)) andW ext = (wa−L, . . . ,wa−2, wa−1)
+Listing 5: Generates an orbit of L macro steps and associated weights over the index range (a− L):(a− 1).
+45
+micro(θ, ρ, µ, M, h, δ)
+Inputs: (θ, ρ)∈ R2d initial position, momentum
+h0 > 0 macro step size
+µ : Rd→ (0, ∞) unnormalized target density
+M∈ Rd×d mass matrix
+h > 0 macro step size
+δ > 0 maximum energy error
+Return: ℓ∈ N step size reduction factor
+(θ(0), ρ(0)) = ( θ, ρ)
+for i from 0 to ∞
+ℓ = 2i
+hmicro = h ℓ−1
+Hmax = Hmin =− log µ(θ(0)) + 1
+2 (ρ(0))⊺M−1ρ(0)
+for j from 0 to ℓ− 1
+ρ(j+1/2) = ρ(j) + 1
+2 hmicro∇ log µ(θ(j))
+θ(j+1) = θ(j) + hmicro M−1ρ(j+1/2)
+ρ(j+1) = ρ(j+1/2) + 1
+2 hmicro∇ log µ(θ(j+1))
+H(j+1) =− log µ(θ(j+1)) + 1
+2 (ρ(j+1))⊺M−1ρ(j+1)
+Hmax = max(H(j+1), Hmax)
+Hmin = min(H(j+1), Hmin)
+if Hmax− Hmin≤ δ
+return ℓ
+Listing 6: Computes the smallest power-of-two integer ℓ such that ℓ leapfrog steps of micro step size hmicro = hℓ−1
+keep the energy error within the user-specified threshold δ, as defined in (12).
+46
+B Practical Implementation
+This section outlines practical implementation strategies that reduce the computational and memory over-
+head of WALNUTS. The pseudocode in Listing 1, including dependencies, is intended to provide the reader
+with a clear conceptual understanding of the WALNUTS transition kernel. However, directly implementing
+this version can lead to substantial redundant computations and high memory usage. In particular, storing
+all positions and momenta in an orbitO may require O(d· 2mmax ) memory, where d is the dimension of the
+state space and mmax is the maximum number of doublings.
+B.1 Error-controlled leapfrog integration steps
+In the pseudocode for orbit expansion (Listings 4 and 5), the calls to micro and the leapfrog integration
+steps used to build the final orbit are implemented as separate function calls for both forward and backward
+directions. While this modular structure aids conceptual understanding and code readability, it introduces
+computational overhead, as the same leapfrog steps may be recomputed multiple times.
+In practice, the contents of the for loops in extend-orbit-forward and extend-orbit-backward are
+consolidated into a single routine that performs all relevant operations together. This combined implementa-
+tion reduces redundant computation by reusing results where possible. The forward case is described below;
+the backward case is analogous.
+• Computeeℓ = micro(θi−1, ρi−1, µ, M, h, δ), and store (θi, ρi) = Φeℓ
+heℓ−1 (θi−1, ρi−1), which is already
+computed as part of the micro procedure.
+• Sample ℓ∼ pmicro(·|eℓ).
+• If ℓ =eℓ = 0: reuse the stored result (θi, ρi).
+• If ℓ =eℓ > 0: use the precomputed result (θi, ρi) = Φeℓ
+heℓ−1 (θi−1, ρi−1). To compute the weight factor,
+we then run micro(θi,−ρi, µ, M, h, δ) using step sizes corresponding to micro step count 2j for j =
+0, 1,. . ., log2(ℓ)− 1. (There is no need to run the backward micro iteration for j = log2(ℓ) or higher
+due to reversibility of the integration; see Lemma 1.)
+• Otherwise (i.e., if ℓ̸=eℓ): proceed as in extend-orbit-forward. In this case, there are no obvious
+computational savings compared to the original algorithm, and the backward micro loop generally
+cannot be terminated early.
+Note that there can be a substantial computational cost difference between the cases ℓ =eℓ and ℓ̸=eℓ. This
+may partly explain why WALNUTS configured with pmicro(eℓ|eℓ) = 1 often appears to run faster in practice,
+even if it terminates orbit construction slightly earlier and more frequently.
+B.2 Memory-efficient orbit construction
+As also described in [29], a more memory-efficient implementation, requiring only O(d· mmax) memory,
+is possible by checking the sub-U-turn condition and performing sampling from categorical
+ 
+Oext,W ext
+concurrently during the execution of extend-orbit-forward or extend-orbit-backward. Since this
+approach is thoroughly explained in [29], we provide only a brief summary here.
+The categorical sampling step is conceptually straightforward. Suppose we wish to sample a random index
+I∈{ 1, . . ., N} according to a sequence of (possibly unnormalized) weights w1, . . ., wN. This can be done in
+an online manner using the following recursive procedure:
+• Initialize I = 1 and S1 = w1.
+• For i = 2, . . . ,N:
+47
+1 2 3 4 5 6 7 8
+integration step #
+sub-U-turn check #1
+sub-U-turn check #2
+sub-U-turn check #3
+sub-U-turn check #4
+sub-U-turn check #5
+sub-U-turn check #6
+sub-U-turn check #7
+Figure 17: Sequence of sub-U-turn checks during forward orbit expansion with 8 integration steps. Black
+dots indicate computed integration steps; red Xs mark steps that have been discarded. Red underbraces
+denote the pairs of states involved in each U-turn check. A state can be safely deleted once it is covered by a
+completed U-turn check that spans beyond it on both sides.
+– Set Si = Si−1 + wi,
+– Draw Ui∼ Unif(0, 1),
+– With probability wi/Si, set I = i; otherwise, leave I unchanged.
+At the end of this procedure, the variable I is distributed according to the categorical distribution with
+probabilities proportional to w1, . . . ,wN.
+Sub-U-turn checks can also be performed concurrently with the extend-orbit-forward and extend-
+orbit-backward routines. In fact, the algorithm in Listing 3 is designed to operate sequentially on the
+states of the orbit as they are computed. Once a U-turn check has been performed between two states, say i
+and j, the intermediate states i + 1, . . ., j− 1 are no longer needed and can be discarded to reduce memory
+usage.
+Figure 17 illustrates this concurrent procedure for extend-orbit-forward with 8 integration steps. New
+integration steps are computed in iterations 1, 2, 4, and 5 of the algorithm. At no point is the full sub-orbit
+stored in memory.
+Concurrent U-turn checks can also lead to computational savings: if a U-turn is detected early (e.g., during
+check #3 in Figure 17), then the remaining integration steps can be skipped, as no proposal will be drawn
+from that region and the orbit expansion stops.
+Similar considerations apply when the weight factor from the reversibility check becomes zero. Specifically,
+if the reversibility check yields zero weights on both sides of the current state (θ0, ρ0), the orbit-building
+process can be terminated early. However, if only one side yields a zero weight, orbit construction must
+continue in the other direction.
+48
+C Exploring T uning Strategies
+This section focuses on tuning the macro step size h, which determines the temporal spacing between
+candidate states along the final orbit, and the energy error threshold δ, which controls local step size
+refinement within each macro step. WALNUTS is designed to be robust to user input, but performance can
+be significantly improved by selecting h and δ carefully in a warmup phase; that is, an initial portion of
+the Markov chain devoted to adapting algorithm parameters prior to collecting samples from the posterior.
+In this part, we explore approaches to tuning both parameters with the goal of balancing efficiency and
+robustness.
+C.1 Energy error threshold δ
+To appropriately set the energy error thresholdδ in the micro step selection function
+micro(θ, ρ, µ, M, h, δ) := min
+n
+ℓ∈ 2N| H+
+ℓ − H−
+ℓ ≤ δ
+o
+, (39)
+we aim to control the local energy error introduced by each integration step while ensuring robust global
+behavior of the sampler.
+When choosing the energy error threshold δ > 0, the primary objective is to prevent numerical divergences
+by bounding the energy error introduced in each macro integration step. An additional, equally important
+objective is to control the total change in energy along an orbitO. Doing so helps ensure that the distribution
+of the integration time index i, which determines the next step of the chain, is broadly spread across the orbit.
+To see this, consider the idealized setting in which the leapfrog integrator is replaced by the exact Hamiltonian
+flow, and assume for simplicity that the orbit length is fixed. In this case, there is no energy error, and
+the normalized integration time index i follows an exact symmetric triangular distribution centered at 0.5
+(see Theorem 2). When the orbit length is tuned to match the local scale of the target, this integration time
+distribution enables effective exploration along that scale.
+In practice, the leapfrog integrator induces an energy error, which can distort this ideal integration time
+distribution and lead to biased or inefficient proposals — particularly if the energy error varies substantially
+along the orbit. Controlling the energy error is therefore essential: it allows the sampler to approximate the
+idealized behavior locally, so that movement occurs effectively along the relevant scale of the target.
+While it is possible to combine WALNUTS’ local step size adaptation with global orbit-level adaptation,
+as proposed in [8], doing so may compromise the fine-grained adaptivity that WALNUTS is designed to
+achieve; namely, reducing the step size only in regions where it is truly necessary. Instead, we advocate a
+strategy that tunes the local energy error threshold δ so that the global energy change along the orbit satisfies
+H+
+O− H−
+O < ∆, (40)
+with high probability, where H+
+O and H−
+O denote the maximum and minimum Hamiltonians observed along
+the orbit, and ∆ > 0 is a global energy error threshold. As shown in [8], the quantity exp(−(H+
+O− H−
+O )) is
+strongly correlated with the probability P(i̸= 0) of selecting a nontrivial proposal. Enforcing the bound (40)
+with a prescribed probability level pa (e.g., pa = 0.95) therefore promotes stable and reliable sampling.
+WALNUTS employs a variable step size leapfrog integrator, which adaptively adjusts the step size within each
+macro integration interval to satisfy a local energy error threshold δ. Specifically, the step size is recursively
+halved until the estimated energy error in a single step satisfies
+|H+
+ℓ − H−
+ℓ|≤ δ.
+49
+If an orbit consists of n macro steps, each satisfying the above bound, then in the worst case, where all local
+energy errors accumulate constructively, then the total energy error satisfies
+H+
+O− H−
+O≤ nδ.
+While this is a conservative upper bound, it highlights the need for orbit-level control. In practice, the
+signs of energy errors often fluctuate, especially in well-conditioned regions of the target, leading to partial
+cancellation. Nonetheless, the envelope of the energy error (i.e., the difference between the largest and
+smallest Hamiltonians along the orbit) may grow with orbit length. To capture this possibility, we model the
+accumulated energy variation as
+H+
+O− H−
+O≈K δ,
+whereK is a local-to-orbit inflation factor, a random variable whose distribution depends on the number of
+integration steps, the macro step size h, and the local geometry of the target distribution. In the ideal case of
+uncorrelated stepwise errors,K remainsO(1) even for long orbits, due to frequent sign changes.
+To ensure that (40) holds with probability at least pa, we propose adapting δ during warmup by recording
+the observed inflation factor
+K = H+
+O− H−
+O
+δ (41)
+for each constructed orbit. These values are collected across warmup iterations, and δ is then updated
+according to
+δ = ∆
+qKpa
+, (42)
+where qK
+pa denotes the empirical pa-quantile of the recorded inflation factors. Since each orbit contributes a
+single value ofK, this adaptation procedure is both memory-efficient and computationally inexpensive.
+This strategy enables automatic and interpretable tuning of δ, aligning local step size control with global
+energy error constraints, and thereby supporting the stability and robustness of the WALNUTS sampler.
+C.2 Macro step size h (given δ)
+Recall that the function micro(θ, ρ, µ, M, h, δ) returns the number of step size halvings needed to reduce the
+energy error below the threshold δ, as defined in (39). In particular, if no micro step size halving is needed,
+then micro(θ, ρ, µ, M, h, δ) = 1.
+To tune the macro step size h, the primary goal is efficiency. If h is too small, WALNUTS will take unneces-
+sarily many leapfrog steps, even in regions where larger steps would be sufficient. On the other hand, if h is
+too large, the micro routine will frequently trigger step size halving to satisfy the energy error threshold δ,
+which wastes computation. Moreover, overly large values of h can cause the integration paths to become too
+coarse to detect U-turns or other important geometric features, potentially leading to poor proposal quality.
+To navigate this trade-off, we propose choosing h such that the probability of needing no step size halving is
+equal to a target value Γ∈ (0, 1):
+P (micro(θ, ρ, µ, M, h0, δ) = 1) = Γ (43)
+This criterion means that, in a typical region of phase space, the initial macro step size h is accepted without
+refinement in a fraction Γ of cases. A value such as Γ = 0.8 typically works well in practice: most steps
+proceed without modification, while micro still adjusts the step size in regions where smaller steps are
+needed.
+In short, this objective helps ensure that h is large enough to be efficient across most of the target distribution,
+without compromising robustness or geometric resolution in more challenging areas.
+50

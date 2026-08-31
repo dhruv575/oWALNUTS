@@ -1,0 +1,39 @@
+{
+  "schema": "owalnuts-paper-funnel-reproduction-protocol/v1",
+  "frozen": "2026-08-31",
+  "target": {
+    "name": "neal_funnel",
+    "dimension": 10,
+    "omega_prior_variance": 9.0,
+    "conditional": "x_i | omega ~ N(0, exp(omega))",
+    "paper_equation": "arXiv 2506.18746 eq. (32)"
+  },
+  "starts": [[-3.0, 0,0,0,0,0,0,0,0,0], [-1.0, 0,0,0,0,0,0,0,0,0], [1.0, 0,0,0,0,0,0,0,0,0], [3.0, 0,0,0,0,0,0,0,0,0]],
+  "chains": 4,
+  "threads": 1,
+  "runtime_callback_cap": 1000000000,
+  "wall_cap_seconds_per_arm": 1200,
+  "arms": {
+    "F":   {"sampler": "owalnuts", "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 10, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81001},
+    "F50": {"sampler": "owalnuts", "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 10, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 50000, "base_seed": 81101},
+    "N11": {"sampler": "owalnuts", "step_size": 0.11, "max_error": 1000.0, "max_refinement_levels": 1, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81201},
+    "N36": {"sampler": "owalnuts", "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 1, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 10000, "base_seed": 81301},
+    "R0":  {"sampler": "walnutpie-0.0.3", "step_size_init": 0.36, "max_hamiltonian_error": 0.21, "max_step_halvings": 9, "max_trajectory_doublings": 10, "min_micro_steps": 1, "min_warmup_iter": 0, "max_warmup_iter": 0, "sampling_iter": 10000, "seed": 81001},
+    "R1":  {"sampler": "walnutpie-0.0.3", "step_size_init": 0.36, "max_hamiltonian_error": 0.21, "max_step_halvings": 9, "max_trajectory_doublings": 10, "min_micro_steps": 1, "min_warmup_iter": 1000, "max_warmup_iter": 1000, "sampling_iter": 10000, "seed": 81001}
+  },
+  "gates": {
+    "rhat_max": 1.01,
+    "bulk_ess_min": 400,
+    "tail_ess_min": 400,
+    "retained_divergences_max": 0,
+    "retained_invalid_evaluations_max": 0,
+    "retained_refinement_exhaustions_max": 0,
+    "tail_mass_thresholds": [-5.0, -6.0],
+    "tail_mass_exact": [0.04779035227281474, 0.022750131948179212],
+    "tail_mass_interval": "exact +- 1.96*sqrt(p(1-p)/tail_ess_omega)",
+    "reported_functionals": ["omega", "x1"],
+    "exact_omega_mean": 0.0,
+    "exact_omega_variance": 9.0,
+    "exact_omega_quantiles": {"0.01": -6.979, "0.005": -7.727}
+  }
+}
