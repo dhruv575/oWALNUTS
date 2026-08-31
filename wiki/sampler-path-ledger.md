@@ -377,3 +377,20 @@ On 2026-08-30, before redesign edits:
 * Validation: 103 lib + 43 facade tests, strict all-target/all-feature Clippy,
   `fmt --check`, `-D warnings` rustdoc; acceptance-driven fingerprints
   unchanged.
+
+## 2026-08-31 zero-density refinement milestone (kernel v10, WP10)
+
+* Recoverable target failures are now zero-density points (`logp = -inf`,
+  `grad = 0`) that refine like any over-tolerance micro-step, exactly as the
+  upstream `NoExceptLogpGrad`/`macro_step` rule; a leaf is rejected only by
+  refinement exhaustion. Zero-density points are excluded from the
+  Hamiltonian extrema and divergence statistic and reported as
+  `zero_density_evaluations` per transition and per partition.
+* New upstream differential oracle `oracle/walnutpie/f5bba365_invalid_leaves`
+  (4,000 leaves against a throwing wall) agrees to 1e-11.
+* `ALGORITHM_REVISION` v9 → v10; no locked fingerprint changed. 154 tests,
+  strict Clippy, fmt and rustdoc clean.
+* Validation study `STUDIES/invalid_evaluation_parity_v1` (ledger entry
+  WP10-INVALID-EVALUATION-PARITY-V10): zero invalid-evaluation stops across
+  216,000 retained transitions and 8.5M recoverable evaluations on three
+  targets; truncated Gaussian stationary; funnel unchanged.

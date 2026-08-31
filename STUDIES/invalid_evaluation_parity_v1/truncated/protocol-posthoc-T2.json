@@ -1,0 +1,58 @@
+{
+ "schema": "owalnuts-invalid-evaluation-parity-truncated-protocol/v1-posthoc",
+ "frozen": "2026-08-31 (after kernel v10, before sampling)",
+ "target": {
+  "name": "half_space_gaussian",
+  "dimension": 2,
+  "density": "N(0, I_2) restricted to x0 > 0 through TargetError::recoverable",
+  "exact": {
+   "mean_x0": 0.7978845608028654,
+   "var_x0": 0.3633802276324187,
+   "mean_x1": 0.0,
+   "var_x1": 1.0
+  }
+ },
+ "starts": [
+  [
+   0.5,
+   0.0
+  ],
+  [
+   1.5,
+   1.0
+  ],
+  [
+   0.2,
+   -1.0
+  ],
+  [
+   2.5,
+   0.5
+  ]
+ ],
+ "chains": 4,
+ "threads": 1,
+ "arm": {
+  "step_size": 0.9,
+  "max_error": 0.5,
+  "max_refinement_levels": 6,
+  "max_depth": 6,
+  "min_micro_steps": 1,
+  "discarded": 500,
+  "retained": 50000,
+  "base_seed": 90041
+ },
+ "gates": {
+  "all_draws_inside": true,
+  "retained_invalid_evaluation_stops_max": 0,
+  "retained_divergences_max": 0,
+  "recoverable_failures_min": 1,
+  "zero_density_equals_recoverable": true,
+  "rhat_max": 1.01,
+  "bulk_ess_min": 400,
+  "tail_ess_min": 400,
+  "moment_z_max": 3.0,
+  "moment_note": "z = (estimate - exact) / MCSE with MCSE from bulk ESS (mean) and from the ESS of the squared functional (variance)"
+ },
+ "purpose": "POST-HOC, NON-EVIDENCE replicate of the preregistered arm on a fresh seed to check the sign of the +2.2-2.4 sigma moment offsets; identical tuning/draws."
+}

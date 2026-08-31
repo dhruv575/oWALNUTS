@@ -244,3 +244,84 @@ Entries follow the Polyscope ledger template. Newest last.
 - Artifacts: `STUDIES/real_target_path_metric_v1/{PREREGISTRATION.md,protocol.json,README.md,src/,make_starts.py,numpyro_reference.py,analyze.py,checksums.py,starts/,fixtures/,artifacts/numpyro/,artifacts/owalnuts-v1/,artifacts/owalnuts-v1-posthoc/}`; `artifacts/owalnuts-v1/summary.json` SHA-256 `4a25f7cb0bc99dffb27289d63693d89eb7b1f2982fc561cc90131eb71c235341`; raw functional draws hashed in `CHECKSUMS.sha256`, not committed.
 - Conclusion: (a) the first external baseline on the T=1000 fixtures shows sspd-10 is not sampled by NumPyro NUTS at depth 12 either (hundreds to thousands of divergences): Polyscope rows 72/75/77 compared arms on a target no tested Euclidean sampler handles and are uninformative about the sampler; (b) on the non-pathological T=1000 cell, centered adapted-diagonal oWALNUTS passes at depth 8 and the a=0.75 production baseline only narrowly fails — "any diagonal metric caps at T=1000" is false as a general claim; (c) the posterior-precision tridiagonal path block is the correct conditional metric on the real target (≈50–200× ESS/call with globals frozen, zero caps on the funnel cell) and gives 2.8× ESS/call with globals free on sspd-11; (d) with globals free a stiff correct path block hurts (P2 < P) because the innovations are in absolute units in every centeredness, so all parameterizations share the `sigma_x → 0` funnel — the residual problem is global–path scale coupling, not the path block. Not supported: any oWALNUTS-vs-NUTS efficiency claim (work units differ), any claim about the sspd-10 posterior.
 - Next decision: (1) product: sample canonical-v2 in a=1 coordinates with the posterior-precision path block refreshed from adapted globals at slow-window boundaries (stage-6 machinery + linear-time `BidiagonalCholesky`); (2) model: version canonical-v3 with scale-non-centered innovations `epsilon_t = (q_t − mu)/sigma_x` before any further funnel-cell work — no Euclidean metric fixes a `sigma_x → 0` funnel; (3) retire sspd-10 as a qualification fixture; keep it as a stress cell with the NumPyro failure as its reference; (4) freeze a fresh-seed confirmation of arm P on sspd-11 with three seeds before any product claim.
+
+### WP10-INVALID-EVALUATION-PARITY-V10 — recoverable failures refine like upstream
+- Ordered time: 2026-08-31, after WP9 and WP4b; kernel commit `452befb`
+  (`walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`), study commit follows.
+- Protocol/config: `STUDIES/invalid_evaluation_parity_v1/PREREGISTRATION.md`
+  SHA-256 `1f028fe997a5…` (two amendments, both recorded before the affected
+  artifact was interpreted); sub-protocols `truncated/protocol.json`
+  `7cd68f903fa5…`, `funnel/protocol.json` `1266e971040b…` (frozen copy of WP6's),
+  `stock_watson/protocol.json` `09453694c122…` (frozen copy of WP2b's with the
+  finite-penalty emulation removed: `nonfinite_policy = recoverable`);
+  `src/kernel.rs` `112eb2658099…`, `src/walnutpie.rs` `58d880c2f019…`. Three
+  arms: truncated 2-D Gaussian (h=0.9, δ=0.5, 6 levels, depth 6,
+  4×500/50,000), Stock–Watson F (paper tuning) and A (Appendix C, paper-mode
+  v3 defaults) at 4×500/2,000 on WP2b's series, funnel F at paper tuning
+  4×2,000/20,000. Full hashes in `CHECKSUMS.sha256`.
+- Seeds: consumed 90031–90034 (truncated), 90011–90014 (SW F), 90021–90024
+  (SW A), 90001–90004 (funnel); post-hoc non-evidence replicate 90041–90044.
+- Status: confirmed correction (leaf level) plus exploratory sampling
+  evidence (sampler level, one seed set per arm).
+- Root cause: through `v9` the facade mapped `TargetError::recoverable` to a
+  NaN evaluation and the kernel stopped the whole transition
+  (`StopReason::InvalidEvaluation`, counted as a divergence). Upstream
+  `walnutpie::detail::NoExceptLogpGrad` (`util.hpp`) maps a failed evaluation
+  to `logp = -inf`, `grad = 0`; `macro_step`/`within_tolerance` then see an
+  infinite endpoint error, refine, and only `build_leaf` returning `nullopt`
+  after every halving stops the orbit in that direction. `reversible` treats
+  a `-inf` endpoint identically (never within tolerance). The kernel now
+  implements exactly this: `-inf` with a finite gradient is a zero-density
+  point that integration continues through (with the supplied zero
+  gradient), excluded from the Hamiltonian extrema and divergence statistic,
+  reported as `zero_density_evaluations`; NaN/`+inf`/nonfinite gradients stay
+  malformed and fatal. Detailed balance: the leapfrog map with a
+  position-dependent (zero on the region) force is still a reversible
+  volume-preserving involution and acceptance depends only on the two
+  endpoint Hamiltonians, so the target restricted to its support is invariant;
+  forward and reverse selections agree because both use the same endpoint
+  statistic.
+- Outcome: **leaf oracle passes 4,000/4,000.** New differential oracle
+  `oracle/walnutpie/f5bba365_invalid_leaves` (`invalid_leaf_cases.json`
+  `7dc3f587d3e0…`), generated by a C++ driver against the unmodified upstream
+  headers with a throwing wall target wrapped in `NoExceptLogpGrad` (343
+  wall-touching leaves, 50 accepted after refining away): acceptance, calls,
+  zero-density call count, adaptation statistic and endpoint agree to 1e-11;
+  under `v9` every wall-touching leaf stopped on its first wall call.
+  Sampler level: truncated target — all gates pass, every draw inside,
+  5,061,666 recoverable = zero-density evaluations, 0 invalid stops, 0
+  divergences, x₀ mean 0.8046 (exact 0.7979, z +2.41), var 0.3684 (0.3634,
+  z +2.23), x₁ mean z −0.80, var z +1.62; post-hoc replicate on seed 90041
+  gave x₀ z −0.12 / −0.11, so the offset is sampling variation.
+  Stock–Watson F: 3,404,887 recoverable evaluations (16.5% of 20.57M retained
+  calls) with **0 invalid-evaluation stops**, max gated R-hat 1.0011, min
+  bulk/tail ESS 2,268/2,453, 1 exhaustion, 13.0% orbits with H range > 2,
+  110 bulk ESS per M calls (WP2b emulated: 104); A: 522 recoverable, 0
+  stops, max gated R-hat **1.0101 (fails ≤1.01 on log σ²)**, min bulk/tail
+  630/1,051, 0/0/0 health, 6.8% > 2, 219 ESS per M calls (WP2b 211).
+  Funnel: P(ω<−5) 0.0464 (z −0.17), P(ω<−6) 0.0206 (z −0.38), var ω 8.65,
+  0/0/0/7 health, all gates pass.
+- Diagnostics: 146 → 154 crate tests (110 lib + 44 facade), strict Clippy,
+  `fmt --check`, `-D warnings` rustdoc pass; no locked fingerprint changed
+  (no frozen fixture returns a recoverable error); facade tests
+  `recoverable_target_failures_are_deterministic_rejections_with_exact_partitions`
+  (rewritten for v10 semantics) and
+  `zero_density_boundary_keeps_truncated_target_stationary` (new).
+- Artifacts: `STUDIES/invalid_evaluation_parity_v1/{README.md,RESULTS.md,
+  PREREGISTRATION.md,summarize.py,CHECKSUMS.sha256,artifacts/summary.json
+  92080b223ea5…, truncated/artifacts/{T.json a9aea6ea23d0…, T2.json
+  9e46678b187c…}, funnel/artifacts/F20.json f68196c70f06…,
+  stock_watson/artifacts/{F.json 8f6c03ee4cbd…, A.json b95e7f070714…}}`;
+  oracle `oracle/walnutpie/f5bba365_invalid_leaves/{generate_invalid_leaves.cpp,
+  invalid_leaf_cases.json,README.md,SHA256SUMS.txt}`; test
+  `src/oracle_tests/invalid_leaf.rs`.
+- Conclusion: WP2b defect (1) is fixed with reference semantics; stiff
+  models whose coarse micro-steps overshoot into a non-representable region
+  no longer produce no-op transitions. Claims not supported: cross-seed
+  replication of the Stock–Watson arms; arm A meeting the R-hat gate (it
+  missed by 0.0001 on one seed under paper-mode v3 defaults, which WP2b did
+  not use); any efficiency claim beyond "ESS/call within ±10% of WP2b".
+- Next decision: ship `v10`; re-run the WP2b arm A on fresh seeds under v3
+  defaults before quoting it; the `StopReason::InvalidEvaluation` variant is
+  now unreachable for successful runs and may be removed at the next
+  breaking release.

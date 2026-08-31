@@ -1,0 +1,118 @@
+{
+ "schema": "owalnuts-invalid-evaluation-parity-funnel-protocol/v1",
+ "frozen": "2026-08-31 (after kernel v10, before sampling)",
+ "target": {
+  "name": "neal_funnel",
+  "dimension": 10,
+  "omega_prior_variance": 9.0,
+  "conditional": "x_i | omega ~ N(0, exp(omega))",
+  "paper_equation": "arXiv 2506.18746 eq. (32)"
+ },
+ "starts": [
+  [
+   -3.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   -1.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   1.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   3.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ ],
+ "chains": 4,
+ "threads": 1,
+ "runtime_callback_cap": 1000000000,
+ "wall_cap_seconds_per_arm": 1200,
+ "arms": {
+  "F20": {
+   "sampler": "owalnuts",
+   "step_size": 0.36,
+   "max_error": 0.21,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 20000,
+   "base_seed": 90001,
+   "role": "funnel gate at paper tuning on v10: P(omega<-5) within +-0.012 of 0.0478, P(omega<-6) within +-0.008 of 0.0228, var(omega) in [8.2,9.8], zero retained divergences; must agree with WP6 v9 F50 within Monte-Carlo error because the funnel target never returns a recoverable error at these tunings"
+  }
+ },
+ "gates": {
+  "rhat_max": 1.01,
+  "bulk_ess_min": 400,
+  "tail_ess_min": 400,
+  "retained_divergences_max": 0,
+  "retained_invalid_evaluations_max": 0,
+  "retained_refinement_exhaustions_max": 0,
+  "tail_mass_thresholds": [
+   -5.0,
+   -6.0
+  ],
+  "tail_mass_exact": [
+   0.04779035227281474,
+   0.022750131948179212
+  ],
+  "tail_mass_interval": "exact +- 1.96*sqrt(p(1-p)/tail_ess_omega)",
+  "reported_functionals": [
+   "omega",
+   "x1"
+  ],
+  "exact_omega_mean": 0.0,
+  "exact_omega_variance": 9.0,
+  "exact_omega_quantiles": {
+   "0.01": -6.979,
+   "0.005": -7.727
+  },
+  "fix_gates": {
+   "tail_mass_minus5_abs_tolerance": 0.012,
+   "tail_mass_minus6_abs_tolerance": 0.008,
+   "omega_variance_interval": [
+    8.2,
+    9.8
+   ],
+   "retained_divergences_max": 0
+  }
+ },
+ "purpose": "Confirm the v10 recoverable-failure semantics leave the (already unbiased) v9 funnel result unchanged at 4x20,000 draws. Fresh seeds.",
+ "copied_from": "STUDIES/funnel_bias_fix_v1/protocol.json (WP6); only arms, seeds, tolerances and purpose changed"
+}

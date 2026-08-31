@@ -1,0 +1,110 @@
+{
+ "schema": "owalnuts-invalid-evaluation-parity-stock-watson-protocol/v1",
+ "frozen": "2026-08-31 (after kernel v10, before sampling)",
+ "target": {
+  "name": "stock_watson_sv",
+  "paper_equations": "JMLR 27 (2026) \u00c2\u00a74.4 eqs. (35)-(38); arXiv 2506.18746 \u00c2\u00a74.4",
+  "model": "z_t|z_{t-1} ~ N(z_{t-1}, sigma^2) t=2..T-1; x_t|x_{t-1} ~ N(x_{t-1}, sigma^2) t=2..T; mu_t|mu_{t-1},z_{t-1} ~ N(mu_{t-1}, exp(z_{t-1})) t=2..T; y_t ~ N(mu_t, exp(x_t))",
+  "scale_prior": "sigma^-2 ~ Gamma(5, rate 0.5); sampled as phi = log sigma^2 with Jacobian",
+  "parameterization": "paper innovations: [phi, z_1, (z_{k+1}-z_k)/sigma, x_1, (x_{k+1}-x_k)/sigma, mu_1, (mu_{k+1}-mu_k) exp(-z_k/2)]; identity mass",
+  "initial_state_prior": "z_1, x_1, mu_1 ~ N(0, s0^2) with s0 below (not stated in the paper; assumption)",
+  "dimension": 756
+ },
+ "initial_state_prior_sd": 10.0,
+ "data": {
+  "source": "simulated from the model (the paper uses the 1955Q1-2018Q1 US quarterly inflation series, which is not available offline; deviation recorded)",
+  "t": 252,
+  "sigma": 0.3,
+  "z1": -6.0,
+  "x1": -2.0,
+  "mu1": 2.0,
+  "data_seed": 2026083120,
+  "superseded_data_seed": 2026083102,
+  "fixture_rule": "amendment 6 (2026-08-31, before any evidence): initial latent states z1=-6, x1=-2, mu1=2 (low persistent volatility, as in the paper Figure 15 where z drifts from 0 to about -12 and exp(z/2) multiplies the trend innovations); first data seed in the ordered list [2026083120, 2026083121, ...] whose simulated ranges satisfy z in [-14, 0] and x in [-7, 3]. 2026083120 is the first admissible seed: z in [-7.6, -0.5], x in [-6.3, 2.9], y in [-5.6, 5.8]. A numpy leapfrog probe from the true path gives one-macro-interval endpoint errors 4.1e3 / 0.013 / 0.053 / 0.012 at micro steps 0.0125 / 0.00625 / 0.002 / 0.001, i.e. the paper regime where the NUTS step 0.002 is stable and WALNUTS needs about one halving from h/8.",
+  "superseded_data_seeds": [
+   2026083102,
+   2026083109
+  ]
+ },
+ "chains": 4,
+ "threads": 4,
+ "start_seed": 2026083103,
+ "start_rule": "amendment 5 (2026-08-31, before any evidence): innovation image of the simulated true latent paths computed at the chain\u2019s own sigma (so all chains start on the true paths); phi = true log sigma^2 + start_log_sigma2_offsets[chain]; then independent N(0, 0.01^2) noise on every coordinate; RNG SmallRng(start_seed + chain).",
+ "runtime_callback_cap": 1000000000,
+ "wall_cap_seconds_per_arm": 2400,
+ "arms": {
+  "F": {
+   "description": "fixed paper tuning: delta=0.3, h=0.1, minimum 8 micro-steps per macro-step, WALNUTS-D (walnutpie kernel)",
+   "step_size": 0.1,
+   "max_error": 0.3,
+   "max_refinement_levels": 8,
+   "max_depth": 10,
+   "min_micro_steps": 8,
+   "divergence_threshold": 1000.0,
+   "discarded": 500,
+   "retained": 2000,
+   "base_seed": 90011,
+   "paper_adaptation": null
+  },
+  "A": {
+   "description": "paper Appendix C adaptation from conservative delta=1.0, h=0.05; Delta=2, p_a=0.95, Gamma=0.8; identity mass (no mass adaptation); paper-mode v3 defaults (continue dual averaging through delta installs, built-leaf unrefined statistic)",
+   "step_size": 0.05,
+   "max_error": 1.0,
+   "max_refinement_levels": 8,
+   "max_depth": 10,
+   "min_micro_steps": 8,
+   "divergence_threshold": 1000.0,
+   "discarded": 500,
+   "retained": 2000,
+   "base_seed": 90021,
+   "paper_adaptation": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8
+   }
+  }
+ },
+ "gates": {
+  "functionals": [
+   "log_sigma2",
+   "z_last",
+   "x_last",
+   "mu_last"
+  ],
+  "reported_functionals": [
+   "log_sigma2",
+   "z_1",
+   "z_last",
+   "x_1",
+   "x_last",
+   "mu_last",
+   "z_mean",
+   "x_mean",
+   "mu_mean"
+  ],
+  "rhat_max": 1.01,
+  "bulk_ess_min": 400,
+  "tail_ess_min": 400,
+  "retained_divergences_max": 0,
+  "retained_invalid_evaluations_max": 0,
+  "retained_refinement_exhaustions_max": 0,
+  "maximum_depth_rate_max": 0.01,
+  "energy_error_headline": "fraction of retained orbits with Hamiltonian range (max H - min H) > 2, per arm (paper Figure 16: NUTS has many, WALNUTS none)",
+  "paper_claim_reproduced_if": "arm F passes all gates and its fraction of orbits with Hamiltonian range > 2 is at most 0.01 while arm N's fraction exceeds 0.10",
+  "adaptation_landing": "report arm A final delta and h per chain against the paper's 0.3 and 0.1; no gate"
+ },
+ "start_jitter_sd": 0.01,
+ "superseded_start_rule_v1": "phi from the list; all other coordinates independent N(0,1) plus y_1 on mu_1. Produced 100% invalid-evaluation stops at transition 1 in arms F and A and stuck chains in arm N; summarized in artifacts/superseded-start-rule-v1/summary.json; not evidence.",
+ "nonfinite_policy": "recoverable",
+ "start_log_sigma2_offsets": [
+  -0.6,
+  -0.2,
+  0.2,
+  0.6
+ ],
+ "superseded_start_rule_v2": "amendment-1 data-informed starts (mu on y, x flat, z flat). With the recoverable policy every F/A transition still stopped at the first evaluation; with the finite-penalty policy (smoke arm S) chains refined to exhaustion at all 8 levels with constant Hamiltonian ranges of about 12 and 482, i.e. the starts were far outside the typical set. Summarized in artifacts/superseded-start-rule-v2/summary.json; not evidence.",
+ "nonfinite_policy_note": "The target returns TargetError::recoverable for non-finite evaluations and applies NO finite penalty, gradient clipping or exponent bound (WP2b amendments 2 and 7 removed). Under kernel v10 the kernel itself refines through such points as the reference does; under v9 this policy produced 65-100% no-op transitions.",
+ "draw_reduction_note": "amendment 5: 1,000/5,000 reduced to 500/2,000 per chain for every evidence arm after the numpy leapfrog probe showed the fixture needs micro steps near 2e-4 (refinement level 6 of 8, about 512 gradients per macro step) to hold delta = 0.3; projected cost at 1,000/5,000 exceeded the wall cap.",
+ "copied_from": "STUDIES/paper_stock_watson_reproduction_v1/protocol.json (WP2b, amendment 7) and its artifacts/data.json (SHA-256 df90ca84f5679851298de2d3730e559a6d6ceac59c7d7a5244acca57670a70b4); only arms, seeds, the nonfinite policy and purpose changed",
+ "purpose": "Re-run WP2b arms F and A on kernel v10 with the natural recoverable-error target (no -inf emulation). Preregistered expectations: retained no-op (invalid-evaluation) transitions 0; recoverable failures > 0 and equal to zero_density_evaluations; arm A passes all gates as in WP2b; arm F matches WP2b arm F within Monte-Carlo error (its 13% >2 energy-range fraction and single exhaustion may differ because interior wall points no longer enter the Hamiltonian extrema)."
+}
