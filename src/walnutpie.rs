@@ -359,6 +359,307 @@ pub enum DualAveragingAcceptance {
     AcceptedTrajectory,
 }
 
+/// Identity of the opt-in JMLR Appendix C adaptation rules.
+///
+/// Default warmup does not use these rules and keeps [`ALGORITHM_REVISION`].
+pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v1";
+/// Default global orbit energy-error bound `Delta` (Appendix C.1).
+pub const DEFAULT_PAPER_GLOBAL_ENERGY_BOUND: f64 = 2.0;
+/// Default quantile level `p_a` for the inflation factor `K` (Appendix C.1).
+pub const DEFAULT_PAPER_QUANTILE_PROBABILITY: f64 = 0.95;
+/// Default target fraction `Gamma` of macro steps needing no refinement
+/// (Appendix C.2).
+pub const DEFAULT_PAPER_UNREFINED_FRACTION_TARGET: f64 = 0.8;
+/// Default minimum number of completed orbits before `delta` is updated.
+pub const DEFAULT_PAPER_MINIMUM_ORBITS: usize = 10;
+const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
+
+/// Opt-in adaptation of the local error threshold `delta` and macro step `h`
+/// following JMLR Appendix C instead of acceptance-driven dual averaging.
+///
+/// * `delta` (the kernel's `max_error`): every completed discarded orbit
+///   records `K = (H_max - H_min) / delta`. At the end of the initial fast
+///   phase and of every nonterminal slow window, `delta` is replaced by
+///   `Delta / max(1, q_{p_a}(K))`, the empirical `p_a`-quantile over that
+///   window's orbits. The result is therefore never larger than `Delta`.
+/// * `h` (the kernel's `step_size`): dual averaging keeps the standard
+///   Hoffman--Gelman constants but its statistic is the per-transition fraction
+///   of attempted macro leaves that needed no refinement, targeted at
+///   `Gamma`. A leaf counts as unrefined when its coarsest level was never
+///   followed by a finer attempt. Dual averaging restarts around the current
+///   step after every `delta` or mass installation.
+///
+/// Both rules are applied only during discarded transitions and are frozen
+/// before the first retained transition. They consume no random draws and no
+/// target callbacks. Windows with fewer completed orbits than the minimum
+/// leave `delta` unchanged and report [`PaperAdaptationOutcome::InsufficientOrbits`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PaperAdaptationConfig {
+    global_energy_bound: f64,
+    quantile_probability: f64,
+    unrefined_fraction_target: f64,
+    adapt_local_error: bool,
+    minimum_orbits: usize,
+}
+
+impl Default for PaperAdaptationConfig {
+    fn default() -> Self {
+        Self {
+            global_energy_bound: DEFAULT_PAPER_GLOBAL_ENERGY_BOUND,
+            quantile_probability: DEFAULT_PAPER_QUANTILE_PROBABILITY,
+            unrefined_fraction_target: DEFAULT_PAPER_UNREFINED_FRACTION_TARGET,
+            adapt_local_error: true,
+            minimum_orbits: DEFAULT_PAPER_MINIMUM_ORBITS,
+        }
+    }
+}
+
+impl PaperAdaptationConfig {
+    pub fn new(
+        global_energy_bound: f64,
+        quantile_probability: f64,
+        unrefined_fraction_target: f64,
+    ) -> Result<Self, Error> {
+        if !global_energy_bound.is_finite() || global_energy_bound <= 0.0 {
+            return Err(Error::configuration(
+                "paper adaptation global energy bound must be finite and positive",
+            ));
+        }
+        if !quantile_probability.is_finite()
+            || quantile_probability <= 0.0
+            || quantile_probability >= 1.0
+        {
+            return Err(Error::configuration(
+                "paper adaptation quantile probability must be strictly between zero and one",
+            ));
+        }
+        if !unrefined_fraction_target.is_finite()
+            || unrefined_fraction_target <= 0.0
+            || unrefined_fraction_target >= 1.0
+        {
+            return Err(Error::configuration(
+                "paper adaptation unrefined fraction target must be strictly between zero and one",
+            ));
+        }
+        Ok(Self {
+            global_energy_bound,
+            quantile_probability,
+            unrefined_fraction_target,
+            ..Self::default()
+        })
+    }
+
+    /// Disable the `delta` rule while keeping the `Gamma`-targeted step rule.
+    pub fn with_local_error_adaptation(mut self, enabled: bool) -> Self {
+        self.adapt_local_error = enabled;
+        self
+    }
+
+    /// Minimum completed orbits in a window before `delta` is updated.
+    pub fn with_minimum_orbits(mut self, minimum_orbits: NonZeroUsize) -> Self {
+        self.minimum_orbits = minimum_orbits.get();
+        self
+    }
+
+    pub fn global_energy_bound(&self) -> f64 {
+        self.global_energy_bound
+    }
+    pub fn quantile_probability(&self) -> f64 {
+        self.quantile_probability
+    }
+    pub fn unrefined_fraction_target(&self) -> f64 {
+        self.unrefined_fraction_target
+    }
+    pub fn adapts_local_error(&self) -> bool {
+        self.adapt_local_error
+    }
+    pub fn minimum_orbits(&self) -> usize {
+        self.minimum_orbits
+    }
+}
+
+/// Result of one paper-rule `delta` update point.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum PaperAdaptationOutcome {
+    /// A new `delta` was installed.
+    Installed,
+    /// Too few completed orbits; `delta` is unchanged.
+    InsufficientOrbits,
+    /// The candidate was nonfinite; `delta` is unchanged.
+    NonFinite,
+    /// The `delta` rule is disabled; only the window summary is reported.
+    Disabled,
+}
+
+/// Typed record of one paper-rule update point.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct PaperAdaptationUpdate {
+    transition: usize,
+    window_index: Option<usize>,
+    orbits: usize,
+    inflation_quantile: Option<f64>,
+    energy_range_quantile: Option<f64>,
+    max_error_before: f64,
+    max_error_after: f64,
+    unrefined_fraction_mean: Option<f64>,
+    step_before: f64,
+    step_after: f64,
+    outcome: PaperAdaptationOutcome,
+}
+
+impl PaperAdaptationUpdate {
+    /// Zero-based discarded transition after which the update was applied.
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    /// Slow window index, or `None` for the end of the initial fast phase.
+    pub fn window_index(&self) -> Option<usize> {
+        self.window_index
+    }
+    /// Completed orbits whose energy range entered the quantile.
+    pub fn orbits(&self) -> usize {
+        self.orbits
+    }
+    /// Empirical `p_a`-quantile of `K = (H_max - H_min) / delta`.
+    pub fn inflation_quantile(&self) -> Option<f64> {
+        self.inflation_quantile
+    }
+    /// Empirical `p_a`-quantile of the raw orbit energy range `H_max - H_min`.
+    pub fn energy_range_quantile(&self) -> Option<f64> {
+        self.energy_range_quantile
+    }
+    pub fn max_error_before(&self) -> f64 {
+        self.max_error_before
+    }
+    pub fn max_error_after(&self) -> f64 {
+        self.max_error_after
+    }
+    /// Mean over the window of the per-transition unrefined leaf fraction.
+    pub fn unrefined_fraction_mean(&self) -> Option<f64> {
+        self.unrefined_fraction_mean
+    }
+    pub fn step_before(&self) -> f64 {
+        self.step_before
+    }
+    /// Step after the dual-averaging restart that follows an installation.
+    pub fn step_after(&self) -> f64 {
+        self.step_after
+    }
+    pub fn outcome(&self) -> PaperAdaptationOutcome {
+        self.outcome
+    }
+}
+
+/// Fraction of attempted macro leaves that never proceeded past their
+/// coarsest refinement level. `None` when the transition attempted no leaf.
+fn unrefined_leaf_fraction(work: &TransitionWorkTelemetry) -> Option<f64> {
+    let attempts = &work.histograms.refinement_level_attempts;
+    let coarsest = *attempts.first()?;
+    if coarsest == 0 {
+        return None;
+    }
+    let refined = attempts.get(1).copied().unwrap_or(0);
+    Some(coarsest.saturating_sub(refined) as f64 / coarsest as f64)
+}
+
+/// Linear-interpolation sample quantile of finite values; `None` when empty.
+fn sample_quantile(values: &mut [f64], probability: f64) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    let position = probability * (values.len() - 1) as f64;
+    let lower = position.floor() as usize;
+    let upper = position.ceil() as usize;
+    let fraction = position - lower as f64;
+    Some(values[lower] + fraction * (values[upper] - values[lower]))
+}
+
+/// Per-chain state for the paper `delta` rule: orbit energy ranges and
+/// unrefined fractions collected since the last update point.
+struct PaperWindow {
+    energy_ranges: Vec<f64>,
+    unrefined_sum: f64,
+    unrefined_count: usize,
+}
+
+impl PaperWindow {
+    fn new() -> Self {
+        Self {
+            energy_ranges: Vec::new(),
+            unrefined_sum: 0.0,
+            unrefined_count: 0,
+        }
+    }
+
+    fn record(&mut self, energy_range: f64, unrefined_fraction: Option<f64>) {
+        if energy_range.is_finite() && energy_range >= 0.0 {
+            self.energy_ranges.push(energy_range);
+        }
+        if let Some(fraction) = unrefined_fraction {
+            self.unrefined_sum += fraction;
+            self.unrefined_count += 1;
+        }
+    }
+
+    fn unrefined_mean(&self) -> Option<f64> {
+        (self.unrefined_count > 0).then(|| self.unrefined_sum / self.unrefined_count as f64)
+    }
+
+    /// Candidate `delta` from this window; consumes the collected orbits.
+    fn candidate(
+        &mut self,
+        paper: &PaperAdaptationConfig,
+        max_error: f64,
+    ) -> (
+        usize,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        PaperAdaptationOutcome,
+    ) {
+        let orbits = self.energy_ranges.len();
+        if !paper.adapt_local_error {
+            return (orbits, None, None, None, PaperAdaptationOutcome::Disabled);
+        }
+        if orbits < paper.minimum_orbits.max(1) {
+            return (
+                orbits,
+                None,
+                None,
+                None,
+                PaperAdaptationOutcome::InsufficientOrbits,
+            );
+        }
+        let range_quantile = sample_quantile(&mut self.energy_ranges, paper.quantile_probability);
+        let inflation_quantile = range_quantile.map(|q| q / max_error);
+        let candidate = inflation_quantile
+            .map(|q| paper.global_energy_bound / q.max(1.0))
+            .filter(|delta| delta.is_finite() && *delta > 0.0)
+            .map(|delta| delta.clamp(PAPER_MAX_ERROR_BOUNDS.0, PAPER_MAX_ERROR_BOUNDS.1));
+        let outcome = if candidate.is_some() {
+            PaperAdaptationOutcome::Installed
+        } else {
+            PaperAdaptationOutcome::NonFinite
+        };
+        (
+            orbits,
+            inflation_quantile,
+            range_quantile,
+            candidate,
+            outcome,
+        )
+    }
+
+    fn reset(&mut self) {
+        self.energy_ranges.clear();
+        self.unrefined_sum = 0.0;
+        self.unrefined_count = 0;
+    }
+}
+
 /// Opt-in adaptation performed during the discarded transitions.
 ///
 /// Step size uses Nesterov dual averaging with the standard Hoffman--Gelman
@@ -376,6 +677,7 @@ pub struct WarmupConfig {
     warmup_telemetry_checkpoints: Vec<usize>,
     research_restart_reference_multiplier: ResearchRestartReferenceMultiplier,
     dual_averaging_acceptance: DualAveragingAcceptance,
+    paper_adaptation: Option<PaperAdaptationConfig>,
 }
 
 impl Default for WarmupConfig {
@@ -389,6 +691,7 @@ impl Default for WarmupConfig {
             warmup_telemetry_checkpoints: Vec::new(),
             research_restart_reference_multiplier: ResearchRestartReferenceMultiplier::One,
             dual_averaging_acceptance: DualAveragingAcceptance::CurrentCoarseEndpoint,
+            paper_adaptation: None,
         }
     }
 }
@@ -479,6 +782,40 @@ impl WarmupConfig {
     pub fn dual_averaging_acceptance(&self) -> DualAveragingAcceptance {
         self.dual_averaging_acceptance
     }
+
+    /// Replace acceptance-driven step adaptation by the JMLR Appendix C
+    /// rules; see [`PaperAdaptationConfig`]. Supported by the diagonal and
+    /// fixed-operator facades only.
+    pub fn with_paper_adaptation(mut self, paper: PaperAdaptationConfig) -> Self {
+        self.paper_adaptation = Some(paper);
+        self
+    }
+    pub fn paper_adaptation(&self) -> Option<&PaperAdaptationConfig> {
+        self.paper_adaptation.as_ref()
+    }
+}
+
+/// Dual-averaging target: acceptance by default, `Gamma` under the paper rules.
+fn step_adaptation_target(warmup: &WarmupConfig) -> f64 {
+    warmup
+        .paper_adaptation
+        .as_ref()
+        .map_or(warmup.target_acceptance, |paper| {
+            paper.unrefined_fraction_target
+        })
+}
+
+fn reject_paper_adaptation(config: &RunConfig, facade: &str) -> Result<(), Error> {
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.paper_adaptation.is_some())
+    {
+        return Err(Error::configuration(format!(
+            "paper adaptation is not supported by the {facade} facade"
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -847,9 +1184,20 @@ pub struct WarmupCheckpointTelemetry {
     divergent: bool,
     refinement_attempts: usize,
     reverse_coarser_rejections: usize,
+    unrefined_fraction: Option<f64>,
+    max_error_after: f64,
 }
 
 impl WarmupCheckpointTelemetry {
+    /// Fraction of attempted macro leaves that needed no refinement in this
+    /// transition; `None` when no leaf was attempted.
+    pub fn unrefined_fraction(&self) -> Option<f64> {
+        self.unrefined_fraction
+    }
+    /// Local error threshold in force after this transition.
+    pub fn max_error_after(&self) -> f64 {
+        self.max_error_after
+    }
     pub fn transition(&self) -> usize {
         self.transition
     }
@@ -3010,9 +3358,15 @@ pub struct RunTelemetry {
     metric_updates: Vec<MetricUpdateTelemetry>,
     acceptance_values: Vec<Option<f64>>,
     warmup_checkpoints: Vec<WarmupCheckpointTelemetry>,
+    paper_adaptation_updates: Vec<PaperAdaptationUpdate>,
 }
 
 impl RunTelemetry {
+    /// Paper-rule update points, in transition order; empty unless
+    /// [`WarmupConfig::with_paper_adaptation`] was used.
+    pub fn paper_adaptation_updates(&self) -> &[PaperAdaptationUpdate] {
+        &self.paper_adaptation_updates
+    }
     pub fn discarded(&self) -> &WorkTotals {
         &self.discarded
     }
@@ -3857,6 +4211,16 @@ where
             "warmup requires at least one discarded transition",
         ));
     }
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.paper_adaptation.is_some())
+        && config.tuning.max_refinement_levels < 2
+    {
+        return Err(Error::configuration(
+            "paper adaptation requires at least two refinement levels",
+        ));
+    }
     if config.warmup.as_ref().is_some_and(|warmup| {
         warmup
             .warmup_telemetry_checkpoints
@@ -3929,6 +4293,15 @@ where
         .and_then(|value| value.checked_mul(size_of::<f64>() * 3))
         .ok_or_else(Error::overflow)?;
     let update_count = schedule.as_ref().map_or(0, |value| value.windows.len());
+    let paper_update_count = if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.paper_adaptation.is_some())
+    {
+        update_count.checked_add(1).ok_or_else(Error::overflow)?
+    } else {
+        0
+    };
     let search_event_count = config
         .warmup
         .as_ref()
@@ -3972,6 +4345,13 @@ where
                             .checked_mul(size_of::<WarmupCheckpointTelemetry>())?,
                     )
                 })
+                .and_then(|value| {
+                    // Paper rules report one update per slow window plus the
+                    // initial-fast boundary.
+                    value.checked_add(
+                        paper_update_count.checked_mul(size_of::<PaperAdaptationUpdate>())?,
+                    )
+                })
                 .ok_or_else(Error::overflow)?,
         )
         .ok_or_else(Error::overflow)?;
@@ -3989,10 +4369,22 @@ where
     // The validated kernel uses dimension-sized vectors and bounded depth-three
     // span/state storage. 128 f64 slots per coordinate plus 16 KiB per chain
     // intentionally overbounds current copied inputs and transient workspaces.
+    // The paper delta rule buffers at most one orbit energy range per
+    // discarded transition of the longest window; bound it by all discarded
+    // transitions.
+    let paper_buffer_bytes = if paper_update_count > 0 {
+        config
+            .discarded
+            .checked_mul(size_of::<f64>())
+            .ok_or_else(Error::overflow)?
+    } else {
+        0
+    };
     let working_bytes = dimension
         .checked_mul(size_of::<f64>())
         .and_then(|value| value.checked_mul(128))
         .and_then(|value| value.checked_add(16 * 1024))
+        .and_then(|value| value.checked_add(paper_buffer_bytes))
         .and_then(|value| value.checked_mul(chain_count))
         .ok_or_else(Error::overflow)?;
     if working_bytes > config.limits.max_working_bytes {
@@ -4652,8 +5044,9 @@ fn run_chain<T: Target>(
         .warmup
         .as_ref()
         .filter(|warmup| warmup.adapt_step_size)
-        .map(|warmup| DualAveraging::new(active_tuning.step_size, warmup.target_acceptance));
+        .map(|warmup| DualAveraging::new(active_tuning.step_size, step_adaptation_target(warmup)));
     let mut variance = DiagonalVariance::new(dimension);
+    let mut paper_window = PaperWindow::new();
     let sample_len = config
         .retained
         .checked_mul(dimension)
@@ -5011,6 +5404,7 @@ fn run_chain<T: Target>(
             .map_err(|error| error.at_transition(transition_index))?;
         let work =
             work.ok_or_else(|| Error::new(ErrorKind::Internal, "missing transition work"))?;
+        let unrefined_fraction = unrefined_leaf_fraction(&work);
         if use_persistent_cache {
             *cached_state = Some(result.selected.clone());
         }
@@ -5113,10 +5507,15 @@ fn run_chain<T: Target>(
             if warmup.adapt_mass && window_index.is_some() {
                 variance.update(&position);
             }
+            let step_statistic = if warmup.paper_adaptation.is_some() {
+                unrefined_fraction
+            } else {
+                acceptance
+            };
             if warmup.adapt_step_size
-                && let (Some(dual), Some(acceptance)) = (&mut dual_averaging, acceptance)
+                && let (Some(dual), Some(statistic)) = (&mut dual_averaging, step_statistic)
             {
-                active_tuning.step_size = dual.update(acceptance);
+                active_tuning.step_size = dual.update(statistic);
             }
             if warmup.adapt_mass
                 && let Some(window_index) = window_index
@@ -5179,7 +5578,7 @@ fn run_chain<T: Target>(
                         }
                         dual_averaging = Some(DualAveraging::restart(
                             active_tuning.step_size,
-                            warmup.target_acceptance,
+                            step_adaptation_target(warmup),
                             warmup.research_restart_reference_multiplier,
                         ));
                         update.step_after_restart = Some(active_tuning.step_size);
@@ -5191,6 +5590,55 @@ fn run_chain<T: Target>(
                 }
                 telemetry.metric_updates.push(update);
                 variance = DiagonalVariance::new(dimension);
+            }
+            if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                paper_window.record(
+                    internal.maximum_hamiltonian - internal.minimum_hamiltonian,
+                    unrefined_fraction,
+                );
+                let schedule = schedule.as_ref().expect("warmup schedule");
+                let is_final = transition_index + 1 == config.discarded;
+                let boundary = if transition_index + 1 == schedule.initial_fast_end {
+                    Some(None)
+                } else {
+                    window_index
+                        .filter(|index| schedule.windows[*index].end == transition_index + 1)
+                        .map(Some)
+                };
+                if let Some(window_index) = boundary
+                    && !is_final
+                {
+                    let step_before = active_tuning.step_size;
+                    let max_error_before = active_tuning.max_error;
+                    let (orbits, inflation_quantile, energy_range_quantile, candidate, outcome) =
+                        paper_window.candidate(paper, max_error_before);
+                    if let Some(max_error) = candidate {
+                        active_tuning.max_error = max_error;
+                        if warmup.adapt_step_size {
+                            dual_averaging = Some(DualAveraging::restart(
+                                active_tuning.step_size,
+                                paper.unrefined_fraction_target,
+                                warmup.research_restart_reference_multiplier,
+                            ));
+                        }
+                    }
+                    telemetry
+                        .paper_adaptation_updates
+                        .push(PaperAdaptationUpdate {
+                            transition: transition_index,
+                            window_index,
+                            orbits,
+                            inflation_quantile,
+                            energy_range_quantile,
+                            max_error_before,
+                            max_error_after: active_tuning.max_error,
+                            unrefined_fraction_mean: paper_window.unrefined_mean(),
+                            step_before,
+                            step_after: active_tuning.step_size,
+                            outcome,
+                        });
+                    paper_window.reset();
+                }
             }
             if transition_index + 1 == config.discarded
                 && let Some(dual) = &dual_averaging
@@ -5220,6 +5668,8 @@ fn run_chain<T: Target>(
                         divergent: internal.divergent,
                         refinement_attempts: internal.refinement_attempts,
                         reverse_coarser_rejections: internal.reverse_coarser_rejections,
+                        unrefined_fraction,
+                        max_error_after: active_tuning.max_error,
                     });
             }
         }
@@ -5789,6 +6239,7 @@ pub fn sample_dense_with_control<T: Target>(
     let Some(warmup) = config.warmup.as_ref().filter(|warmup| warmup.adapt_mass) else {
         return sample_dense_fixed(target, initial_position, mass, config, run_control);
     };
+    reject_paper_adaptation(config, "dense adaptive")?;
     if config.discarded == 0 {
         return Err(Error::configuration(
             "dense warmup requires at least one discarded transition",
@@ -6093,6 +6544,13 @@ pub fn sample_chains_dense_with_control<T: Target>(
     max_threads: NonZeroUsize,
     run_control: &RunControl<'_>,
 ) -> Result<MultiChainOutput, Error> {
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.adapt_mass)
+    {
+        reject_paper_adaptation(config, "dense adaptive")?;
+    }
     if initial_positions.is_empty() || initial_positions.len() > config.limits.max_chains {
         return Err(Error::resource("chain count exceeds its resource limit"));
     }
@@ -6624,6 +7082,7 @@ pub fn sample_projected_arrowhead<T: Target>(
         .warmup
         .as_ref()
         .ok_or_else(|| Error::configuration("projected arrowhead adaptation requires warmup"))?;
+    reject_paper_adaptation(config, "projected arrowhead")?;
     if !warmup.adapt_mass {
         return Err(Error::configuration(
             "projected arrowhead mass adaptation is disabled",
@@ -6917,6 +7376,7 @@ pub fn sample_chains_projected_arrowhead<T: Target>(
         .warmup
         .as_ref()
         .ok_or_else(|| Error::configuration("pooled projected adaptation requires warmup"))?;
+    reject_paper_adaptation(config, "pooled projected arrowhead")?;
     if !warmup.adapt_mass || initial_positions.is_empty() {
         return Err(Error::configuration(
             "pooled projected adaptation requires chains and mass adaptation",
@@ -7510,6 +7970,13 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
     budget: &TargetEvaluationBudget,
     run_control: &RunControl<'_>,
 ) -> Result<MultiChainOutput, Error> {
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.adapt_mass)
+    {
+        reject_paper_adaptation(config, "dense adaptive")?;
+    }
     if budget.started() != 0 {
         return Err(Error::configuration(
             "runtime target-evaluation budget must be fresh",
