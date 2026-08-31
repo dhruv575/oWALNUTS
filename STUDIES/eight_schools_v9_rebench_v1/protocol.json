@@ -1,0 +1,54 @@
+{
+  "schema": "eight-schools-v9-rebench-v1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "purpose": "Paired re-measurement of the oWALNUTS strict-track cells of the v38 noncentered Eight Schools confirmation on kernel revision v9 (WP6 endpoint-error fix). Only oWALNUTS is re-run; competitor figures are cited from the frozen v3 release package.",
+  "kernel_under_test": {
+    "algorithm_revision_required": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v9",
+    "owalnuts_commit": "1666dbb"
+  },
+  "reference_evidence": {
+    "v38_confirmation_analysis": "C:/dev/polyscope/STUDIES/public_owalnuts_numpyro_suite_v2/confirmation-v38/evidence-v38/analysis-summary.json",
+    "v38_confirmation_analysis_sha256": "1fb8c295681a848280e126c815cb6e5f2d3a7c31682790d384af91d55c45e04f",
+    "v38_algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v7",
+    "release_v3_finalized": "C:/dev/polyscope/RELEASES/owalnuts-x-2026-08-30-v3/finalized.json",
+    "release_v3_validate_release": "C:/dev/polyscope/RELEASES/owalnuts-x-2026-08-30-v3/validate_release.py"
+  },
+  "settings": {
+    "target": "v38 noncentered Eight Schools unconstrained density (mu, log tau, z_1..z_8)",
+    "starts": [[0,-2,0,0,0,0,0,0,0,0],[0,-1,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,1,0,0,0,0,0,0,0,0]],
+    "chains": 4,
+    "chain_execution": "sequential, threads=1",
+    "warmup": 1000,
+    "retained": 1000,
+    "target_accept": 0.95,
+    "max_tree_depth": 8,
+    "kernel_tuning": {"step_size": 0.3, "min_micro_steps": 1, "max_refinement_levels": 8, "max_error": 1.0, "divergence_threshold": 1000.0},
+    "metric": "adapted diagonal from identity",
+    "callback_cap": 10000000
+  },
+  "seeds": {
+    "paired_v38": [100070101, 100070102, 100070103, 100070104],
+    "paired_rationale": "Re-measurement of a frozen protocol on a new kernel revision; reusing the v38 evidence seeds gives a paired comparison. They are not fresh seeds and are not claimed as such.",
+    "fresh": [88001, 88002, 88003],
+    "fresh_verified_unused": true
+  },
+  "timing": {
+    "repetitions_per_seed": 5,
+    "estimand": "wall strictly around sample_chains_with_target_budget (warm production sampler call), as v38",
+    "aggregation_within_seed": "median of 5 repetitions; min and max reported",
+    "load_caveat": "machine shared with other running agents; wall-based numbers are upper bounds on cost, ESS per target call is the machine-independent primary robustness figure",
+    "bit_identity_required_across_repetitions": true
+  },
+  "functionals": ["mu", "tau", "mean_theta", "sd_theta", "theta_1", "theta_8"],
+  "estimators": "arviz 1.3: rank rhat; bulk ESS; tail ESS with prob (0.05, 0.95); ESS/s = ESS / median wall; ESS/call = ESS / total callbacks started (initialization + warmup + retained), as v38 backend-native work",
+  "aggregations_reported": {
+    "release_v3_style": "min over functionals of the across-seed median (this is what the release package's 19,054.65 / 14,494.34 figure is, taken from v38 summaries.rust.across_seeds.tau.*_per_total_second.median)",
+    "true_conservative_minimum": "min over all seeds and all functionals (the wording used in the release text)"
+  },
+  "gates": {
+    "health": "bulk and tail ESS >= 400 on every functional, rank rhat <= 1.01, divergence rate <= 0.01, max-depth rate <= 0.01, refinement exhaustions == 0, invalid stops == 0, finite samples",
+    "posterior_agreement_vs_v38": "|mean difference| <= 0.10 pooled posterior SD + 2 pooled MCSE and |SD difference| <= 0.15 pooled posterior SD + 2 pooled MCSE for every functional (v38 rule) against the v38 oWALNUTS posterior moments",
+    "question": "Do the v9 numbers exceed every strict competitor's v3 minimum (CmdStan 6290.30/3950.59, BlackJAX 5644.66/4195.13, NumPyro 5240.68/4049.60 bulk/tail ESS/s) under (a) the release-style aggregation and (b) the true conservative minimum?"
+  },
+  "decision_rules": "Report all cells. No seed or repetition selection. If the claim survives only under one aggregation, say so explicitly and report the corrected numbers."
+}
