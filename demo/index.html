@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oWALNUTS × Crypto Volatility</title>
+  <meta name="description" content="Full-posterior stochastic volatility on the five largest cryptocurrencies, sampled with the oWALNUTS kernel. Preregistered, checksummed, honest about failures." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌰</text></svg>" />
+</head>
+<body>
+  <nav class="topnav">
+    <span class="topnav-logo">oWALNUTS</span>
+    <span class="topnav-tag">a Polyscope research demo</span>
+    <div class="topnav-links">
+      <a class="topnav-link" href="https://github.com/dhruv575/oWALNUTS" rel="noopener">GitHub</a>
+      <a class="topnav-link" href="https://github.com/dhruv575/oWALNUTS/tree/main/STUDIES/flagship_crypto_sv_v1" rel="noopener">Study</a>
+      <a class="topnav-link" href="https://github.com/dhruv575/oWALNUTS/blob/main/integrations/python/examples/crypto_sv.ipynb" rel="noopener">Notebook</a>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="eyebrow">Flagship demo · preregistered 2026-08-31</div>
+    <h1 class="page-title">Crypto volatility, the full posterior</h1>
+    <p class="page-subtitle">
+      Stochastic-volatility posteriors over the complete daily history of the five largest
+      cryptocurrencies — every latent volatility state sampled jointly with the model's global
+      parameters, no marginalization, no shortcuts. Sampled with
+      <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS" rel="noopener">oWALNUTS</a>,
+      a Rust implementation of the within-orbit adaptive leapfrog No-U-Turn sampler,
+      compared head-to-head against NumPyro NUTS and nutpie on the same models and seeds.
+    </p>
+
+    <div class="overview" id="overview"><!-- stat strip --></div>
+
+    <hr class="page-divider" />
+
+    <section>
+      <div class="eyebrow">Why another sampler</div>
+      <h2 class="section-title">NUTS quietly misses the tail. oWALNUTS doesn't.</h2>
+      <p class="prose">
+        Neal's funnel is the canonical hard geometry: a scale parameter ω whose exact marginal is
+        N(0,&nbsp;3²), so exactly <strong>4.78%</strong> of posterior mass sits below ω&nbsp;=&nbsp;−5.
+        NumPyro's NUTS, at either target acceptance, places <strong>almost none of it</strong> there —
+        while emitting hundreds to thousands of divergences. oWALNUTS, whose leapfrog refines its
+        step <em>within</em> each orbit, recovers the tail exactly, with zero divergences, in a tenth
+        of the wall time. Same target, same seeds, measured — not inferred.
+      </p>
+      <div class="panel-row">
+        <div class="panel">
+          <div class="panel-title">ω marginal, 200,000 oWALNUTS draws vs the exact density</div>
+          <div id="funnel-hist"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">P(ω &lt; −5) by run · exact = 0.0478 (dotted)</div>
+          <div id="funnel-bars"></div>
+          <div class="panel-note" id="funnel-note"></div>
+        </div>
+      </div>
+      <div class="chart-legend" id="funnel-legend"></div>
+    </section>
+
+    <hr class="page-divider" />
+
+    <section>
+      <div class="eyebrow">Five assets · full history · T up to 3,153 days</div>
+      <h2 class="section-title">Posterior annualized volatility</h2>
+      <p class="prose">
+        Median and 90% credible band of annualized volatility, from the oWALNUTS native run
+        (seed 97001) on each asset's complete daily close history. Hover to read the band.
+      </p>
+      <div class="asset-grid" id="asset-grid"><!-- asset cards --></div>
+    </section>
+
+    <hr class="page-divider" />
+
+    <section>
+      <div class="eyebrow">Four backends · shared seeds · shared gates</div>
+      <h2 class="section-title">The comparison, including the losses</h2>
+      <p class="prose">
+        Every cell ran 4 chains × 1,000 warmup + 3,000 retained draws against preregistered gates
+        (rank R-hat ≤ 1.01 and bulk ESS ≥ 400 on the primary functionals; zero divergences;
+        depth caps ≤ 1%). Zero divergences occurred in all 40 cells and every healthy pair of
+        backends agrees on the posterior (worst z = 2.29). Wall times are from one shared machine.
+      </p>
+      <div id="comparison"><!-- per-asset tables --></div>
+      <div class="honest-box">
+        <strong>Honest edges — what did not pass</strong>
+        At this draw budget, oWALNUTS misses the primary ESS gate on BTC and ETH (T ≈ 3,150),
+        where NumPyro passes: the two observation-scale globals sit on a correlation ≈ −0.9 ridge,
+        and windowed metric adaptation (nutpie, NumPyro) extracts ~1.5–2× more effective samples
+        from it than our one-shot metric. Three PyMC-bridge seeds stalled from bad starts
+        (R-hat 1.4–1.7) — a start-sensitivity of the frozen metric, reported rather than resampled.
+        The named fix, windowed adaptation, is the next preregistered study.
+      </div>
+    </section>
+
+    <hr class="page-divider" />
+
+    <section>
+      <div class="eyebrow">Run it yourself</div>
+      <h2 class="section-title">Reproduce</h2>
+      <p class="prose">Everything on this page is computed from committed, checksummed artifacts. The notebook reproduces the BTC posterior in a few seconds on a laptop:</p>
+      <pre class="code"><code>pip install maturin numba pymc arviz
+git clone https://github.com/dhruv575/oWALNUTS &amp;&amp; cd oWALNUTS/integrations/python
+maturin develop --release</code></pre>
+      <pre class="code"><code>import owalnuts
+result = owalnuts.sample(owalnuts.from_pymc(sv_model, gil_free=True), ...)
+idata = result.to_inferencedata()   # 94k gradients · 3.5 s · zero divergences</code></pre>
+      <p class="prose">
+        Full evidence: the
+        <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/tree/main/STUDIES/flagship_crypto_sv_v1" rel="noopener">study directory</a>
+        (preregistration, protocol, per-cell artifacts, checksums) and the
+        <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/blob/main/integrations/python/examples/crypto_sv.ipynb" rel="noopener">executed notebook</a>.
+      </p>
+    </section>
+
+    <footer class="footer">
+      Kernel revision v10 · commit <span class="mono">fc2b81e</span> · data through 2026-08-30 (OKX daily closes) ·
+      preregistered, checksummed, seeds 97001–97003 · zero divergences in 40/40 cells ·
+      built 2026-08-31
+    </footer>
+  </main>
+
+  <div class="tooltip" id="tooltip" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
