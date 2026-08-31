@@ -101,6 +101,15 @@
 //! accepted constructions. Direction and uniform counts are actual consumed
 //! kernel draws; target evaluations are fused log-density/gradient calls.
 //!
+//! # Boundary-refreshed structured metrics
+//!
+//! [`sample_chains_structured_refresh`] rebuilds a [`StructuredBlockMass`]
+//! through a caller-supplied [`StructuredMetricRefresh`] at completed slow
+//! warmup-window boundaries and freezes it before retention; the kernel runs
+//! directly in original coordinates, so installations never change the
+//! position or its cached evaluation. Execution identity is
+//! [`STRUCTURED_REFRESH_REVISION`].
+//!
 //! # Telemetry
 //!
 //! [`RunTelemetry`] partitions work into `discarded`, `retained`, and `total`;
@@ -4002,6 +4011,13 @@ impl Error {
 
     fn configuration(message: impl Into<Box<str>>) -> Self {
         Self::new(ErrorKind::Configuration, message)
+    }
+    /// A caller-built metric candidate was rejected (for example, a window
+    /// summary that does not yield a positive-definite block). Intended for
+    /// [`StructuredMetricRefresh`] implementations; the driver records the
+    /// message and keeps the previous metric installed.
+    pub fn metric_candidate(message: impl Into<Box<str>>) -> Self {
+        Self::new(ErrorKind::Numerical, message)
     }
     fn resource(message: impl Into<Box<str>>) -> Self {
         Self::new(ErrorKind::ResourceLimit, message)
@@ -7971,6 +7987,750 @@ fn run_control_check(control: &RunControl<'_>) -> Result<(), Error> {
 }
 
 /// Validate a direct-original-q run without invoking the target callback.
+/// Execution identity of the boundary-refreshed structured-metric driver.
+///
+/// The driver runs the fixed-metric kernel directly in original `q`
+/// coordinates through a [`StructuredBlockMass`] operator and replaces that
+/// operator only at completed slow-window boundaries with a caller-built
+/// candidate. Retained transitions use one frozen operator.
+pub const STRUCTURED_REFRESH_REVISION: &str = "walnutpie-structured-metric-refresh-v1";
+
+/// Welford summary of one completed slow warmup window, handed to a
+/// [`StructuredMetricRefresh`] before a metric is rebuilt.
+///
+/// `mean` and `variance` are per-coordinate sample statistics over the
+/// retained positions of exactly one window (unbiased variance, `n - 1`
+/// denominator). The summary never contains momentum, gradients, or RNG
+/// state, and building it consumes no target evaluations.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct WindowSummary {
+    window_index: usize,
+    transition: usize,
+    sample_count: usize,
+    mean: Vec<f64>,
+    variance: Vec<f64>,
+}
+
+impl WindowSummary {
+    /// Zero-based slow-window index.
+    pub fn window_index(&self) -> usize {
+        self.window_index
+    }
+    /// Index of the last transition of the window.
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    /// Number of positions accumulated in the window.
+    pub fn sample_count(&self) -> usize {
+        self.sample_count
+    }
+    /// Per-coordinate window means.
+    pub fn mean(&self) -> &[f64] {
+        &self.mean
+    }
+    /// Per-coordinate unbiased window variances.
+    pub fn variance(&self) -> &[f64] {
+        &self.variance
+    }
+    /// Regularised momentum covariance (`1 / variance`) for the listed
+    /// coordinates, using the same shrinkage toward unit variance as the
+    /// diagonal warmup adapter.
+    pub fn regularized_precision(&self, coordinates: &[usize]) -> Result<Vec<f64>, Error> {
+        let n = self.sample_count as f64;
+        coordinates
+            .iter()
+            .map(|&index| {
+                let variance = *self
+                    .variance
+                    .get(index)
+                    .ok_or_else(|| Error::configuration("coordinate index out of range"))?;
+                Ok(((n / (n + 5.0)) * variance + 5.0 / (n + 5.0))
+                    .max(MIN_ADAPTATION_VARIANCE)
+                    .recip())
+            })
+            .collect()
+    }
+}
+
+/// Caller-supplied rebuild of a structured metric at a slow-window boundary.
+///
+/// The refresh receives the window summary and the currently installed mass
+/// and returns a complete replacement of the same dimension. Returning an
+/// error keeps the current mass installed and is reported as
+/// [`StructuredRefreshOutcome::RefreshFailed`]; a panic fails the run. The
+/// refresh must be deterministic given its inputs and must not depend on
+/// shared mutable state, so that sequential and parallel execution agree.
+pub trait StructuredMetricRefresh: Send + Sync {
+    fn refresh(
+        &self,
+        summary: &WindowSummary,
+        current: &StructuredBlockMass,
+    ) -> Result<StructuredBlockMass, Error>;
+}
+
+impl<F> StructuredMetricRefresh for F
+where
+    F: Fn(&WindowSummary, &StructuredBlockMass) -> Result<StructuredBlockMass, Error> + Send + Sync,
+{
+    fn refresh(
+        &self,
+        summary: &WindowSummary,
+        current: &StructuredBlockMass,
+    ) -> Result<StructuredBlockMass, Error> {
+        self(summary, current)
+    }
+}
+
+/// Dual-averaging behaviour after a successful metric installation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum StructuredRefreshRestartPolicy {
+    /// Restart dual averaging around the (optionally re-searched) step, as
+    /// the diagonal adapter does after every installed metric.
+    #[default]
+    RestartDualAveraging,
+    /// Keep the dual-averaging state across the installation.
+    ContinueDualAveraging,
+}
+
+/// Policy for [`sample_structured_refresh`] and
+/// [`sample_chains_structured_refresh`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StructuredRefreshConfig {
+    minimum_samples: NonZeroUsize,
+    restart_policy: StructuredRefreshRestartPolicy,
+}
+
+impl Default for StructuredRefreshConfig {
+    fn default() -> Self {
+        Self {
+            minimum_samples: NonZeroUsize::new(2).expect("nonzero"),
+            restart_policy: StructuredRefreshRestartPolicy::default(),
+        }
+    }
+}
+
+impl StructuredRefreshConfig {
+    /// Windows with fewer accumulated positions are skipped
+    /// ([`StructuredRefreshOutcome::InsufficientSamples`]). Default `2`.
+    pub fn with_minimum_samples(mut self, minimum_samples: NonZeroUsize) -> Self {
+        self.minimum_samples = minimum_samples;
+        self
+    }
+    pub fn with_restart_policy(mut self, policy: StructuredRefreshRestartPolicy) -> Self {
+        self.restart_policy = policy;
+        self
+    }
+    pub fn minimum_samples(&self) -> usize {
+        self.minimum_samples.get()
+    }
+    pub fn restart_policy(&self) -> StructuredRefreshRestartPolicy {
+        self.restart_policy
+    }
+}
+
+/// Result of one boundary refresh attempt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum StructuredRefreshOutcome {
+    Installed,
+    InsufficientSamples,
+    /// The refresh returned an error; the previous mass stays installed.
+    RefreshFailed,
+    /// The refresh returned a mass of another dimension; the previous mass
+    /// stays installed.
+    DimensionMismatch,
+}
+
+/// Typed record of one slow-window boundary in the refreshed driver.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct StructuredRefreshUpdate {
+    window_index: usize,
+    transition: usize,
+    sample_count: usize,
+    generation: usize,
+    outcome: StructuredRefreshOutcome,
+    failure: Option<Box<str>>,
+    covariance_diagonal_range: Option<(f64, f64)>,
+    step_before: f64,
+    step_after_search: Option<f64>,
+    step_after_restart: Option<f64>,
+    dual_averaging_restarted: bool,
+}
+
+impl StructuredRefreshUpdate {
+    pub fn window_index(&self) -> usize {
+        self.window_index
+    }
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    pub fn sample_count(&self) -> usize {
+        self.sample_count
+    }
+    /// Number of installed metrics so far, including this one if installed.
+    pub fn generation(&self) -> usize {
+        self.generation
+    }
+    pub fn outcome(&self) -> StructuredRefreshOutcome {
+        self.outcome
+    }
+    /// Message of a failed refresh, if any.
+    pub fn failure(&self) -> Option<&str> {
+        self.failure.as_deref()
+    }
+    /// Minimum and maximum of the installed momentum-covariance diagonal.
+    pub fn covariance_diagonal_range(&self) -> Option<(f64, f64)> {
+        self.covariance_diagonal_range
+    }
+    pub fn step_before(&self) -> f64 {
+        self.step_before
+    }
+    pub fn step_after_search(&self) -> Option<f64> {
+        self.step_after_search
+    }
+    pub fn step_after_restart(&self) -> Option<f64> {
+        self.step_after_restart
+    }
+    pub fn dual_averaging_restarted(&self) -> bool {
+        self.dual_averaging_restarted
+    }
+}
+
+/// One refreshed structured-metric chain.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct StructuredRefreshOutput {
+    chain: ChainOutput,
+    metric_updates: Vec<StructuredRefreshUpdate>,
+    final_mass: StructuredBlockMass,
+}
+
+impl StructuredRefreshOutput {
+    pub fn chain(&self) -> &ChainOutput {
+        &self.chain
+    }
+    pub fn metric_updates(&self) -> &[StructuredRefreshUpdate] {
+        &self.metric_updates
+    }
+    /// The frozen mass used by every retained transition.
+    pub fn final_mass(&self) -> &StructuredBlockMass {
+        &self.final_mass
+    }
+}
+
+/// Independently refreshed chains in chain-index order.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct StructuredRefreshChainsOutput {
+    chains: MultiChainOutput,
+    metric_updates: Vec<Vec<StructuredRefreshUpdate>>,
+    final_masses: Vec<StructuredBlockMass>,
+}
+
+impl StructuredRefreshChainsOutput {
+    pub fn chains(&self) -> &MultiChainOutput {
+        &self.chains
+    }
+    /// Boundary records per chain, in chain-index order.
+    pub fn metric_updates(&self) -> &[Vec<StructuredRefreshUpdate>] {
+        &self.metric_updates
+    }
+    pub fn final_masses(&self) -> &[StructuredBlockMass] {
+        &self.final_masses
+    }
+}
+
+fn structured_refresh_workspace_bytes(dimension: usize, chains: usize) -> Result<usize, Error> {
+    // Welford mean/m2, the window summary mean/variance, the active and one
+    // candidate mass, and the cached selected state, all per chain.
+    dimension
+        .checked_mul(size_of::<f64>())
+        .and_then(|x| x.checked_mul(10))
+        .and_then(|x| x.checked_mul(chains))
+        .ok_or_else(Error::overflow)
+}
+
+fn validate_structured_refresh<T: Target>(
+    target: &T,
+    initial_positions: &[Vec<f64>],
+    initial_mass: &StructuredBlockMass,
+    config: &RunConfig,
+) -> Result<(usize, WarmupScheduleMetadata), Error> {
+    let warmup = config
+        .warmup
+        .as_ref()
+        .ok_or_else(|| Error::configuration("structured metric refresh requires warmup"))?;
+    reject_paper_adaptation(config, "structured metric refresh")?;
+    if !warmup.adapt_mass {
+        return Err(Error::configuration(
+            "structured metric refresh requires mass adaptation to be enabled",
+        ));
+    }
+    if initial_positions.is_empty() {
+        return Err(Error::configuration(
+            "structured metric refresh requires at least one chain",
+        ));
+    }
+    let dimension = initial_mass.dimension();
+    if target.dimension() != dimension
+        || initial_positions
+            .iter()
+            .any(|position| position.len() != dimension)
+    {
+        return Err(Error::configuration(
+            "target, structured mass, and initial position dimensions differ",
+        ));
+    }
+    let chains = initial_positions.len();
+    if chains > config.limits.max_chains {
+        return Err(Error::resource("chain count exceeds its resource limit"));
+    }
+    if structured_refresh_workspace_bytes(dimension, chains)? > config.limits.max_working_bytes {
+        return Err(Error::resource(
+            "structured refresh workspace exceeds its resource limit",
+        ));
+    }
+    let schedule = warmup_schedule(config.discarded, &warmup.windows)?;
+    let identity =
+        DiagonalMass::identity(NonZeroUsize::new(dimension).ok_or_else(Error::overflow)?);
+    validate(
+        target,
+        chains,
+        initial_positions.iter().map(Vec::as_slice),
+        &identity,
+        config,
+    )?;
+    Ok((dimension, schedule))
+}
+
+/// Validate a refreshed structured-metric run without evaluating the target.
+pub fn preflight_chains_structured_refresh<T: Target>(
+    target: &T,
+    initial_positions: &[Vec<f64>],
+    initial_mass: &StructuredBlockMass,
+    config: &RunConfig,
+) -> Result<PreflightReport, Error> {
+    let (dimension, _) =
+        validate_structured_refresh(target, initial_positions, initial_mass, config)?;
+    let identity =
+        DiagonalMass::identity(NonZeroUsize::new(dimension).ok_or_else(Error::overflow)?);
+    preflight_chains(target, initial_positions, &identity, config)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_structured_refresh_chain<T: Target>(
+    target: &T,
+    chain: usize,
+    initial_position: &[f64],
+    initial_mass: &StructuredBlockMass,
+    refresh: &dyn StructuredMetricRefresh,
+    refresh_config: &StructuredRefreshConfig,
+    config: &RunConfig,
+    schedule: &WarmupScheduleMetadata,
+    threads: usize,
+    control: &ExecutionControl<'_>,
+) -> Result<StructuredRefreshOutput, Error> {
+    let warmup = config.warmup.as_ref().expect("validated warmup");
+    let dimension = initial_mass.dimension();
+    let identity =
+        DiagonalMass::identity(NonZeroUsize::new(dimension).ok_or_else(Error::overflow)?);
+    let transitions = config
+        .discarded
+        .checked_add(config.retained)
+        .ok_or_else(Error::overflow)?;
+    let seed = chain_seed(config.seed, chain);
+    let mut position = initial_position.to_vec();
+    let mut active_mass = initial_mass.clone();
+    let mut active_step = config.tuning.step_size;
+    let mut dual = warmup
+        .adapt_step_size
+        .then(|| DualAveraging::new(active_step, warmup.target_acceptance));
+    let mut variance = DiagonalVariance::new(dimension);
+    let mut updates = Vec::with_capacity(schedule.windows.len());
+    let mut generation = 0usize;
+    let mut combined: Option<ChainOutput> = None;
+    let mut step_searches = Vec::new();
+    let mut persistent = PersistentChainContext::new(seed);
+
+    for transition in 0..transitions {
+        let window_index = schedule
+            .windows
+            .iter()
+            .position(|w| transition >= w.start && transition < w.end);
+        let mut one = config.clone();
+        one.discarded = 0;
+        one.retained = 1;
+        one.warmup = None;
+        one.capture_acceptance = true;
+        one.tuning.step_size = active_step;
+        let direct = DirectOriginalQMass::StructuredPath(active_mass.clone());
+        let output = run_chain(
+            target,
+            dimension,
+            &position,
+            &identity,
+            Some(&direct),
+            false,
+            &one,
+            seed,
+            threads,
+            control,
+            None,
+            Some(&mut persistent),
+        )
+        .map_err(|error| error.at_transition(transition))?;
+        let mut transition_work = output.telemetry.total.clone();
+        position.copy_from_slice(&output.samples);
+        if transition < config.discarded && window_index.is_some() {
+            variance.update(&position);
+        }
+        if let (Some(dual), Some(acceptance)) = (&mut dual, output.telemetry.acceptance_values[0]) {
+            active_step = dual.update(acceptance);
+        }
+        if transition == 0
+            && config.discarded > 0
+            && let Some(search) = &warmup.initial_step_search
+        {
+            // The initial search runs from the first selected state because
+            // the segmented driver has no evaluated state before it.
+            let cached = persistent.cached_state.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorKind::Internal,
+                    "structured refresh lost its evaluated state",
+                )
+            })?;
+            let momentum = direct
+                .sample_momentum(&mut persistent.rng)
+                .map_err(Error::internal)?;
+            let (step, diagnostics) = search_step_from_evaluated(
+                target,
+                EvaluatedTransitionInput {
+                    theta: cached.theta.clone(),
+                    rho: momentum,
+                    log_prob: cached.log_prob,
+                    grad: cached.grad.clone(),
+                },
+                &direct,
+                KernelTuning {
+                    step_size: active_step,
+                    ..config.tuning
+                },
+                warmup.target_acceptance,
+                search,
+                &mut persistent.rng,
+                control,
+                transition,
+                true,
+                &mut transition_work,
+            )
+            .map_err(|error| error.at_transition(transition))?;
+            active_step = step;
+            if warmup.adapt_step_size {
+                dual = Some(DualAveraging::new(active_step, warmup.target_acceptance));
+            }
+            step_searches.push(StepSearchEvent {
+                reason: StepSearchReason::Initial,
+                search: diagnostics,
+            });
+        }
+        if transition < config.discarded
+            && let Some(index) = window_index
+            && schedule.windows[index].end == transition + 1
+        {
+            control.check().map_err(control_error)?;
+            let step_before = active_step;
+            let sample_count = variance.count;
+            let mut update = StructuredRefreshUpdate {
+                window_index: index,
+                transition,
+                sample_count,
+                generation,
+                outcome: StructuredRefreshOutcome::InsufficientSamples,
+                failure: None,
+                covariance_diagonal_range: None,
+                step_before,
+                step_after_search: None,
+                step_after_restart: None,
+                dual_averaging_restarted: false,
+            };
+            if sample_count >= refresh_config.minimum_samples.get() {
+                let n = sample_count as f64;
+                let summary = WindowSummary {
+                    window_index: index,
+                    transition,
+                    sample_count,
+                    mean: variance.mean.clone(),
+                    variance: variance.m2.iter().map(|m2| m2 / (n - 1.0)).collect(),
+                };
+                let candidate =
+                    catch_unwind(AssertUnwindSafe(|| refresh.refresh(&summary, &active_mass)))
+                        .map_err(|_| {
+                            Error::new(ErrorKind::Panic, "structured metric refresh panicked")
+                                .at_transition(transition)
+                        })?;
+                control.check().map_err(control_error)?;
+                match candidate {
+                    Err(error) => {
+                        update.outcome = StructuredRefreshOutcome::RefreshFailed;
+                        update.failure = Some(error.message.clone());
+                    }
+                    Ok(mass) if mass.dimension() != dimension => {
+                        update.outcome = StructuredRefreshOutcome::DimensionMismatch;
+                    }
+                    Ok(mass) => {
+                        let diagonal = mass.covariance_diagonal();
+                        update.covariance_diagonal_range = Some((
+                            diagonal.iter().copied().fold(f64::INFINITY, f64::min),
+                            diagonal.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+                        ));
+                        active_mass = mass;
+                        generation += 1;
+                        update.generation = generation;
+                        update.outcome = StructuredRefreshOutcome::Installed;
+                        if warmup.adapt_step_size && transition + 1 < config.discarded {
+                            if let Some(search) = &warmup.initial_step_search {
+                                let cached = persistent.cached_state.as_ref().ok_or_else(|| {
+                                    Error::new(
+                                        ErrorKind::Internal,
+                                        "structured refresh lost its evaluated state",
+                                    )
+                                })?;
+                                let direct =
+                                    DirectOriginalQMass::StructuredPath(active_mass.clone());
+                                let momentum = direct
+                                    .sample_momentum(&mut persistent.rng)
+                                    .map_err(Error::internal)?;
+                                let (step, diagnostics) = search_step_from_evaluated(
+                                    target,
+                                    EvaluatedTransitionInput {
+                                        theta: cached.theta.clone(),
+                                        rho: momentum,
+                                        log_prob: cached.log_prob,
+                                        grad: cached.grad.clone(),
+                                    },
+                                    &direct,
+                                    KernelTuning {
+                                        step_size: active_step,
+                                        ..config.tuning
+                                    },
+                                    warmup.target_acceptance,
+                                    search,
+                                    &mut persistent.rng,
+                                    control,
+                                    transition,
+                                    true,
+                                    &mut transition_work,
+                                )
+                                .map_err(|error| error.at_transition(transition))?;
+                                active_step = step;
+                                update.step_after_search = Some(step);
+                                step_searches.push(StepSearchEvent {
+                                    reason: StepSearchReason::MetricUpdate {
+                                        window_index: index,
+                                    },
+                                    search: diagnostics,
+                                });
+                            }
+                            if refresh_config.restart_policy
+                                == StructuredRefreshRestartPolicy::RestartDualAveraging
+                            {
+                                dual = Some(DualAveraging::restart(
+                                    active_step,
+                                    warmup.target_acceptance,
+                                    warmup.research_restart_reference_multiplier,
+                                ));
+                                update.dual_averaging_restarted = true;
+                            }
+                            update.step_after_restart = Some(active_step);
+                        }
+                    }
+                }
+            }
+            updates.push(update);
+            variance = DiagonalVariance::new(dimension);
+        }
+        if transition + 1 == config.discarded
+            && let Some(value) = &dual
+        {
+            active_step = value.final_step();
+        }
+        append_projected_transition(
+            &mut combined,
+            output,
+            transition,
+            config.discarded,
+            &transition_work,
+        )?;
+    }
+    let mut chain_output =
+        combined.ok_or_else(|| Error::configuration("run requires at least one transition"))?;
+    chain_output.metadata.algorithm_revision = STRUCTURED_REFRESH_REVISION;
+    chain_output.metadata.base_seed = config.seed;
+    chain_output.metadata.effective_seed = seed;
+    chain_output.metadata.thread_count = threads;
+    chain_output.metadata.step_size = active_step;
+    chain_output.metadata.tuning.step_size = active_step;
+    chain_output.metadata.discarded = config.discarded;
+    chain_output.metadata.retained = config.retained;
+    chain_output.metadata.warmup = config.warmup.clone();
+    chain_output.metadata.warmup_schedule = Some(schedule.clone());
+    // A structured operator has no exact diagonal representation; report its
+    // momentum-covariance diagonals instead of the identity placeholder.
+    chain_output.metadata.initial_mass_diagonal = initial_mass.covariance_diagonal();
+    chain_output.metadata.mass_diagonal = active_mass.covariance_diagonal();
+    chain_output.telemetry.step_searches = step_searches;
+    Ok(StructuredRefreshOutput {
+        chain: chain_output,
+        metric_updates: updates,
+        final_mass: active_mass,
+    })
+}
+
+/// Sample one chain whose structured metric is rebuilt by `refresh` at every
+/// completed slow-window boundary and frozen before the first retained
+/// transition.
+///
+/// The kernel runs directly in original `q` coordinates through the
+/// [`StructuredBlockMass`] operator (no coordinate remap), so installing a new
+/// metric changes neither the current position nor its cached log density and
+/// gradient; momentum is freshly drawn after every transition. Window
+/// statistics are collected only during slow windows and reset after each
+/// boundary. When [`WarmupConfig::with_initial_step_search`] is set, the
+/// initial search runs from the first selected state and a bounded search
+/// re-selects the step after every installation; dual averaging then
+/// restarts or continues per [`StructuredRefreshRestartPolicy`]. Requires
+/// [`WarmupConfig::with_mass_adaptation`] enabled; paper adaptation is not
+/// supported on this driver.
+pub fn sample_structured_refresh<T: Target>(
+    target: &T,
+    initial_position: &[f64],
+    initial_mass: &StructuredBlockMass,
+    refresh: &dyn StructuredMetricRefresh,
+    refresh_config: &StructuredRefreshConfig,
+    config: &RunConfig,
+    control: &RunControl<'_>,
+) -> Result<StructuredRefreshOutput, Error> {
+    let positions = [initial_position.to_vec()];
+    let (_, schedule) = validate_structured_refresh(target, &positions, initial_mass, config)?;
+    let execution = ExecutionControl {
+        public: control,
+        failed_chain: None,
+        chain: 0,
+    };
+    execution.check().map_err(control_error)?;
+    catch_unwind(AssertUnwindSafe(|| {
+        run_structured_refresh_chain(
+            target,
+            0,
+            initial_position,
+            initial_mass,
+            refresh,
+            refresh_config,
+            config,
+            &schedule,
+            1,
+            &execution,
+        )
+    }))
+    .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "sampling worker panicked")))
+}
+
+/// Independently refreshed chains in chain-index order; see
+/// [`sample_structured_refresh`]. Each chain owns its RNG, window statistics,
+/// dual averaging, and metric generation, so sequential and parallel
+/// execution produce identical output; errors select the lowest failing
+/// chain.
+#[allow(clippy::too_many_arguments)]
+pub fn sample_chains_structured_refresh<T: Target>(
+    target: &T,
+    initial_positions: &[Vec<f64>],
+    initial_mass: &StructuredBlockMass,
+    refresh: &dyn StructuredMetricRefresh,
+    refresh_config: &StructuredRefreshConfig,
+    config: &RunConfig,
+    max_threads: NonZeroUsize,
+    run_control: &RunControl<'_>,
+) -> Result<StructuredRefreshChainsOutput, Error> {
+    let (_, schedule) =
+        validate_structured_refresh(target, initial_positions, initial_mass, config)?;
+    let threads = max_threads.get().min(initial_positions.len());
+    if threads > config.limits.max_chains {
+        return Err(Error::resource("thread count exceeds its resource limit"));
+    }
+    let failed_chain = AtomicUsize::new(usize::MAX);
+    let execute = |chain: usize, position: &Vec<f64>| {
+        let control = ExecutionControl {
+            public: run_control,
+            failed_chain: Some(&failed_chain),
+            chain,
+        };
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            run_structured_refresh_chain(
+                target,
+                chain,
+                position,
+                initial_mass,
+                refresh,
+                refresh_config,
+                config,
+                &schedule,
+                threads,
+                &control,
+            )
+        }))
+        .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "Rayon worker panicked")))
+        .map_err(|error| error.at_chain(chain));
+        if result.is_err() {
+            failed_chain.fetch_min(chain, Ordering::AcqRel);
+        }
+        result
+    };
+    let results = if threads == 1 {
+        initial_positions
+            .iter()
+            .enumerate()
+            .map(|(chain, position)| execute(chain, position))
+            .collect::<Vec<_>>()
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
+        catch_unwind(AssertUnwindSafe(|| {
+            pool.install(|| {
+                initial_positions
+                    .par_iter()
+                    .enumerate()
+                    .map(|(chain, position)| execute(chain, position))
+                    .collect::<Vec<_>>()
+            })
+        }))
+        .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+    };
+    let mut chains = Vec::with_capacity(results.len());
+    let mut metric_updates = Vec::with_capacity(results.len());
+    let mut final_masses = Vec::with_capacity(results.len());
+    for result in results {
+        let output = result?;
+        chains.push(output.chain);
+        metric_updates.push(output.metric_updates);
+        final_masses.push(output.final_mass);
+    }
+    Ok(StructuredRefreshChainsOutput {
+        chains: MultiChainOutput {
+            chains,
+            base_seed: config.seed,
+            algorithm_revision: STRUCTURED_REFRESH_REVISION,
+        },
+        metric_updates,
+        final_masses,
+    })
+}
+
 pub fn preflight_direct_original_q<T: Target>(
     target: &T,
     initial_positions: &[Vec<f64>],

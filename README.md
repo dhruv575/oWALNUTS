@@ -97,6 +97,15 @@ step and caps the tree at `T = 1000` (`WP4-ESSGT-V1`). The versioned
 `sample_direct_original_q` family runs the same metrics directly in target
 coordinates (`DIRECT_ORIGINAL_Q_REVISION`).
 
+When the right block depends on parameters that are themselves being sampled
+(for a state-space path, the innovation scale and observation noise),
+`sample_chains_structured_refresh` rebuilds the `StructuredBlockMass` from a
+caller-supplied `StructuredMetricRefresh` at every completed slow
+warmup-window boundary and freezes it before retention. Installations never
+change the position or its cached evaluation, failed candidates keep the
+previous metric, and every boundary emits a typed `StructuredRefreshUpdate`
+(`STRUCTURED_REFRESH_REVISION`).
+
 ## Validated results (2026-08-31)
 
 | Target | Result | Ledger entry |

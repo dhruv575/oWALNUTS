@@ -5,6 +5,26 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, and target
 architecture (see the `walnutpie` module documentation).
 
+## [Unreleased]
+
+### Added
+
+- **Boundary-refreshed structured metrics.** `sample_structured_refresh`,
+  `sample_chains_structured_refresh`, and
+  `preflight_chains_structured_refresh` run the fixed kernel directly in
+  original coordinates through a `StructuredBlockMass` operator and rebuild it
+  with a caller-supplied `StructuredMetricRefresh` at every completed slow
+  warmup-window boundary (per-chain Welford `WindowSummary`; typed
+  `StructuredRefreshUpdate` telemetry; optional boundary step re-search;
+  `StructuredRefreshRestartPolicy` for dual averaging; failures keep the
+  previous metric installed; the metric freezes before the first retained
+  transition). Execution identity `STRUCTURED_REFRESH_REVISION`
+  (`walnutpie-structured-metric-refresh-v1`); an identity refresh is
+  bit-identical to the fixed direct driver, and `ALGORITHM_REVISION` is
+  unchanged. Motivated by the T=1000 state-space result that the posterior-
+  precision path block depends on global parameters best estimated during
+  warmup. [WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1]
+
 ## [0.1.0-beta.2] - 2026-08-31
 
 First release candidate. The kernel is at revision
