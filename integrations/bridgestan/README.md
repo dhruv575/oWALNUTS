@@ -43,3 +43,13 @@ cargo +1.88.0-x86_64-pc-windows-gnu run --release --bin bench
 
 Results and interpretation: `../AUTODIFF-RESEARCH.md` and
 `artifacts/bridgestan-benchmark.json`.
+
+## Facade note (WP18)
+
+`StanTarget` deliberately stays a direct `Target` implementation rather than
+routing through the facade's new `RawTarget`: the BridgeStan call is already
+GIL-free, and the direct impl preserves Stan's error-message slot
+(recoverable domain errors keep their message; fatal messages now also
+appear in the facade `Error`'s `Display`). With the new `?Sized` support a
+loaded model can be held as `Box<dyn Target>`. All tests pass unchanged
+against facade commit `3b14d64`.

@@ -298,3 +298,63 @@ Zero divergences/caps everywhere; worst R-hat 1.0061.
 
 Artifacts: `integrations/python/bench/artifacts/{summary.json,pymc-compare.json}`
 (quick-run duplicate under `artifacts-quick/`), full log `bench/artifacts-full.log`.
+
+## GIL-free transport (WP18)
+
+Facade commit `3b14d64` landed the autodiff surface proposed above:
+`RawTarget`/`RawTargetFn` (C-ABI fused callback; `-inf` → recoverable
+zero-density, other nonfinite output fatal), `&dyn`/`Box`/`Arc` targets,
+fatal target messages in `Error`'s `Display`, and
+`Target::parameter_names`. The package exposes `owalnuts.from_cfunc`
+(numba signature in `RAW_CFUNC_SIGNATURE`) and
+`from_pymc(model, gil_free=True)`, which wraps PyTensor's NUMBA-mode
+`vm.jit_fn` in a `numba.cfunc` — the same transport nutpie uses — and
+verifies it against the ordinary compiled path through ctypes before use.
+
+### Rebench (preregistered in BENCH.md; fresh seeds 96001–96003)
+
+Eight Schools PyMC model, 1,000/1,000, 4 chains, accept .95. Geometric-mean
+min-bulk ESS/s (range), all cells zero divergences, max R-hat ≤ 1.0041,
+means agreeing across cells:
+
+| cell | ESS/s | ESS/work (kind) |
+|---|---:|---|
+| owalnuts from_pymc GIL, t1 | 2,261 [1,997–2,478] | 0.0336 (fused exact) |
+| owalnuts cfunc, t1 | 9,979 [8,892–10,911] | 0.0338 (fused exact) |
+| **owalnuts cfunc, t4** | **30,982 [29,560–32,533]** | 0.0338 (fused exact) |
+| nutpie cores=4 | 27,754 [21,726–36,208] | 0.0431 (leapfrog proxy) |
+| nutpie cores=1 | 12,537 [10,829–13,657] | 0.0431 (leapfrog proxy) |
+| NumPyro | 1,857 [1,411–2,334] | 0.0427 (leapfrog proxy) |
+
+Per-call: PyMC GIL 5.69 µs → cfunc 1.25 µs. Predictions 1, 2, 3, 5 held
+(4.4× from removing the GIL attach; 3.1× thread scaling; **parity with
+nutpie**, not merely within 2×); prediction 4 held (per-gradient efficiency
+comparable, exact-vs-proxy caveat unchanged). The WP15b conclusion is
+therefore closed: the nutpie gap was transport, and one facade change plus
+~100 lines of adapter removed it. owalnuts-cfunc-t4 had the smallest
+seed-to-seed spread of the fast cells.
+
+Local-level T=1000 with the tridiagonal posterior-precision metric via a
+numba cfunc: 6,072–6,196 ESS/s at t1 (WP15b numpy cell: 2,455; same-run
+numpy control: 4,302) and 20,791–22,471 at t4 — ≈ 29× NumPyro's identity-
+metric 720 from WP15b, on a metric NumPyro cannot express. Zero divergences,
+R-hat ≤ 1.0028, ESS/call identical across transports (same kernel).
+
+### BridgeStan under the new facade
+
+Not switched to `RawTarget`: `bs_log_density_gradient` is already GIL-free
+and direct; a `RawTargetFn` shim would add an indirection and drop the
+model's error-message slot (Stan exceptions currently map to
+`TargetError::recoverable` with the real message, which the new `Error`
+`Display` now surfaces for fatal cases). The crate's 4 tests pass unchanged
+against the new facade. The `?Sized`/`Box<dyn Target>` impls let a loaded
+Stan model be stored dynamically, which the README now notes.
+
+### Remaining gaps (honest)
+
+* nutpie's numbers remain leapfrog proxies; a same-`.stan`-file strict
+  three-way (WP15a next-step 1) is still the publishable comparison.
+* `from_pymc(gil_free=True)` snapshots shared-variable values at compile
+  time (documented); models mutating `pm.Data` between runs must recompile.
+* Free-threaded CPython and per-chain subprocess fallbacks (proposal 3)
+  are now unnecessary for numba-capable models and were not built.

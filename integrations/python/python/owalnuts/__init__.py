@@ -183,6 +183,58 @@ def _starts(init: Any, dim: int, chains: int, seed: int, jitter: float) -> np.nd
     return starts
 
 
+@dataclass(frozen=True)
+class CFuncTarget:
+    """A compiled C-ABI target: GIL-free, so ``threads > 1`` really parallelises.
+
+    ``address`` is a function with the exact ABI
+    ``float64(intp dim, const double* q, double* grad_out, void* user_data)``
+    (numba signature string in ``RAW_CFUNC_SIGNATURE``). ``keep_alive`` holds
+    the compiled object (and any arrays it closes over) for the target's life.
+    """
+
+    address: int
+    dim: int
+    user_data: int = 0
+    parameter_names: tuple[str, ...] | None = None
+    keep_alive: Any = None
+
+
+def numba_raw_signature():
+    """The numba signature object matching ``RAW_CFUNC_SIGNATURE``."""
+    from numba import types
+
+    return types.float64(
+        types.intp,
+        types.CPointer(types.float64),
+        types.CPointer(types.float64),
+        types.voidptr,
+    )
+
+
+def from_cfunc(
+    cfunc_or_address: Any,
+    dim: int,
+    *,
+    user_data: int = 0,
+    parameter_names: Sequence[str] | None = None,
+) -> CFuncTarget:
+    """Wrap a numba/Cython ``cfunc`` (or a raw address) as a GIL-free target.
+
+    The callback must be thread-safe, reentrant, deterministic, write every
+    gradient element on finite returns, return ``-inf`` for zero-density
+    points (refined, then zero weight), and never raise across the ABI.
+    """
+    address = getattr(cfunc_or_address, "address", cfunc_or_address)
+    return CFuncTarget(
+        address=int(address),
+        dim=int(dim),
+        user_data=int(user_data),
+        parameter_names=tuple(parameter_names) if parameter_names else None,
+        keep_alive=cfunc_or_address,
+    )
+
+
 def wrap_callable(fn: LogpGrad) -> LogpGrad:
     """Coerce a target's outputs to ``(float, contiguous float64 array)``."""
 
@@ -225,6 +277,15 @@ def sample(
         adaptation=adaptation, mass=mass, max_target_evaluations=max_target_evaluations,
         max_depth_stop_limit=max_depth_stop_limit,
     )
+    if isinstance(logp_and_grad, CFuncTarget):
+        cft = logp_and_grad
+        if cft.dim != dim:
+            raise ValueError(f"CFuncTarget dim {cft.dim} != sample dim {dim}")
+        raw = _owalnuts.sample_cfunc(
+            cft.address, cft.dim, starts, cfg, cft.user_data,
+            list(cft.parameter_names) if cft.parameter_names else None,
+        )
+        return _result(raw, cfg)
     target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
     raw = _owalnuts.sample_callable(target, starts, cfg, nonfinite)
     return _result(raw, cfg)
@@ -340,17 +401,7 @@ def from_torch(logp_fn: Callable[[Any], Any], *, device: str = "cpu") -> LogpGra
     return target
 
 
-def from_pymc(model: Any, *, mode: str | None = None) -> tuple[LogpGrad, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
-    """Wrap a PyMC model's compiled joint log density and gradient over the
-    raveled unconstrained (transformed) variables.
-
-    Returns ``(target, dim, initial_point, var_names, unravel)`` where
-    ``unravel`` maps a raveled draw back to a dict of transformed values.
-    """
-    import pymc as pm  # noqa: F401
-
-    fn = model.logp_dlogp_function(ravel_inputs=True, mode=mode)
-    fn.set_extra_values({})
+def _pymc_layout(model) -> tuple[np.ndarray, int, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
     initial = model.initial_point()
     names: list[str] = []
     sizes: list[int] = []
@@ -361,16 +412,121 @@ def from_pymc(model: Any, *, mode: str | None = None) -> tuple[LogpGrad, int, np
         sizes.append(int(value.size))
         flat_parts.append(value.ravel())
     q0 = np.concatenate(flat_parts) if flat_parts else np.zeros(0)
-    dim = int(q0.size)
-
-    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
-        logp, grad = fn(np.asarray(q, dtype=np.float64))
-        return float(logp), np.asarray(grad, dtype=np.float64)
-
     offsets = np.cumsum([0, *sizes])
 
     def unravel(q: np.ndarray) -> dict[str, np.ndarray]:
         return {name: q[..., offsets[i]:offsets[i + 1]] for i, name in enumerate(names)}
+
+    return q0, int(q0.size), names, unravel
+
+
+def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
+    """nutpie-style transport: PyMC's numba-compiled joint logp/grad wrapped
+    in a ``numba.cfunc`` with the RawTarget ABI, verified against the ordinary
+    compiled function before use. Shared-variable values are snapshotted at
+    compile time. Raises ``NotImplementedError`` when the PyTensor numba
+    backend cannot supply a wrappable jit function.
+    """
+    import ctypes
+
+    import numba
+
+    fn = model.logp_dlogp_function(ravel_inputs=True, mode="NUMBA")
+    fn.set_extra_values({})
+    q0, dim, names, unravel = _pymc_layout(model)
+    inner = getattr(getattr(fn._pytensor_function, "vm", None), "jit_fn", None)
+    if inner is None:
+        raise NotImplementedError(
+            "PyTensor NUMBA mode did not expose vm.jit_fn; use gil_free=False"
+        )
+    n = dim
+    sig = numba_raw_signature()
+
+    def build(extract):
+        @numba.cfunc(sig, nopython=True)
+        def raw(dim_, x_ptr, grad_ptr, _user):
+            x = numba.carray(x_ptr, (n,))
+            logp, grad = inner(x)
+            g = numba.carray(grad_ptr, (n,))
+            for i in range(n):
+                g[i] = grad[i]
+            return extract(logp)
+
+        return raw
+
+    errors: list[str] = []
+    raw = None
+    for extract in (
+        numba.njit(lambda v: v.sum()),  # 0-d / 1-element array log density
+        numba.njit(lambda v: v),  # scalar log density
+    ):
+        try:
+            raw = build(extract)
+            break
+        except Exception as error:  # noqa: BLE001 - report all attempts
+            errors.append(f"{type(error).__name__}: {error}")
+    if raw is None:
+        raise NotImplementedError(
+            "could not wrap the PyTensor numba function as a cfunc: "
+            + " | ".join(errors)
+        )
+
+    # Verify once through ctypes against the ordinary compiled path.
+    proto = ctypes.CFUNCTYPE(
+        ctypes.c_double,
+        ctypes.c_ssize_t,
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_void_p,
+    )
+    caller = proto(raw.address)
+    probe = np.ascontiguousarray(q0, dtype=np.float64)
+    grad_out = np.zeros(dim, dtype=np.float64)
+    value = caller(
+        dim,
+        probe.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+        grad_out.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+        None,
+    )
+    ref_value, ref_grad = fn(probe)
+    if not (
+        np.isfinite(value)
+        and abs(value - float(ref_value)) <= 1e-8 * (1.0 + abs(float(ref_value)))
+        and np.allclose(grad_out, np.asarray(ref_grad, dtype=np.float64), rtol=1e-8, atol=1e-10)
+    ):
+        raise NotImplementedError(
+            "cfunc wrapper disagreed with the compiled PyMC function; use gil_free=False"
+        )
+
+    target = CFuncTarget(
+        address=int(raw.address),
+        dim=dim,
+        user_data=0,
+        parameter_names=None,
+        keep_alive=(raw, inner, fn),
+    )
+    return target, dim, q0, names, unravel
+
+
+def from_pymc(model: Any, *, mode: str | None = None, gil_free: bool = False) -> tuple[LogpGrad, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
+    """Wrap a PyMC model's compiled joint log density and gradient over the
+    raveled unconstrained (transformed) variables.
+
+    Returns ``(target, dim, initial_point, var_names, unravel)`` where
+    ``unravel`` maps a raveled draw back to a dict of transformed values.
+    """
+    import pymc as pm  # noqa: F401
+
+    if gil_free:
+        return _from_pymc_gil_free(model)
+
+    fn = model.logp_dlogp_function(ravel_inputs=True, mode=mode)
+    fn.set_extra_values({})
+    q0, dim, names, unravel = _pymc_layout(model)
+
+    def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+        logp, grad = fn(np.asarray(q, dtype=np.float64))
+        return float(logp), np.asarray(grad, dtype=np.float64)
 
     return target, dim, q0, names, unravel
 

@@ -15,7 +15,8 @@ use numpy::{IntoPyArray, PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadonlyA
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, ChainOutput, DiagonalMass, Error, KernelTuning, MultiChainOutput,
     PAPER_ADAPTATION_REVISION, PaperAdaptationConfig, PaperRestartPolicy, PaperStepStatistic,
-    RunConfig, StopReason, StructuredBlockMass, StructuredCovarianceBlock, Target, TargetError,
+    RawTarget, RawTargetFn, RunConfig, StopReason, StructuredBlockMass, StructuredCovarianceBlock,
+    Target, TargetError,
     TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig, WorkTotals,
     preflight_chains, preflight_chains_structured, preflight_chains_with_target_budget,
     sample_chains, sample_chains_structured, sample_chains_with_target_budget,
@@ -866,6 +867,63 @@ fn sample_local_level<'py>(
     )
 }
 
+/// Sample a raw C-ABI callback given as an integer function address.
+///
+/// The callee must have the exact `RawTargetFn` ABI — in numba terms
+/// `float64(intp, CPointer(float64), CPointer(float64), voidptr)` — be
+/// thread-safe, reentrant, deterministic, and outlive the call (the Python
+/// side keeps the compiled object alive). It runs with no interpreter
+/// attachment, so `threads > 1` gives real parallel chains.
+#[pyfunction]
+#[pyo3(signature = (address, dimension, starts, config, user_data=0, parameter_names=None))]
+fn sample_cfunc<'py>(
+    py: Python<'py>,
+    address: usize,
+    dimension: usize,
+    starts: PyReadonlyArray2<'py, f64>,
+    config: &Bound<'py, PyDict>,
+    user_data: usize,
+    parameter_names: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    if address == 0 {
+        return Err(value_error("address must be a nonzero cfunc address"));
+    }
+    let starts = parse_starts(starts)?;
+    if starts.first().map(Vec::len) != Some(dimension) {
+        return Err(value_error(format!(
+            "starts must be (chains, {dimension}) to match the cfunc dimension"
+        )));
+    }
+    let run = parse_run(py, dimension, config)?;
+    // SAFETY: the caller passes the address of a compiled callback with the
+    // documented `RawTargetFn` ABI and keeps it alive for the whole call; the
+    // remaining contract is asserted through `RawTarget::new` below.
+    let function: RawTargetFn = unsafe { std::mem::transmute::<usize, RawTargetFn>(address) };
+    // SAFETY: thread-safety, reentrancy, determinism, buffer discipline, and
+    // `user_data` validity are the documented `from_cfunc` contract.
+    let mut target = unsafe {
+        RawTarget::new(
+            nonzero(dimension, "dimension")?,
+            function,
+            user_data as *mut core::ffi::c_void,
+        )
+    };
+    if let Some(names) = parameter_names {
+        target = target.with_parameter_names(names).map_err(facade_error)?;
+    }
+    let started = Instant::now();
+    let output = py
+        .detach(|| execute(&target, &starts, &run))
+        .map_err(facade_error)?;
+    let wall = started.elapsed().as_secs_f64();
+    let calls = output
+        .chains()
+        .iter()
+        .map(|c| c.telemetry().total().target_calls_total())
+        .sum();
+    output_dict(py, &output, wall, calls, 0, 0.0)
+}
+
 /// Evaluate the built-in Eight Schools density once (for adapter tests).
 #[pyfunction]
 fn eight_schools_logp_grad<'py>(
@@ -901,6 +959,11 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
             "invalid_evaluation",
         ],
     )?;
+    m.add(
+        "RAW_CFUNC_SIGNATURE",
+        "float64(intp, CPointer(float64), CPointer(float64), voidptr)",
+    )?;
+    m.add_function(wrap_pyfunction!(sample_cfunc, m)?)?;
     m.add_function(wrap_pyfunction!(sample_callable, m)?)?;
     m.add_function(wrap_pyfunction!(preflight_callable, m)?)?;
     m.add_function(wrap_pyfunction!(sample_eight_schools, m)?)?;

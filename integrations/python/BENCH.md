@@ -82,3 +82,48 @@ work, labelled as such).
 Health: zero divergences, no `invalid_evaluation` stops, max-depth rate ≤1%,
 R-hat ≤1.01 for every oWALNUTS cell; posterior agreement as above. Cells
 failing health are reported, not dropped.
+
+## GIL-free rebench (preregistered before execution; WP18)
+
+Facade commit `3b14d64` adds `RawTarget`; the package exposes it as
+`owalnuts.from_cfunc` (numba signature in `RAW_CFUNC_SIGNATURE`) and
+`from_pymc(model, gil_free=True)` (PyTensor NUMBA `jit_fn` wrapped in a
+`numba.cfunc`, verified against the compiled GIL path before use).
+
+Claim under test: WP15b measured that the nutpie gap on PyMC models was
+callback transport (GIL serialisation), not per-gradient sampler efficiency.
+GIL-free transport at `threads=4` should therefore close most of the gap.
+
+**Cells (fresh seeds 96001–96003, Eight Schools PyMC model exactly as
+`bench/pymc_compare.py`, 1,000 tune / 1,000 draws, 4 chains, target
+acceptance .95, step 0.3, depth 8, 8 refinement levels):**
+
+* `owalnuts-pymc-gil` — `from_pymc`, threads 1 (WP15b path, control);
+* `owalnuts-pymc-cfunc-t1` / `-t4` — `from_pymc(gil_free=True)`, threads 1 / 4;
+* `nutpie-cores4` (its design) and `nutpie-cores1`;
+* `numpyro` via `pm.sample(nuts_sampler="numpyro")`.
+
+**Local-level T=1000 with the tridiagonal posterior-precision metric** (same
+data generator and settings as the main bench): hand-written numba cfunc of
+the identical density, threads 1 and 4, vs the WP15b numpy-callback and
+native cells (cited from `artifacts/summary.json`).
+
+**Measurements:** min-bulk-ESS/s over (mu, tau, theta_1, theta_8) and their
+ESS-per-work (owalnuts: exact fused calls; nutpie/numpyro: leapfrog proxy,
+labelled); per-call µs via a 2,000-call ctypes loop; thread scaling
+(t4 wall / t1 wall); health (zero divergences, R-hat ≤ 1.02 at these budgets)
+and posterior agreement (means within 3 MCSE across cells per seed).
+
+**Predictions (before running):**
+
+1. `owalnuts-pymc-cfunc-t1` ≥ 3× `owalnuts-pymc-gil` ESS/s (removes
+   per-call attach ≈ 6 µs at ≈ 0.9 µs/call compiled cost);
+2. `owalnuts-pymc-cfunc-t4` ≥ 2.5× `-t1` (real parallel chains);
+3. `owalnuts-pymc-cfunc-t4` within 2× of `nutpie-cores4` min-bulk ESS/s
+   (gap closed to at most 2×, from ≈ 12×) — the headline claim;
+4. per-gradient efficiency of owalnuts-cfunc within [0.5, 2]× nutpie's
+   proxy figure, unchanged from WP15b;
+5. T=1000 cfunc + precision metric ≥ 2× the WP15b numpy cell's ESS/s at
+   threads 1, and ≥ 4× at threads 4.
+
+Shared-machine caveat applies as before; ESS/work is the robust figure.

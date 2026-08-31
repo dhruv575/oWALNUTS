@@ -68,3 +68,32 @@ ESS per second is what the callback overhead taxes.
 ```console
 .venv\Scripts\python -m pytest -q
 ```
+
+## GIL-free compiled targets
+
+```python
+import numba, owalnuts
+
+sig = owalnuts.numba_raw_signature()  # float64(intp, double*, double*, void*)
+
+@numba.cfunc(sig, nopython=True)
+def logp_grad(dim, q_ptr, grad_ptr, user_data):
+    q = numba.carray(q_ptr, (3,))
+    g = numba.carray(grad_ptr, (3,))
+    total = 0.0
+    for i in range(3):
+        g[i] = -q[i]
+        total += q[i] * q[i]
+    return -0.5 * total   # return -inf for zero-density points
+
+target = owalnuts.from_cfunc(logp_grad, 3)
+result = owalnuts.sample(target, 3, threads=4)   # real parallel chains
+```
+
+PyMC models get the same transport with
+`owalnuts.from_pymc(model, gil_free=True)` (numba required; verified against
+the ordinary compiled path before use; shared-variable values are
+snapshotted at compile time). Measured on Eight Schools: ~31,000 min-bulk
+ESS/s at 4 threads — parity with nutpie — vs ~2,300 through the GIL path.
+The callback must be thread-safe, deterministic, write every gradient
+element on finite returns, and never raise across the ABI.

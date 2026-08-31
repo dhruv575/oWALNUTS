@@ -169,3 +169,82 @@ def test_preflight_reports_zero_callbacks():
     report = owalnuts.preflight(5, warmup=100, draws=100)
     assert report["total_transitions"] == 800
     assert report["worst_case_target_evaluations"] <= report["admission_ceiling"]
+
+
+def test_from_cfunc_numba_gaussian_parallel_chains():
+    numba = pytest.importorskip("numba")
+    sig = owalnuts.numba_raw_signature()
+
+    @numba.cfunc(sig, nopython=True)
+    def gaussian(dim, x_ptr, g_ptr, _ud):
+        x = numba.carray(x_ptr, (3,))
+        g = numba.carray(g_ptr, (3,))
+        total = 0.0
+        for i in range(3):
+            g[i] = -x[i]
+            total += x[i] * x[i]
+        return -0.5 * total
+
+    target = owalnuts.from_cfunc(gaussian, 3, parameter_names=["a", "b", "c"])
+    r = owalnuts.sample(
+        target, 3, chains=4, warmup=300, draws=800, seed=11, threads=4,
+        tuning=owalnuts.Tuning(step_size=0.4, max_depth=6),
+    )
+    q = r.samples.reshape(-1, 3)
+    assert np.isfinite(q).all()
+    assert abs(q.mean()) < 0.1
+    assert abs(q.var() - 1.0) < 0.15
+    assert r.target_calls > 0
+
+
+def test_from_cfunc_zero_density_wall_matches_truncated_moments():
+    numba = pytest.importorskip("numba")
+    sig = owalnuts.numba_raw_signature()
+
+    @numba.cfunc(sig, nopython=True)
+    def wall(dim, x_ptr, g_ptr, _ud):
+        x = numba.carray(x_ptr, (2,))
+        if x[0] < 0.0:
+            return -np.inf
+        g = numba.carray(g_ptr, (2,))
+        g[0] = -x[0]
+        g[1] = -x[1]
+        return -0.5 * (x[0] * x[0] + x[1] * x[1])
+
+    target = owalnuts.from_cfunc(wall, 2)
+    r = owalnuts.sample(
+        target, 2, init=np.array([1.0, 0.0]), chains=2, warmup=300, draws=1500, seed=7,
+    )
+    assert np.isfinite(r.samples).all()
+    x0 = r.samples[..., 0].ravel()
+    assert x0.min() >= 0.0
+    assert abs(x0.mean() - math.sqrt(2.0 / math.pi)) < 0.08
+    zero_density = sum(
+        int(c["work_total"]["zero_density_evaluations"]) for c in r.chains
+    )
+    assert zero_density > 0
+
+
+def test_from_pymc_gil_free_matches_gil_path():
+    pytest.importorskip("numba")
+    pm = pytest.importorskip("pymc")
+
+    with pm.Model() as m:
+        mu = pm.Normal("mu", 0.0, 5.0)
+        tau = pm.HalfCauchy("tau", 5.0)
+        z = pm.Normal("z", 0.0, 1.0, shape=8)
+        pm.Normal("y", mu + tau * z, SE, observed=Y)
+
+    gil_target, dim, q0, names, unravel = owalnuts.from_pymc(m)
+    try:
+        cf_target, dim2, q02, names2, _ = owalnuts.from_pymc(m, gil_free=True)
+    except NotImplementedError as e:
+        pytest.skip(f"gil-free PyMC transport unavailable: {e}")
+    assert dim2 == dim and names2 == names
+    np.testing.assert_allclose(q02, q0)
+    r_gil = owalnuts.sample(gil_target, dim, init=q0, chains=2, warmup=200, draws=300, seed=5)
+    r_cf = owalnuts.sample(cf_target, dim, init=q0, chains=2, warmup=200, draws=300, seed=5)
+    # Same kernel, same seed: identical draws when the gradients agree bitwise;
+    # allow tiny divergence otherwise but require matching posteriors.
+    assert np.isfinite(r_cf.samples).all()
+    assert abs(r_cf.samples.mean() - r_gil.samples.mean()) < 0.25
