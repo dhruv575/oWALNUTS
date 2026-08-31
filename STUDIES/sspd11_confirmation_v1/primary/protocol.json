@@ -1,0 +1,127 @@
+{
+ "schema": "owalnuts-sspd11-confirmation/v1",
+ "program": "wiki/research-program-2026-08-31.md",
+ "preregistration": "../PREREGISTRATION.md",
+ "copied_from": "STUDIES/real_target_path_metric_v1/protocol.json (WP4b, SHA-256 9ac8722cec8941f0260a262193f352cfdeb30ddf0917e358f3e16cf9f31ca9cb); only the fixture set, seeds (now a list), arms (I and P only) and gates additions changed",
+ "kernel": {
+  "expected_algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "expected_head": "93ed8e9"
+ },
+ "target": {
+  "model_revision": "polyscope-canonical-v2",
+  "oracle": "fixtures/polyscope_parity.json",
+  "oracle_sha256": "4c91f5fddda2e15f42e4209343ee9234bdab866a32918c260fe29fd6b0cf7d0c",
+  "coordinates": "triangular unit-Jacobian centeredness map, a in {0.75, 1}"
+ },
+ "fixtures": {
+  "sspd-11": {
+   "file": "sspd-11-n1000-mixed-regular-moderate-h1-none-none-cold.json",
+   "sha256": "2fff97663b6e7946e64e465610ebf9dd4350d6615ecaa5aa513ff070b683baad",
+   "t": 1000,
+   "role": "primary"
+  }
+ },
+ "fixture_order": [
+  "sspd-11"
+ ],
+ "seeds": {
+  "sspd-11": [
+   91001,
+   91002,
+   91003
+  ]
+ },
+ "starts": {
+  "rule": "initial_innovations plus mu offsets, zero sigma offsets; cold-initialization factor of sspd-11 deliberately not applied",
+  "mu_offsets": [
+   -0.03,
+   -0.01,
+   0.01,
+   0.03
+  ],
+  "sigma_offsets": [
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ]
+ },
+ "functionals": [
+  "mu",
+  "sigma_x",
+  "alpha",
+  "beta",
+  "gamma",
+  "nu",
+  "x_terminal",
+  "x_path_mean"
+ ],
+ "arms": {
+  "I": {
+   "facade": "sample_chains",
+   "centeredness": 1.0,
+   "initial_mass": "identity",
+   "mass_adaptation": true
+  },
+  "P": {
+   "facade": "sample_chains_structured",
+   "centeredness": 1.0,
+   "mass_adaptation": false,
+   "globals_block": "BidiagonalCholesky diag sqrt(geomean over chains of arm I adapted momentum covariance for globals), zero subdiagonal",
+   "path_block": "BidiagonalCholesky = Cholesky of H = [1/tau^2 at x_1] + Q_rw(sigma_x) + diag((nu+1)/(nu*(alpha^2+beta^2 s_t^2+gamma^2/(v_t+1)))) at initial_params globals (nu=3, beta=e^-2)"
+  }
+ },
+ "arm_order": [
+  "I",
+  "P"
+ ],
+ "owalnuts_common": {
+  "chains": 4,
+  "threads": 4,
+  "discarded": 500,
+  "retained": 2000,
+  "initial_step": 0.1,
+  "initial_step_search": true,
+  "max_depth": 8,
+  "min_micro_steps": 1,
+  "max_refinement_levels": 3,
+  "max_error": 1.0,
+  "target_acceptance": 0.8,
+  "wall_cap_seconds": 900,
+  "arm_order": [
+   "I",
+   "P",
+   "B"
+  ]
+ },
+ "reference": {
+  "arm": "N (NumPyro 0.21 NUTS, a=1, seed 86001, WP4b)",
+  "file": "STUDIES/real_target_path_metric_v1/artifacts/numpyro/sspd-11-N-a1-86001.json",
+  "sha256": "e8587b3dde935da4eca76ba1e85dfd8c91f9ff4ee9a6818b8bfac0828dc63cd6",
+  "functionals_npy": "STUDIES/real_target_path_metric_v1/artifacts/numpyro/sspd-11-N-a1-86001-functionals.npy",
+  "functionals_npy_sha256": "5fe68ed7ba7573cb0b7200aef9519983fa3654ec1f8a48578a4e2a9dfa8376ee"
+ },
+ "gates": {
+  "max_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "retained_divergences": 0,
+  "retained_invalid_evaluations": 0,
+  "retained_refinement_exhaustions": 0,
+  "max_depth_rate": 0.01,
+  "agreement_P_vs_N_combined_mcse_multiple": 3.0,
+  "agreement_P_vs_I_combined_mcse_multiple": 3.0,
+  "confirmation_rule": "an arm is confirmed only if every one of the three seeds passes all per-run gates (R-hat, bulk/tail ESS, zero div/invalid/exhaustion, cap rate) and, for P, every seed also passes agreement with I (same seed) and with N"
+ },
+ "efficiency": {
+  "work_unit": "retained fused target calls",
+  "statistic": "min over the eight functionals of bulk ESS per retained target call; ratio P/I per seed; geometric mean and range over seeds"
+ },
+ "predictions": [
+  "P passes all gates on 3/3 seeds (confirmed)",
+  "I passes all gates on 3/3 seeds (confirmed)",
+  "P/I min-bulk-ESS-per-call ratio geometric mean >= 2 (WP4b single seed: 2.8)",
+  "P agrees with I and with N on every functional (|z| <= 3) on every seed",
+  "P median depth 6 (as WP4b), I median depth 8 with cap rate <= 1%"
+ ]
+}
