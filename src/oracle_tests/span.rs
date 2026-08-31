@@ -171,6 +171,7 @@ fn matches_every_validated_upstream_span_trace() {
             max_refinement_levels: usize_field(input, "max_step_halvings"),
             min_micro_steps: usize_field(input, "min_micro_steps"),
             max_error: number(input, "max_error"),
+            divergence_threshold: 1000.0,
         };
         let scripted_draws: Vec<f64> = expected_events(case)
             .iter()

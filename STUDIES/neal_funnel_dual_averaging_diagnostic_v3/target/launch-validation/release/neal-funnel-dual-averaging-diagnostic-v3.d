@@ -1,0 +1,1 @@
+C:\dev\oWALNUTS\STUDIES\neal_funnel_dual_averaging_diagnostic_v3\target\launch-validation\release\neal-funnel-dual-averaging-diagnostic-v3.exe: C:\dev\oWALNUTS\STUDIES\neal_funnel_dual_averaging_diagnostic_v3\src\main.rs C:\dev\oWALNUTS\src\kernel.rs C:\dev\oWALNUTS\src\lib.rs C:\dev\oWALNUTS\src\types.rs C:\dev\oWALNUTS\src\walnutpie.rs

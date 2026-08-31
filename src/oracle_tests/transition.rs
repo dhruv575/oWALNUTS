@@ -147,6 +147,7 @@ fn matches_every_validated_upstream_transition_trace() {
                     max_refinement_levels: usize_field(input, "max_step_halvings"),
                     min_micro_steps: usize_field(input, "min_micro_steps"),
                     max_error: number(input, "max_error"),
+                    divergence_threshold: 1000.0,
                 },
                 max_depth: usize_field(input, "max_depth"),
             },

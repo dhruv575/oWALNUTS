@@ -1,0 +1,111 @@
+{
+  "schema": "owalnuts-neal-funnel-dual-averaging-diagnostic-v3",
+  "status": "FROZEN_PREFLIGHTED_NOT_AUTHORIZED",
+  "sampling_authorized": false,
+  "evidence_class": "adaptation-mechanism diagnostic; not confirmation",
+  "source_binding": {
+    "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v7",
+    "src/kernel.rs_sha256": "c115972afc46cea75d551b3cd49f4db8d981be3add1393fa1bbe1b4549774faf",
+    "src/walnutpie.rs_sha256": "532d403d70d63d8da76f832dbf4138cf78b9ee0dcecc043c0253aee144827510",
+    "tests/public_facade.rs_sha256": "3e2d3158e2a869d7e23b8212bc95ff6852ae4af791bd349b05b56a08d5907c3b"
+  },
+  "target": {
+    "definition": "centered 10D Neal funnel; v~N(0,3), x_i|v~N(0,exp(v/2))",
+    "known_v_mean": 0.0,
+    "known_v_variance": 9.0,
+    "starts_v": [-3.0, -1.0, 1.0, 3.0],
+    "starts_x": "all zero",
+    "target_transformations": "forbidden"
+  },
+  "fixed": {
+    "seeds": [2026092101, 2026092102, 2026092103],
+    "chains": 4,
+    "warmup_per_chain": 2000,
+    "retained_per_chain": 10000,
+    "target_acceptance": 0.9,
+    "initial_step_size": 0.3,
+    "initial_step_search": null,
+    "maximum_depth": 10,
+    "minimum_micro_steps": 1,
+    "maximum_refinement_levels": 12,
+    "maximum_error": 0.5,
+    "divergence_threshold": 1000.0,
+    "workers": 1
+  },
+  "minimum_2x2": {
+    "restart_center_multiplier": [1.0, 10.0],
+    "metric_policy": ["adaptive_diagonal", "fixed_identity"],
+    "cells": [
+      "center1+adaptive",
+      "center10+adaptive",
+      "center1+fixed",
+      "center10+fixed"
+    ],
+    "purpose": {
+      "restart_centering": "center10 versus center1 within each metric policy",
+      "window_schedule": "boundary-aligned step and dual-state jumps in adaptive cells versus the no-window fixed-metric controls",
+      "acceptance_noise": "paired current level0-error and accepted-trajectory acceptance streams on the same transitions",
+      "metric_coupling": "adaptive versus fixed metric within each centering policy, including cross-chain mass/step correlations"
+    }
+  },
+  "generic_instrumentation": {
+    "implementation_status": "implemented and identity-tested",
+    "warmup_transition": [
+      "transition index and warmup phase/window",
+      "step before transition and instantaneous step after dual update",
+      "current adaptation statistic or missing reason",
+      "accepted-trajectory Metropolis acceptance statistic",
+      "number, mean, variance, minimum and maximum of leaf adaptation values",
+      "stop reason, divergence, refinement attempts and reverse-coarser rejections",
+      "target calls"
+    ],
+    "dual_averaging_checkpoint": [
+      "iteration, target, mu, h_bar, log_step, log_step_bar",
+      "restart reason and reference multiplier"
+    ],
+    "metric_checkpoint": [
+      "window boundaries and sample count",
+      "mass diagonal before and after update",
+      "step before metric update, after optional search, after restart",
+      "metric condition and fallback outcome"
+    ],
+    "checkpoints": [
+      0, 1, 2, 4, 8, 16, 32, 64, 74, 75, 99, 100,
+      149, 150, 249, 250, 449, 450, 849, 850, 1649, 1650,
+      1949, 1950, 1960, 1980, 1999
+    ],
+    "storage": "warmup-only typed telemetry; no tracing or allocation during retained sampling"
+  },
+  "health_and_feasibility": {
+    "zero_retained_divergences": true,
+    "zero_invalid_or_recoverable": true,
+    "zero_refinement_exhaustions": true,
+    "maximum_depth_rate_max": 0.01,
+    "maximum_rank_rhat": 1.05,
+    "scale_bulk_ess_min": 80,
+    "scale_tail_ess_min": 80,
+    "scale_mean_absolute_max": 1.0,
+    "scale_variance_range": [6.0, 13.5],
+    "step_dispersion_max_ratio": 4.0,
+    "projected_50000_scale_bulk_and_tail_ess_min": 400
+  },
+  "mechanism_rules": {
+    "restart_centering_supported": "center10 reduces median log step max-minus-min by at least log(2), has step ratio <=4 on every seed, and improves median dispersed-start scale ESS/target-call by >=1.25 without any seed below 0.8",
+    "window_instability_supported": "at least 50% of total absolute log-step movement occurs within 16 transitions after metric-window boundaries in adaptive but not fixed cells",
+    "acceptance_noise_supported": "current versus accepted-trajectory statistic correlation <0.5 or current statistic missing/rejection-conditioned rate differs by >=0.20",
+    "metric_coupling_supported": "adaptive-minus-fixed cross-chain log-step dispersion is >=log(2) and correlates |rho|>=0.7 with log mass scale in at least two seeds",
+    "advancement": "advance only center10 if its adaptive cells pass health/feasibility on all seeds and restart_centering_supported; otherwise no sampler change",
+    "falsification": "if center10 does not meet the preregistered dispersion and efficiency effects, reject restart centering as the primary cause"
+  },
+  "resource_policy": {
+    "callback_cap_per_cell": 1000000000,
+    "process_wall_cap_seconds_per_cell": 300,
+    "create_only_atomic_artifacts": true,
+    "partial_failure": "preserve attempt, classify failed cell as resource evidence, make advancement impossible",
+    "preflight": "12 seed-by-cell dispatches compile and start zero target callbacks against walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v7"
+  },
+  "matched_numpyro_reference": {
+    "behavior": "find reasonable step after metric-window updates, initialize dual averaging with mu=log(10*step), reset dual state, and use trajectory acceptance probability",
+    "sampling_in_this_diagnostic": false
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "schema": "owalnuts-neal-funnel-intervention-pilot-v2",
+  "status": "FROZEN_NOT_AUTHORIZED",
+  "sampling_authorized": false,
+  "evidence_class": "mechanism-and-feasibility pilot; not confirmation",
+  "target": {
+    "dimension": 10,
+    "definition": "v ~ Normal(0,3); x_i | v ~ Normal(0,exp(v/2)), i=1..9",
+    "parameterization": "centered; no target transformation",
+    "known_moments": {
+      "v_mean": 0.0,
+      "v_variance": 9.0
+    }
+  },
+  "fixed_kernel": {
+    "initial_step_size": 0.3,
+    "target_acceptance": 0.9,
+    "maximum_depth": 10,
+    "minimum_micro_steps": 1,
+    "maximum_refinement_levels": 12,
+    "maximum_error": 0.5,
+    "divergence_threshold": 1000.0,
+    "diagonal_mass_adaptation": true,
+    "workers": 1,
+    "chain_execution": "sequential"
+  },
+  "pilot": {
+    "seeds": [2026091101, 2026091102, 2026091103],
+    "retained_per_chain": 10000,
+    "factors": {
+      "initialization": {
+        "dispersed": [-3.0, -1.0, 1.0, 3.0],
+        "common_zero": [0.0, 0.0, 0.0, 0.0],
+        "other_coordinates": "all zero"
+      },
+      "adaptation_policy": {
+        "baseline": {
+          "warmup_per_chain": 2000,
+          "initial_step_search": null
+        },
+        "robust": {
+          "warmup_per_chain": 8000,
+          "initial_step_search": {
+            "probes": 4,
+            "maximum_steps": 16,
+            "maximum_target_calls": 1024
+          }
+        }
+      }
+    },
+    "cells_per_seed": [
+      "dispersed+baseline",
+      "common_zero+baseline",
+      "dispersed+robust",
+      "common_zero+robust"
+    ]
+  },
+  "hypotheses": {
+    "primary": "Initial-step search plus 8000-transition windowed warmup stabilizes final macro-step and mass adaptation across dispersed starts, increasing scale ESS per target call and reducing between-chain scale disagreement.",
+    "initialization": "The difference between dispersed and common-zero starts estimates finite-warmup initialization sensitivity; common-zero success alone is not sufficient to select the robust adaptation intervention.",
+    "falsification": "Reject the primary mechanism if robust adaptation fails health, improves median dispersed-start scale bulk ESS per target call by less than 1.5x, has any seed ratio below 0.8x, or remains materially initialization-sensitive."
+  },
+  "health_gates_per_cell": {
+    "retained_divergences_max": 0,
+    "retained_invalid_evaluation_stops_max": 0,
+    "retained_recoverable_target_failures_max": 0,
+    "retained_refinement_exhaustion_stops_max": 0,
+    "retained_maximum_depth_rate_max": 0.01,
+    "all_coordinates_rank_normalized_split_rhat_max": 1.05,
+    "scale_bulk_ess_min": 100,
+    "scale_tail_ess_min": 100,
+    "scale_mean_absolute_max": 1.0,
+    "scale_variance_range": [6.0, 13.5],
+    "note": "R-hat/ESS thresholds are short-pilot feasibility gates, not convergence claims."
+  },
+  "selection_rule": {
+    "candidate": "robust adaptation policy; initialization is a controlled factor, not a seed-specific choice",
+    "required": [
+      "all robust-policy cells pass every short-pilot health gate for all seeds",
+      "paired dispersed-start median scale bulk ESS/target-call ratio robust:baseline >= 1.5",
+      "every dispersed-start seed ratio >= 0.8",
+      "robust common-zero versus dispersed scale bulk ESS/target-call ratio lies in [0.67,1.5] for every seed",
+      "robust final qualified step-size max/min across chains <= 4 within every cell",
+      "no resource cap failure or missing artifact"
+    ],
+    "credible_confirmation_scaling": "For each robust cell, projected 50000-draw scale bulk and tail ESS are 5 times pilot ESS; both projections must be >=400. This projection permits confirmation without requiring confirmation-level ESS in 10000 pilot draws.",
+    "outcome": "advance one fixed robust policy or no selection; never select an initialization per seed"
+  },
+  "matched_numpyro_confirmation_policy": {
+    "not_run_in_this_pilot": true,
+    "future_policy": {
+      "same_target_precision_starts_seeds_chains_warmup_retained_workers": true,
+      "target_acceptance": 0.9,
+      "maximum_tree_depth": 10,
+      "diagonal_mass_adaptation": true,
+      "initial_step_search": "NumPyro default step-size initialization, disclosed; oWALNUTS-native search has no identical NumPyro control",
+      "timing": "compile excluded; warmup and retained reported separately where APIs permit"
+    }
+  },
+  "resource_policy": {
+    "runtime_callback_cap_per_cell": 1000000000,
+    "wall_cap_seconds_per_cell": 300,
+    "budget_exhaustion": "fatal; preserve artifact as resource failure and do not select",
+    "preflight": "compile all 12 seed-by-cell dispatches and require exactly zero target callbacks",
+    "authorization_file_required": "AUTHORIZE_SAMPLING.json"
+  },
+  "excluded_interventions": {
+    "target_acceptance_095": "v1 was inconsistent and sometimes substantially worse than 0.90",
+    "maximum_error": "changing the numerical accuracy criterion would confound mixing with integration tolerance",
+    "minimum_microsteps": "raises work for every leaf without evidence of a scale-mixing mechanism",
+    "reverse_coarser_rule": "a reversibility safeguard; no correctness defect is established",
+    "maximum_depth": "v1 depth-stop rates were already below 0.53%, so trajectory truncation is not the observed bottleneck",
+    "target_transformation": "benchmark-specific parameterization changes are outside this sampler intervention"
+  }
+}

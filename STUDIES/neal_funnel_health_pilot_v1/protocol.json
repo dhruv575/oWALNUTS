@@ -1,0 +1,82 @@
+{
+  "schema": "owalnuts-neal-funnel-health-pilot-v1",
+  "status": "FROZEN_NOT_AUTHORIZED",
+  "sampling_authorized": false,
+  "target": {
+    "dimension": 10,
+    "definition": "v ~ Normal(0,3); x_i | v ~ Normal(0,exp(v/2)), i=1..9",
+    "parameterization": "centered",
+    "starts_v": [-3.0, -1.0, 1.0, 3.0],
+    "starts_x": "all zero"
+  },
+  "pilot": {
+    "seeds": [2026090101, 2026090102, 2026090103],
+    "chains": 4,
+    "warmup_per_chain": 2000,
+    "retained_per_chain": 10000,
+    "workers": 1,
+    "chain_execution": "sequential",
+    "initial_step_size": 0.3,
+    "maximum_depth": 10,
+    "minimum_micro_steps": 1,
+    "maximum_error": 0.5,
+    "divergence_threshold": 1000.0,
+    "diagonal_mass_adaptation": true,
+    "grid": {
+      "target_accept": [0.9, 0.95],
+      "maximum_refinement_levels": [8, 12]
+    }
+  },
+  "matched_numpyro": {
+    "precision": "float64",
+    "chains": 4,
+    "warmup_per_chain": 2000,
+    "retained_per_chain": 10000,
+    "workers": 1,
+    "chain_execution": "sequential",
+    "maximum_tree_depth": 10,
+    "diagonal_mass_adaptation": true,
+    "target_accept": "matched grid cell",
+    "starts": "identical physical positions"
+  },
+  "health_gates": {
+    "all_coordinates_rank_normalized_split_rhat_max": 1.01,
+    "all_coordinates_bulk_ess_min": 400,
+    "all_coordinates_tail_ess_min": 400,
+    "retained_divergences_max": 0,
+    "retained_invalid_evaluation_stops_max": 0,
+    "retained_recoverable_target_failures_max": 0,
+    "retained_refinement_exhaustion_stops_max": 0,
+    "retained_maximum_depth_rate_max": 0.01,
+    "reverse_coarser": "report as adaptation/efficiency telemetry; not a correctness failure by itself",
+    "funnel_scale_mean": "two-sided preregistered Monte Carlo interval contains 0",
+    "funnel_scale_variance": "two-sided preregistered Monte Carlo interval contains 9"
+  },
+  "selection_rule": {
+    "eligibility": "all health gates pass for every pilot seed",
+    "objective": "maximize median scale bulk ESS per target evaluation",
+    "tie_breaks": [
+      "fewer maximum refinement levels",
+      "target_accept 0.90"
+    ],
+    "seed_specific_selection_forbidden": true
+  },
+  "confirmation": {
+    "seeds": [2026090201, 2026090202, 2026090203, 2026090204],
+    "warmup_per_chain": 2000,
+    "retained_per_chain": 50000,
+    "settings": "single pilot-selected cell frozen before confirmation",
+    "win": "both samplers pass every health gate on every seed; oWALNUTS paired median scale bulk ESS/second and ESS/target-evaluation exceed NumPyro and the seed-wise bootstrap 95% lower bound of each ratio exceeds 1"
+  },
+  "timing": {
+    "compile_and_process_startup_excluded": true,
+    "serialization_and_diagnostics_excluded": true,
+    "warmup_and_retained_reported_separately": true
+  },
+  "execution_policy": {
+    "preflight_must_start_zero_target_callbacks": true,
+    "runtime_target_callback_cap": 1000000000,
+    "budget_exhaustion": "fatal; no partial evidence",
+    "authorization_file_required_for_sampling": "AUTHORIZE_SAMPLING.json"
+  }
+}

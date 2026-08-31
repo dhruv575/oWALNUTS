@@ -198,6 +198,7 @@ fn matches_both_validated_upstream_transition_sequences() {
                         max_refinement_levels: usize_field(kernel, "max_step_halvings"),
                         min_micro_steps: usize_field(kernel, "min_micro_steps"),
                         max_error: number(kernel, "max_error"),
+                        divergence_threshold: 1000.0,
                     },
                     max_depth: usize_field(kernel, "max_depth"),
                 },

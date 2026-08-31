@@ -7,6 +7,142 @@
 #![allow(clippy::large_enum_variant, clippy::too_many_arguments)]
 
 use crate::types::{State, ValidationError};
+use rand::RngCore;
+use rand_distr::{Distribution, StandardNormal};
+use std::cell::Cell;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EvaluationPhase {
+    Initial,
+    Forward,
+    Reverse,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EvaluationContext {
+    pub phase: EvaluationPhase,
+    pub direction: Option<Direction>,
+    pub refinement_level: Option<usize>,
+    pub evaluation_in_attempt: usize,
+    pub kinetic: f64,
+    pub initial_hamiltonian: Option<f64>,
+}
+
+thread_local! {
+    static EVALUATION_CONTEXT: Cell<Option<EvaluationContext>> = const { Cell::new(None) };
+}
+
+pub(crate) fn take_evaluation_context() -> Option<EvaluationContext> {
+    EVALUATION_CONTEXT.take()
+}
+
+fn set_evaluation_context(context: EvaluationContext) {
+    EVALUATION_CONTEXT.set(Some(context));
+}
+
+/// Immutable Euclidean metric used by one complete transition.
+///
+/// Implementations must not change while any state/span built with them is
+/// live. The slice implementation below deliberately preserves the original
+/// diagonal arithmetic and summation order.
+pub(crate) trait MassOperator {
+    fn dimension(&self) -> usize;
+    fn sample_momentum(&self, rng: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError>;
+    fn velocity(&self, momentum: &[f64]) -> Vec<f64>;
+    fn kinetic_energy(&self, momentum: &[f64]) -> f64;
+    fn is_valid(&self) -> bool;
+}
+
+impl MassOperator for [f64] {
+    fn sample_momentum(&self, rng: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError> {
+        let momentum = self
+            .iter()
+            .map(|inverse| {
+                let normal: f64 = StandardNormal.sample(&mut *rng);
+                normal / inverse.sqrt()
+            })
+            .collect::<Vec<_>>();
+        if momentum.iter().all(|value| value.is_finite()) {
+            Ok(momentum)
+        } else {
+            Err(ValidationError(
+                "momentum refresh is not safely representable".into(),
+            ))
+        }
+    }
+
+    fn dimension(&self) -> usize {
+        self.len()
+    }
+
+    fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
+        momentum
+            .iter()
+            .zip(self)
+            .map(|(p, inverse_mass)| p * inverse_mass)
+            .collect()
+    }
+
+    fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
+        0.5 * momentum
+            .iter()
+            .zip(self)
+            .map(|(p, m)| p * p * m)
+            .sum::<f64>()
+    }
+
+    fn is_valid(&self) -> bool {
+        self.iter().all(|value| value.is_finite() && *value > 0.0)
+    }
+}
+
+impl<const N: usize> MassOperator for [f64; N] {
+    fn sample_momentum(&self, rng: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError> {
+        self.as_slice().sample_momentum(rng)
+    }
+
+    fn dimension(&self) -> usize {
+        N
+    }
+
+    fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
+        self.as_slice().velocity(momentum)
+    }
+
+    fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
+        self.as_slice().kinetic_energy(momentum)
+    }
+
+    fn is_valid(&self) -> bool {
+        self.as_slice().is_valid()
+    }
+}
+
+impl MassOperator for Vec<f64> {
+    fn sample_momentum(&self, rng: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError> {
+        self.as_slice().sample_momentum(rng)
+    }
+
+    fn dimension(&self) -> usize {
+        self.len()
+    }
+
+    fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
+        self.as_slice().velocity(momentum)
+    }
+
+    fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
+        self.as_slice().kinetic_energy(momentum)
+    }
+
+    fn is_valid(&self) -> bool {
+        self.as_slice().is_valid()
+    }
+}
+
+fn kinetic_energy<M: MassOperator + ?Sized>(momentum: &[f64], mass: &M) -> f64 {
+    mass.kinetic_energy(momentum)
+}
 
 /// One physical endpoint of a span, including its cached joint log density.
 #[derive(Clone, Debug)]
@@ -35,9 +171,12 @@ pub struct Span {
 
 impl Span {
     /// Construct a one-state span.
-    pub fn from_state(state: State, inverse_mass: &[f64]) -> Result<Self, ValidationError> {
-        validate_state_and_mass(&state, inverse_mass)?;
-        let log_joint = joint_log_density(&state, inverse_mass);
+    pub fn from_state<M: MassOperator + ?Sized>(
+        state: State,
+        mass: &M,
+    ) -> Result<Self, ValidationError> {
+        validate_state_and_mass(&state, mass)?;
+        let log_joint = joint_log_density(&state, mass);
         if !log_joint.is_finite() {
             return Err(ValidationError(
                 "state joint log density must be finite".into(),
@@ -128,8 +267,10 @@ pub struct FixedTuning {
     pub max_refinement_levels: usize,
     /// Leapfrog steps in the first attempt. Must be positive.
     pub min_micro_steps: usize,
-    /// Inclusive endpoint Hamiltonian-error tolerance.
+    /// Inclusive full-trajectory Hamiltonian-error tolerance.
     pub max_error: f64,
+    /// Maximum absolute trajectory energy error before a transition is divergent.
+    pub divergence_threshold: f64,
 }
 
 /// Why a deterministic leaf was rejected.
@@ -155,7 +296,15 @@ pub struct MacroLeafResult {
     pub reverse_evaluations: usize,
     /// Value supplied to upstream's step-size adaptation callback.
     pub adaptation_value: f64,
+    /// Metropolis acceptance probability at the accepted refined endpoint.
+    pub accepted_trajectory_adaptation_value: Option<f64>,
     pub rejection: Option<Rejection>,
+    pub selected_refinement_level: Option<usize>,
+    pub refinement_attempts: usize,
+    pub initial_hamiltonian: f64,
+    pub minimum_hamiltonian: f64,
+    pub maximum_hamiltonian: f64,
+    pub maximum_absolute_energy_error: f64,
 }
 
 impl MacroLeafResult {
@@ -172,12 +321,14 @@ pub enum BuildLeafResult {
         micro_steps: usize,
         evaluations: usize,
         adaptation_value: f64,
+        accepted_trajectory_adaptation_value: Option<f64>,
     },
     Stopped {
         rejection: Rejection,
         micro_steps: usize,
         evaluations: usize,
         adaptation_value: f64,
+        accepted_trajectory_adaptation_value: Option<f64>,
     },
 }
 
@@ -219,6 +370,7 @@ pub struct SpanTraceEvent {
     /// `None` preserves upstream's short-circuit when the forward dot turns.
     pub backward_dot: Option<f64>,
     pub adaptation_value: Option<f64>,
+    pub accepted_trajectory_adaptation_value: Option<f64>,
 }
 
 impl SpanTraceEvent {
@@ -240,6 +392,7 @@ impl SpanTraceEvent {
             forward_dot: None,
             backward_dot: None,
             adaptation_value: None,
+            accepted_trajectory_adaptation_value: None,
         }
     }
 }
@@ -275,9 +428,9 @@ pub fn log_add_exp(left: f64, right: f64) -> Result<f64, ValidationError> {
 }
 
 /// Deterministically build a one-state span from the directional endpoint.
-pub fn build_leaf<F>(
+pub fn build_leaf<F, M: MassOperator + ?Sized>(
     last_span: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     eval: &mut F,
@@ -287,7 +440,7 @@ where
 {
     build_leaf_observed(
         last_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         eval,
@@ -295,9 +448,9 @@ where
     )
 }
 
-fn build_leaf_observed<F>(
+fn build_leaf_observed<F, M: MassOperator + ?Sized>(
     last_span: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     eval: &mut F,
@@ -306,21 +459,22 @@ fn build_leaf_observed<F>(
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
-    validate_span(last_span, inverse_mass)?;
+    validate_span(last_span, mass)?;
     let start = match direction {
         Direction::Forward => &last_span.forward.state,
         Direction::Backward => &last_span.backward.state,
     };
     increment(&mut work.leaves_attempted)?;
-    let result = macro_leaf_observed(start, inverse_mass, tuning, direction, eval, work)?;
+    let result = macro_leaf_observed(start, mass, tuning, direction, eval, work)?;
     match (result.end_state, result.rejection) {
         (Some(state), None) => {
             increment(&mut work.leaves_built)?;
             Ok(BuildLeafResult::Built {
-                span: Span::from_state(state, inverse_mass)?,
+                span: Span::from_state(state, mass)?,
                 micro_steps: result.micro_steps,
                 evaluations: result.evaluations,
                 adaptation_value: result.adaptation_value,
+                accepted_trajectory_adaptation_value: result.accepted_trajectory_adaptation_value,
             })
         }
         (None, Some(rejection)) => Ok(BuildLeafResult::Stopped {
@@ -328,6 +482,7 @@ where
             micro_steps: result.micro_steps,
             evaluations: result.evaluations,
             adaptation_value: result.adaptation_value,
+            accepted_trajectory_adaptation_value: result.accepted_trajectory_adaptation_value,
         }),
         _ => Err(ValidationError(
             "macro leaf returned an inconsistent outcome".into(),
@@ -336,10 +491,10 @@ where
 }
 
 /// Recursively build `2^depth` leaves, stopping on exhaustion or a U-turn.
-pub fn build_span<F, R>(
+pub fn build_span<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     depth: usize,
@@ -349,7 +504,7 @@ where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
     R: Uniform01,
 {
-    validate_span(last_span, inverse_mass)?;
+    validate_span(last_span, mass)?;
     let shift = u32::try_from(depth)
         .map_err(|_| ValidationError("span depth overflows leaf count".into()))?;
     let leaves = 1usize
@@ -362,7 +517,7 @@ where
     build_span_counted_inner(
         rng,
         last_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         depth,
@@ -376,10 +531,10 @@ where
 }
 
 /// Build a span while exposing prototype-only branch and RNG observations.
-pub fn build_span_traced<F, R>(
+pub fn build_span_traced<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     depth: usize,
@@ -389,7 +544,7 @@ where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
     R: Uniform01,
 {
-    validate_span(last_span, inverse_mass)?;
+    validate_span(last_span, mass)?;
     let shift = u32::try_from(depth)
         .map_err(|_| ValidationError("span depth overflows leaf count".into()))?;
     let leaves = 1usize
@@ -401,7 +556,7 @@ where
     let result = build_span_inner(
         rng,
         last_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         depth,
@@ -414,10 +569,10 @@ where
     Ok(TracedBuildSpanResult { result, events })
 }
 
-fn build_span_inner<F, R>(
+fn build_span_inner<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     depth: usize,
@@ -440,11 +595,12 @@ where
     ));
     if depth == 0 {
         return Ok(
-            match build_leaf_observed(last_span, inverse_mass, tuning, direction, eval, work)? {
+            match build_leaf_observed(last_span, mass, tuning, direction, eval, work)? {
                 BuildLeafResult::Built {
                     span,
                     evaluations,
                     adaptation_value,
+                    accepted_trajectory_adaptation_value,
                     ..
                 } => {
                     *cumulative_evaluations =
@@ -457,6 +613,8 @@ where
                         *cumulative_evaluations,
                     );
                     event.adaptation_value = Some(adaptation_value);
+                    event.accepted_trajectory_adaptation_value =
+                        accepted_trajectory_adaptation_value;
                     trace(event);
                     BuildSpanResult::Built {
                         span,
@@ -468,6 +626,7 @@ where
                     rejection,
                     evaluations,
                     adaptation_value,
+                    accepted_trajectory_adaptation_value,
                     ..
                 } => {
                     *cumulative_evaluations =
@@ -480,6 +639,8 @@ where
                         *cumulative_evaluations,
                     );
                     event.adaptation_value = Some(adaptation_value);
+                    event.accepted_trajectory_adaptation_value =
+                        accepted_trajectory_adaptation_value;
                     trace(event);
                     BuildSpanResult::Stopped {
                         cause: SpanStop::Leaf(rejection),
@@ -493,7 +654,7 @@ where
     let first = build_span_inner(
         rng,
         last_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         depth - 1,
@@ -521,7 +682,7 @@ where
     let second = build_span_inner(
         rng,
         &first_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         depth - 1,
@@ -551,7 +712,7 @@ where
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
     let (made_u_turn, forward_dot, backward_dot) =
-        spans_make_u_turn_observed(&first_span, &second_span, inverse_mass, direction);
+        spans_make_u_turn_observed(&first_span, &second_span, mass, direction);
     let mut predicate = SpanTraceEvent::basic(
         "uturn_predicate",
         None,
@@ -602,10 +763,10 @@ where
     })
 }
 
-fn build_span_counted_inner<F, R>(
+fn build_span_counted_inner<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     depth: usize,
@@ -625,7 +786,7 @@ where
             .checked_add(1)
             .ok_or_else(|| ValidationError("leaf count overflowed usize".into()))?;
         return Ok(
-            match build_leaf_observed(last_span, inverse_mass, tuning, direction, eval, work)? {
+            match build_leaf_observed(last_span, mass, tuning, direction, eval, work)? {
                 BuildLeafResult::Built {
                     span, evaluations, ..
                 } => {
@@ -659,7 +820,7 @@ where
     let first = build_span_counted_inner(
         rng,
         last_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         depth - 1,
@@ -681,7 +842,7 @@ where
     let second = build_span_counted_inner(
         rng,
         &first_span,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         depth - 1,
@@ -705,7 +866,7 @@ where
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
     let (made_u_turn, _, _) =
-        spans_make_u_turn_observed(&first_span, &second_span, inverse_mass, direction);
+        spans_make_u_turn_observed(&first_span, &second_span, mass, direction);
     if made_u_turn {
         return Ok(BuildSpanResult::Stopped {
             cause: SpanStop::UTurn,
@@ -763,30 +924,31 @@ fn combine_barker_observed<R: Uniform01>(
     ))
 }
 
-fn spans_make_u_turn_observed(
+fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
     first: &Span,
     second: &Span,
-    inverse_mass: &[f64],
+    mass: &M,
     direction: Direction,
 ) -> (bool, f64, Option<f64>) {
     let (earlier, later) = match direction {
         Direction::Forward => (first, second),
         Direction::Backward => (second, first),
     };
-    let scaled_difference = later
+    let difference = later
         .forward
         .state
         .theta
         .iter()
         .zip(&earlier.backward.state.theta)
-        .zip(inverse_mass)
-        .map(|((later, earlier), inverse_mass)| inverse_mass * (later - earlier));
+        .map(|(later, earlier)| later - earlier)
+        .collect::<Vec<_>>();
+    let scaled_difference = mass.velocity(&difference);
     let later_dot = later
         .forward
         .state
         .rho
         .iter()
-        .zip(scaled_difference.clone())
+        .zip(&scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     if later_dot < 0.0 {
@@ -797,7 +959,7 @@ fn spans_make_u_turn_observed(
         .state
         .rho
         .iter()
-        .zip(scaled_difference)
+        .zip(&scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     (earlier_dot < 0.0, later_dot, Some(earlier_dot))
@@ -1013,6 +1175,17 @@ pub struct TransitionInput {
     pub rho: Vec<f64>,
 }
 
+/// A momentum-supplied transition whose position target value is already
+/// evaluated. This is the versioned driver/kernel boundary representation:
+/// `log_prob` and `grad` remain valid across metric installations.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct EvaluatedTransitionInput {
+    pub theta: Vec<f64>,
+    pub rho: Vec<f64>,
+    pub log_prob: f64,
+    pub grad: Vec<f64>,
+}
+
 /// Immutable tuning for one fixed-tuning transition.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TransitionTuning {
@@ -1029,7 +1202,7 @@ pub enum TransitionStop {
 }
 
 /// Exact logical work performed by a fixed-tuning transition.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TransitionDiagnostics {
     pub depth: usize,
     pub stop: TransitionStop,
@@ -1040,6 +1213,14 @@ pub struct TransitionDiagnostics {
     pub outer_metropolis_draws: usize,
     pub leaves_attempted: usize,
     pub leaves_built: usize,
+    pub initial_hamiltonian: f64,
+    pub minimum_hamiltonian: f64,
+    pub maximum_hamiltonian: f64,
+    pub maximum_absolute_energy_error: f64,
+    pub divergent: bool,
+    pub selected_refinement_level: Option<usize>,
+    pub refinement_attempts: usize,
+    pub reverse_coarser_rejections: usize,
 }
 
 /// Exact fused target-callback counts, partitioned by algorithmic purpose.
@@ -1094,7 +1275,7 @@ pub struct WorkHistogram {
 }
 
 /// Additive exact work performed by one transition.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TransitionWorkTelemetry {
     pub fused_calls: FusedCallCounts,
     pub forward_refinement_attempts: usize,
@@ -1114,6 +1295,11 @@ pub struct TransitionWorkTelemetry {
     pub barker: SelectionDrawCounts,
     pub metropolis: SelectionDrawCounts,
     pub histograms: WorkHistogram,
+    pub initial_hamiltonian: f64,
+    pub minimum_hamiltonian: f64,
+    pub maximum_hamiltonian: f64,
+    pub maximum_absolute_energy_error: f64,
+    pub selected_refinement_level: Option<usize>,
 }
 
 impl TransitionWorkTelemetry {
@@ -1257,6 +1443,7 @@ pub struct TransitionTraceEvent {
     pub forward_dot: Option<f64>,
     pub backward_dot: Option<f64>,
     pub adaptation_value: Option<f64>,
+    pub accepted_trajectory_adaptation_value: Option<f64>,
 }
 impl TransitionTraceEvent {
     fn basic(
@@ -1279,6 +1466,7 @@ impl TransitionTraceEvent {
             forward_dot: None,
             backward_dot: None,
             adaptation_value: None,
+            accepted_trajectory_adaptation_value: None,
         }
     }
 }
@@ -1341,10 +1529,10 @@ impl<R: TransitionRng> TransitionRng for CountedTransitionRng<'_, R> {
 }
 
 /// Run one momentum-supplied, fixed-tuning transition.
-pub fn transition_w<F, R>(
+pub fn transition_w<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: TransitionTuning,
     eval: &mut F,
 ) -> Result<TransitionResult, ValidationError>
@@ -1352,14 +1540,29 @@ where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
     R: TransitionRng,
 {
-    transition_w_untraced_inner(rng, input, inverse_mass, tuning, eval).map(|output| output.result)
+    transition_w_untraced_inner(
+        rng,
+        input,
+        mass,
+        tuning,
+        eval,
+        None,
+        OuterSelectionPolicy::BiasedProgressive,
+    )
+    .map(|output| output.result)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OuterSelectionPolicy {
+    BiasedProgressive,
+    NormalizedMultinomial,
 }
 
 /// Run one transition and return exact additive work telemetry.
-pub fn transition_w_with_telemetry<F, R>(
+pub fn transition_w_with_telemetry<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: TransitionTuning,
     eval: &mut F,
 ) -> Result<TelemetryTransitionResult, ValidationError>
@@ -1367,14 +1570,96 @@ where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
     R: TransitionRng,
 {
-    transition_w_untraced_inner(rng, input, inverse_mass, tuning, eval)
+    transition_w_untraced_inner(
+        rng,
+        input,
+        mass,
+        tuning,
+        eval,
+        None,
+        OuterSelectionPolicy::BiasedProgressive,
+    )
+}
+
+pub(crate) fn transition_w_with_telemetry_and_outer_policy<F, R, M: MassOperator + ?Sized>(
+    rng: &mut R,
+    input: TransitionInput,
+    mass: &M,
+    tuning: TransitionTuning,
+    eval: &mut F,
+    policy: OuterSelectionPolicy,
+) -> Result<TelemetryTransitionResult, ValidationError>
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    R: TransitionRng,
+{
+    transition_w_untraced_inner(rng, input, mass, tuning, eval, None, policy)
+}
+
+/// Run a transition from a valid cached target evaluation. The initial state
+/// is validated but the callback is not invoked and initial fused-call work is
+/// zero.
+pub(crate) fn transition_w_from_evaluated_with_telemetry<F, R, M: MassOperator + ?Sized>(
+    rng: &mut R,
+    input: EvaluatedTransitionInput,
+    mass: &M,
+    tuning: TransitionTuning,
+    eval: &mut F,
+) -> Result<TelemetryTransitionResult, ValidationError>
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    R: TransitionRng,
+{
+    let plain = TransitionInput {
+        theta: input.theta,
+        rho: input.rho,
+    };
+    transition_w_untraced_inner(
+        rng,
+        plain,
+        mass,
+        tuning,
+        eval,
+        Some((input.log_prob, input.grad)),
+        OuterSelectionPolicy::BiasedProgressive,
+    )
+}
+
+pub(crate) fn transition_w_from_evaluated_with_telemetry_and_outer_policy<
+    F,
+    R,
+    M: MassOperator + ?Sized,
+>(
+    rng: &mut R,
+    input: EvaluatedTransitionInput,
+    mass: &M,
+    tuning: TransitionTuning,
+    eval: &mut F,
+    policy: OuterSelectionPolicy,
+) -> Result<TelemetryTransitionResult, ValidationError>
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    R: TransitionRng,
+{
+    transition_w_untraced_inner(
+        rng,
+        TransitionInput {
+            theta: input.theta,
+            rho: input.rho,
+        },
+        mass,
+        tuning,
+        eval,
+        Some((input.log_prob, input.grad)),
+        policy,
+    )
 }
 
 /// Run a transition while exposing transition and recursive-span observations.
-pub fn transition_w_traced<F, R>(
+pub fn transition_w_traced<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: TransitionTuning,
     eval: &mut F,
 ) -> Result<TracedTransitionResult, ValidationError>
@@ -1383,9 +1668,16 @@ where
     R: TransitionRng,
 {
     let mut events = Vec::new();
-    let output = transition_w_inner(rng, input, inverse_mass, tuning, eval, &mut |event| {
-        events.push(event)
-    })?;
+    let output = transition_w_inner(
+        rng,
+        input,
+        mass,
+        tuning,
+        eval,
+        None,
+        OuterSelectionPolicy::BiasedProgressive,
+        &mut |event| events.push(event),
+    )?;
     Ok(TracedTransitionResult {
         result: output.result,
         events,
@@ -1393,10 +1685,10 @@ where
 }
 
 /// Run a traced transition and return exact additive work telemetry.
-pub fn transition_w_traced_with_telemetry<F, R>(
+pub fn transition_w_traced_with_telemetry<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: TransitionTuning,
     eval: &mut F,
 ) -> Result<TracedTelemetryTransitionResult, ValidationError>
@@ -1405,7 +1697,37 @@ where
     R: TransitionRng,
 {
     let mut events = Vec::new();
-    let output = transition_w_inner(rng, input, inverse_mass, tuning, eval, &mut |event| {
+    let output = transition_w_inner(
+        rng,
+        input,
+        mass,
+        tuning,
+        eval,
+        None,
+        OuterSelectionPolicy::BiasedProgressive,
+        &mut |event| events.push(event),
+    )?;
+    Ok(TracedTelemetryTransitionResult {
+        result: output.result,
+        work: output.work,
+        events,
+    })
+}
+
+pub(crate) fn transition_w_traced_with_telemetry_and_outer_policy<F, R, M: MassOperator + ?Sized>(
+    rng: &mut R,
+    input: TransitionInput,
+    mass: &M,
+    tuning: TransitionTuning,
+    eval: &mut F,
+    policy: OuterSelectionPolicy,
+) -> Result<TracedTelemetryTransitionResult, ValidationError>
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    R: TransitionRng,
+{
+    let mut events = Vec::new();
+    let output = transition_w_inner(rng, input, mass, tuning, eval, None, policy, &mut |event| {
         events.push(event)
     })?;
     Ok(TracedTelemetryTransitionResult {
@@ -1414,23 +1736,108 @@ where
         events,
     })
 }
-fn transition_w_untraced_inner<F, R>(
+
+pub(crate) fn transition_w_from_evaluated_traced_with_telemetry<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
-    input: TransitionInput,
-    inverse_mass: &[f64],
+    input: EvaluatedTransitionInput,
+    mass: &M,
     tuning: TransitionTuning,
     eval: &mut F,
+) -> Result<TracedTelemetryTransitionResult, ValidationError>
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    R: TransitionRng,
+{
+    let mut events = Vec::new();
+    let cached = Some((input.log_prob, input.grad));
+    let output = transition_w_inner(
+        rng,
+        TransitionInput {
+            theta: input.theta,
+            rho: input.rho,
+        },
+        mass,
+        tuning,
+        eval,
+        cached,
+        OuterSelectionPolicy::BiasedProgressive,
+        &mut |event| events.push(event),
+    )?;
+    Ok(TracedTelemetryTransitionResult {
+        result: output.result,
+        work: output.work,
+        events,
+    })
+}
+
+pub(crate) fn transition_w_from_evaluated_traced_with_telemetry_and_outer_policy<
+    F,
+    R,
+    M: MassOperator + ?Sized,
+>(
+    rng: &mut R,
+    input: EvaluatedTransitionInput,
+    mass: &M,
+    tuning: TransitionTuning,
+    eval: &mut F,
+    policy: OuterSelectionPolicy,
+) -> Result<TracedTelemetryTransitionResult, ValidationError>
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    R: TransitionRng,
+{
+    let mut events = Vec::new();
+    let output = transition_w_inner(
+        rng,
+        TransitionInput {
+            theta: input.theta,
+            rho: input.rho,
+        },
+        mass,
+        tuning,
+        eval,
+        Some((input.log_prob, input.grad)),
+        policy,
+        &mut |event| events.push(event),
+    )?;
+    Ok(TracedTelemetryTransitionResult {
+        result: output.result,
+        work: output.work,
+        events,
+    })
+}
+fn transition_w_untraced_inner<F, R, M: MassOperator + ?Sized>(
+    rng: &mut R,
+    input: TransitionInput,
+    mass: &M,
+    tuning: TransitionTuning,
+    eval: &mut F,
+    cached: Option<(f64, Vec<f64>)>,
+    outer_policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
     R: TransitionRng,
 {
-    validate_transition_input(&input, inverse_mass, tuning)?;
-    let (log_prob, grad) = eval(&input.theta);
+    validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
-    work.fused_calls.initial = 1;
+    let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
+        (log_prob, grad, 0)
+    } else {
+        set_evaluation_context(EvaluationContext {
+            phase: EvaluationPhase::Initial,
+            direction: None,
+            refinement_level: None,
+            evaluation_in_attempt: 0,
+            kinetic: kinetic_energy(&input.rho, mass),
+            initial_hamiltonian: None,
+        });
+        let (log_prob, grad) = eval(&input.theta);
+        work.fused_calls.initial = 1;
+        (log_prob, grad, 1)
+    };
     let mut counts = TransitionCounts {
-        target_evaluations: 1,
+        target_evaluations: initial_evaluations,
         ..TransitionCounts::default()
     };
     let state = State {
@@ -1439,8 +1846,8 @@ where
         log_prob,
         grad,
     };
-    validate_state_and_mass(&state, inverse_mass)?;
-    let mut span_accum = Span::from_state(state, inverse_mass)?;
+    validate_state_and_mass(&state, mass)?;
+    let mut span_accum = Span::from_state(state, mass)?;
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -1469,7 +1876,7 @@ where
             build_span_counted_inner(
                 &mut counted_rng,
                 &span_accum,
-                inverse_mass,
+                mass,
                 tuning.leaf,
                 direction,
                 depth - 1,
@@ -1495,15 +1902,20 @@ where
         };
 
         let (outer_uturn, _, _) =
-            spans_make_u_turn_observed(&span_accum, &next_span, inverse_mass, direction);
+            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction);
         let combined = {
             let mut counted_rng = CountedTransitionRng {
                 inner: rng,
                 direction_draws: &mut counts.direction_draws,
                 uniform_draws: &mut counts.uniform_draws,
             };
-            let (combined, _, _, update) =
-                combine_metropolis_observed(&mut counted_rng, span_accum, next_span, direction)?;
+            let (combined, _, _, update) = combine_outer_observed(
+                &mut counted_rng,
+                span_accum,
+                next_span,
+                direction,
+                outer_policy,
+            )?;
             increment(&mut work.metropolis.attempted)?;
             if update {
                 increment(&mut work.metropolis.selected_new)?;
@@ -1540,29 +1952,53 @@ where
                 outer_metropolis_draws: counts.outer_metropolis_draws,
                 leaves_attempted: counts.leaves_attempted,
                 leaves_built: counts.leaves_built,
+                initial_hamiltonian: work.initial_hamiltonian,
+                minimum_hamiltonian: work.minimum_hamiltonian,
+                maximum_hamiltonian: work.maximum_hamiltonian,
+                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
+                divergent: !work.maximum_absolute_energy_error.is_finite()
+                    || work.maximum_absolute_energy_error > tuning.leaf.divergence_threshold,
+                selected_refinement_level: work.selected_refinement_level,
+                refinement_attempts: work.forward_refinement_attempts,
+                reverse_coarser_rejections: work.rejections.reverse_coarser_accepted,
             },
         },
         work,
     })
 }
-fn transition_w_inner<F, R>(
+fn transition_w_inner<F, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: TransitionTuning,
     eval: &mut F,
+    cached: Option<(f64, Vec<f64>)>,
+    outer_policy: OuterSelectionPolicy,
     trace: &mut impl FnMut(TransitionTraceEvent),
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
     R: TransitionRng,
 {
-    validate_transition_input(&input, inverse_mass, tuning)?;
-    let (log_prob, grad) = eval(&input.theta);
+    validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
-    work.fused_calls.initial = 1;
+    let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
+        (log_prob, grad, 0)
+    } else {
+        set_evaluation_context(EvaluationContext {
+            phase: EvaluationPhase::Initial,
+            direction: None,
+            refinement_level: None,
+            evaluation_in_attempt: 0,
+            kinetic: kinetic_energy(&input.rho, mass),
+            initial_hamiltonian: None,
+        });
+        let (log_prob, grad) = eval(&input.theta);
+        work.fused_calls.initial = 1;
+        (log_prob, grad, 1)
+    };
     let mut counts = TransitionCounts {
-        target_evaluations: 1,
+        target_evaluations: initial_evaluations,
         ..TransitionCounts::default()
     };
     let state = State {
@@ -1571,14 +2007,16 @@ where
         log_prob,
         grad,
     };
-    validate_state_and_mass(&state, inverse_mass)?;
-    let mut span_accum = Span::from_state(state, inverse_mass)?;
-    trace(TransitionTraceEvent::basic(
-        "initial_evaluation",
-        None,
-        None,
-        &counts,
-    ));
+    validate_state_and_mass(&state, mass)?;
+    let mut span_accum = Span::from_state(state, mass)?;
+    if initial_evaluations != 0 {
+        trace(TransitionTraceEvent::basic(
+            "initial_evaluation",
+            None,
+            None,
+            &counts,
+        ));
+    }
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -1621,7 +2059,7 @@ where
             build_span_inner(
                 &mut counted_rng,
                 &span_accum,
-                inverse_mass,
+                mass,
                 tuning.leaf,
                 direction,
                 depth - 1,
@@ -1671,6 +2109,8 @@ where
             transition_event.forward_dot = event.forward_dot;
             transition_event.backward_dot = event.backward_dot;
             transition_event.adaptation_value = event.adaptation_value;
+            transition_event.accepted_trajectory_adaptation_value =
+                event.accepted_trajectory_adaptation_value;
             trace(transition_event);
         }
 
@@ -1692,7 +2132,7 @@ where
         };
 
         let (outer_uturn, forward_dot, backward_dot) =
-            spans_make_u_turn_observed(&span_accum, &next_span, inverse_mass, direction);
+            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction);
         let mut event = TransitionTraceEvent::basic(
             "outer_uturn_predicate",
             Some(depth),
@@ -1710,7 +2150,13 @@ where
                 direction_draws: &mut counts.direction_draws,
                 uniform_draws: &mut counts.uniform_draws,
             };
-            combine_metropolis_observed(&mut counted_rng, span_accum, next_span, direction)?
+            combine_outer_observed(
+                &mut counted_rng,
+                span_accum,
+                next_span,
+                direction,
+                outer_policy,
+            )?
         };
         increment(&mut work.metropolis.attempted)?;
         if update {
@@ -1754,6 +2200,15 @@ where
         outer_metropolis_draws: counts.outer_metropolis_draws,
         leaves_attempted: counts.leaves_attempted,
         leaves_built: counts.leaves_built,
+        initial_hamiltonian: work.initial_hamiltonian,
+        minimum_hamiltonian: work.minimum_hamiltonian,
+        maximum_hamiltonian: work.maximum_hamiltonian,
+        maximum_absolute_energy_error: work.maximum_absolute_energy_error,
+        divergent: !work.maximum_absolute_energy_error.is_finite()
+            || work.maximum_absolute_energy_error > tuning.leaf.divergence_threshold,
+        selected_refinement_level: work.selected_refinement_level,
+        refinement_attempts: work.forward_refinement_attempts,
+        reverse_coarser_rejections: work.rejections.reverse_coarser_accepted,
     };
     let mut event = TransitionTraceEvent::basic(
         "transition_stop",
@@ -1807,13 +2262,30 @@ fn combine_metropolis_observed<R: Uniform01>(
         update,
     ))
 }
-fn validate_transition_input(
+
+fn combine_outer_observed<R: Uniform01>(
+    rng: &mut R,
+    old: Span,
+    new: Span,
+    direction: Direction,
+    policy: OuterSelectionPolicy,
+) -> Result<(Span, f64, f64, bool), ValidationError> {
+    match policy {
+        OuterSelectionPolicy::BiasedProgressive => {
+            combine_metropolis_observed(rng, old, new, direction)
+        }
+        OuterSelectionPolicy::NormalizedMultinomial => {
+            combine_barker_observed(rng, old, new, direction)
+        }
+    }
+}
+fn validate_transition_input<M: MassOperator + ?Sized>(
     input: &TransitionInput,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: TransitionTuning,
 ) -> Result<(), ValidationError> {
     let dim = input.theta.len();
-    if dim == 0 || input.rho.len() != dim || inverse_mass.len() != dim {
+    if dim == 0 || input.rho.len() != dim || mass.dimension() != dim {
         return Err(ValidationError(
             "transition input and diagonal inverse mass dimensions must match and be nonzero"
                 .into(),
@@ -1827,10 +2299,7 @@ fn validate_transition_input(
     {
         return Err(ValidationError("transition input must be finite".into()));
     }
-    if inverse_mass
-        .iter()
-        .any(|value| !value.is_finite() || *value <= 0.0)
-    {
+    if !mass.is_valid() {
         return Err(ValidationError(
             "inverse mass entries must be finite and positive".into(),
         ));
@@ -1849,17 +2318,17 @@ fn validate_transition_input(
         log_prob: 0.0,
         grad: vec![0.0; dim],
     };
-    validate(&validation_state, inverse_mass, tuning.leaf)
+    validate(&validation_state, mass, tuning.leaf)
 }
 
 /// Build one fixed-tuning macro leaf using a diagonal inverse mass.
 ///
-/// Refinement tests only the macro-step endpoint, not the range of energies
-/// visited by its micro steps. A candidate is accepted only if no admissible
-/// coarser reverse trajectory also meets the inclusive endpoint tolerance.
-pub fn macro_leaf<F>(
+/// Refinement tests the maximum absolute Hamiltonian departure over every
+/// visited micro-step. A candidate is accepted only if no admissible coarser
+/// reverse trajectory also meets the same inclusive trajectory tolerance.
+pub fn macro_leaf<F, M: MassOperator + ?Sized>(
     start: &State,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     eval: &mut F,
@@ -1869,7 +2338,7 @@ where
 {
     macro_leaf_observed(
         start,
-        inverse_mass,
+        mass,
         tuning,
         direction,
         eval,
@@ -1877,9 +2346,9 @@ where
     )
 }
 
-fn macro_leaf_observed<F>(
+fn macro_leaf_observed<F, M: MassOperator + ?Sized>(
     start: &State,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
     direction: Direction,
     eval: &mut F,
@@ -1888,9 +2357,10 @@ fn macro_leaf_observed<F>(
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
-    validate(start, inverse_mass, tuning)?;
+    validate(start, mass, tuning)?;
 
-    let initial_h = joint_log_density(start, inverse_mass);
+    let initial_h = -joint_log_density(start, mass);
+    observe_initial_energy(work, initial_h);
     let signed_step = match direction {
         Direction::Forward => tuning.step_size,
         Direction::Backward => -tuning.step_size,
@@ -1898,6 +2368,7 @@ where
     let mut forward_evaluations = 0;
     let mut last_steps = tuning.min_micro_steps;
     let mut last_adaptation_value = 0.0;
+    let mut last_integration = None;
 
     for level in 0..tuning.max_refinement_levels {
         let shift = u32::try_from(level)
@@ -1922,12 +2393,26 @@ where
         last_steps = micro_steps;
         let step = signed_step / multiplier as f64;
         let mut candidate = start.clone();
-        let (attempted, valid) = integrate(&mut candidate, step, micro_steps, inverse_mass, eval);
+        let integration = integrate(
+            &mut candidate,
+            step,
+            micro_steps,
+            mass,
+            initial_h,
+            EvaluationPhase::Forward,
+            direction,
+            level,
+            eval,
+        );
+        last_integration = Some(integration);
+        let attempted = integration.attempted;
+        let valid = integration.valid;
         work.forward_micro_steps_executed =
             checked_add_work(work.forward_micro_steps_executed, attempted)?;
         work.fused_calls.forward = checked_add_work(work.fused_calls.forward, attempted)?;
         forward_evaluations = checked_add_evaluations(forward_evaluations, attempted)?;
         if !valid {
+            observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
             increment(&mut work.rejections.invalid_forward_evaluation)?;
             return Ok(MacroLeafResult {
                 end_state: None,
@@ -1936,15 +2421,21 @@ where
                 forward_evaluations,
                 reverse_evaluations: 0,
                 adaptation_value: 0.0,
+                accepted_trajectory_adaptation_value: None,
                 rejection: Some(Rejection::InvalidEvaluation),
+                selected_refinement_level: None,
+                refinement_attempts: level + 1,
+                initial_hamiltonian: initial_h,
+                minimum_hamiltonian: work.minimum_hamiltonian,
+                maximum_hamiltonian: work.maximum_hamiltonian,
+                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
             });
         }
         if level == 0 {
-            last_adaptation_value =
-                (-(joint_log_density(&candidate, inverse_mass) - initial_h).abs()).exp();
+            last_adaptation_value = (-integration.maximum_absolute_error).exp();
         }
 
-        if (joint_log_density(&candidate, inverse_mass) - initial_h).abs() <= tuning.max_error {
+        if integration.maximum_absolute_error <= tuning.max_error {
             increment(&mut work.forward_refinement_accepted)?;
             work.accepted_forward_micro_steps =
                 checked_add_work(work.accepted_forward_micro_steps, micro_steps)?;
@@ -1962,13 +2453,34 @@ where
                 for momentum in &mut reversed.rho {
                     *momentum = -*momentum;
                 }
-                let (attempted, valid) =
-                    integrate(&mut reversed, coarse_step, coarse_steps, inverse_mass, eval);
+                let reverse_initial_h = -joint_log_density(&candidate, mass);
+                let integration = integrate(
+                    &mut reversed,
+                    coarse_step,
+                    coarse_steps,
+                    mass,
+                    reverse_initial_h,
+                    EvaluationPhase::Reverse,
+                    match direction {
+                        Direction::Forward => Direction::Backward,
+                        Direction::Backward => Direction::Forward,
+                    },
+                    level,
+                    eval,
+                );
+                let attempted = integration.attempted;
+                let valid = integration.valid;
                 work.reverse_micro_steps_executed =
                     checked_add_work(work.reverse_micro_steps_executed, attempted)?;
                 work.fused_calls.reverse = checked_add_work(work.fused_calls.reverse, attempted)?;
                 reverse_evaluations = checked_add_evaluations(reverse_evaluations, attempted)?;
                 if !valid {
+                    observe_energy_range(
+                        work,
+                        integration.minimum,
+                        integration.maximum,
+                        reverse_initial_h,
+                    );
                     increment(&mut work.rejections.invalid_reverse_evaluation)?;
                     return Ok(MacroLeafResult {
                         end_state: None,
@@ -1980,14 +2492,17 @@ where
                         forward_evaluations,
                         reverse_evaluations,
                         adaptation_value: last_adaptation_value,
+                        accepted_trajectory_adaptation_value: None,
                         rejection: Some(Rejection::InvalidEvaluation),
+                        selected_refinement_level: None,
+                        refinement_attempts: level + 1,
+                        initial_hamiltonian: initial_h,
+                        minimum_hamiltonian: work.minimum_hamiltonian,
+                        maximum_hamiltonian: work.maximum_hamiltonian,
+                        maximum_absolute_energy_error: work.maximum_absolute_energy_error,
                     });
                 }
-                if (joint_log_density(&reversed, inverse_mass)
-                    - joint_log_density(&candidate, inverse_mass))
-                .abs()
-                    <= tuning.max_error
-                {
+                if integration.maximum_absolute_error <= tuning.max_error {
                     increment(&mut work.reverse_coarsening_accepted)?;
                     increment(&mut work.rejections.reverse_coarser_accepted)?;
                     return Ok(MacroLeafResult {
@@ -2000,10 +2515,26 @@ where
                         forward_evaluations,
                         reverse_evaluations,
                         adaptation_value: last_adaptation_value,
+                        accepted_trajectory_adaptation_value: None,
                         rejection: Some(Rejection::ReverseCoarserAccepted),
+                        selected_refinement_level: None,
+                        refinement_attempts: level + 1,
+                        initial_hamiltonian: initial_h,
+                        minimum_hamiltonian: work.minimum_hamiltonian,
+                        maximum_hamiltonian: work.maximum_hamiltonian,
+                        maximum_absolute_energy_error: work.maximum_absolute_energy_error,
                     });
                 }
             }
+            work.selected_refinement_level = Some(
+                work.selected_refinement_level
+                    .map_or(level, |selected| selected.max(level)),
+            );
+            observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
+            let accepted_trajectory_adaptation_value = (initial_h
+                + joint_log_density(&candidate, mass))
+            .min(0.0)
+            .exp();
             return Ok(MacroLeafResult {
                 end_state: Some(candidate),
                 micro_steps,
@@ -2011,12 +2542,22 @@ where
                 forward_evaluations,
                 reverse_evaluations,
                 adaptation_value: last_adaptation_value,
+                accepted_trajectory_adaptation_value: Some(accepted_trajectory_adaptation_value),
                 rejection: None,
+                selected_refinement_level: Some(level),
+                refinement_attempts: level + 1,
+                initial_hamiltonian: initial_h,
+                minimum_hamiltonian: work.minimum_hamiltonian,
+                maximum_hamiltonian: work.maximum_hamiltonian,
+                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
             });
         }
     }
 
     increment(&mut work.rejections.refinement_exhausted)?;
+    if let Some(integration) = last_integration {
+        observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
+    }
     Ok(MacroLeafResult {
         end_state: None,
         micro_steps: last_steps,
@@ -2024,16 +2565,23 @@ where
         forward_evaluations,
         reverse_evaluations: 0,
         adaptation_value: last_adaptation_value,
+        accepted_trajectory_adaptation_value: None,
         rejection: Some(Rejection::RefinementExhausted),
+        selected_refinement_level: None,
+        refinement_attempts: tuning.max_refinement_levels,
+        initial_hamiltonian: initial_h,
+        minimum_hamiltonian: work.minimum_hamiltonian,
+        maximum_hamiltonian: work.maximum_hamiltonian,
+        maximum_absolute_energy_error: work.maximum_absolute_energy_error,
     })
 }
 
-fn validate(
+fn validate<M: MassOperator + ?Sized>(
     start: &State,
-    inverse_mass: &[f64],
+    mass: &M,
     tuning: FixedTuning,
 ) -> Result<(), ValidationError> {
-    validate_state_and_mass(start, inverse_mass)?;
+    validate_state_and_mass(start, mass)?;
     if !tuning.step_size.is_finite() || tuning.step_size <= 0.0 {
         return Err(ValidationError(
             "step_size must be finite and positive".into(),
@@ -2059,12 +2607,20 @@ fn validate(
             "max_error must be finite and positive".into(),
         ));
     }
+    if !tuning.divergence_threshold.is_finite() || tuning.divergence_threshold <= 0.0 {
+        return Err(ValidationError(
+            "divergence threshold must be finite and positive".into(),
+        ));
+    }
     Ok(())
 }
 
-fn validate_state_and_mass(state: &State, inverse_mass: &[f64]) -> Result<(), ValidationError> {
+fn validate_state_and_mass<M: MassOperator + ?Sized>(
+    state: &State,
+    mass: &M,
+) -> Result<(), ValidationError> {
     let dim = state.theta.len();
-    if dim == 0 || state.rho.len() != dim || state.grad.len() != dim || inverse_mass.len() != dim {
+    if dim == 0 || state.rho.len() != dim || state.grad.len() != dim || mass.dimension() != dim {
         return Err(ValidationError(
             "state and diagonal inverse mass dimensions must match and be nonzero".into(),
         ));
@@ -2079,10 +2635,7 @@ fn validate_state_and_mass(state: &State, inverse_mass: &[f64]) -> Result<(), Va
     {
         return Err(ValidationError("state must be finite".into()));
     }
-    if inverse_mass
-        .iter()
-        .any(|value| !value.is_finite() || *value <= 0.0)
-    {
+    if !mass.is_valid() {
         return Err(ValidationError(
             "inverse mass entries must be finite and positive".into(),
         ));
@@ -2090,10 +2643,10 @@ fn validate_state_and_mass(state: &State, inverse_mass: &[f64]) -> Result<(), Va
     Ok(())
 }
 
-fn validate_span(span: &Span, inverse_mass: &[f64]) -> Result<(), ValidationError> {
-    validate_state_and_mass(&span.backward.state, inverse_mass)?;
-    validate_state_and_mass(&span.forward.state, inverse_mass)?;
-    let dim = inverse_mass.len();
+fn validate_span<M: MassOperator + ?Sized>(span: &Span, mass: &M) -> Result<(), ValidationError> {
+    validate_state_and_mass(&span.backward.state, mass)?;
+    validate_state_and_mass(&span.forward.state, mass)?;
+    let dim = mass.dimension();
     if span.selected.theta.len() != dim
         || span.selected.grad.len() != dim
         || !span.selected.log_prob.is_finite()
@@ -2114,26 +2667,49 @@ fn validate_span(span: &Span, inverse_mass: &[f64]) -> Result<(), ValidationErro
     Ok(())
 }
 
-fn integrate<F>(
+#[derive(Clone, Copy, Debug)]
+struct IntegrationObservation {
+    attempted: usize,
+    valid: bool,
+    minimum: f64,
+    maximum: f64,
+    maximum_absolute_error: f64,
+}
+
+fn integrate<F, M: MassOperator + ?Sized>(
     state: &mut State,
     step: f64,
     count: usize,
-    inverse_mass: &[f64],
+    mass: &M,
+    initial_hamiltonian: f64,
+    phase: EvaluationPhase,
+    direction: Direction,
+    refinement_level: usize,
     eval: &mut F,
-) -> (usize, bool)
+) -> IntegrationObservation
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
     let half_step = 0.5 * step;
+    let mut minimum = initial_hamiltonian;
+    let mut maximum = initial_hamiltonian;
+    let mut maximum_absolute_error = 0.0_f64;
     for evaluation in 0..count {
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        for ((position, momentum), inv_mass) in
-            state.theta.iter_mut().zip(&state.rho).zip(inverse_mass)
-        {
-            *position += step * inv_mass * momentum;
+        let velocity = mass.velocity(&state.rho);
+        for (position, velocity) in state.theta.iter_mut().zip(velocity) {
+            *position += step * velocity;
         }
+        set_evaluation_context(EvaluationContext {
+            phase,
+            direction: Some(direction),
+            refinement_level: Some(refinement_level),
+            evaluation_in_attempt: evaluation,
+            kinetic: kinetic_energy(&state.rho, mass),
+            initial_hamiltonian: Some(initial_hamiltonian),
+        });
         let (log_prob, gradient) = eval(&state.theta);
         if gradient.len() != state.theta.len()
             || !log_prob.is_finite()
@@ -2141,7 +2717,13 @@ where
         {
             state.log_prob = f64::NEG_INFINITY;
             state.grad.fill(0.0);
-            return (evaluation + 1, false);
+            return IntegrationObservation {
+                attempted: evaluation + 1,
+                valid: false,
+                minimum: f64::NEG_INFINITY,
+                maximum: f64::INFINITY,
+                maximum_absolute_error: f64::INFINITY,
+            };
         } else {
             state.log_prob = log_prob;
             state.grad.copy_from_slice(&gradient);
@@ -2149,24 +2731,209 @@ where
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
+        let energy = -joint_log_density(state, mass);
+        if !energy.is_finite() {
+            return IntegrationObservation {
+                attempted: evaluation + 1,
+                valid: false,
+                minimum: f64::NEG_INFINITY,
+                maximum: f64::INFINITY,
+                maximum_absolute_error: f64::INFINITY,
+            };
+        }
+        minimum = minimum.min(energy);
+        maximum = maximum.max(energy);
+        maximum_absolute_error = maximum_absolute_error.max((energy - initial_hamiltonian).abs());
     }
-    (count, true)
+    IntegrationObservation {
+        attempted: count,
+        valid: true,
+        minimum,
+        maximum,
+        maximum_absolute_error,
+    }
 }
 
-fn joint_log_density(state: &State, inverse_mass: &[f64]) -> f64 {
-    state.log_prob
-        - 0.5
-            * state
-                .rho
-                .iter()
-                .zip(inverse_mass)
-                .map(|(momentum, inv_mass)| momentum * momentum * inv_mass)
-                .sum::<f64>()
+fn observe_initial_energy(work: &mut TransitionWorkTelemetry, energy: f64) {
+    if work.fused_calls.initial <= 1 && work.forward_refinement_attempts == 0 {
+        work.initial_hamiltonian = energy;
+        work.minimum_hamiltonian = energy;
+        work.maximum_hamiltonian = energy;
+    }
+}
+
+fn observe_energy_range(
+    work: &mut TransitionWorkTelemetry,
+    minimum: f64,
+    maximum: f64,
+    reference: f64,
+) {
+    work.minimum_hamiltonian = work.minimum_hamiltonian.min(minimum);
+    work.maximum_hamiltonian = work.maximum_hamiltonian.max(maximum);
+    let error = (minimum - reference).abs().max((maximum - reference).abs());
+    work.maximum_absolute_energy_error = work.maximum_absolute_energy_error.max(error);
+}
+
+fn joint_log_density<M: MassOperator + ?Sized>(state: &State, mass: &M) -> f64 {
+    state.log_prob - mass.kinetic_energy(&state.rho)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    struct CoupledMass {
+        generation: u64,
+        calls: Cell<usize>,
+    }
+
+    impl MassOperator for CoupledMass {
+        fn sample_momentum(&self, _: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError> {
+            unreachable!("test operator uses supplied momentum")
+        }
+
+        fn dimension(&self) -> usize {
+            2
+        }
+
+        fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
+            self.calls.set(self.calls.get() + 1);
+            vec![
+                1.5 * momentum[0] + 0.25 * momentum[1],
+                0.25 * momentum[0] + 0.75 * momentum[1],
+            ]
+        }
+
+        fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
+            let velocity = self.velocity(momentum);
+            0.5 * momentum
+                .iter()
+                .zip(velocity)
+                .map(|(p, v)| p * v)
+                .sum::<f64>()
+        }
+
+        fn is_valid(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn original_q_mass_operator_leapfrog_is_reversible_and_generation_is_fixed() {
+        let mass = CoupledMass {
+            generation: 7,
+            calls: Cell::new(0),
+        };
+        let initial = State {
+            theta: vec![0.2, -0.4],
+            rho: vec![0.7, -0.3],
+            log_prob: -0.1,
+            grad: vec![-0.2, 0.4],
+        };
+        let mut state = initial.clone();
+        let initial_h = -joint_log_density(&state, &mass);
+        let mut eval = |q: &[f64]| {
+            (
+                -0.5 * q.iter().map(|x| x * x).sum::<f64>(),
+                q.iter().map(|x| -*x).collect(),
+            )
+        };
+        let forward = integrate(
+            &mut state,
+            0.03,
+            5,
+            &mass,
+            initial_h,
+            EvaluationPhase::Forward,
+            Direction::Forward,
+            0,
+            &mut eval,
+        );
+        assert!(forward.valid);
+        let reverse_h = -joint_log_density(&state, &mass);
+        let reverse = integrate(
+            &mut state,
+            -0.03,
+            5,
+            &mass,
+            reverse_h,
+            EvaluationPhase::Reverse,
+            Direction::Backward,
+            0,
+            &mut eval,
+        );
+        assert!(reverse.valid);
+        for (actual, expected) in state.theta.iter().zip(&initial.theta) {
+            assert!((actual - expected).abs() < 2.0e-15);
+        }
+        for (actual, expected) in state.rho.iter().zip(&initial.rho) {
+            assert!((actual - expected).abs() < 2.0e-15);
+        }
+        assert_eq!(mass.generation, 7);
+        assert!(mass.calls.get() > 0);
+    }
+
+    #[test]
+    fn metric_boundary_install_does_not_remap_q_or_cached_target_state() {
+        let selected = SelectedState {
+            theta: vec![0.2, -0.4],
+            grad: vec![-0.2, 0.4],
+            log_prob: -0.1,
+        };
+        let before = selected.clone();
+        let old_mass = CoupledMass {
+            generation: 3,
+            calls: Cell::new(0),
+        };
+        let new_mass = CoupledMass {
+            generation: 4,
+            calls: Cell::new(0),
+        };
+        assert_ne!(old_mass.generation, new_mass.generation);
+        assert_eq!(selected, before);
+        assert_eq!(old_mass.calls.get(), 0);
+        assert_eq!(new_mass.calls.get(), 0);
+    }
+
+    #[test]
+    fn complete_transition_uses_one_coupled_metric_generation_with_exact_rng_and_work() {
+        let mass = CoupledMass {
+            generation: 11,
+            calls: Cell::new(0),
+        };
+        let mut rng = ScriptedTransitionRng::new(vec![
+            TransitionDraw::Direction(Direction::Forward),
+            TransitionDraw::Uniform(0.25),
+        ]);
+        let output = transition_w_with_telemetry(
+            &mut rng,
+            TransitionInput {
+                theta: vec![0.2, -0.4],
+                rho: vec![0.7, -0.3],
+            },
+            &mass,
+            TransitionTuning {
+                leaf: FixedTuning {
+                    step_size: 0.03,
+                    max_refinement_levels: 1,
+                    min_micro_steps: 1,
+                    max_error: 1.0,
+                    divergence_threshold: 1000.0,
+                },
+                max_depth: 1,
+            },
+            &mut gaussian,
+        )
+        .unwrap();
+        assert_eq!(mass.generation, 11);
+        assert_eq!(rng.consumed(), 2);
+        assert_eq!(output.result.diagnostics.direction_draws, 1);
+        assert_eq!(output.result.diagnostics.uniform_draws, 1);
+        assert_eq!(output.result.diagnostics.target_evaluations, 2);
+        assert_eq!(output.work.forward_micro_steps_executed, 1);
+        assert!(mass.calls.get() > 0);
+    }
 
     fn gaussian(theta: &[f64]) -> (f64, Vec<f64>) {
         (
@@ -2190,6 +2957,7 @@ mod tests {
             max_refinement_levels: levels,
             min_micro_steps: min_steps,
             max_error: error,
+            divergence_threshold: 1000.0,
         }
     }
 
@@ -2253,7 +3021,7 @@ mod tests {
     }
 
     #[test]
-    fn endpoint_tolerance_does_not_test_intermediate_range() {
+    fn interior_energy_spike_is_rejected_even_when_endpoint_returns_close() {
         let result = macro_leaf(
             &state(1.0, 0.0),
             &[1.0],
@@ -2262,9 +3030,10 @@ mod tests {
             &mut gaussian,
         )
         .unwrap();
-        assert!(result.accepted());
+        assert_eq!(result.rejection, Some(Rejection::RefinementExhausted));
         assert_eq!(result.micro_steps, 2);
         assert_eq!(result.evaluations, 2);
+        assert!(result.maximum_absolute_energy_error > 1e-4);
     }
 
     #[test]
@@ -2281,6 +3050,74 @@ mod tests {
         assert_eq!(result.forward_evaluations, 1 + 2);
         assert_eq!(result.reverse_evaluations, 1);
         assert_eq!(result.evaluations, 4);
+    }
+
+    #[test]
+    fn invalid_reverse_replay_stops_on_the_failed_call_with_exact_work() {
+        let mut calls = 0;
+        let mut work = TransitionWorkTelemetry::default();
+        let result = macro_leaf_observed(
+            &state(1.0, 0.0),
+            &[1.0],
+            tuning(3.48, 2, 1, 0.8178),
+            Direction::Forward,
+            &mut |theta: &[f64]| {
+                calls += 1;
+                if calls == 4 {
+                    (f64::NAN, vec![f64::NAN; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+            &mut work,
+        )
+        .unwrap();
+        assert_eq!(result.rejection, Some(Rejection::InvalidEvaluation));
+        assert_eq!(result.forward_evaluations, 3);
+        assert_eq!(result.reverse_evaluations, 1);
+        assert_eq!(result.evaluations, 4);
+        assert_eq!(calls, 4);
+        assert_eq!(work.fused_calls.forward, 3);
+        assert_eq!(work.fused_calls.reverse, 1);
+        assert_eq!(work.reverse_micro_steps_executed, 1);
+        assert_eq!(work.rejections.invalid_reverse_evaluation, 1);
+        assert_eq!(work.rejections.reverse_coarser_accepted, 0);
+    }
+
+    #[test]
+    fn invalid_reverse_replay_consumes_only_its_direction_draw() {
+        let mut rng =
+            ScriptedTransitionRng::new(vec![TransitionDraw::Direction(Direction::Forward)]);
+        let mut calls = 0;
+        let output = transition_w_with_telemetry(
+            &mut rng,
+            TransitionInput {
+                theta: vec![1.0],
+                rho: vec![0.0],
+            },
+            &[1.0],
+            transition_tuning(3.48, 1, 2, 1, 0.8178),
+            &mut |theta: &[f64]| {
+                calls += 1;
+                if calls == 5 {
+                    (f64::NAN, vec![f64::NAN; theta.len()])
+                } else {
+                    gaussian(theta)
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            output.result.diagnostics.stop,
+            TransitionStop::Recursive(SpanStop::Leaf(Rejection::InvalidEvaluation))
+        );
+        assert_eq!(output.result.diagnostics.target_evaluations, 5);
+        assert_eq!(output.result.diagnostics.direction_draws, 1);
+        assert_eq!(output.result.diagnostics.uniform_draws, 0);
+        assert_eq!(rng.consumed(), 1);
+        assert_eq!(output.work.fused_calls.initial, 1);
+        assert_eq!(output.work.fused_calls.forward, 3);
+        assert_eq!(output.work.fused_calls.reverse, 1);
     }
 
     #[test]
@@ -2401,6 +3238,71 @@ mod tests {
             combine_barker(&mut below_boundary, old, new.clone(), Direction::Forward).unwrap();
         assert_eq!(combined.selected.theta, new.selected.theta);
         assert_eq!(below_boundary.consumed(), 1);
+    }
+
+    #[test]
+    fn randomized_barker_flux_satisfies_discrete_balance() {
+        let mut light = Span::from_state(state(0.0, 1.0), &[1.0]).unwrap();
+        let mut heavy = Span::from_state(state(1.0, 0.0), &[1.0]).unwrap();
+        light.log_weight = 0.0;
+        heavy.log_weight = 2.0_f64.ln();
+        let trials = 12_000;
+        let mut light_to_heavy = 0;
+        let mut heavy_to_light = 0;
+        for index in 0..trials {
+            let draw = (index as f64 + 0.5) / trials as f64;
+            let mut forward_rng = ScriptedUniform01::new(vec![draw]);
+            let forward = combine_barker(
+                &mut forward_rng,
+                light.clone(),
+                heavy.clone(),
+                Direction::Forward,
+            )
+            .unwrap();
+            light_to_heavy += usize::from(forward.selected.theta == heavy.selected.theta);
+
+            let mut reverse_rng = ScriptedUniform01::new(vec![draw]);
+            let reverse = combine_barker(
+                &mut reverse_rng,
+                heavy.clone(),
+                light.clone(),
+                Direction::Forward,
+            )
+            .unwrap();
+            heavy_to_light += usize::from(reverse.selected.theta == light.selected.theta);
+        }
+        assert_eq!(light_to_heavy, 2 * heavy_to_light);
+    }
+
+    #[test]
+    fn gaussian_macro_leaf_is_reversible_under_momentum_flip() {
+        let initial = state(0.37, -0.81);
+        let forward = macro_leaf(
+            &initial,
+            &[1.0],
+            tuning(0.2, 1, 4, 10.0),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap()
+        .end_state
+        .unwrap();
+        let mut reversed_start = forward;
+        reversed_start.rho[0] = -reversed_start.rho[0];
+        let returned = macro_leaf(
+            &reversed_start,
+            &[1.0],
+            tuning(0.2, 1, 4, 10.0),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap()
+        .end_state
+        .unwrap();
+        assert!((returned.theta[0] - initial.theta[0]).abs() < 1e-12);
+        assert!((returned.rho[0] + initial.rho[0]).abs() < 1e-12);
+        assert!((returned.log_prob - initial.log_prob).abs() < 1e-12);
+        assert!((returned.grad[0] - initial.grad[0]).abs() < 1e-12);
     }
 
     #[test]
@@ -2643,6 +3545,58 @@ mod tests {
         );
     }
     #[test]
+    fn cached_transition_is_numerically_identical_without_initial_target_work() {
+        let draws = vec![
+            TransitionDraw::Direction(Direction::Forward),
+            TransitionDraw::Uniform(0.0),
+        ];
+        let tuning = transition_tuning(0.1, 1, 1, 2, 1.0);
+        let mut ordinary_rng = ScriptedTransitionRng::new(draws.clone());
+        let mut cached_rng = ScriptedTransitionRng::new(draws);
+        let mut ordinary_calls = 0;
+        let ordinary = transition_w_with_telemetry(
+            &mut ordinary_rng,
+            TransitionInput {
+                theta: vec![0.7],
+                rho: vec![0.4],
+            },
+            &[1.0],
+            tuning,
+            &mut |theta| {
+                ordinary_calls += 1;
+                gaussian(theta)
+            },
+        )
+        .unwrap();
+        let mut cached_calls = 0;
+        let cached = transition_w_from_evaluated_with_telemetry(
+            &mut cached_rng,
+            EvaluatedTransitionInput {
+                theta: vec![0.7],
+                rho: vec![0.4],
+                log_prob: -0.5 * 0.7 * 0.7,
+                grad: vec![-0.7],
+            },
+            &[1.0],
+            tuning,
+            &mut |theta| {
+                cached_calls += 1;
+                gaussian(theta)
+            },
+        )
+        .unwrap();
+
+        assert_eq!(ordinary.result.selected, cached.result.selected);
+        assert_eq!(ordinary_rng.consumed(), cached_rng.consumed());
+        assert_eq!(ordinary_calls, cached_calls + 1);
+        assert_eq!(ordinary.work.fused_calls.initial, 1);
+        assert_eq!(cached.work.fused_calls.initial, 0);
+        assert_eq!(
+            ordinary.result.diagnostics.target_evaluations,
+            cached.result.diagnostics.target_evaluations + 1
+        );
+    }
+    #[test]
     fn traced_and_untraced_transition_results_diagnostics_and_work_are_identical() {
         let draws = vec![
             TransitionDraw::Direction(Direction::Forward),
@@ -2872,6 +3826,58 @@ mod tests {
         assert!(updated);
         assert_eq!(combined.selected, new.selected);
         assert_eq!(certain.consumed(), 1);
+    }
+
+    #[test]
+    fn outer_selection_probabilities_match_closed_form_and_empirical_grid() {
+        let mut old = Span::from_state(state(0.0, 1.0), &[1.0]).unwrap();
+        let mut new = Span::from_state(state(1.0, 0.0), &[1.0]).unwrap();
+        old.log_weight = 0.0;
+        new.log_weight = 2.0_f64.ln();
+        let n = 10_000usize;
+
+        for (policy, expected) in [
+            (OuterSelectionPolicy::BiasedProgressive, 1.0),
+            (OuterSelectionPolicy::NormalizedMultinomial, 2.0 / 3.0),
+        ] {
+            let mut selected = 0usize;
+            for index in 0..n {
+                let draw = (index as f64 + 0.5) / n as f64;
+                let mut rng = ScriptedUniform01::new(vec![draw]);
+                let (combined, observed, log_probability, update) = combine_outer_observed(
+                    &mut rng,
+                    old.clone(),
+                    new.clone(),
+                    Direction::Forward,
+                    policy,
+                )
+                .unwrap();
+                assert_eq!(observed, draw);
+                assert_eq!(rng.consumed(), 1);
+                assert!((combined.log_weight - 3.0_f64.ln()).abs() < 2.0e-15);
+                assert_eq!(update, combined.selected == new.selected);
+                if update {
+                    selected += 1;
+                }
+                let probability = log_probability.exp().min(1.0);
+                assert!((probability - expected).abs() < 2.0e-15);
+            }
+            assert!((selected as f64 / n as f64 - expected).abs() <= 1.0 / n as f64);
+        }
+
+        let mut extreme = new;
+        extreme.log_weight = -1_000.0;
+        let mut rng = ScriptedUniform01::new(vec![0.5]);
+        let (combined, _, log_probability, _) = combine_outer_observed(
+            &mut rng,
+            old,
+            extreme,
+            Direction::Backward,
+            OuterSelectionPolicy::NormalizedMultinomial,
+        )
+        .unwrap();
+        assert!(combined.log_weight.is_finite());
+        assert!(log_probability.is_finite());
     }
     #[test]
     fn transition_validates_before_evaluation_or_rng_and_rejects_bad_evaluation() {
