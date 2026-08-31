@@ -1,0 +1,179 @@
+{
+ "schema": "owalnuts-paper-funnel-adaptive-protocol/v1",
+ "frozen": "2026-08-31 (kernel v9, paper adaptation v1; frozen before any sampling in this directory)",
+ "target": {
+  "name": "neal_funnel",
+  "dimension": 10,
+  "omega_prior_variance": 9.0,
+  "conditional": "x_i | omega ~ N(0, exp(omega))",
+  "paper_equation": "arXiv 2506.18746 eq. (32)"
+ },
+ "starts": [
+  [
+   -3.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   -1.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   1.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   3.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ ],
+ "chains": 4,
+ "threads": 1,
+ "runtime_callback_cap": 1000000000,
+ "wall_cap_seconds_per_arm": 1200,
+ "arms": {
+  "C": {
+   "sampler": "owalnuts",
+   "mode": "fixed",
+   "step_size": 0.36,
+   "max_error": 0.21,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 5000,
+   "base_seed": 87021,
+   "role": "calibration (non-evidence): measures the retained-orbit energy-range quantiles at the paper tuning; Delta* for arm AD = pooled q95 rounded to two significant digits"
+  },
+  "A2": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 87001,
+   "paper": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8
+   },
+   "role": "primary: paper Appendix C adaptation with the paper's example constants (Delta=2, p_a=0.95, Gamma=0.8) from conservative delta=1.0, h=0.1"
+  },
+  "AD": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 87011,
+   "paper": {
+    "global_energy_bound": 0.72,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8
+   },
+   "role": "secondary: paper adaptation with Delta* = calibration q95 0.7191 rounded to two significant digits = 0.72 (rule fixed in PREREGISTRATION.md before arm C ran)"
+  },
+  "CU": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.36,
+   "max_error": 0.21,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 100,
+   "base_seed": 87031,
+   "paper": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "adapt_local_error": false,
+    "adapt_step_size": false
+   },
+   "role": "post-hoc measurement only (see posthoc_arms); not evidence"
+  }
+ },
+ "gates": {
+  "rhat_max": 1.01,
+  "bulk_ess_min": 400,
+  "tail_ess_min": 400,
+  "tail_mass_thresholds": [
+   -5.0,
+   -6.0
+  ],
+  "tail_mass_exact": [
+   0.04779035227281474,
+   0.022750131948179212
+  ],
+  "tail_mass_tolerance": [
+   0.009,
+   0.006
+  ],
+  "omega_variance_interval": [
+   8.2,
+   9.8
+  ],
+  "exact_omega_quantiles": {
+   "0.01": -6.979,
+   "0.005": -7.727
+  }
+ },
+ "control_reference": {
+  "study": "STUDIES/funnel_bias_fix_v1",
+  "arm": "F50",
+  "artifact_sha256": "b0d51a5e635c84a42eabd00776346c310163de6e36ef450cf0b13515c3a38410",
+  "summary_sha256": "67f923ecf768f6b94170ccc0923ed3b9b8573eabde4600fc43ce271995968bbf"
+ },
+ "calibration": {
+  "arm": "C",
+  "pooled_retained_energy_range_q95": 0.7191374544587756,
+  "delta_star": 0.72
+ },
+ "posthoc_arms": {
+  "CU": "post-hoc, non-preregistered: fixed h=0.36, delta=0.21 with both paper rules disabled so the per-window unrefined fraction is measured at the paper's tuning; seed base 87031"
+ }
+}
