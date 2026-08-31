@@ -20,6 +20,8 @@ use owalnuts::walnutpie::{
     TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig, WorkTotals,
     preflight_chains, preflight_chains_structured, preflight_chains_with_target_budget,
     sample_chains, sample_chains_structured, sample_chains_with_target_budget,
+    sample_chains_structured_refresh, StructuredMetricRefresh, StructuredRefreshConfig,
+    StructuredRefreshRestartPolicy, RunControl, WindowSummary,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -348,6 +350,14 @@ fn parse_mass(py: Python<'_>, dimension: usize, spec: Option<Bound<'_, PyAny>>) 
     let blocks = spec.cast::<PyList>().map_err(|_| {
         value_error("mass must be None, a 1-D float64 array, or a list of block dicts")
     })?;
+    let parsed = parse_blocks(&blocks)?;
+    let _ = py;
+    StructuredBlockMass::new(parsed)
+        .map(Mass::Structured)
+        .map_err(facade_error)
+}
+
+fn parse_blocks(blocks: &Bound<'_, PyList>) -> PyResult<Vec<StructuredCovarianceBlock>> {
     let mut parsed = Vec::with_capacity(blocks.len());
     for block in blocks.iter() {
         let block = block
@@ -391,13 +401,15 @@ fn parse_mass(py: Python<'_>, dimension: usize, spec: Option<Bound<'_, PyAny>>) 
             }
         }
     }
-    let _ = py;
-    StructuredBlockMass::new(parsed)
-        .map(Mass::Structured)
-        .map_err(facade_error)
+    Ok(parsed)
 }
 
-fn parse_run(py: Python<'_>, dimension: usize, cfg: &Bound<'_, PyDict>) -> PyResult<Run> {
+fn parse_run(
+    py: Python<'_>,
+    dimension: usize,
+    cfg: &Bound<'_, PyDict>,
+    refresh_active: bool,
+) -> PyResult<Run> {
     let discarded: usize = required(cfg, "warmup")?;
     let retained: usize = required(cfg, "draws")?;
     let seed: u64 = required(cfg, "seed")?;
@@ -452,7 +464,8 @@ fn parse_run(py: Python<'_>, dimension: usize, cfg: &Bound<'_, PyDict>) -> PyRes
         let target_accept: f64 = get(cfg, "target_accept")?.unwrap_or(0.8);
         let adapt_step: bool = get(cfg, "adapt_step_size")?.unwrap_or(true);
         let adapt_mass_requested: bool = get(cfg, "adapt_mass")?.unwrap_or(true);
-        let adapt_mass = adapt_mass_requested && matches!(mass, Mass::Diagonal(_));
+        let adapt_mass =
+            adapt_mass_requested && (matches!(mass, Mass::Diagonal(_)) || refresh_active);
         let mut warmup = WarmupConfig::new(target_accept)
             .map_err(facade_error)?
             .with_step_size_adaptation(adapt_step)
@@ -737,24 +750,64 @@ fn output_dict<'py>(
     Ok(d)
 }
 
+/// Python slow-window refresh callback for structured-mass runs.
+struct PyRefresh {
+    callable: Py<PyAny>,
+}
+
+impl StructuredMetricRefresh for PyRefresh {
+    fn refresh(
+        &self,
+        summary: &WindowSummary,
+        current: &StructuredBlockMass,
+    ) -> Result<StructuredBlockMass, Error> {
+        Python::attach(|py| {
+            let mean = PyArray1::from_slice(py, summary.mean());
+            let variance = PyArray1::from_slice(py, summary.variance());
+            let result = self
+                .callable
+                .bind(py)
+                .call1((
+                    summary.window_index(),
+                    summary.transition(),
+                    summary.sample_count(),
+                    mean,
+                    variance,
+                ))
+                .map_err(|e| Error::metric_candidate(format!("refresh callback raised: {e}")))?;
+            if result.is_none() {
+                return Ok(current.clone());
+            }
+            let list = result.cast::<PyList>().map_err(|_| {
+                Error::metric_candidate("refresh callback must return None or a list of mass blocks")
+            })?;
+            let blocks = parse_blocks(&list)
+                .map_err(|e| Error::metric_candidate(format!("refresh blocks invalid: {e}")))?;
+            StructuredBlockMass::new(blocks)
+        })
+    }
+}
+
 // ── Python API ───────────────────────────────────────────────────────────
 
 /// Sample a Python callable target `f(q) -> (log_density, gradient)`.
 #[pyfunction]
-#[pyo3(signature = (target, starts, config, nonfinite="zero_density"))]
+#[pyo3(signature = (target, starts, config, nonfinite="zero_density", refresh=None, refresh_restart="continue"))]
 fn sample_callable<'py>(
     py: Python<'py>,
     target: Py<PyAny>,
     starts: PyReadonlyArray2<'py, f64>,
     config: &Bound<'py, PyDict>,
     nonfinite: &str,
+    refresh: Option<Py<PyAny>>,
+    refresh_restart: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     let starts = parse_starts(starts)?;
     let dimension = starts
         .first()
         .map(Vec::len)
         .ok_or_else(|| value_error("starts is empty"))?;
-    let run = parse_run(py, dimension, config)?;
+    let run = parse_run(py, dimension, config, refresh.is_some())?;
     let py_target = PyTarget {
         callable: target,
         dimension,
@@ -765,6 +818,58 @@ fn sample_callable<'py>(
         last_fatal: Mutex::new(None),
     };
     let started = Instant::now();
+    if let Some(callback) = refresh {
+        let Mass::Structured(mass) = &run.mass else {
+            return Err(value_error("refresh requires a structured mass"));
+        };
+        let policy = match refresh_restart {
+            "continue" => StructuredRefreshRestartPolicy::ContinueDualAveraging,
+            "restart" => StructuredRefreshRestartPolicy::RestartDualAveraging,
+            other => return Err(value_error(format!("unknown refresh_restart {other:?}"))),
+        };
+        let adapter = PyRefresh { callable: callback };
+        let refresh_config = StructuredRefreshConfig::default().with_restart_policy(policy);
+        let control = RunControl::new();
+        let output = py
+            .detach(|| {
+                sample_chains_structured_refresh(
+                    &py_target,
+                    &starts,
+                    mass,
+                    &adapter,
+                    &refresh_config,
+                    &run.config,
+                    run.threads,
+                    &control,
+                )
+            })
+            .map_err(|e| py_target.fatal_error(e))?;
+        let wall = started.elapsed().as_secs_f64();
+        let dict = output_dict(
+            py,
+            output.chains(),
+            wall,
+            py_target.calls.load(Ordering::Relaxed),
+            py_target.recoverable.load(Ordering::Relaxed),
+            py_target.attached_nanos.load(Ordering::Relaxed) as f64 * 1e-9,
+        )?;
+        let updates = PyList::empty(py);
+        for (chain, rows) in output.metric_updates().iter().enumerate() {
+            for u in rows {
+                let row = PyDict::new(py);
+                row.set_item("chain", chain)?;
+                row.set_item("window", u.window_index())?;
+                row.set_item("transition", u.transition())?;
+                row.set_item("outcome", format!("{:?}", u.outcome()))?;
+                row.set_item("step_before", u.step_before())?;
+                row.set_item("step_after_search", u.step_after_search())?;
+                row.set_item("step_after_restart", u.step_after_restart())?;
+                updates.append(row)?;
+            }
+        }
+        dict.set_item("refresh_updates", updates)?;
+        return Ok(dict);
+    }
     let output = py
         .detach(|| execute(&py_target, &starts, &run))
         .map_err(|e| py_target.fatal_error(e))?;
@@ -791,7 +896,7 @@ fn preflight_callable<'py>(
         .first()
         .map(Vec::len)
         .ok_or_else(|| value_error("starts is empty"))?;
-    let run = parse_run(py, dimension, config)?;
+    let run = parse_run(py, dimension, config, false)?;
     struct Never(usize);
     impl Target for Never {
         fn dimension(&self) -> usize {
@@ -825,7 +930,7 @@ fn sample_eight_schools<'py>(
         calls: AtomicUsize::new(0),
     };
     let starts = parse_starts(starts)?;
-    let run = parse_run(py, target.dimension(), config)?;
+    let run = parse_run(py, target.dimension(), config, false)?;
     let started = Instant::now();
     let output = py
         .detach(|| execute(&target, &starts, &run))
@@ -866,7 +971,7 @@ fn sample_local_level<'py>(
         calls: AtomicUsize::new(0),
     };
     let starts = parse_starts(starts)?;
-    let run = parse_run(py, target.dimension(), config)?;
+    let run = parse_run(py, target.dimension(), config, false)?;
     let started = Instant::now();
     let output = py
         .detach(|| execute(&target, &starts, &run))
@@ -909,7 +1014,7 @@ fn sample_cfunc<'py>(
             "starts must be (chains, {dimension}) to match the cfunc dimension"
         )));
     }
-    let run = parse_run(py, dimension, config)?;
+    let run = parse_run(py, dimension, config, false)?;
     // SAFETY: the caller passes the address of a compiled callback with the
     // documented `RawTargetFn` ABI and keeps it alive for the whole call; the
     // remaining contract is asserted through `RawTarget::new` below.

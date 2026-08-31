@@ -84,6 +84,7 @@ class SampleResult:
     target_recoverable_failures: int
     target_attached_seconds: float
     config: dict[str, Any] = field(default_factory=dict)
+    refresh_updates: list[dict[str, Any]] | None = None
 
     # convenience --------------------------------------------------------
     @property
@@ -263,6 +264,8 @@ def sample(
     max_depth_stop_limit: int | None = None,
     init_jitter: float = 2.0,
     coerce: bool = True,
+    refresh: Callable[..., Any] | None = None,
+    refresh_restart: str = "continue",
 ) -> SampleResult:
     """Sample ``logp_and_grad`` with oWALNUTS.
 
@@ -270,6 +273,14 @@ def sample(
     (diagonal), or a list of structured blocks such as
     ``tridiagonal_precision_mass(...)``. Diagonal mass adaptation is disabled
     automatically for structured masses (the facade does not adapt them).
+
+    ``refresh`` (structured mass + callable transport only) is called at every
+    slow-window boundary as ``refresh(window_index, transition, sample_count,
+    mean, variance)`` and returns ``None`` to keep the current metric or a
+    list of mass blocks to install (same schema as ``mass``). Raising keeps
+    the previous metric (typed ``RefreshFailed`` fallback in the facade).
+    ``refresh_restart`` is ``"continue"`` (default) or ``"restart"`` for the
+    dual-averaging state at installs.
     """
     starts = _starts(init, dim, chains, seed, init_jitter)
     cfg = _config_dict(
@@ -278,6 +289,11 @@ def sample(
         max_depth_stop_limit=max_depth_stop_limit,
     )
     if isinstance(logp_and_grad, CFuncTarget):
+        if refresh is not None:
+            raise ValueError(
+                "refresh requires the callable transport; pass the plain "
+                "logp_and_grad (e.g. from_pymc(model) without gil_free)"
+            )
         cft = logp_and_grad
         if cft.dim != dim:
             raise ValueError(f"CFuncTarget dim {cft.dim} != sample dim {dim}")
@@ -287,7 +303,7 @@ def sample(
         )
         return _result(raw, cfg)
     target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
-    raw = _owalnuts.sample_callable(target, starts, cfg, nonfinite)
+    raw = _owalnuts.sample_callable(target, starts, cfg, nonfinite, refresh, refresh_restart)
     return _result(raw, cfg)
 
 
@@ -324,6 +340,7 @@ def _result(raw: dict[str, Any], cfg: dict[str, Any]) -> SampleResult:
         target_recoverable_failures=int(raw["target_recoverable_failures"]),
         target_attached_seconds=float(raw["target_attached_seconds"]),
         config=cfg,
+        refresh_updates=raw.get("refresh_updates"),
     )
 
 
@@ -508,21 +525,51 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
     return target, dim, q0, names, unravel
 
 
-def from_pymc(model: Any, *, mode: str | None = None, gil_free: bool = False) -> tuple[LogpGrad, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
+def from_pymc(model: Any, *, mode: str | None = None, gil_free: bool = False,
+              thread_safe: bool = False) -> tuple[LogpGrad, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
     """Wrap a PyMC model's compiled joint log density and gradient over the
     raveled unconstrained (transformed) variables.
 
     Returns ``(target, dim, initial_point, var_names, unravel)`` where
     ``unravel`` maps a raveled draw back to a dict of transformed values.
+
+    A compiled PyTensor function reuses internal storage and is NOT safe to
+    call from concurrent sampler threads. ``thread_safe=True`` lazily compiles
+    one function per calling thread (a small one-time cost per thread), which
+    restores ``threads > 1`` sampling on the callable transport. The default
+    single-function wrapper is only safe with ``threads=1``.
     """
     import pymc as pm  # noqa: F401
 
     if gil_free:
         return _from_pymc_gil_free(model)
 
+    q0, dim, names, unravel = _pymc_layout(model)
+
+    if thread_safe:
+        import threading
+
+        local = threading.local()
+        compile_lock = threading.Lock()
+
+        def _fn():
+            fn = getattr(local, "fn", None)
+            if fn is None:
+                # PyTensor compilation itself is not reentrant; serialize it.
+                with compile_lock:
+                    fn = model.logp_dlogp_function(ravel_inputs=True, mode=mode)
+                    fn.set_extra_values({})
+                local.fn = fn
+            return fn
+
+        def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+            logp, grad = _fn()(np.asarray(q, dtype=np.float64))
+            return float(logp), np.asarray(grad, dtype=np.float64)
+
+        return target, dim, q0, names, unravel
+
     fn = model.logp_dlogp_function(ravel_inputs=True, mode=mode)
     fn.set_extra_values({})
-    q0, dim, names, unravel = _pymc_layout(model)
 
     def target(q: np.ndarray) -> tuple[float, np.ndarray]:
         logp, grad = fn(np.asarray(q, dtype=np.float64))

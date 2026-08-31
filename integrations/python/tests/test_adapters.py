@@ -248,3 +248,78 @@ def test_from_pymc_gil_free_matches_gil_path():
     # allow tiny divergence otherwise but require matching posteriors.
     assert np.isfinite(r_cf.samples).all()
     assert abs(r_cf.samples.mean() - r_gil.samples.mean()) < 0.25
+
+
+def test_refresh_callback_installs_and_reports():
+    import owalnuts
+
+    dim = 3
+    calls = []
+
+    def logp(q):
+        return -0.5 * float(q @ q), -q
+
+    def refresh(window, transition, count, mean, variance):
+        calls.append((window, transition, count, mean.shape, variance.shape))
+        if transition < 150:
+            return None
+        return [{"type": "diagonal", "diagonal": np.clip(1.0 / variance, 0.1, 10.0)}]
+
+    mass = [{"type": "diagonal", "diagonal": np.ones(dim)}]
+    out = owalnuts.sample(
+        logp, dim, chains=2, warmup=200, draws=200, seed=11, threads=1,
+        mass=mass, refresh=refresh,
+        adaptation=owalnuts.Adaptation(adapt_mass=True),
+    )
+    assert out.samples.shape == (2, 200, dim)
+    assert np.isfinite(out.samples).all()
+    updates = out.refresh_updates
+    assert updates, "no refresh telemetry"
+    outcomes = {u["outcome"] for u in updates}
+    assert "Installed" in outcomes
+    assert calls and all(c[3] == (dim,) for c in calls)
+
+
+def test_refresh_exception_keeps_previous_metric():
+    import owalnuts
+
+    dim = 2
+
+    def logp(q):
+        return -0.5 * float(q @ q), -q
+
+    def refresh(window, transition, count, mean, variance):
+        raise RuntimeError("candidate failed")
+
+    mass = [{"type": "diagonal", "diagonal": np.ones(dim)}]
+    out = owalnuts.sample(
+        logp, dim, chains=1, warmup=150, draws=100, seed=12, threads=1,
+        mass=mass, refresh=refresh,
+        adaptation=owalnuts.Adaptation(adapt_mass=True),
+    )
+    assert np.isfinite(out.samples).all()
+    updates = out.refresh_updates
+    assert updates and all(u["outcome"] == "RefreshFailed" for u in updates)
+
+
+def test_from_pymc_thread_safe_matches_single_thread():
+    pymc = pytest.importorskip("pymc")
+    import owalnuts
+
+    with pymc.Model() as model:
+        x = pymc.Normal("x", 0.0, 1.0)
+        pymc.Normal("y", x, 1.0, observed=np.array([0.3, -0.2, 0.5]))
+
+    t1, dim, q0, _, _ = owalnuts.from_pymc(model)
+    t4, dim4, _, _, _ = owalnuts.from_pymc(model, thread_safe=True)
+    assert dim == dim4
+    lp1, g1 = t1(q0)
+    lp4, g4 = t4(q0)
+    assert lp1 == lp4 and np.allclose(g1, g4)
+
+    out1 = owalnuts.sample(t1, dim, chains=2, warmup=150, draws=150, seed=21, threads=1)
+    out4 = owalnuts.sample(t4, dim, chains=4, warmup=150, draws=300, seed=22, threads=4)
+    assert np.isfinite(out4.samples).all()
+    m1 = out1.samples[:, :, 0].mean()
+    m4 = out4.samples[:, :, 0].mean()
+    assert abs(m1 - m4) < 0.2, (m1, m4)
