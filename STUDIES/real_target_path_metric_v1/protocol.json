@@ -1,0 +1,39 @@
+{
+  "schema": "owalnuts-real-target-path-metric/v1",
+  "program": "wiki/research-program-2026-08-31.md",
+  "preregistration": "PREREGISTRATION.md",
+  "target": {
+    "model_revision": "polyscope-canonical-v2",
+    "oracle": "fixtures/polyscope_parity.json",
+    "oracle_sha256": "4c91f5fddda2e15f42e4209343ee9234bdab866a32918c260fe29fd6b0cf7d0c",
+    "coordinates": "triangular unit-Jacobian centeredness map, a in {0.75, 1}"
+  },
+  "fixtures": {
+    "sspd-11": {"file": "sspd-11-n1000-mixed-regular-moderate-h1-none-none-cold.json", "sha256": "2fff97663b6e7946e64e465610ebf9dd4350d6615ecaa5aa513ff070b683baad", "t": 1000, "role": "primary"},
+    "sspd-10": {"file": "sspd-10-n1000-strong-near_funnel_zero-moderate-h1-blocks-contaminated-regular.json", "sha256": "005a5c7d5094e27ecc14a997baec96031de952e0854d6259d616f788cd9687ac", "t": 1000, "role": "secondary-pathological"},
+    "sspd-05": {"file": "sspd-05-n100-mixed-regular-moderate-h0-blocks-contaminated-regular.json", "sha256": "1d10f68eb861cc852493ccfad2bf5f93b2f79c77294a68c7da3da73b9a88091d", "t": 100, "role": "sanity"}
+  },
+  "fixture_order": ["sspd-11", "sspd-10", "sspd-05"],
+  "seeds": {"sspd-11": 86001, "sspd-10": 86002, "sspd-05": 86003},
+  "starts": {
+    "rule": "initial_innovations plus mu offsets, zero sigma offsets; cold-initialization factor of sspd-11 deliberately not applied",
+    "mu_offsets": [-0.03, -0.01, 0.01, 0.03],
+    "sigma_offsets": [0.0, 0.0, 0.0, 0.0]
+  },
+  "functionals": ["mu", "sigma_x", "alpha", "beta", "gamma", "nu", "x_terminal", "x_path_mean"],
+  "arms": {
+    "N": {"backend": "numpyro-0.21 NUTS", "centeredness": [1.0, 0.75], "chains": 4, "warmup": 1000, "draws": 2000, "target_accept": 0.9, "max_tree_depth": 12, "metric": "diagonal_adapted", "chain_method": "sequential", "wall_cap_seconds": 1800},
+    "I": {"facade": "sample_chains", "centeredness": 1.0, "initial_mass": "identity", "mass_adaptation": true},
+    "P": {"facade": "sample_chains_structured", "centeredness": 1.0, "mass_adaptation": false, "globals_block": "BidiagonalCholesky diag sqrt(geomean over chains of arm I adapted momentum covariance for globals), zero subdiagonal", "path_block": "BidiagonalCholesky = Cholesky of H = [1/tau^2 at x_1] + Q_rw(sigma_x) + diag((nu+1)/(nu*(alpha^2+beta^2 s_t^2+gamma^2/(v_t+1)))) at initial_params globals (nu=3, beta=e^-2)"},
+    "B": {"facade": "sample_chains", "centeredness": 0.75, "initial_mass": "identity", "mass_adaptation": true, "note": "production baseline coordinates"}
+  },
+  "owalnuts_common": {"chains": 4, "threads": 4, "discarded": 500, "retained": 2000, "initial_step": 0.1, "initial_step_search": true, "max_depth": 8, "min_micro_steps": 1, "max_refinement_levels": 3, "max_error": 1.0, "target_acceptance": 0.8, "wall_cap_seconds": 900, "arm_order": ["I", "P", "B"]},
+  "gates": {"max_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "retained_divergences": 0, "retained_invalid_evaluations": 0, "retained_refinement_exhaustions": 0, "max_depth_rate": 0.01, "agreement_P_vs_N_combined_mcse_multiple": 3.0},
+  "predictions": [
+    "sspd-11: P passes all gates with median depth <= 5",
+    "sspd-11: I passes or fails only ESS narrowly; max-depth rate <= 1%",
+    "sspd-11: B caps (max-depth rate > 1%, expected >> 10%) and fails R-hat/ESS",
+    "sspd-10: no pass/fail prediction; report N versus I/P/B",
+    "sspd-05: all arms pass"
+  ]
+}
