@@ -1,0 +1,43 @@
+{
+  "schema": "owalnuts-canonical-v3-scale-noncentered/v1",
+  "program": "wiki/research-program-2026-08-31.md",
+  "preregistration": "PREREGISTRATION.md",
+  "targets": {
+    "v2": {"model_revision": "polyscope-canonical-v2", "coordinates": "a=1 centered latent states [globals; x_1..x_T]"},
+    "v3": {"model_revision": "polyscope-canonical-v3-scale-noncentered", "coordinates": "[globals; x_1; eps_2..eps_T] with d_t = mu + sigma_x * eps_t; log-Jacobian (T-1) log sigma_x"},
+    "oracle": "fixtures/polyscope_parity.json",
+    "oracle_sha256": "4c91f5fddda2e15f42e4209343ee9234bdab866a32918c260fe29fd6b0cf7d0c"
+  },
+  "fixtures": {
+    "sspd-10": {"file": "sspd-10-n1000-strong-near_funnel_zero-moderate-h1-blocks-contaminated-regular.json", "sha256": "005a5c7d5094e27ecc14a997baec96031de952e0854d6259d616f788cd9687ac", "t": 1000, "role": "primary (sigma_x -> 0 funnel cell; truth sigma_x = 1e-4)"},
+    "sspd-11": {"file": "sspd-11-n1000-mixed-regular-moderate-h1-none-none-cold.json", "sha256": "2fff97663b6e7946e64e465610ebf9dd4350d6615ecaa5aa513ff070b683baad", "t": 1000, "role": "non-regression (truth sigma_x = 0.18)"},
+    "sspd-05": {"file": "sspd-05-n100-mixed-regular-moderate-h0-blocks-contaminated-regular.json", "sha256": "1d10f68eb861cc852493ccfad2bf5f93b2f79c77294a68c7da3da73b9a88091d", "t": 100, "role": "non-regression and v2/v3 same-posterior check (truth sigma_x = 0.18)"}
+  },
+  "fixture_order": ["sspd-10", "sspd-11", "sspd-05"],
+  "seeds": {"sspd-10": 95001, "sspd-11": 95002, "sspd-05": 95003},
+  "starts": {
+    "rule": "initial_innovations plus mu offsets, zero sigma offsets (WP4b rule); sspd-11 cold factor deliberately not applied; the same innovation-coordinate starts are mapped into v2 (a=1) and v3 coordinates",
+    "mu_offsets": [-0.03, -0.01, 0.01, 0.03],
+    "sigma_offsets": [0.0, 0.0, 0.0, 0.0]
+  },
+  "functionals": ["mu", "sigma_x", "alpha", "beta", "gamma", "nu", "x_terminal", "x_path_mean"],
+  "arms": {
+    "V2-I": {"target": "v2", "adaptation": "standard", "role": "control (WP4b/WP12 arm I)"},
+    "V3-D": {"target": "v3", "adaptation": "standard", "role": "primary diagonal arm"},
+    "V3-A": {"target": "v3", "adaptation": "paper", "role": "primary refinement arm"},
+    "V2-A": {"target": "v2", "adaptation": "paper", "role": "secondary: refinement on the centered funnel"},
+    "N3": {"backend": "numpyro-0.21 NUTS", "target": "v3", "chains": 4, "warmup": 1000, "draws": 2000, "target_accept": 0.9, "max_tree_depth": 12, "metric": "diagonal_adapted", "chain_method": "sequential", "wall_cap_seconds": 1800, "role": "external reference on the v3 density"}
+  },
+  "owalnuts_common": {"chains": 4, "threads": 4, "discarded": 500, "retained": 2000, "max_depth": 8, "wall_cap_seconds": 900, "initial_mass": "identity", "mass_adaptation": true},
+  "standard_adaptation": {"initial_step": 0.1, "initial_step_search": true, "max_refinement_levels": 3, "max_error": 1.0, "target_acceptance": 0.8, "min_micro_steps": 1},
+  "paper_adaptation": {"initial_step": 0.1, "initial_step_search": false, "max_refinement_levels": 8, "initial_max_error": 1.0, "min_micro_steps": 1, "global_energy_bound": 2.0, "quantile_probability": 0.95, "unrefined_fraction_target": 0.8, "step_statistic": "per_transition (default)", "restart_policy": "continue (v3 default)", "runtime_callback_cap": 200000000},
+  "gates": {"max_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "retained_divergences": 0, "retained_invalid_evaluations": 0, "retained_refinement_exhaustions": 0, "max_depth_rate": 0.01, "agreement_combined_mcse_multiple": 3.0},
+  "predictions": [
+    "P1 sspd-10: V3-D has max-depth rate <= 1% (v3 removes the sigma_x -> 0 neck from the path coordinates) and passes R-hat/ESS on the six globals; V2-I caps (>10%) as in WP4b",
+    "P2 sspd-10: V3-A >= V3-D on min bulk ESS per retained target call (refinement earns its keep in the residual mouth stiffness)",
+    "P3 sspd-10: N3 has fewer than 10% of the divergences NumPyro produced on the v2 density in WP4b (1,510 at a=1); whether it passes all gates is not predicted",
+    "P4 sspd-11 (informative data, sigma_x = 0.18): V3-D passes health (zero div/invalid/exhaustion, caps <= 1%) but has lower min bulk ESS per call than V2-I (non-centering is the wrong choice when the data are informative); V3 arms may fail the ESS gate",
+    "P5 sspd-05: V2-I and V3-D both pass all gates and agree on every functional within 3 combined MCSE (same posterior, exact Jacobian)",
+    "P6 all fixtures: V2-A retains V2-I's health status; on sspd-10 it does not remove the caps (refinement cannot fix a sigma_x -> 0 funnel without reparameterization)"
+  ]
+}
