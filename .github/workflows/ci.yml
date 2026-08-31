@@ -7,27 +7,53 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
   bounded-checks:
+    name: ${{ matrix.name }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - name: Linux GNU 1.88 (MSRV)
+            os: ubuntu-latest
             toolchain: 1.88.0-x86_64-unknown-linux-gnu
-          - os: windows-latest
+          - name: Windows GNU 1.88 (reference toolchain)
+            os: windows-latest
             toolchain: 1.88.0-x86_64-pc-windows-gnu
+          - name: Linux stable
+            os: ubuntu-latest
+            toolchain: stable
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.toolchain }}
           components: rustfmt, clippy
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all-targets
-      - run: cargo doc --no-deps
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy (all targets, all features, deny warnings)
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Tests (library, oracle parity, public facade, examples)
+        run: cargo test --locked --all-targets
+      - name: Rustdoc (deny warnings)
+        run: cargo doc --locked --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
-      - run: cargo package
+      - name: Build examples
+        run: cargo build --locked --release --examples
+      - name: Run bounded examples
+        run: |
+          cargo run --locked --release --example gaussian
+          cargo run --locked --release --example state_space_path_metric
+      - name: Package contents
+        run: cargo package --locked --no-verify

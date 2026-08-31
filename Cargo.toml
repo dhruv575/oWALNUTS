@@ -1,12 +1,13 @@
 [package]
 name = "owalnuts"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2024"
 rust-version = "1.88"
-description = "Internal-beta fixed-diagonal oWALNUTS sampling kernel"
+description = "Within-orbit adaptive leapfrog NUTS (WALNUTS) sampling kernel with oracle parity to the reference implementation"
 license = "MIT"
 readme = "README.md"
 documentation = "https://docs.rs/owalnuts"
+repository = "https://github.com/dhruv575/oWALNUTS"
 authors = ["oWALNUTS contributors"]
 keywords = ["mcmc", "monte-carlo", "statistics", "sampling"]
 categories = ["algorithms", "mathematics", "science"]
@@ -37,6 +38,18 @@ rayon = "1.10"
 [[example]]
 name = "gaussian"
 path = "examples/gaussian.rs"
+
+[[example]]
+name = "funnel_paper_adaptation"
+path = "examples/funnel_paper_adaptation.rs"
+
+[[example]]
+name = "state_space_path_metric"
+path = "examples/state_space_path_metric.rs"
+
+[[example]]
+name = "structured_metric_benchmark"
+path = "examples/structured_metric_benchmark.rs"
 
 [dev-dependencies]
 serde_json = "1"
