@@ -1,11 +1,16 @@
-//! Internal limited-beta, fixed-tuning, diagonal-mass WALNUTS facade.
+//! The public WALNUTS sampling facade.
 //!
-//! This is an internal beta, not a generally supported or statistically validated
-//! production sampler. It is limited to deterministic, smooth densities in
-//! unconstrained `f64` coordinates. Adaptation is opt-in. Student-t and
-//! other heavy-tailed targets, constrained transforms, hierarchical targets,
-//! and real models have not been validated. Only this facade is public; the
-//! numerical implementation remains private.
+//! The kernel behind this module is derived from the Flatiron `walnutpie`
+//! reference and is tested leaf-for-leaf against it (Gaussian, Neal's-funnel,
+//! and recoverable-failure oracles). It samples deterministic, smooth
+//! densities in unconstrained `f64` coordinates. Adaptation is opt-in:
+//! acceptance-driven dual averaging with a Welford diagonal mass, or the JMLR
+//! Appendix C rules (see *Paper adaptation* below). Recoverable target
+//! failures are zero-density points that the kernel refines through, as
+//! upstream does (revision `v10`). What has been validated statistically, and
+//! on which targets, is listed in the crate README; constrained transforms
+//! and heavy-tailed targets are the caller's responsibility. Only this facade
+//! is public; the numerical implementation remains private.
 //!
 //! # Frozen kernel
 //!
