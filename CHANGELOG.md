@@ -136,14 +136,19 @@ below is a checksummed study under `STUDIES/` with an entry in
   Monte-Carlo accuracy (ESS/call 4.8× identity, ~1,000× a prior-based metric,
   which caps at depth 8 in 92% of transitions at T = 1000). [WP4-ESSGT-V1]
 - Real Polyscope state-space target at T = 1000 (non-pathological fixture):
-  oWALNUTS passes every gate NumPyro NUTS passes; the posterior-precision path
-  block gives 2.8× ESS per call over an adapted diagonal. On the σ_x → 0
+  oWALNUTS with an adapted diagonal in centered coordinates passes every gate
+  NumPyro NUTS passes, confirmed on three fresh seeds; the posterior-precision
+  path block agrees on every seed and gives 2.7× ESS per call but passed the
+  strict conjunctive gate on 2/3 seeds (not yet confirmed)
+  [WP12-SSPD11-CONFIRMATION-V1]. On the σ_x → 0
   funnel fixture no tested Euclidean sampler passes, NumPyro included (1,510
   divergences). [WP4B-REAL-TARGET-PATH-METRIC-V1]
-- Stock–Watson stochastic volatility (simulated series, one seed per arm): the
-  paper's fixed tuning does not reproduce the paper's energy-error contrast on
-  this series; the Appendix C adaptation arm passes every gate and is 2.0× more
-  efficient per call than the fixed tuning. [WP2b-SW-REPRO-V1]
+- Stock–Watson stochastic volatility (simulated series): the paper's fixed
+  tuning does not reproduce the paper's energy-error contrast on this series;
+  the Appendix C adaptation arm passes every gate on 2/3 fresh seeds at
+  4×2,000 draws (miss: R-hat 1.0101, clean health) and is 2.0× more efficient
+  per call than the fixed tuning. [WP2b-SW-REPRO-V1,
+  WP12-SSPD11-CONFIRMATION-V1]
 
 ### Errata
 

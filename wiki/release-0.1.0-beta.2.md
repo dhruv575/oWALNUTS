@@ -26,9 +26,9 @@ Every number is traceable to a preregistered, checksummed study under
 | Eight Schools (v38 strict track), kernel v9 | 12,830 bulk / 10,346 tail ESS/s conservative minimum, 7 seeds; ≥2× every strict competitor; ESS/call unchanged vs v7 | WP8-EIGHT-SCHOOLS-V9-REBENCH-V1 |
 | Eight Schools outer-selection ablation | biased progressive (default) 1.75× ESS/call over exact multinomial | WP3-1 |
 | Exact Gaussian state space, T=100/1000 | posterior-precision path metric: depth 3–4, MC-accurate; prior-based metric caps 92% | WP4-ESSGT-V1 |
-| Polyscope canonical-v2, T=1000 (sspd-11) | passes where NumPyro passes; path block 2.8× ESS/call | WP4B-REAL-TARGET-PATH-METRIC-V1 |
+| Polyscope canonical-v2, T=1000 (sspd-11) | adapted diagonal passes where NumPyro passes, confirmed 3/3 fresh seeds; path block 2.7× ESS/call, 2/3 under the strict gate (not confirmed) | WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1 |
 | Polyscope canonical-v2, T=1000 (sspd-10, σ_x→0 funnel) | no tested Euclidean sampler passes, NumPyro included | WP4B-REAL-TARGET-PATH-METRIC-V1 |
-| Stock–Watson SV (simulated, one seed/arm) | adaptation arm passes all gates, 2.0× ESS/call vs fixed paper tuning; paper's energy-error contrast is data-specific | WP2b-SW-REPRO-V1 |
+| Stock–Watson SV (simulated) | adaptation arm passes all gates on 2/3 fresh seeds at 4×2,000, 2.0× ESS/call vs fixed paper tuning; paper's energy-error contrast is data-specific | WP2b-SW-REPRO-V1, WP12-SSPD11-CONFIRMATION-V1 |
 | Recoverable-failure semantics | 4,000/4,000 oracle leaves; 0 invalid stops across 216k transitions; truncated Gaussian stationary | WP10-INVALID-EVALUATION-PARITY-V10 |
 
 ## Erratum
@@ -47,7 +47,8 @@ both the corrected v7 minimum and the v9 re-measurement. See
 - The σ_x → 0 funnel cell of the state-space family (`sspd-10`) is not
   sampled by any Euclidean sampler tested; it needs a reparameterisation, not
   a metric.
-- Stock–Watson evidence is one seed per arm.
+- Stock–Watson evidence is simulated data; 2/3 fresh seeds pass the strict
+  R-hat gate at 4×2,000 draws.
 - On an exactly whitened Gaussian a fixed macro step can alias the
   tree-doubling schedule (see `examples/state_space_path_metric.rs`); there is
   no step jitter option yet.

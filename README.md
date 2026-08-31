@@ -106,8 +106,8 @@ coordinates (`DIRECT_ORIGINAL_Q_REVISION`).
 | Noncentered Eight Schools, strict matched track (4 chains, 1,000/1,000, target .95, depth 8, adapted diagonal, one thread) | conservative minimum over 7 seeds × 6 functionals **12,830 bulk / 10,346 tail ESS/s**; CmdStan 6,290/3,951, BlackJAX 5,645/4,195, NumPyro 5,241/4,050 on the same track. ESS per target call unchanged by the `v9` fix (0.96/0.99). Walls measured on a loaded machine; NextStat is faster on a non-strict public-API track. | WP8-EIGHT-SCHOOLS-V9-REBENCH-V1 |
 | Eight Schools, outer-selection ablation | biased progressive selection (default) 1.75× ESS/call over exact multinomial, no tail penalty | WP3-1 |
 | Exact Gaussian state space, T=100/1000 | posterior-precision path metric mixes at depth 3–4 at Monte-Carlo accuracy; ESS/call 4.8× identity, ~1,000× prior-based | WP4-ESSGT-V1 |
-| Polyscope canonical-v2 state-space posterior, T=1000, regular fixture | passes every gate NumPyro NUTS passes; posterior-precision path block 2.8× ESS/call over adapted diagonal (12 s vs NumPyro 47 s, different work units) | WP4B-REAL-TARGET-PATH-METRIC-V1 |
-| Stock–Watson SV (simulated, one seed per arm) | Appendix C arm passes all gates, 2.0× ESS/call vs fixed paper tuning; the paper's energy-error contrast did not reproduce on this series | WP2b-SW-REPRO-V1 |
+| Polyscope canonical-v2 state-space posterior, T=1000, regular fixture | adapted diagonal in centered coordinates passes every gate NumPyro NUTS passes, **confirmed on 3/3 fresh seeds**; the posterior-precision path block agrees with both on every seed and is 2.7× more efficient per call, but passed the strict conjunctive gate on 2/3 seeds (one R-hat of 1.0102 on `beta`), so it is not yet confirmed | WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1 |
+| Stock–Watson SV (simulated) | Appendix C arm passes all gates on 2/3 fresh seeds at 4×2,000 (the miss is R-hat 1.0101 with clean health) and is 2.0× ESS/call vs fixed paper tuning; the paper's energy-error contrast did not reproduce on this series | WP2b-SW-REPRO-V1, WP12-SSPD11-CONFIRMATION-V1 |
 
 ## Oracle parity
 
@@ -134,8 +134,9 @@ pinned orbit fixtures.
 - The σ_x → 0 funnel cell of the state-space family (`sspd-10`) is not
   sampled by any Euclidean sampler tested, NumPyro NUTS included; it needs a
   reparameterisation, not a metric.
-- Stock–Watson evidence is one seed per arm; the paper's real inflation
-  series was not available.
+- Stock–Watson evidence is simulated data at 4×2,000 draws (2/3 seeds pass
+  the strict R-hat gate); the paper's real inflation series was not
+  available.
 - On an exactly whitened Gaussian a fixed macro step can alias the
   tree-doubling schedule (see `examples/state_space_path_metric.rs`); there is
   no step-jitter option.
