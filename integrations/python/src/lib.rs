@@ -429,6 +429,21 @@ fn parse_run(py: Python<'_>, dimension: usize, cfg: &Bound<'_, PyDict>) -> PyRes
     if let Some(limit) = max_depth_stop_limit {
         config = config.with_maximum_depth_stop_limit(limit);
     }
+    if let Some(budget) = budget {
+        // A caller-supplied budget is authoritative for the runtime cap; also
+        // raise the conservative constructor admission ceiling accordingly so
+        // structured-mass runs (which have no budgeted entry point) admit the
+        // same configurations the budgeted diagonal path does. Bounded by the
+        // facade's hard research maximum.
+        let ceiling = budget
+            .get()
+            .min(owalnuts::walnutpie::RESEARCH_MAX_TARGET_EVALUATIONS);
+        let limit = owalnuts::walnutpie::ResearchTargetEvaluationLimit::new(
+            NonZeroUsize::new(ceiling).expect("nonzero ceiling"),
+        )
+        .map_err(facade_error)?;
+        config = config.with_research_target_evaluation_limit(limit);
+    }
 
     let mass = parse_mass(py, dimension, cfg.get_item("mass")?)?;
 

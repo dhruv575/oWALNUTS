@@ -391,3 +391,53 @@ Entries follow the Polyscope ledger template. Newest last.
 - Artifacts: `integrations/python/bench/artifacts/gil-free-compare.json`; `integrations/python/{src/lib.rs, python/owalnuts/__init__.py, tests/test_adapters.py, bench/gil_free_compare.py, BENCH.md, README.md}`; `integrations/AUTODIFF-RESEARCH.md` §"GIL-free transport (WP18)"; facade `src/walnutpie.rs`, `tests/public_facade.rs`, `CHANGELOG.md`.
 - Conclusion: supported — the nutpie gap on PyMC models was callback transport and is closed at equal per-gradient efficiency (parity at 4 cores, exact-vs-proxy work caveat noted); the structured-metric advantage compounds through the cfunc path (≈29× NumPyro's identity-metric ESS/s at T=1000, t4). Not supported — any strict claim against nutpie until a same-model exact-work three-way is run; any claim for non-numba-capable models.
 - Next decision: preregister the same-`.stan`-file strict three-way (oWALNUTS-BridgeStan vs CmdStan vs nutpie); document `from_cfunc` in the release notes at the next version bump.
+
+### WP19-FLAGSHIP-CRYPTO-SV-V1 — five-asset stochastic-volatility demo study
+- Ordered time: 2026-08-31 (after WP18); sequence basis: git history.
+- Protocol/config: `STUDIES/flagship_crypto_sv_v1/{PREREGISTRATION.md,protocol.json}`
+  (SHA-256 in the study `CHECKSUMS.sha256`); kernel v10; owalnuts 0.1.0b2 with the
+  budget/admission patch in `integrations/python/src/lib.rs`; standard SV model,
+  unconstrained `[mu, a, s, h_1..h_T]`; OKX daily closes for BTC/ETH/XRP/BNB/SOL
+  (T = 3153/3153/2433/1348/2159); cells native (Rust, paper adaptation v3,
+  one-shot tridiagonalized-global + AR(1)+curvature path precision metric from a
+  stage-A adapted-diagonal calibration), pymc (`from_pymc(gil_free=True)`, same
+  metric), nutpie 0.16.8, NumPyro 0.21.0 (depth 12, 0.9); 4 chains, 1,000/3,000
+  (owalnuts native+pymc 3 seeds; external references 1 seed).
+- Seeds: pilot 97000 (BTC, non-evidence); evidence 97001–97003 consumed; no
+  other namespace touched.
+- Status: exploratory sampling evidence (demo study; preregistered with one
+  pre-evidence amendment A1: depth 10→9 after a zero-callback admission
+  failure at 1.54e9 worst-case vs the 1e9 research ceiling).
+- Outcome: mixed, reported in full in the study README/RESULTS.md. Zero
+  divergences in all 40 cells; cross-backend agreement for every healthy pair
+  (worst z 2.29); oWALNUTS native fastest wall on 5/5 assets (e.g. XRP
+  13.2–15.0 s vs nutpie 15.8 s / NumPyro 29.5 s; SOL 12.8–14.6 s vs 33.4/54.2 s).
+  Primary health: owalnuts 3/3 on XRP (native+pymc) and SOL (native), 2/3 BNB;
+  fails BTC/ETH at this budget (min primary ESS 99–398) where NumPyro passes
+  (420–544). Global (a,s) ridge (corr ≈ −0.9) bottlenecks every backend;
+  nutpie/NumPyro windowed adaptation extracts ~1.5–2× more global ESS at
+  T≈3,150 than the one-shot metric. pymc arm stuck seeds ETH-97003,
+  SOL-97001/97003 (R-hat 1.44–1.65, zero divergences) — start sensitivity of
+  the frozen metric. Predictions: P1 falsified; P2, P4, P6 held; P3 held
+  except stuck seeds; P5 half-held.
+- Diagnostics: per-cell tables in `artifacts/RESULTS.md`; full numbers in
+  `artifacts/summary.json`; raw draws hashed in `CHECKSUMS.sha256` (python
+  .npz functionals committed; native .f64 draws are ~300 MB each and stay
+  untracked, reproducible from the committed seeds).
+- Artifacts: `STUDIES/flagship_crypto_sv_v1/**` (data, calibrations, runs,
+  draws, figures, notebook builder); public notebook
+  `integrations/python/examples/crypto_sv.ipynb` (executed) and
+  `examples/crypto_sv.py`; funnel figure derives from the frozen WP14
+  artifacts.
+- Conclusion: supported claims — funnel correctness differentiator (from
+  WP14), five-asset full-posterior sampling with universal agreement and zero
+  divergences, fastest wall on all assets, one-line PyMC entry with GIL-free
+  transport at native speed. Not supported — "passes all gates everywhere"
+  (BTC/ETH global ESS at this budget) and any claim of global-ESS superiority
+  over mature windowed adapters at T≈3,000+.
+- Next decision: the global–path coupling (arrowhead line) is the mechanism to
+  beat nutpie/NumPyro on the (a,s) ridge; a windowed/iterated calibration for
+  the one-shot metric and start-robustness for the pymc arm are the cheap
+  follow-ups. During piloting the study also exposed and fixed a Python
+  package defect (structured-mass runs ignored the caller budget at
+  admission); package tests 13/13.

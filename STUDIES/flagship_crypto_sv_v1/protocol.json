@@ -1,0 +1,29 @@
+{
+  "schema": "flagship-crypto-sv-v1/protocol",
+  "frozen_utc": "2026-08-31",
+  "kernel_algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "backends": {"owalnuts_python": "0.1.0b2 (patched lib.rs budget/admission)", "nutpie": "0.16.8", "numpyro": "0.21.0", "pymc": "5.28.5"},
+  "symbols": ["BTC", "ETH", "XRP", "BNB", "SOL"],
+  "data_source": "OKX /api/v5/market/history-candles bar=1Dutc confirmed bars, closes only",
+  "model": {
+    "returns": "r_t = ln(c_t/c_{t-1})",
+    "observation": "r_t ~ N(0, exp(h_t))",
+    "latent": "h_t = mu + phi (h_{t-1}-mu) + sigma eta_t, stationary init",
+    "priors": {"mu": "N(-10, 25)", "(phi+1)/2": "Beta(20, 1.5)", "sigma": "HalfNormal(0.5)"},
+    "unconstrained": "[mu, a = logit((phi+1)/2), s = ln sigma, h_1..h_T]"
+  },
+  "cells": {
+    "native": {"sampler": "oWALNUTS Rust", "warmup": 1000, "draws": 3000, "chains": 4, "threads": 4, "seeds": [97001, 97002, 97003], "tuning": {"step_size": 0.1, "max_depth": 9, "min_micro_steps": 1, "max_refinement_levels": 6, "max_error": 1.0}, "adaptation": "paper Appendix C defaults, target_accept 0.8, mass adaptation off", "metric": "one-shot: tridiagonalized 3x3 global precision (2x-inflated stage-A covariance) + AR(1)+curvature path precision at stage-A estimates", "research_evaluation_ceiling": 1000000000},
+    "pymc": {"sampler": "oWALNUTS from_pymc gil_free", "same_as": "native"},
+    "nutpie": {"warmup": 1000, "draws": 3000, "chains": 4, "cores": 4, "seeds": [97001], "settings": "library defaults"},
+    "numpyro": {"warmup": 1000, "draws": 3000, "chains": 4, "seeds": [97001], "settings": {"target_accept": 0.9, "max_tree_depth": 12, "dense_mass": false, "chain_method": "sequential"}}
+  },
+  "stage_a_calibration": {"warmup": 800, "draws": 400, "seed": "evidence seed XOR 0xC0FFEE", "mass": "identity diagonal, adapted", "outputs": ["global means", "3x3 global covariance", "posterior-mean h path", "phi_hat", "sigma_hat"]},
+  "gates": {
+    "primary": {"functionals": ["mu", "h_T", "mean_h"], "rhat_max": 1.01, "bulk_ess_min": 400, "tail_ess_min": 400, "max_depth_rate_max": 0.01, "owalnuts_divergences": 0, "owalnuts_invalid": 0, "owalnuts_exhaustions": 0},
+    "globals": {"functionals": ["a", "s"], "rhat_max": 1.05, "bulk_ess_min": 100, "note": "weakened from the program default 400 before evidence; pilots showed a shared (a,s) ridge bottleneck in every backend"},
+    "agreement": {"rule": "healthy-pair posterior means within 3 combined MCSE on all five functionals"}
+  },
+  "pilot": {"seed": 97000, "symbol": "BTC", "status": "non-evidence"},
+  "work_units": {"owalnuts": "fused target calls (exact)", "nutpie": "retained leapfrog steps (proxy)", "numpyro": "retained leapfrog steps (proxy)"}
+}

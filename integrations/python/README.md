@@ -97,3 +97,13 @@ snapshotted at compile time). Measured on Eight Schools: ~31,000 min-bulk
 ESS/s at 4 threads — parity with nutpie — vs ~2,300 through the GIL path.
 The callback must be thread-safe, deterministic, write every gradient
 element on finite returns, and never raise across the ABI.
+
+## Example: stochastic volatility on the top-5 cryptocurrencies
+
+`examples/crypto_sv.ipynb` (executed notebook) and `examples/crypto_sv.py`
+sample the full posterior of a standard SV model over up to 3,153 daily
+returns of BTC/ETH/XRP/BNB/SOL through `from_pymc(model, gil_free=True)` with
+a tridiagonal-precision path metric — seconds of wall time, zero divergences,
+cross-checked against nutpie and NumPyro in the preregistered study
+`STUDIES/flagship_crypto_sv_v1` (which also carries the honest limitations:
+the shared global-ridge bottleneck and two backends' stuck seeds).
