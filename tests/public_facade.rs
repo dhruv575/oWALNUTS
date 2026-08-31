@@ -1701,3 +1701,256 @@ fn conservative_bound_overflow_fails_before_target_callbacks() {
             .is_err()
     );
 }
+
+// ── JMLR Appendix C paper adaptation ─────────────────────────────────────────
+
+use owalnuts::walnutpie::{
+    PAPER_ADAPTATION_REVISION, PaperAdaptationConfig, PaperAdaptationOutcome,
+};
+
+/// Ten-dimensional Neal funnel: `omega ~ N(0, 3^2)`, `x_i | omega ~ N(0, e^omega)`.
+struct NealFunnel;
+
+impl Target for NealFunnel {
+    fn dimension(&self) -> usize {
+        10
+    }
+
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        let omega = position[0];
+        let precision = (-omega).exp();
+        let mut log_density = -omega * omega / 18.0;
+        let mut omega_gradient = -omega / 9.0;
+        for (x, slot) in position[1..].iter().zip(&mut gradient[1..]) {
+            log_density -= 0.5 * x * x * precision + 0.5 * omega;
+            omega_gradient += 0.5 * x * x * precision - 0.5;
+            *slot = -x * precision;
+        }
+        gradient[0] = omega_gradient;
+        Ok(log_density)
+    }
+}
+
+fn paper_tuning(step: f64, max_error: f64, depth: usize, levels: usize) -> KernelTuning {
+    KernelTuning::new(
+        step,
+        NonZeroUsize::new(depth).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(levels).unwrap(),
+        max_error,
+    )
+    .unwrap()
+}
+
+#[test]
+fn paper_adaptation_is_opt_in_frozen_before_retention_and_reported() {
+    assert!(!PAPER_ADAPTATION_REVISION.is_empty());
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let discarded = 160;
+    let warmup = WarmupConfig::default()
+        .with_mass_adaptation(false)
+        .with_telemetry_checkpoints((0..discarded).collect())
+        .unwrap();
+    let default_run = sample(
+        &Gaussian,
+        &[0.3, -0.2],
+        &mass,
+        &RunConfig::new(discarded, NonZeroUsize::new(30).unwrap(), 0x9a9e)
+            .with_tuning(paper_tuning(0.1, 1.0, 4, 4))
+            .with_warmup(warmup.clone()),
+    )
+    .unwrap();
+    assert!(
+        default_run
+            .telemetry()
+            .paper_adaptation_updates()
+            .is_empty()
+    );
+    assert_eq!(default_run.metadata().tuning().max_error(), 1.0);
+
+    let paper_run = sample(
+        &Gaussian,
+        &[0.3, -0.2],
+        &mass,
+        &RunConfig::new(discarded, NonZeroUsize::new(30).unwrap(), 0x9a9e)
+            .with_tuning(paper_tuning(0.1, 1.0, 4, 4))
+            .with_warmup(warmup.with_paper_adaptation(PaperAdaptationConfig::default())),
+    )
+    .unwrap();
+    let updates = paper_run.telemetry().paper_adaptation_updates();
+    assert!(!updates.is_empty());
+    assert_eq!(
+        updates
+            .iter()
+            .filter(|update| update.window_index().is_none())
+            .count(),
+        1,
+        "exactly one initial-fast boundary update"
+    );
+    assert!(
+        updates
+            .windows(2)
+            .all(|pair| pair[0].transition() < pair[1].transition())
+    );
+    assert!(
+        updates
+            .iter()
+            .all(|update| update.transition() + 1 < discarded)
+    );
+    let installed: Vec<_> = updates
+        .iter()
+        .filter(|update| update.outcome() == PaperAdaptationOutcome::Installed)
+        .collect();
+    assert!(!installed.is_empty());
+    for update in installed {
+        assert!(update.max_error_after() <= 2.0);
+        assert!(update.max_error_after() > 0.0);
+        assert!(update.inflation_quantile().unwrap() >= 0.0);
+        assert!(update.orbits() >= PaperAdaptationConfig::default().minimum_orbits());
+        assert!(update.step_after().is_finite() && update.step_after() > 0.0);
+    }
+    for pair in updates.windows(2) {
+        assert_eq!(pair[1].max_error_before(), pair[0].max_error_after());
+    }
+    let final_max_error = paper_run.metadata().tuning().max_error();
+    assert_eq!(updates.last().unwrap().max_error_after(), final_max_error);
+    let checkpoints = paper_run.telemetry().warmup_checkpoints();
+    assert_eq!(checkpoints.len(), discarded);
+    assert_eq!(
+        checkpoints.last().unwrap().max_error_after(),
+        final_max_error
+    );
+    assert!(
+        checkpoints
+            .iter()
+            .filter_map(|checkpoint| checkpoint.unrefined_fraction())
+            .all(|fraction| (0.0..=1.0).contains(&fraction))
+    );
+    assert_eq!(paper_run.metadata().initial_tuning().max_error(), 1.0);
+    assert_eq!(
+        paper_run.metadata().warmup().unwrap().paper_adaptation(),
+        Some(&PaperAdaptationConfig::default())
+    );
+    assert_eq!(
+        paper_run.telemetry().total().target_calls_total(),
+        paper_run
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| diagnostic.target_evaluations())
+            .sum::<usize>()
+    );
+}
+
+#[test]
+fn paper_adaptation_is_parallel_sequential_identical_and_preflights_without_callbacks() {
+    struct Counted(AtomicUsize);
+    impl Target for Counted {
+        fn dimension(&self) -> usize {
+            2
+        }
+        fn log_density_gradient(
+            &self,
+            position: &[f64],
+            gradient: &mut [f64],
+        ) -> Result<f64, TargetError> {
+            self.0.fetch_add(1, Ordering::AcqRel);
+            Gaussian.log_density_gradient(position, gradient)
+        }
+    }
+    let target = Counted(AtomicUsize::new(0));
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let config = RunConfig::new(120, NonZeroUsize::new(10).unwrap(), 0xbeef)
+        .with_tuning(paper_tuning(0.2, 1.0, 4, 4))
+        .with_warmup(
+            WarmupConfig::default().with_paper_adaptation(PaperAdaptationConfig::default()),
+        );
+    let positions = vec![vec![0.5, -0.5], vec![-0.25, 0.75], vec![0.0, 0.0]];
+    let report = preflight_chains(&target, &positions, &mass, &config).unwrap();
+    assert_eq!(target.0.load(Ordering::Acquire), 0);
+    assert_eq!(report.chains(), 3);
+    let sequential = sample_chains(
+        &target,
+        &positions,
+        &mass,
+        &config,
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .unwrap();
+    let parallel = sample_chains(
+        &target,
+        &positions,
+        &mass,
+        &config,
+        NonZeroUsize::new(3).unwrap(),
+    )
+    .unwrap();
+    for (a, b) in sequential.chains().iter().zip(parallel.chains()) {
+        assert_eq!(a.samples(), b.samples());
+        assert_eq!(a.diagnostics(), b.diagnostics());
+        assert_eq!(a.telemetry(), b.telemetry());
+        assert_eq!(a.metadata().tuning(), b.metadata().tuning());
+        assert!(!a.telemetry().paper_adaptation_updates().is_empty());
+    }
+}
+
+#[test]
+fn paper_adaptation_rules_hold_on_the_funnel() {
+    // Conservative start: coarse local threshold and a small macro step.
+    // Depth 10 with eight refinement levels exceeds the conservative
+    // constructor bound; the research ceiling admits it without callbacks.
+    let mass = DiagonalMass::identity(NonZeroUsize::new(10).unwrap());
+    let paper = PaperAdaptationConfig::default();
+    let config = RunConfig::new(600, NonZeroUsize::new(20).unwrap(), 0xf0_11e1)
+        .with_tuning(paper_tuning(0.1, 1.0, 10, 8))
+        .with_research_target_evaluation_limit(
+            ResearchTargetEvaluationLimit::new(
+                NonZeroUsize::new(RESEARCH_MAX_TARGET_EVALUATIONS).unwrap(),
+            )
+            .unwrap(),
+        )
+        .with_warmup(
+            WarmupConfig::default()
+                .with_mass_adaptation(false)
+                .with_paper_adaptation(paper),
+        );
+    let initial = vec![0.0; 10];
+    let output = sample(&NealFunnel, &initial, &mass, &config).unwrap();
+    let tuning = output.metadata().tuning();
+    let updates = output.telemetry().paper_adaptation_updates();
+    assert!(updates.len() >= 3);
+    for update in updates {
+        assert_eq!(update.outcome(), PaperAdaptationOutcome::Installed);
+        // Closed-form K-quantile rule at every installation.
+        let inflation = update.energy_range_quantile().unwrap() / update.max_error_before();
+        assert!((update.inflation_quantile().unwrap() - inflation).abs() < 1e-12);
+        let expected = paper.global_energy_bound() / inflation.max(1.0);
+        assert!((update.max_error_after() - expected).abs() < 1e-12);
+        assert!(update.max_error_after() <= paper.global_energy_bound());
+    }
+    // The Gamma rule reaches its target once the first slow window completes.
+    for update in updates
+        .iter()
+        .filter(|update| update.window_index().is_some())
+    {
+        let fraction = update.unrefined_fraction_mean().unwrap();
+        assert!(
+            (fraction - paper.unrefined_fraction_target()).abs() < 0.1,
+            "window unrefined fraction {fraction} should track Gamma"
+        );
+    }
+    assert!(tuning.max_error() > 0.0 && tuning.max_error() <= paper.global_energy_bound());
+    assert!(
+        tuning.step_size() > 0.1 && tuning.step_size() < 5.0,
+        "step {} should grow from the conservative start",
+        tuning.step_size()
+    );
+    assert_eq!(output.telemetry().retained().divergences(), 0);
+    assert_eq!(
+        output.telemetry().retained().refinement_exhaustion_stops(),
+        0
+    );
+}

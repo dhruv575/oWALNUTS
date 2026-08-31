@@ -319,6 +319,36 @@ On 2026-08-30, before redesign edits:
   seed (169.5). The diagnostic therefore does not robustly qualify and no
   larger confirmation was frozen or executed.
 
+## 2026-08-31 paper adaptation milestone
+
+* Added the opt-in JMLR Appendix C mode `WarmupConfig::with_paper_adaptation`
+  (`PaperAdaptationConfig`, revision
+  `walnutpie-paper-adaptation-kquantile-gamma-v1`): K-quantile `delta` rule
+  at the initial-fast boundary and nonterminal slow-window ends, and
+  `Gamma`-targeted dual averaging of `h` on the per-transition unrefined
+  macro-leaf fraction (`refinement_level_attempts[0] - [1]`, over `[0]`).
+  Dual averaging restarts after each `delta` or mass installation.
+* Orbit energy range uses the transition's `H_max - H_min` over accepted
+  leaves plus invalid/exhausted attempts; refined-away coarse attempts and
+  valid reverse coarsening replays are not included.
+* Typed `PaperAdaptationUpdate` telemetry, checkpoint `unrefined_fraction`
+  and `max_error_after`, admission accounting for updates and the energy
+  buffer, and fail-closed rejection on the dense adaptive and projected
+  facades. Paper mode requires at least two refinement levels.
+* Default warmup and every fixed-path fingerprint are unchanged.
+* Tests: 100 library + 41 public facade, 0 failed, 1 ignored. Strict
+  all-target/all-feature Clippy, `cargo fmt --check`, and `-D warnings`
+  rustdoc pass.
+* Funnel smoke (10-D, depth 10, eight levels, `Delta = 2`): the `Gamma` rule
+  holds window unrefined fractions at 0.78–0.81 and grows `h` from 0.1 to
+  about 0.46; the K-quantile rule keeps `delta` at about 1.1–1.7 because the
+  observed orbit inflation `K` is only 1.3–2.8. The published funnel
+  `delta = 0.21` therefore corresponds to a smaller `Delta` than the
+  default 2 in this kernel; `Delta` is the knob for the reproduction study.
+* Not done: no evidence run; paper mode is not wired into the dense adaptive,
+  projected or pooled drivers; deep configurations still need budgeted
+  admission because the conservative bound is unchanged.
+
 ## Non-negotiable invariants
 
 * An active metric generation is immutable for an entire transition.

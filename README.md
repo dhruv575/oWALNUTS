@@ -30,6 +30,36 @@ checks. Successful output records both the effective ceiling and
 This mechanism is for controlled research experiments, not a production-default
 change or a guarantee that a target callback can be forcibly interrupted.
 
+## Paper adaptation
+
+`WarmupConfig::with_paper_adaptation(PaperAdaptationConfig::default())` opts
+into the JMLR Appendix C rules (`walnutpie-paper-adaptation-kquantile-gamma-v1`)
+instead of acceptance-driven dual averaging:
+
+* `delta` (`KernelTuning::max_error`) is set at the initial-fast boundary and
+  every nonterminal slow window to `Delta / max(1, q_{p_a}(K))`, where
+  `K = (H_max - H_min) / delta` is the orbit energy-range inflation factor
+  (defaults `Delta = 2`, `p_a = 0.95`);
+* `h` (`KernelTuning::step_size`) is dual averaged so that a fraction
+  `Gamma = 0.8` of macro leaves needs no refinement.
+
+Both rules are frozen before the first retained transition, consume no random
+draws or target callbacks, and report `PaperAdaptationUpdate` telemetry.
+Default warmup is unchanged. Deep refinement with deep trees exceeds the
+conservative constructor bound; admit such runs with
+`sample_chains_with_target_budget` and an explicit
+`TargetEvaluationAdmissionLimit`, or the research ceiling.
+
+```rust,ignore
+let tuning = KernelTuning::new(0.1, depth10, micro1, levels8, 1.0)?;
+let warmup = WarmupConfig::default()
+    .with_mass_adaptation(false)
+    .with_paper_adaptation(PaperAdaptationConfig::new(2.0, 0.95, 0.8)?);
+let config = RunConfig::new(2_000, retained, seed)
+    .with_tuning(tuning)
+    .with_warmup(warmup);
+```
+
 ## Oracle parity
 
 Private test-only modules validate pinned upstream fixtures without exposing prototype APIs:

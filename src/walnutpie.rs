@@ -20,6 +20,24 @@
 //! [`ErrorKind::Unhealthy`]; the run fails when the cumulative count becomes
 //! strictly greater than the configured limit.
 //!
+//! # Paper adaptation
+//!
+//! [`WarmupConfig::with_paper_adaptation`] replaces acceptance-driven dual
+//! averaging by the JMLR Appendix C rules under
+//! [`PAPER_ADAPTATION_REVISION`]: the local error threshold (`max_error`,
+//! the paper's `delta`) follows the K-quantile rule
+//! `delta = Delta / max(1, q_{p_a}(K))` with `K = (H_max - H_min) / delta`
+//! per completed orbit, and the macro step (`step_size`, the paper's `h`)
+//! is dual averaged toward a target fraction `Gamma` of macro leaves that
+//! need no refinement. Updates happen only at the initial-fast boundary and
+//! nonterminal slow-window ends, consume no random draws or callbacks, and
+//! are frozen before retention; see [`PaperAdaptationUpdate`] telemetry.
+//! Deep refinement (`max_refinement_levels >= 8`) with deep trees exceeds
+//! the conservative constructor bound; admit such runs through
+//! [`sample_chains_with_target_budget`] and
+//! [`TargetEvaluationAdmissionLimit`] or the research ceiling. The rules
+//! are supported by the diagonal and fixed-operator facades only.
+//!
 //! [`DiagonalMass`] is the diagonal covariance `M` of refreshed momentum:
 //! `p_i ~ Normal(0, M_i)`. The kinetic energy is
 //! `K(p) = 0.5 * sum_i(p_i^2 / M_i)`, and the kernel receives inverse mass
@@ -9779,5 +9797,150 @@ mod tests {
         assert_eq!(a, b);
         assert!(c.metadata().qualified_step_size().is_finite());
         assert_eq!(c.samples().len(), a.samples().len());
+    }
+
+    #[test]
+    fn paper_quantile_and_delta_rule_are_closed_form() {
+        assert_eq!(sample_quantile(&mut [], 0.5), None);
+        assert_eq!(sample_quantile(&mut [3.0], 0.95), Some(3.0));
+        assert_eq!(
+            sample_quantile(&mut [5.0, 1.0, 3.0, 2.0, 4.0], 0.5),
+            Some(3.0)
+        );
+        let q = sample_quantile(&mut [5.0, 1.0, 3.0, 2.0, 4.0], 0.95).unwrap();
+        assert!((q - 4.8).abs() < 1e-12);
+
+        let paper = PaperAdaptationConfig::new(2.0, 0.95, 0.8)
+            .unwrap()
+            .with_minimum_orbits(NonZeroUsize::new(5).unwrap());
+        let mut window = PaperWindow::new();
+        for range in [0.5, 1.0, 3.0, 2.0, 4.0] {
+            window.record(range, Some(1.0));
+        }
+        // delta = 0.5: K = range / 0.5, q_{0.95}(K) = 2 * 3.8 = 7.6, so
+        // delta_new = 2 / 7.6.
+        let (orbits, inflation, range_quantile, candidate, outcome) = window.candidate(&paper, 0.5);
+        assert_eq!(orbits, 5);
+        assert!((inflation.unwrap() - 7.6).abs() < 1e-12);
+        assert!((range_quantile.unwrap() - 3.8).abs() < 1e-12);
+        assert!((candidate.unwrap() - 2.0 / 7.6).abs() < 1e-12);
+        assert_eq!(outcome, PaperAdaptationOutcome::Installed);
+        assert_eq!(window.unrefined_mean(), Some(1.0));
+
+        // Small inflation is floored at one, so delta never exceeds Delta.
+        let mut calm = PaperWindow::new();
+        for range in [0.01, 0.02, 0.03, 0.04, 0.05] {
+            calm.record(range, None);
+        }
+        let (_, inflation, _, candidate, outcome) = calm.candidate(&paper, 1.0);
+        assert!(inflation.unwrap() < 1.0);
+        assert_eq!(candidate, Some(2.0));
+        assert_eq!(outcome, PaperAdaptationOutcome::Installed);
+        assert_eq!(calm.unrefined_mean(), None);
+
+        // Too few orbits and the disabled rule leave delta untouched.
+        let mut sparse = PaperWindow::new();
+        sparse.record(1.0, Some(0.5));
+        let (orbits, _, _, candidate, outcome) = sparse.candidate(&paper, 1.0);
+        assert_eq!((orbits, candidate), (1, None));
+        assert_eq!(outcome, PaperAdaptationOutcome::InsufficientOrbits);
+        let disabled = paper.with_local_error_adaptation(false);
+        let (_, _, _, candidate, outcome) = window.candidate(&disabled, 0.5);
+        assert_eq!(candidate, None);
+        assert_eq!(outcome, PaperAdaptationOutcome::Disabled);
+
+        // Nonfinite ranges are ignored rather than recorded.
+        let mut nonfinite = PaperWindow::new();
+        nonfinite.record(f64::INFINITY, None);
+        nonfinite.record(f64::NAN, None);
+        nonfinite.record(-1.0, None);
+        assert_eq!(nonfinite.energy_ranges.len(), 0);
+    }
+
+    #[test]
+    fn paper_step_rule_moves_with_the_unrefined_fraction() {
+        let mut too_few_refinements = DualAveraging::new(0.1, 0.8);
+        let mut step = 0.1;
+        for _ in 0..20 {
+            step = too_few_refinements.update(1.0);
+        }
+        assert!(step > 0.1, "step must grow when no leaf needs refinement");
+        let mut too_many_refinements = DualAveraging::new(0.1, 0.8);
+        for _ in 0..20 {
+            step = too_many_refinements.update(0.0);
+        }
+        assert!(step < 0.1, "step must shrink when every leaf refines");
+        // Exactly on target, the Hoffman--Gelman iterate sits at the
+        // reference `mu = log(10 * step)`, as in the acceptance-driven rule.
+        let mut on_target = DualAveraging::new(0.1, 0.8);
+        for _ in 0..20 {
+            step = on_target.update(0.8);
+        }
+        assert!((step - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn unrefined_fraction_reads_the_coarsest_level_histogram() {
+        let mut work = TransitionWorkTelemetry::default();
+        assert_eq!(unrefined_leaf_fraction(&work), None);
+        work.histograms.refinement_level_attempts = vec![8];
+        assert_eq!(unrefined_leaf_fraction(&work), Some(1.0));
+        work.histograms.refinement_level_attempts = vec![8, 2, 1];
+        assert_eq!(unrefined_leaf_fraction(&work), Some(0.75));
+        work.histograms.refinement_level_attempts = vec![0, 0];
+        assert_eq!(unrefined_leaf_fraction(&work), None);
+    }
+
+    #[test]
+    fn paper_adaptation_configuration_fails_closed() {
+        assert!(PaperAdaptationConfig::new(0.0, 0.95, 0.8).is_err());
+        assert!(PaperAdaptationConfig::new(2.0, 1.0, 0.8).is_err());
+        assert!(PaperAdaptationConfig::new(2.0, 0.95, 0.0).is_err());
+        assert!(PaperAdaptationConfig::new(f64::NAN, 0.95, 0.8).is_err());
+        let paper = PaperAdaptationConfig::default();
+        assert_eq!(
+            paper.global_energy_bound(),
+            DEFAULT_PAPER_GLOBAL_ENERGY_BOUND
+        );
+        assert_eq!(
+            paper.quantile_probability(),
+            DEFAULT_PAPER_QUANTILE_PROBABILITY
+        );
+        assert_eq!(
+            paper.unrefined_fraction_target(),
+            DEFAULT_PAPER_UNREFINED_FRACTION_TARGET
+        );
+        assert!(paper.adapts_local_error());
+        assert_eq!(paper.minimum_orbits(), DEFAULT_PAPER_MINIMUM_ORBITS);
+
+        let warmup = WarmupConfig::default().with_paper_adaptation(paper);
+        assert_eq!(warmup.paper_adaptation(), Some(&paper));
+        assert!(WarmupConfig::default().paper_adaptation().is_none());
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        let single_level = KernelTuning::new(
+            0.5,
+            NonZeroUsize::new(3).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+            1.0,
+        )
+        .unwrap();
+        let config = RunConfig::new(4, NonZeroUsize::new(2).unwrap(), 3)
+            .with_tuning(single_level)
+            .with_warmup(warmup.clone());
+        assert_eq!(
+            sample(&Gaussian(2), &[0.0, 0.0], &mass, &config)
+                .unwrap_err()
+                .kind(),
+            ErrorKind::Configuration
+        );
+        let dense = DenseMass::identity(NonZeroUsize::new(2).unwrap()).unwrap();
+        let dense_config = RunConfig::new(4, NonZeroUsize::new(2).unwrap(), 3).with_warmup(warmup);
+        assert_eq!(
+            sample_dense(&Gaussian(2), &[0.0, 0.0], &dense, &dense_config)
+                .unwrap_err()
+                .kind(),
+            ErrorKind::Configuration
+        );
     }
 }
