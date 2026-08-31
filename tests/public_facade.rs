@@ -15,7 +15,7 @@ use owalnuts::walnutpie::{
     InitialStepSearchConfig, KernelTuning, LowRankArrowheadMass, PROJECTED_ARROWHEAD_REVISION,
     ProjectedArrowheadWarmup, ProjectedMetricOutcome, ProposalObservation,
     ProposalObservationControl, ProposalObserver, ProposalPhase, ProposalTargetOutcome,
-    RESEARCH_MAX_TARGET_EVALUATIONS, ResearchRestartReferenceMultiplier,
+    RESEARCH_MAX_TARGET_EVALUATIONS, RawTarget, ResearchRestartReferenceMultiplier,
     ResearchTargetEvaluationLimit, RunConfig, RunControl, StopReason, StructuredBlockMass,
     StructuredCovarianceBlock, Target, TargetError, TargetErrorKind,
     TargetEvaluationAdmissionLimit, TargetEvaluationBudget, TargetEvaluationLimitProvenance,
@@ -2299,4 +2299,206 @@ fn paper_adaptation_rules_hold_on_the_funnel() {
         output.telemetry().retained().refinement_exhaustion_stops(),
         0
     );
+}
+
+// ── FFI and autodiff backend surface ─────────────────────────────────────
+
+unsafe extern "C" fn raw_gaussian(
+    dimension: usize,
+    position: *const f64,
+    gradient_out: *mut f64,
+    _user_data: *mut core::ffi::c_void,
+) -> f64 {
+    let position = unsafe { std::slice::from_raw_parts(position, dimension) };
+    let gradient = unsafe { std::slice::from_raw_parts_mut(gradient_out, dimension) };
+    for (g, q) in gradient.iter_mut().zip(position) {
+        *g = -*q;
+    }
+    -0.5 * position.iter().map(|q| q * q).sum::<f64>()
+}
+
+unsafe extern "C" fn raw_half_space(
+    dimension: usize,
+    position: *const f64,
+    gradient_out: *mut f64,
+    user_data: *mut core::ffi::c_void,
+) -> f64 {
+    let position = unsafe { std::slice::from_raw_parts(position, dimension) };
+    if position[0] < 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if !user_data.is_null() {
+        let calls = unsafe { &*(user_data as *const AtomicUsize) };
+        calls.fetch_add(1, Ordering::Relaxed);
+    }
+    unsafe {
+        raw_gaussian(
+            dimension,
+            position.as_ptr(),
+            gradient_out,
+            std::ptr::null_mut(),
+        )
+    }
+}
+
+unsafe extern "C" fn raw_nan(
+    _dimension: usize,
+    _position: *const f64,
+    _gradient_out: *mut f64,
+    _user_data: *mut core::ffi::c_void,
+) -> f64 {
+    f64::NAN
+}
+
+fn small_run() -> (Vec<Vec<f64>>, DiagonalMass, RunConfig) {
+    (
+        vec![vec![0.25, -0.5], vec![-0.75, 0.125]],
+        DiagonalMass::from_diagonal(vec![0.5, 2.0]).unwrap(),
+        RunConfig::new(2, NonZeroUsize::new(4).unwrap(), 0x5eed),
+    )
+}
+
+#[test]
+fn raw_target_is_bit_identical_to_the_native_implementation() {
+    let (starts, mass, config) = small_run();
+    let native = sample_chains(
+        &Gaussian,
+        &starts,
+        &mass,
+        &config,
+        NonZeroUsize::new(2).unwrap(),
+    )
+    .unwrap();
+    let raw = unsafe {
+        RawTarget::new(
+            NonZeroUsize::new(2).unwrap(),
+            raw_gaussian,
+            std::ptr::null_mut(),
+        )
+    };
+    let output =
+        sample_chains(&raw, &starts, &mass, &config, NonZeroUsize::new(2).unwrap()).unwrap();
+    for (a, b) in native.chains().iter().zip(output.chains()) {
+        assert_eq!(a.samples(), b.samples());
+        assert_eq!(
+            a.telemetry().total().target_calls_total(),
+            b.telemetry().total().target_calls_total()
+        );
+    }
+}
+
+#[test]
+fn raw_target_negative_infinity_is_a_recoverable_zero_density_point() {
+    let calls = AtomicUsize::new(0);
+    let raw = unsafe {
+        RawTarget::new(
+            NonZeroUsize::new(2).unwrap(),
+            raw_half_space,
+            &calls as *const AtomicUsize as *mut core::ffi::c_void,
+        )
+    };
+    let starts = vec![vec![0.5, 0.25]];
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let config = RunConfig::new(20, NonZeroUsize::new(200).unwrap(), 0xbeef);
+    let output =
+        sample_chains(&raw, &starts, &mass, &config, NonZeroUsize::new(1).unwrap()).unwrap();
+    let chain = &output.chains()[0];
+    assert!(chain.samples().iter().all(|v| v.is_finite()));
+    assert!(calls.load(Ordering::Relaxed) > 0);
+    let totals = chain.telemetry().total();
+    assert!(totals.zero_density_evaluations() > 0);
+    assert_eq!(totals.invalid_evaluation_stops(), 0);
+}
+
+#[test]
+fn raw_target_nan_return_fails_the_run_fatally() {
+    let raw =
+        unsafe { RawTarget::new(NonZeroUsize::new(2).unwrap(), raw_nan, std::ptr::null_mut()) };
+    let (starts, mass, config) = small_run();
+    let error =
+        sample_chains(&raw, &starts, &mass, &config, NonZeroUsize::new(1).unwrap()).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Target);
+    assert!(format!("{error}").contains("nonfinite log density"));
+}
+
+#[test]
+fn references_boxes_and_arcs_of_targets_are_targets() {
+    let (starts, mass, config) = small_run();
+    let threads = NonZeroUsize::new(2).unwrap();
+    let direct = sample_chains(&Gaussian, &starts, &mass, &config, threads).unwrap();
+    let by_reference: &dyn Target = &Gaussian;
+    let boxed: Box<dyn Target> = Box::new(Gaussian);
+    let shared: Arc<dyn Target> = Arc::new(Gaussian);
+    for output in [
+        sample_chains(&by_reference, &starts, &mass, &config, threads).unwrap(),
+        sample_chains(&boxed, &starts, &mass, &config, threads).unwrap(),
+        sample_chains(&shared, &starts, &mass, &config, threads).unwrap(),
+    ] {
+        for (a, b) in direct.chains().iter().zip(output.chains()) {
+            assert_eq!(a.samples(), b.samples());
+        }
+    }
+}
+
+#[test]
+fn fatal_target_messages_reach_the_error_display() {
+    struct Exploding;
+    impl Target for Exploding {
+        fn dimension(&self) -> usize {
+            2
+        }
+        fn log_density_gradient(&self, _: &[f64], _: &mut [f64]) -> Result<f64, TargetError> {
+            Err(TargetError::new("synthetic backend exploded (code 42)"))
+        }
+    }
+    let (starts, mass, config) = small_run();
+    let error = sample_chains(
+        &Exploding,
+        &starts,
+        &mass,
+        &config,
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Target);
+    let display = format!("{error}");
+    assert!(
+        display.contains("synthetic backend exploded (code 42)"),
+        "display was {display:?}"
+    );
+}
+
+#[test]
+fn parameter_names_default_to_none_and_validate_on_raw_targets() {
+    assert_eq!(Gaussian.parameter_names(), None);
+    let raw = unsafe {
+        RawTarget::new(
+            NonZeroUsize::new(2).unwrap(),
+            raw_gaussian,
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(raw.parameter_names(), None);
+    let named = unsafe {
+        RawTarget::new(
+            NonZeroUsize::new(2).unwrap(),
+            raw_gaussian,
+            std::ptr::null_mut(),
+        )
+    }
+    .with_parameter_names(vec!["mu".into(), "log_sigma".into()])
+    .unwrap();
+    assert_eq!(
+        named.parameter_names(),
+        Some(vec!["mu".to_string(), "log_sigma".to_string()])
+    );
+    let wrong = unsafe {
+        RawTarget::new(
+            NonZeroUsize::new(2).unwrap(),
+            raw_gaussian,
+            std::ptr::null_mut(),
+        )
+    }
+    .with_parameter_names(vec!["only-one".into()]);
+    assert!(wrong.is_err());
 }

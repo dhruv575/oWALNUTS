@@ -9,6 +9,19 @@ architecture (see the `walnutpie` module documentation).
 
 ### Added
 
+- **FFI and autodiff backend support.** `RawTarget` wraps a C-ABI
+  fused log-density/gradient callback (`RawTargetFn`) so compiled gradients —
+  numba/Cython `cfunc`s, BridgeStan-style entry points — run from parallel
+  chains with no interpreter lock; `-inf` returns follow the v10 recoverable
+  zero-density path and any other nonfinite output is fatal. References,
+  boxes, and `Arc`s of targets are now targets (`&dyn Target` works
+  everywhere). Fatal target error messages are carried into `Error` and shown
+  by its `Display`. `Target::parameter_names` (default `None`) labels
+  unconstrained coordinates for diagnostics export. Motivated by the autodiff
+  track's measurement that GIL-free callback transport, not sampler
+  efficiency, was the remaining gap to nutpie on PyMC models.
+  [WP15a-AUTODIFF-BRIDGESTAN-ENZYME-V1, WP15B-PYTHON-TARGETS-V1]
+
 - **Boundary-refreshed structured metrics.** `sample_structured_refresh`,
   `sample_chains_structured_refresh`, and
   `preflight_chains_structured_refresh` run the fixed kernel directly in

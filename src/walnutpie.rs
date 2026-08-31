@@ -101,6 +101,24 @@
 //! accepted constructions. Direction and uniform counts are actual consumed
 //! kernel draws; target evaluations are fused log-density/gradient calls.
 //!
+//! # FFI and autodiff backends
+//!
+//! Targets whose gradients come from another runtime (Stan via BridgeStan,
+//! numba/Cython `cfunc`s, JIT-compiled Python models) plug in two ways.
+//! [`RawTarget`] wraps a C-ABI callback ([`RawTargetFn`]) so compiled
+//! gradients run from parallel chains with no interpreter lock; its
+//! constructor is `unsafe` and states the exact thread-safety and buffer
+//! contract, and its per-call classification maps `-inf` to the recoverable
+//! zero-density path and any other nonfinite output to a fatal error.
+//! Dynamically typed backends can also be passed as `&dyn Target`,
+//! `Box<dyn Target>`, or `Arc<dyn Target>`: references, boxes, and `Arc`s of
+//! targets are targets. Backends must map a *domain* failure (an evaluation
+//! exception at an out-of-support point) to [`TargetError::recoverable`] and
+//! a *programming* failure to a fatal [`TargetError::new`]; fatal target
+//! messages are carried in the returned [`Error`] and shown by its `Display`.
+//! [`Target::parameter_names`] optionally labels unconstrained coordinates
+//! for diagnostics export; coordinate-transforming facades do not forward it.
+//!
 //! # Boundary-refreshed structured metrics
 //!
 //! [`sample_chains_structured_refresh`] rebuilds a [`StructuredBlockMass`]
@@ -1616,6 +1634,204 @@ pub trait Target: Send + Sync {
         position: &[f64],
         gradient: &mut [f64],
     ) -> Result<f64, TargetError>;
+
+    /// Optional unconstrained-coordinate parameter names for labelling
+    /// diagnostics and exported draws.
+    ///
+    /// `None` (the default) means unnamed. When provided, the list must have
+    /// exactly [`Target::dimension`] entries. Coordinate-transforming
+    /// wrappers (dense/block/structured facades) intentionally do not forward
+    /// names because their kernel coordinates are not the caller's.
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        None
+    }
+}
+
+impl<T: Target + ?Sized> Target for &T {
+    fn dimension(&self) -> usize {
+        (**self).dimension()
+    }
+    fn cancel_after_admission(&self) -> bool {
+        (**self).cancel_after_admission()
+    }
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        (**self).log_density_gradient(position, gradient)
+    }
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        (**self).parameter_names()
+    }
+}
+
+impl<T: Target + ?Sized> Target for Box<T> {
+    fn dimension(&self) -> usize {
+        (**self).dimension()
+    }
+    fn cancel_after_admission(&self) -> bool {
+        (**self).cancel_after_admission()
+    }
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        (**self).log_density_gradient(position, gradient)
+    }
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        (**self).parameter_names()
+    }
+}
+
+impl<T: Target + ?Sized> Target for std::sync::Arc<T> {
+    fn dimension(&self) -> usize {
+        (**self).dimension()
+    }
+    fn cancel_after_admission(&self) -> bool {
+        (**self).cancel_after_admission()
+    }
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        (**self).log_density_gradient(position, gradient)
+    }
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        (**self).parameter_names()
+    }
+}
+
+/// C-compatible fused log-density/gradient callback used by [`RawTarget`].
+///
+/// The callee receives the target dimension, a read-only position of exactly
+/// that length, a write-only gradient buffer of the same length, and the
+/// opaque `user_data` pointer, and returns the unnormalized log density.
+pub type RawTargetFn = unsafe extern "C" fn(
+    dimension: usize,
+    position: *const f64,
+    gradient_out: *mut f64,
+    user_data: *mut core::ffi::c_void,
+) -> f64;
+
+/// A [`Target`] over a raw C-ABI callback, for autodiff and FFI backends
+/// (numba/Cython `cfunc`s, JIT-compiled gradients, C/C++ model libraries)
+/// that must be callable from parallel chains without any interpreter lock.
+///
+/// Per-call result classification:
+///
+/// * a finite return with an entirely finite gradient is an ordinary result;
+/// * a `-inf` return is a recoverable zero-density point (the leaf refines
+///   and then carries zero weight, exactly as [`TargetError::recoverable`];
+///   the gradient buffer contents are ignored);
+/// * `NaN` or `+inf` returns, and finite returns whose gradient contains a
+///   nonfinite element, are fatal ([`TargetError::new`]) and fail the run.
+///
+/// The gradient buffer is write-only and may contain stale finite values from
+/// earlier calls; a callee that fails to overwrite every element on a finite
+/// return silently produces wrong gradients, which this wrapper cannot
+/// detect. The callback must satisfy the full [`Target`] contract:
+/// deterministic in the position for the life of a run, thread-safe,
+/// reentrant, and free of hidden cross-chain state.
+pub struct RawTarget {
+    dimension: NonZeroUsize,
+    function: RawTargetFn,
+    user_data: *mut core::ffi::c_void,
+    names: Option<Vec<String>>,
+}
+
+// SAFETY: asserted by the `RawTarget::new` caller — the callback and its
+// `user_data` are thread-safe and reentrant for the life of the value.
+unsafe impl Send for RawTarget {}
+// SAFETY: as above; shared `&RawTarget` calls are concurrent callback calls,
+// which the constructor contract requires to be safe.
+unsafe impl Sync for RawTarget {}
+
+impl RawTarget {
+    /// Wrap a raw callback as a target.
+    ///
+    /// # Safety
+    ///
+    /// The caller asserts, for the entire lifetime of the returned value:
+    /// `function` is safe to call concurrently from multiple threads with
+    /// this `user_data`; it only reads `position[..dimension]` and only
+    /// writes `gradient_out[..dimension]`; it neither unwinds across the FFI
+    /// boundary nor stores the passed pointers beyond the call; and
+    /// `user_data` remains valid. The callback must be deterministic in the
+    /// position while a run is live.
+    pub unsafe fn new(
+        dimension: NonZeroUsize,
+        function: RawTargetFn,
+        user_data: *mut core::ffi::c_void,
+    ) -> Self {
+        Self {
+            dimension,
+            function,
+            user_data,
+            names: None,
+        }
+    }
+
+    /// Attach parameter names reported through [`Target::parameter_names`].
+    ///
+    /// Fails when the list length does not equal the target dimension.
+    pub fn with_parameter_names(mut self, names: Vec<String>) -> Result<Self, Error> {
+        if names.len() != self.dimension.get() {
+            return Err(Error::configuration(format!(
+                "parameter names must have exactly {} entries (got {})",
+                self.dimension,
+                names.len()
+            )));
+        }
+        self.names = Some(names);
+        Ok(self)
+    }
+}
+
+impl Target for RawTarget {
+    fn dimension(&self) -> usize {
+        self.dimension.get()
+    }
+
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        // SAFETY: the kernel supplies `position` and `gradient` slices of
+        // exactly `dimension` elements; everything else is asserted by the
+        // `RawTarget::new` contract.
+        let value = unsafe {
+            (self.function)(
+                self.dimension.get(),
+                position.as_ptr(),
+                gradient.as_mut_ptr(),
+                self.user_data,
+            )
+        };
+        if value == f64::NEG_INFINITY {
+            return Err(TargetError::recoverable(
+                "raw target reported a zero-density point",
+            ));
+        }
+        if !value.is_finite() {
+            return Err(TargetError::new(format!(
+                "raw target returned a nonfinite log density ({value})"
+            )));
+        }
+        if let Some(bad) = gradient.iter().find(|g| !g.is_finite()) {
+            return Err(TargetError::new(format!(
+                "raw target wrote a nonfinite gradient element ({bad})"
+            )));
+        }
+        Ok(value)
+    }
+
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        self.names.clone()
+    }
 }
 
 /// Shared exact runtime ceiling on started target callbacks.
@@ -1688,6 +1904,9 @@ pub struct BudgetedTarget<'a, T> {
 impl<T: Target> Target for BudgetedTarget<'_, T> {
     fn dimension(&self) -> usize {
         self.target.dimension()
+    }
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        self.target.parameter_names()
     }
     fn log_density_gradient(
         &self,
@@ -4056,7 +4275,13 @@ impl Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
+        f.write_str(&self.message)?;
+        if let Some(source) = &self.target_source {
+            if !source.message().is_empty() {
+                write!(f, ": {}", source.message())?;
+            }
+        }
+        Ok(())
     }
 }
 
