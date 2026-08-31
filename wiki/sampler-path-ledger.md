@@ -394,3 +394,26 @@ On 2026-08-30, before redesign edits:
   WP10-INVALID-EVALUATION-PARITY-V10): zero invalid-evaluation stops across
   216,000 retained transitions and 8.5M recoverable evaluations on three
   targets; truncated Gaussian stationary; funnel unchanged.
+
+## 2026-08-31 boundary-refreshed structured metrics (WP16)
+
+* Added the public refresh driver: `StructuredMetricRefresh` +
+  `sample_chains_structured_refresh` rebuild a `StructuredBlockMass` from
+  per-window Welford `WindowSummary` values at completed slow-window
+  boundaries, directly in original `q` via the `MassOperator` path (no
+  coordinate remap; stage-6 invariants: install only at boundaries, `q`/cache
+  preserved, momentum discarded, failures keep the previous metric, freeze
+  before retention, optional boundary step re-search, restart-or-continue
+  dual averaging, zero-callback preflight). Execution identity
+  `walnutpie-structured-metric-refresh-v1`; an identity refresh is bit-exact
+  against the fixed direct driver; 159 tests, strict Clippy/fmt/rustdoc pass;
+  `ALGORITHM_REVISION` unchanged.
+* Preregistered evaluation `STUDIES/sspd11_refreshed_block_v1` (ledger entry
+  `WP16-REFRESHED-PATH-BLOCK-V1`): the per-window refresh policy was
+  falsified on sspd-11 (2/3 seeds, 0.25–0.52× the one-shot block's ESS/call;
+  early-window globals variance underestimation installs over-tight blocks),
+  while the one-shot posterior-precision path block was **confirmed 3/3 at
+  4×500/4,000** with 2.2–2.3× the adapted diagonal's ESS per call.
+* The mutable-metric machinery itself is now public and exact; policy work
+  (final-boundary-only rebuild, calibrated globals diagonal) is the open
+  item, not infrastructure.
