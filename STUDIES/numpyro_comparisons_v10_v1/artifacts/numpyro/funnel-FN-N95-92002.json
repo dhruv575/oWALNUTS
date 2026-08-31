@@ -1,0 +1,104 @@
+{
+ "arm": "FN-N95",
+ "backend": "numpyro",
+ "part": "3_funnel",
+ "seed": 92002,
+ "evidence": true,
+ "chains": 4,
+ "retained_per_chain": 50000,
+ "settings": {
+  "warmup": 2000,
+  "chains": 4,
+  "chain_method": "sequential",
+  "target_accept": 0.95,
+  "max_tree_depth": 10,
+  "adapt_mass_matrix": true,
+  "dense_mass": false
+ },
+ "software": {
+  "python": "3.14.7",
+  "jax": "0.11.1",
+  "numpyro": "0.21.0",
+  "arviz": "1.3.0",
+  "numpy": "2.5.2"
+ },
+ "functionals": {
+  "omega": {
+   "rhat": 1.0173737532692362,
+   "bulk_ess": 1114.854890155937,
+   "tail_ess": 1337.2656230698722,
+   "mean": 0.7575975276316153,
+   "variance": 6.200681854336508
+  },
+  "x_1": {
+   "rhat": 1.0081693502549238,
+   "bulk_ess": 210567.6283493672,
+   "tail_ess": 17611.647046559418,
+   "mean": -0.009248779894217019,
+   "variance": 82.43779240682811
+  }
+ },
+ "tail_mass": {
+  "-5.0": 0.0,
+  "-6.0": 0.0
+ },
+ "tail_mass_per_chain": {
+  "-5.0": [
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "-6.0": [
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ]
+ },
+ "omega_quantiles": {
+  "0.01": -3.990151539982068,
+  "0.005": -4.124273607563509
+ },
+ "sampler": {
+  "divergences": 365,
+  "divergences_per_chain": [
+   212,
+   41,
+   61,
+   51
+  ],
+  "depth_histogram": {
+   "0": 4245,
+   "1": 15,
+   "2": 30632,
+   "3": 52107,
+   "4": 41974,
+   "5": 32849,
+   "6": 20397,
+   "7": 10935,
+   "8": 4686,
+   "9": 1648,
+   "10": 512
+  },
+  "max_depth_rate": 0.00256,
+  "median_depth": 4,
+  "retained_leapfrogs": 7332190,
+  "warmup_leapfrogs": 311990,
+  "work_unit": "leapfrog num_steps (NumPyro proxy)",
+  "final_step_sizes": [
+   0.08762445079344032,
+   0.07367826812476119,
+   0.11740813718894993,
+   0.11580043242035334
+  ]
+ },
+ "timing_seconds": {
+  "warmup": 3.3759526000358164,
+  "sampling": 30.263616899959743,
+  "total_sampling": 33.63957220001612,
+  "note": "after a same-shape compile probe; compile excluded"
+ },
+ "draws_file": "draws/funnel-FN-N95-92002.npy",
+ "draws_layout": "(chains, draws, [omega, x_1])"
+}

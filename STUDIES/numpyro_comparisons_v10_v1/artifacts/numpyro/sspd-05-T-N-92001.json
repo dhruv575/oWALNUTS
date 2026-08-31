@@ -1,0 +1,142 @@
+{
+ "arm": "T-N",
+ "backend": "numpyro",
+ "part": "1_sspd05_timing",
+ "fixture": "sspd-05",
+ "fixture_sha256": "1d10f68eb861cc852493ccfad2bf5f93b2f79c77294a68c7da3da73b9a88091d",
+ "centeredness": 1.0,
+ "seed": 92001,
+ "evidence": true,
+ "dimension": 106,
+ "settings": {
+  "warmup": 500,
+  "draws": 4000,
+  "chains": 4,
+  "chain_method": "sequential",
+  "target_accept": 0.9,
+  "max_tree_depth": 8,
+  "adapt_step_size": true,
+  "adapt_mass_matrix": false,
+  "metric": "frozen_diagonal"
+ },
+ "frozen_diagonal": {
+  "file": "sspd-05-shared-frozen-diagonal.json",
+  "sha256": "afbc3318443f31f492c2365a72e08e88dfe257e7d1e7c55d10400f08286d63ea",
+  "rule": "inverse_mass_matrix = 1 / momentum covariance, elementwise, binary64"
+ },
+ "software": {
+  "python": "3.14.7",
+  "jax": "0.11.1",
+  "numpyro": "0.21.0",
+  "arviz": "1.3.0",
+  "numpy": "2.5.2"
+ },
+ "single_thread_env": {
+  "OMP_NUM_THREADS": "1",
+  "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+ },
+ "functional_names": [
+  "mu",
+  "sigma_x",
+  "alpha",
+  "beta",
+  "gamma",
+  "nu",
+  "x_terminal",
+  "x_path_mean",
+  "x_initial"
+ ],
+ "functionals": {
+  "mu": {
+   "rhat": 1.0014261532370445,
+   "bulk_ess": 15206.938246006894,
+   "tail_ess": 9714.00477578328,
+   "mean": -0.011615078289362629,
+   "sd": 0.01762188061641033
+  },
+  "sigma_x": {
+   "rhat": 1.0019262054700935,
+   "bulk_ess": 1295.6250795560118,
+   "tail_ess": 2088.133271251243,
+   "mean": 0.1676780515830088,
+   "sd": 0.03373869379965375
+  },
+  "alpha": {
+   "rhat": 1.0016517967604133,
+   "bulk_ess": 1658.3040610378578,
+   "tail_ess": 1325.689106424214,
+   "mean": 0.08667449499849832,
+   "sd": 0.03175345888058085
+  },
+  "beta": {
+   "rhat": 1.0000852790712116,
+   "bulk_ess": 9622.083717033513,
+   "tail_ess": 5569.388101820877,
+   "mean": 0.40353830005473496,
+   "sd": 0.29994319973622324
+  },
+  "gamma": {
+   "rhat": 0.9999758342067603,
+   "bulk_ess": 16554.789383725765,
+   "tail_ess": 10809.541836401972,
+   "mean": 1.3644301046563594,
+   "sd": 0.17989592797669218
+  },
+  "nu": {
+   "rhat": 1.0004143540956558,
+   "bulk_ess": 8113.296576149077,
+   "tail_ess": 6515.920260351672,
+   "mean": 2.6625223951716044,
+   "sd": 0.5982565590720981
+  },
+  "x_terminal": {
+   "rhat": 1.0001585130765744,
+   "bulk_ess": 11966.42005631947,
+   "tail_ess": 7950.015304859191,
+   "mean": -0.677352454727687,
+   "sd": 0.13104122219379677
+  },
+  "x_path_mean": {
+   "rhat": 1.0009516776892613,
+   "bulk_ess": 3207.4346943947808,
+   "tail_ess": 4814.675626240204,
+   "mean": -0.23485391794908214,
+   "sd": 0.05448649972275336
+  },
+  "x_initial": {
+   "rhat": 1.0003151376507229,
+   "bulk_ess": 5426.521173884568,
+   "tail_ess": 8073.363832252551,
+   "mean": 0.48122564631040654,
+   "sd": 0.3871078360471324
+  }
+ },
+ "sampler": {
+  "divergences": 0,
+  "depth_histogram": {
+   "4": 632,
+   "5": 5414,
+   "6": 7253,
+   "7": 2668,
+   "8": 33
+  },
+  "max_depth_rate": 0.0020625,
+  "median_depth": 6,
+  "retained_leapfrogs": 939680,
+  "warmup_leapfrogs": 124512,
+  "work_unit": "leapfrog num_steps (NumPyro proxy; not a fused target-call counter)",
+  "final_step_sizes": [
+   0.08164167774301281,
+   0.0861641581806008,
+   0.07492074724836166,
+   0.09234303228151543
+  ]
+ },
+ "timing_seconds": {
+  "warmup": 5.626783000014257,
+  "sampling": 19.619666699960362,
+  "total_sampling": 25.246452699997462,
+  "note": "after a same-shape compile probe; compile excluded"
+ },
+ "functionals_file": "draws/sspd-05-T-N-92001.npy"
+}

@@ -1,0 +1,180 @@
+{
+ "schema": "numpyro-comparisons-v10/v1",
+ "program": "wiki/research-program-2026-08-31.md",
+ "preregistration": "PREREGISTRATION.md",
+ "frozen": "2026-08-31, kernel v10 at HEAD d8617a8, before any sampling in this directory",
+ "kernel": {
+  "expected_algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "expected_head": "d8617a8"
+ },
+ "seeds": {
+  "evidence": [92001, 92002, 92003],
+  "compile_probe": 92000,
+  "policy": "Each backend cell runs once per evidence seed; the NumPyro compile probe (92000) is never evidence. Verified absent from every ledger and study before freezing."
+ },
+ "wall_cap_seconds_per_cell": 900,
+ "machine_load_note": "Two other agents (autodiff integrations) compile and run on the same 16-core machine during this study; wall-clock figures are reported with that caveat and ESS per backend-native work unit is the robust comparison.",
+ "fixtures": {
+  "sspd-05": {
+   "file": "sspd-05-n100-mixed-regular-moderate-h0-blocks-contaminated-regular.json",
+   "sha256": "1d10f68eb861cc852493ccfad2bf5f93b2f79c77294a68c7da3da73b9a88091d",
+   "t": 100,
+   "dimension": 106
+  },
+  "rm48": {
+   "file": "real_market_48h.json",
+   "sha256": "73185a16b8b836107956bb35620840b96278526905b1dccf40af441aa202714a",
+   "source": "C:/dev/polyscope/STUDIES/hard_polyscope_v1/fixtures/real_market_48h.json wrapped as {data:{y,s,v}}",
+   "source_sha256": "cf929ec6f917e3556cf73fc8b608ac019130092c2f810ba4e18949029048eaa6",
+   "t": 48,
+   "dimension": 54
+  },
+  "polyscope_parity": {
+   "file": "polyscope_parity.json",
+   "sha256": "4c91f5fddda2e15f42e4209343ee9234bdab866a32918c260fe29fd6b0cf7d0c"
+  },
+  "sspd-05-frozen-diagonal": {
+   "file": "sspd-05-shared-frozen-diagonal.json",
+   "sha256": "afbc3318443f31f492c2365a72e08e88dfe257e7d1e7c55d10400f08286d63ea",
+   "meaning": "momentum covariance M (a=1 coordinates, dim 106) from Polyscope confirmation-v3; NumPyro inverse_mass_matrix = 1/M elementwise, as matched-timing-v1"
+  }
+ },
+ "starts": {
+  "rule": "canonical::Data::initial_innovations plus per-chain mu offsets, zero sigma offsets (WP4b/WP12 rule); identical physical starts for every backend after the unit-Jacobian centeredness map",
+  "mu_offsets": [-0.03, -0.01, 0.01, 0.03],
+  "files": {"sspd-05": "starts/sspd-05.json", "rm48": "starts/rm48.json"}
+ },
+ "functionals": {
+  "state_space": ["mu", "sigma_x", "alpha", "beta", "gamma", "nu", "x_terminal", "x_path_mean", "x_initial"],
+  "matched_timing_subset": ["mu", "sigma_x", "nu", "x_initial"],
+  "funnel": ["omega", "x_1"]
+ },
+ "gates": {
+  "state_space": {
+   "max_rhat": 1.01,
+   "min_bulk_ess": 400,
+   "min_tail_ess": 400,
+   "retained_divergences": 0,
+   "retained_invalid_evaluations": 0,
+   "retained_refinement_exhaustions": 0,
+   "max_depth_rate": 0.01,
+   "applies_to": "all nine state-space functionals, every backend"
+  },
+  "funnel": {
+   "max_rhat": 1.01,
+   "min_bulk_ess": 400,
+   "min_tail_ess": 400,
+   "retained_divergences": 0,
+   "retained_invalid_evaluations": 0,
+   "retained_refinement_exhaustions": 0,
+   "tail_mass_thresholds": [-5.0, -6.0],
+   "tail_mass_exact": [0.04779035227281474, 0.022750131948179212],
+   "tail_mass_abs_tolerance": [0.009, 0.006],
+   "omega_variance_interval": [8.2, 9.8],
+   "exact_omega_mean": 0.0,
+   "exact_omega_variance": 9.0,
+   "note": "identical to the WP6/WP9 fix gates; the divergence gate is applied to NumPyro's own `diverging` field"
+  }
+ },
+ "parts": {
+  "1_sspd05_timing": {
+   "question": "Does the v7 matched-timing separation (5.4-7.3x ESS/s) persist on kernel v10 with the exact matched-timing-v1 settings, and how do the WP12-style adapted-diagonal and path-block arms compare?",
+   "fixture": "sspd-05",
+   "replicates": "C:/dev/polyscope/STUDIES/owalnuts_state_space_phase_diagram/matched-timing-v1 (protocol SHA-256 18ed0c9420a22e35b9558a4e20d0404f80ac9fb3fbcdce029710e5c77be6a76d): a=1, 4 sequential chains, 1 thread, 500 warmup / 4,000 retained, target acceptance 0.9, depth 8, initial step 0.005, step adaptation on, mass adaptation off, shared frozen diagonal covariance",
+   "arm_order": ["T-F", "T-I", "T-P"],
+   "arms": {
+    "T-F": {"backend": "owalnuts", "centeredness": 1.0, "metric": "frozen_diagonal", "frozen_diagonal_file": "sspd-05-shared-frozen-diagonal.json",
+            "initial_step": 0.005, "initial_step_search": false, "max_depth": 8, "max_refinement_levels": 4, "min_micro_steps": 1, "max_error": 10.0,
+            "target_acceptance": 0.9, "discarded": 500, "retained": 4000, "chains": 4, "threads": 1, "wall_cap_seconds": 900,
+            "role": "exact matched-timing-v1 oWALNUTS settings on v10"},
+    "T-I": {"backend": "owalnuts", "centeredness": 1.0, "metric": "identity_adapted",
+            "initial_step": 0.1, "initial_step_search": true, "max_depth": 8, "max_refinement_levels": 3, "min_micro_steps": 1, "max_error": 1.0,
+            "target_acceptance": 0.8, "discarded": 500, "retained": 4000, "chains": 4, "threads": 1, "wall_cap_seconds": 900,
+            "role": "WP12 arm I settings (adapted diagonal), 4,000 retained"},
+    "T-P": {"backend": "owalnuts", "centeredness": 1.0, "metric": "path_block", "globals_mass_from": "T-I",
+            "initial_step": 0.1, "initial_step_search": true, "max_depth": 8, "max_refinement_levels": 3, "min_micro_steps": 1, "max_error": 1.0,
+            "target_acceptance": 0.8, "discarded": 500, "retained": 4000, "chains": 4, "threads": 1, "wall_cap_seconds": 900,
+            "role": "WP12 arm P (fixed posterior-precision path block + same-seed T-I globals mass)"},
+    "T-N": {"backend": "numpyro", "centeredness": 1.0, "metric": "frozen_diagonal", "frozen_diagonal_file": "sspd-05-shared-frozen-diagonal.json",
+            "initial_step": 0.005, "adapt_step_size": true, "adapt_mass_matrix": false, "max_tree_depth": 8, "target_accept": 0.9,
+            "warmup": 500, "draws": 4000, "chains": 4, "chain_method": "sequential", "single_thread_env": true,
+            "role": "exact matched-timing-v1 NumPyro settings"}
+   },
+   "estimands": {
+    "primary": "per matched-timing functional (mu, sigma_x, nu, x_initial) and seed: bulk ESS / total sampling wall seconds (warmup + retained, compile excluded), ratio T-F / T-N; geometric mean over seeds per functional and overall",
+    "secondary": ["tail ESS / s ratios", "bulk and tail ESS per backend-native work unit (oWALNUTS fused target calls incl. warmup vs NumPyro leapfrog num_steps incl. warmup; labelled, not equated)", "end-to-end seconds including the NumPyro compile probe", "T-I / T-N and T-P / T-N ratios", "T-P / T-I bulk ESS per retained target call"],
+    "eligibility": "a ratio is reported only when both cells pass every state-space gate; otherwise diagnostics only"
+   },
+   "predictions": {
+    "P1": "T-F / T-N overall geometric-mean bulk ESS/s >= 3 (v7 measured 5.4-7.3; v9/v10 was cost-neutral on Gaussian-like targets)",
+    "P2": "T-F, T-I and T-N pass all gates on 3/3 seeds",
+    "P3": "T-P / T-I bulk ESS per retained call >= 2 on every seed (WP12 measured 2.6-3.0 at T=1000)"
+   }
+  },
+  "2_rm48": {
+   "question": "On the real-market T=48 fixture, does v10 at depth 10 clear the maximum-depth gate that the pre-v9 Phase 0 pilot failed (3.625% caps at depth 8), and how do ESS per work unit and wall compare to NumPyro?",
+   "fixture": "rm48",
+   "reference": {
+    "file": "C:/dev/polyscope/STUDIES/hard_polyscope_v1/artifacts/numpyro-nuts-cpu-confirmation.json",
+    "sha256": "1ec744261b890a55969b2622e2ee5db33978b4e9b48ed286bc707ce689e3b828",
+    "summary": "NumPyro 0.21 NUTS a=0.75, seeds 6502001-6502004, 500/2,000, target_accept 0.9, depth 10: all gates passed (seed 6502001: max R-hat 1.0016, min bulk ESS 1,580, 0 divergences, 0 caps)",
+    "prior_owalnuts": "Phase 0 pilot (kernel v5-v7, a=0.75, depth 8): statistical gates passed, maximum-depth stops 3.625% > 1%"
+   },
+   "arm_order": ["R-B", "R-I"],
+   "arms": {
+    "R-B": {"backend": "owalnuts", "centeredness": 0.75, "metric": "identity_adapted",
+            "initial_step": 0.1, "initial_step_search": true, "max_depth": 10, "max_refinement_levels": 3, "min_micro_steps": 1, "max_error": 1.0,
+            "target_acceptance": 0.8, "discarded": 500, "retained": 2000, "chains": 4, "threads": 1, "wall_cap_seconds": 900,
+            "role": "production coordinates (a=0.75) as Phase 0, but depth 10 and kernel v10"},
+    "R-I": {"backend": "owalnuts", "centeredness": 1.0, "metric": "identity_adapted",
+            "initial_step": 0.1, "initial_step_search": true, "max_depth": 10, "max_refinement_levels": 3, "min_micro_steps": 1, "max_error": 1.0,
+            "target_acceptance": 0.8, "discarded": 500, "retained": 2000, "chains": 4, "threads": 1, "wall_cap_seconds": 900,
+            "role": "centered coordinates (a=1), adapted diagonal, depth 10"},
+    "R-N": {"backend": "numpyro", "centeredness": 0.75, "metric": "adapted_diagonal",
+            "adapt_step_size": true, "adapt_mass_matrix": true, "max_tree_depth": 10, "target_accept": 0.9,
+            "warmup": 500, "draws": 2000, "chains": 4, "chain_method": "sequential", "single_thread_env": true,
+            "role": "Phase 0.2 NumPyro settings re-run on the evidence seeds for a same-machine wall comparison"}
+   },
+   "estimands": {
+    "primary": "pass/fail of every gate per arm and seed, with the maximum-depth rate at depth 10 explicitly reported",
+    "secondary": ["bulk/tail ESS per work unit (labelled)", "total sampling wall (compile excluded)", "ESS/s ratios R-B/R-N and R-I/R-N when both pass"]
+   },
+   "predictions": {
+    "P4": "R-B and R-I pass all gates on 3/3 seeds with maximum-depth rate <= 1% at depth 10",
+    "P5": "R-N passes 3/3 (as the frozen confirmation did)",
+    "P6": "R-I median depth <= R-B median depth"
+   }
+  },
+  "3_funnel": {
+   "question": "Does NumPyro's NUTS show the neck under-coverage on Neal's funnel that the JMLR paper reports, while oWALNUTS v10 (fixed paper tuning and Appendix C adaptation) does not?",
+   "target": {"name": "neal_funnel", "dimension": 10, "omega_prior_variance": 9.0, "conditional": "x_i | omega ~ N(0, exp(omega))"},
+   "starts": [[-3.0,0,0,0,0,0,0,0,0,0],[-1.0,0,0,0,0,0,0,0,0,0],[1.0,0,0,0,0,0,0,0,0,0],[3.0,0,0,0,0,0,0,0,0,0]],
+   "chains": 4,
+   "threads": 1,
+   "runtime_callback_cap": 1000000000,
+   "draws": {"warmup": 2000, "retained_per_chain": 50000, "fallback_if_over_wall_cap": 20000},
+   "arm_order": ["FN-F", "FN-A", "FN-N80", "FN-N95"],
+   "arms": {
+    "FN-F": {"backend": "owalnuts", "mode": "fixed", "step_size": 0.36, "max_error": 0.21, "max_refinement_levels": 10, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 50000,
+             "role": "fixed paper tuning (WP6 F50 configuration) on v10"},
+    "FN-A": {"backend": "owalnuts", "mode": "paper", "step_size": 0.1, "max_error": 1.0, "max_refinement_levels": 10, "max_depth": 10, "min_micro_steps": 1, "divergence_threshold": 1000.0, "discarded": 2000, "retained": 50000,
+             "paper": {"global_energy_bound": 2.0, "quantile_probability": 0.95, "unrefined_fraction_target": 0.8, "step_statistic": "per_transition", "restart_policy": "continue"},
+             "role": "Appendix C adaptation, WP9 A2-R configuration (= paper-mode v3 defaults)"},
+    "FN-N80": {"backend": "numpyro", "target_accept": 0.8, "max_tree_depth": 10, "adapt_mass_matrix": true, "dense_mass": false, "warmup": 2000, "draws": 50000, "chains": 4, "chain_method": "sequential", "single_thread_env": true,
+               "role": "NumPyro NUTS defaults"},
+    "FN-N95": {"backend": "numpyro", "target_accept": 0.95, "max_tree_depth": 10, "adapt_mass_matrix": true, "dense_mass": false, "warmup": 2000, "draws": 50000, "chains": 4, "chain_method": "sequential", "single_thread_env": true,
+               "role": "NumPyro NUTS with the usual funnel remedy (higher target acceptance)"}
+   },
+   "estimands": {
+    "primary": "per cell and seed: P(omega < -5) and P(omega < -6) with the exact values, omega variance, divergences, retained refinement exhaustions / invalid stops, rank R-hat and bulk/tail ESS of omega and x_1, work (target calls / leapfrogs incl. warmup) and total sampling wall",
+    "bias_rule": "a cell 'under-covers the neck' when P(omega < -5) < exact - 0.009 (i.e. outside the fix-gate tolerance on the low side); a cell 'passes' when every funnel gate holds"
+   },
+   "predictions": {
+    "P7": "FN-F and FN-A pass every funnel gate on 3/3 seeds",
+    "P8": "FN-N80 under-covers the neck on >= 2/3 seeds and reports > 0 divergences on 3/3 seeds",
+    "P9": "FN-N95 under-covers the neck on >= 2/3 seeds (less severely than FN-N80) and reports > 0 divergences on >= 2/3 seeds",
+    "P10": "no NumPyro cell passes every funnel gate"
+   }
+  }
+ }
+}

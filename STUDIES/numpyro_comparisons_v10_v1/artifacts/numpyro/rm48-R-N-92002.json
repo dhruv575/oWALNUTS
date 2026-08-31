@@ -1,0 +1,137 @@
+{
+ "arm": "R-N",
+ "backend": "numpyro",
+ "part": "2_rm48",
+ "fixture": "rm48",
+ "fixture_sha256": "73185a16b8b836107956bb35620840b96278526905b1dccf40af441aa202714a",
+ "centeredness": 0.75,
+ "seed": 92002,
+ "evidence": true,
+ "dimension": 54,
+ "settings": {
+  "warmup": 500,
+  "draws": 2000,
+  "chains": 4,
+  "chain_method": "sequential",
+  "target_accept": 0.9,
+  "max_tree_depth": 10,
+  "adapt_step_size": true,
+  "adapt_mass_matrix": true,
+  "metric": "adapted_diagonal"
+ },
+ "frozen_diagonal": null,
+ "software": {
+  "python": "3.14.7",
+  "jax": "0.11.1",
+  "numpyro": "0.21.0",
+  "arviz": "1.3.0",
+  "numpy": "2.5.2"
+ },
+ "single_thread_env": {
+  "OMP_NUM_THREADS": "1",
+  "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+ },
+ "functional_names": [
+  "mu",
+  "sigma_x",
+  "alpha",
+  "beta",
+  "gamma",
+  "nu",
+  "x_terminal",
+  "x_path_mean",
+  "x_initial"
+ ],
+ "functionals": {
+  "mu": {
+   "rhat": 1.0001848847221158,
+   "bulk_ess": 11851.535295162927,
+   "tail_ess": 4886.806502195368,
+   "mean": 0.01605921471099353,
+   "sd": 0.01613195418330285
+  },
+  "sigma_x": {
+   "rhat": 1.0020671177503373,
+   "bulk_ess": 1528.7371175298963,
+   "tail_ess": 2829.3635657631844,
+   "mean": 0.10789521183737807,
+   "sd": 0.02478300135022158
+  },
+  "alpha": {
+   "rhat": 1.0005516803664352,
+   "bulk_ess": 3383.782893242792,
+   "tail_ess": 3484.9029764092334,
+   "mean": 0.0607306296229973,
+   "sd": 0.03425674262675789
+  },
+  "beta": {
+   "rhat": 1.0005713226024429,
+   "bulk_ess": 5272.554736337634,
+   "tail_ess": 3420.4317426535667,
+   "mean": 0.4048124759879596,
+   "sd": 0.3124256403870903
+  },
+  "gamma": {
+   "rhat": 1.0008187800403028,
+   "bulk_ess": 3361.6853468152262,
+   "tail_ess": 3380.732362888782,
+   "mean": 0.09150128274295721,
+   "sd": 0.04806170543321653
+  },
+  "nu": {
+   "rhat": 1.0004219870949362,
+   "bulk_ess": 5469.272566708458,
+   "tail_ess": 3240.8559571404426,
+   "mean": 2.9163985886995496,
+   "sd": 0.9071016199040064
+  },
+  "x_terminal": {
+   "rhat": 1.0001128466654707,
+   "bulk_ess": 8942.578522987049,
+   "tail_ess": 4844.021264243924,
+   "mean": -1.9836762889998871,
+   "sd": 0.08345775716555656
+  },
+  "x_path_mean": {
+   "rhat": 1.0016908449461892,
+   "bulk_ess": 3438.8429129060673,
+   "tail_ess": 5001.562908544131,
+   "mean": -2.7406787525673564,
+   "sd": 0.024130085539599958
+  },
+  "x_initial": {
+   "rhat": 1.0002412839112804,
+   "bulk_ess": 6800.208963067975,
+   "tail_ess": 4743.613457480697,
+   "mean": -2.754378768007511,
+   "sd": 0.1110320482801662
+  }
+ },
+ "sampler": {
+  "divergences": 0,
+  "depth_histogram": {
+   "4": 1547,
+   "5": 6360,
+   "6": 90,
+   "7": 3
+  },
+  "max_depth_rate": 0.0,
+  "median_depth": 5,
+  "retained_leapfrogs": 225680,
+  "warmup_leapfrogs": 63163,
+  "work_unit": "leapfrog num_steps (NumPyro proxy; not a fused target-call counter)",
+  "final_step_sizes": [
+   0.16660217374698616,
+   0.15849092805584997,
+   0.17501468825716515,
+   0.16364907095359407
+  ]
+ },
+ "timing_seconds": {
+  "warmup": 3.161630899994634,
+  "sampling": 3.5517073000082746,
+  "total_sampling": 6.713340700021945,
+  "note": "after a same-shape compile probe; compile excluded"
+ },
+ "functionals_file": "draws/rm48-R-N-92002.npy"
+}
