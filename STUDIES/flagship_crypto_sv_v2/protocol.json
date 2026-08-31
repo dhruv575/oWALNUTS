@@ -1,0 +1,36 @@
+{
+  "schema": "flagship-crypto-sv-v2/protocol",
+  "frozen": "2026-08-31",
+  "purpose": "Reach PASS on the v1 gates on all five assets, 3/3 fresh seeds, native and pymc arms, at the v1 retained budget. Gates identical to v1; no gate weakened.",
+  "kernel": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "sampler_source_commit_at_freeze": "8c91516",
+  "data": "v1 data files reused byte-identical (OKX daily closes; SHA-256 in CHECKSUMS.sha256)",
+  "gates": {
+    "primary": {"rhat_max": 1.01, "bulk_ess_min": 400, "tail_ess_min": 400, "functionals": ["mu", "h_T", "mean_h"], "max_depth_rate_max": 0.01, "owalnuts_zero": ["divergences", "invalid", "exhaustions"]},
+    "globals": {"rhat_max": 1.05, "bulk_ess_min": 100, "functionals": ["a", "s"]},
+    "agreement": {"worst_z_max": 3.0, "against": "every healthy cell incl. v1 nutpie/numpyro references"}
+  },
+  "budget": {"chains": 4, "discarded": 1000, "retained": 3000, "threads_native": 4, "threads_pymc": 1, "max_depth": 9, "refinement_levels": 6, "research_evaluation_limit": 1000000000},
+  "pilot": {
+    "seeds": [98000, 98004],
+    "arms": {
+      "O": "v1 exact (paper 2.0/.95/.8, target .8, fixed one-shot metric)",
+      "A": "standard DA .8 + late structured rebuild (refresh driver)",
+      "B": "standard DA .9 + late structured rebuild",
+      "C": "paper 1.0/.95/.90, fixed one-shot metric",
+      "D": "pooled rank-2 projected arrowhead on a 3-dummy-padded target, standard DA .8",
+      "E": "paper 1.0/.95/.95, fixed one-shot metric"
+    },
+    "selection": "highest min{a,s,mean_h} bulk ESS with clean health on the common factorial seed; amendments A3-A5 in PREREGISTRATION.md"
+  },
+  "evidence": {
+    "configuration": "arm E (Amendment A5)",
+    "seeds": [98001, 98002, 98003],
+    "assets": ["BTC", "ETH", "XRP", "BNB", "SOL"],
+    "arms": ["native", "pymc"],
+    "external_references": "v1 nutpie/numpyro cells at seed 97001, frozen, cited by hash, not rerun",
+    "stage_a": "per evidence seed, exactly as v1 (800/400 adapted-diagonal, seed XOR 0xC0FFEE)"
+  },
+  "predictions": ["P1 selected config passes 5/5 assets 3/3 seeds both arms", "P2 zero stuck pymc chains (global R-hat > 1.2)", "P3 pymc wall <= 1.3x native — expected to FAIL for wall under A2b (threads=1); ESS/work parity is the substitute measure", "P4 agreement holds with v1 healthy cells"],
+  "honesty": {"machine": "shared; ESS/work primary", "raw_draws": "hashed, not committed", "deviations": "appended to PREREGISTRATION.md before affected runs"}
+}
