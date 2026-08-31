@@ -1,0 +1,270 @@
+{
+ "schema": "owalnuts-paper-funnel-adaptive-protocol/v2",
+ "frozen": "2026-08-31 (kernel v9 at cfd813b, paper adaptation v2; frozen before any sampling in this directory)",
+ "target": {
+  "name": "neal_funnel",
+  "dimension": 10,
+  "omega_prior_variance": 9.0,
+  "conditional": "x_i | omega ~ N(0, exp(omega))",
+  "paper_equation": "arXiv 2506.18746 eq. (32)"
+ },
+ "starts": [
+  [
+   -3.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   -1.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   1.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   3.0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ ],
+ "chains": 4,
+ "threads": 1,
+ "runtime_callback_cap": 1000000000,
+ "wall_cap_seconds_per_arm": 900,
+ "gates": {
+  "rhat_max": 1.01,
+  "bulk_ess_min": 400,
+  "tail_ess_min": 400,
+  "tail_mass_thresholds": [
+   -5.0,
+   -6.0
+  ],
+  "tail_mass_exact": [
+   0.04779035227281474,
+   0.022750131948179212
+  ],
+  "tail_mass_tolerance": [
+   0.009,
+   0.006
+  ],
+  "omega_variance_interval": [
+   8.2,
+   9.8
+  ],
+  "exact_omega_quantiles": {
+   "0.01": -6.979,
+   "0.005": -7.727
+  },
+  "final_step_spread_max": 1.5,
+  "final_delta_spread_max": 1.2,
+  "bulk_ess_per_call_ratio_min": 0.8,
+  "tail_ess_per_call_ratio_min": 0.7
+ },
+ "control_reference": {
+  "study": "STUDIES/funnel_bias_fix_v1",
+  "arm": "F50",
+  "artifact_sha256": "b0d51a5e635c84a42eabd00776346c310163de6e36ef450cf0b13515c3a38410",
+  "summary_sha256": "67f923ecf768f6b94170ccc0923ed3b9b8573eabde4600fc43ce271995968bbf"
+ },
+ "arms": {
+  "A2-C": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89001,
+   "paper": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "per_transition",
+    "restart_policy": "restart"
+   },
+   "role": "control: v2 default h rule (per-transition statistic, restart at delta installs), Delta=2.0"
+  },
+  "A2-S": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89011,
+   "paper": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "cumulative",
+    "restart_policy": "restart"
+   },
+   "role": "(a) cumulative statistic only, Delta=2.0"
+  },
+  "A2-R": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89021,
+   "paper": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "per_transition",
+    "restart_policy": "continue"
+   },
+   "role": "(b) continue through delta installs only, Delta=2.0"
+  },
+  "A2-SR": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89031,
+   "paper": {
+    "global_energy_bound": 2.0,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "cumulative",
+    "restart_policy": "continue"
+   },
+   "role": "(a)+(b) cumulative statistic and continue, Delta=2.0"
+  },
+  "AD-C": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89041,
+   "paper": {
+    "global_energy_bound": 0.72,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "per_transition",
+    "restart_policy": "restart"
+   },
+   "role": "control: v2 default h rule (per-transition statistic, restart at delta installs), Delta=0.72"
+  },
+  "AD-S": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89051,
+   "paper": {
+    "global_energy_bound": 0.72,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "cumulative",
+    "restart_policy": "restart"
+   },
+   "role": "(a) cumulative statistic only, Delta=0.72"
+  },
+  "AD-R": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89061,
+   "paper": {
+    "global_energy_bound": 0.72,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "per_transition",
+    "restart_policy": "continue"
+   },
+   "role": "(b) continue through delta installs only, Delta=0.72"
+  },
+  "AD-SR": {
+   "sampler": "owalnuts",
+   "mode": "paper",
+   "step_size": 0.1,
+   "max_error": 1.0,
+   "max_refinement_levels": 10,
+   "max_depth": 10,
+   "min_micro_steps": 1,
+   "divergence_threshold": 1000.0,
+   "discarded": 2000,
+   "retained": 50000,
+   "base_seed": 89071,
+   "paper": {
+    "global_energy_bound": 0.72,
+    "quantile_probability": 0.95,
+    "unrefined_fraction_target": 0.8,
+    "step_statistic": "cumulative",
+    "restart_policy": "continue"
+   },
+   "role": "(a)+(b) cumulative statistic and continue, Delta=0.72"
+  }
+ }
+}
