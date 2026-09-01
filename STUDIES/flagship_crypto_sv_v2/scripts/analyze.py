@@ -47,6 +47,12 @@ REMEASURE = ROOT / "artifacts-remeasure"
 
 def load_meta(symbol, cell, seed):
     meta = json.loads((_root(cell) / "artifacts" / "runs" / f"{symbol}-{cell}-{seed}.json").read_text())
+    if "wall_sampling" not in meta:  # native Rust runner schema
+        meta["wall_sampling"] = meta["wall_seconds"]
+        meta["wall_cell"] = meta["wall_seconds"]
+        meta["work"] = meta["target_calls_total"]
+        meta["work_unit"] = "fused target calls (exact)"
+    meta.setdefault("cell", cell)
     rm = REMEASURE / "runs" / f"{symbol}-{cell}-{seed}.json"
     if rm.exists() and cell in ("native", "pymc"):
         m2 = json.loads(rm.read_text())
@@ -56,12 +62,6 @@ def load_meta(symbol, cell, seed):
         meta["wall_seconds"] = w2
         meta["wall_sampling"] = w2
         meta["remeasure_threads"] = m2.get("threads")
-    if "wall_sampling" not in meta:  # native Rust runner schema
-        meta["wall_sampling"] = meta["wall_seconds"]
-        meta["wall_cell"] = meta["wall_seconds"]
-        meta["work"] = meta["target_calls_total"]
-        meta["work_unit"] = "fused target calls (exact)"
-    meta.setdefault("cell", cell)
     return meta
 
 
