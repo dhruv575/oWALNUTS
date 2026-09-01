@@ -66,7 +66,7 @@ const EXACT_SD = 3;
 function normalPdf(x, sd) { return Math.exp(-0.5 * (x / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI)); }
 
 function player(R) {
-  const SPEEDS = [8, 20, 50, 120, 300, 800]; // evaluations per second, per panel
+  const SPEEDS = [30, 100, 300, 600, 1200, 3000]; // evaluations per second, per panel
   const W = 460, H = 330, m = { l: 36, r: 8, t: 8, b: 24 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const X0 = -8, X1 = 8, O0 = -9.5, O1 = 6;
@@ -191,16 +191,18 @@ function player(R) {
   }
 
   function reset() {
-    ti = 0; frac = 0;
+    ti = 0; frac = 0; finished = false;
     for (const s of Object.values(sides)) setup(s);
     for (const s of Object.values(sides)) renderTransition(s, 0, 0);
   }
+  let finished = false;
   function advance(df) {
+    if (finished) return;
     frac += df;
     while (frac >= 1) {
       for (const s of Object.values(sides)) { renderTransition(s, ti, 1); commit(s, ti); }
       ti++; frac -= 1;
-      if (ti >= N) { ti = 0; frac = 0; for (const s of Object.values(sides)) setup(s); }
+      if (ti >= N) { ti = N - 1; frac = 1; finished = true; setPlaying(false); playBtn.textContent = "Replay"; return; }
     }
     for (const s of Object.values(sides)) renderTransition(s, ti, frac);
   }
@@ -215,7 +217,7 @@ function player(R) {
   }
   const playBtn = document.getElementById("play-btn");
   function setPlaying(v) { playing = v; playBtn.textContent = v ? "Pause" : "Play"; last = null; if (v) raf = requestAnimationFrame(frame); else if (raf) cancelAnimationFrame(raf); }
-  playBtn.addEventListener("click", () => setPlaying(!playing));
+  playBtn.addEventListener("click", () => { if (finished) reset(); setPlaying(!playing); });
   document.getElementById("step-btn").addEventListener("click", () => { setPlaying(false); advance(1 - frac || 1); });
   document.getElementById("reset-btn").addEventListener("click", () => { setPlaying(false); reset(); });
   document.querySelectorAll("#nuts-toggle button").forEach(b => b.addEventListener("click", () => {
