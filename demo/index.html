@@ -14,7 +14,6 @@
 <body>
   <nav class="topnav">
     <span class="topnav-logo">oWALNUTS</span>
-    <span class="topnav-tag">a Polyscope research demo</span>
     <div class="topnav-links">
       <a class="topnav-link" href="#funnel">Funnel</a>
       <a class="topnav-link" href="#paths">Long paths</a>
@@ -26,35 +25,63 @@
   </nav>
 
   <main class="page">
-    <div class="eyebrow">Rust · kernel v10 · verified against the reference implementation</div>
-    <h1 class="page-title">Sampling the geometries NUTS gives up on</h1>
+    <h1 class="page-title">An Optimized Rust MCMC Sampler</h1>
     <p class="page-subtitle">
-      oWALNUTS is an independent Rust implementation of
-      <a class="inline-link" href="https://arxiv.org/abs/2506.18746" rel="noopener">WALNUTS</a> —
-      the No-U-Turn sampler whose leapfrog refines its own step size <em>inside</em> every orbit
-      (Bou-Rabee, Carpenter, Kleppe &amp; Marsden, JMLR 2026). It matches the authors' reference
-      implementation leaf for leaf, reproduces the paper's funnel result where NumPyro NUTS
-      fails, and — paired with a posterior-precision path metric — samples 1,000-step latent
-      paths that prior-based metrics cannot. Every number on this page comes from a
-      preregistered, checksummed study, and the misses are listed next to the wins.
+      oWALNUTS is an independent implementation of the No-U-Turn sampler variant
+      <a class="inline-link" href="https://arxiv.org/abs/2506.18746" rel="noopener">WALNUTS</a>
+      (Bou-Rabee, Carpenter, Kleppe &amp; Marsden). The Rust implementation matches the paper's
+      implementation with several optimizations and improvements, reproduces their result where
+      NumPyro NUTS fails, and is able to sample 1,000-step latent paths that prior metrics cannot.
     </p>
 
-    <div class="overview" id="overview"><!-- stat strip --></div>
 
     <!-- ============ 1 · FUNNEL ============ -->
     <section id="funnel">
-      <div class="eyebrow">1 · The algorithm, visible</div>
-      <h2 class="section-title">Steps that shrink in the neck</h2>
+      <h2 class="section-title">Neal's Funnel</h2>
       <p class="prose">
-        Neal's funnel is the canonical hard geometry: a scale ω ~ N(0, 3²) and nine
-        coordinates x<sub>i</sub> ~ N(0, e<sup>ω</sup>). Near ω = −6 the x-directions are a
-        thousand times stiffer than near ω = +2, so any single leapfrog step is either too coarse
-        for the neck or too fine for the mouth. WALNUTS builds each orbit with a macro step
-        h and, wherever the energy error of a macro step exceeds δ, halves the micro step
-        until it doesn't — then checks that the same choice would be made in reverse, so the
-        transition stays exactly reversible. Below is one real orbit from oWALNUTS at the
-        paper's tuning (h = 0.36, δ = 0.21): every gradient evaluation the kernel made, in order,
-        coloured by refinement level.
+        Neal's Funnel is considered a hard geometry (the statistics equivalent of trying to run
+        gradient descent with a learning rate that is always too large or too small) that WALNUTS'
+        unique ability to build each orbit with a macro step h — and refine it wherever the orbit
+        needs it — allows it to properly sample.
+      </p>
+      <div class="player panel" id="player">
+        <div class="player-bar">
+          <div class="player-controls">
+            <button type="button" class="btn-primary" id="play-btn">Play</button>
+            <button type="button" id="step-btn">Step</button>
+            <button type="button" id="reset-btn">Reset</button>
+            <label class="player-speed">Speed <input type="range" id="speed" min="1" max="6" value="3" /></label>
+          </div>
+          <div class="player-toggle" id="nuts-toggle">
+            <span>NUTS step</span>
+            <button type="button" data-arm="nuts_h011" class="active">h = 0.11</button>
+            <button type="button" data-arm="nuts_h036">h = 0.36</button>
+          </div>
+        </div>
+        <div class="player-grid">
+          <div class="player-side" id="side-nuts">
+            <div class="player-head"><span class="player-name">NUTS</span><span class="player-sub" id="nuts-sub"></span></div>
+            <div class="player-plot" id="plot-nuts"></div>
+            <div class="player-status" id="status-nuts"></div>
+            <div class="player-stats" id="stats-nuts"></div>
+            <div class="player-hist" id="hist-nuts"></div>
+          </div>
+          <div class="player-side" id="side-walnuts">
+            <div class="player-head"><span class="player-name">WALNUTS</span><span class="player-sub" id="walnuts-sub"></span></div>
+            <div class="player-plot" id="plot-walnuts"></div>
+            <div class="player-status" id="status-walnuts"></div>
+            <div class="player-stats" id="stats-walnuts"></div>
+            <div class="player-hist" id="hist-walnuts"></div>
+          </div>
+        </div>
+        <div class="chart-legend" id="player-legend"></div>
+        <p class="panel-note" id="player-note"></p>
+      </div>
+
+      <h3 class="sub-title">Inspect one orbit</h3>
+      <p class="prose">
+        One real orbit from the WALNUTS run, every gradient evaluation the kernel made, in order and
+        coloured by refinement level. Hover a point for its step size and energy error.
       </p>
       <div class="orbit-panel panel">
         <div class="orbit-head">
@@ -101,7 +128,6 @@
 
     <!-- ============ 2 · LONG PATHS ============ -->
     <section id="paths">
-      <div class="eyebrow">2 · Long latent paths</div>
       <h2 class="section-title">A metric that makes T = 1,000 routine</h2>
       <p class="prose">
         Polyscope's forecasting models carry latent random-walk paths a thousand steps long.
@@ -142,7 +168,6 @@
 
     <!-- ============ 3 · THROUGHPUT ============ -->
     <section id="throughput">
-      <div class="eyebrow">3 · Throughput, strictly matched</div>
       <h2 class="section-title">nutpie-class speed from PyMC, twice CmdStan in Rust</h2>
       <p class="prose">
         A better kernel is worth little behind a slow transport. oWALNUTS exposes a GIL-free
@@ -162,7 +187,6 @@
 
     <!-- ============ 4 · CRYPTO ============ -->
     <section id="crypto">
-      <div class="eyebrow">4 · Real data, every gate, honest walls</div>
       <h2 class="section-title">Crypto volatility: the ordinary test</h2>
       <p class="prose">
         Stochastic-volatility posteriors over the full daily history of the five largest
@@ -208,7 +232,6 @@
 
     <!-- ============ EVIDENCE ============ -->
     <section id="evidence">
-      <div class="eyebrow">How we know</div>
       <h2 class="section-title">Verified against the reference, preregistered, corrected in public</h2>
       <div class="evidence-grid" id="evidence-grid"></div>
       <h3 class="sub-title">Corrections we published</h3>
@@ -224,7 +247,6 @@
     <hr class="page-divider" />
 
     <section id="reproduce">
-      <div class="eyebrow">Run it yourself</div>
       <h2 class="section-title">Reproduce</h2>
       <p class="prose">The orbit at the top of this page, and the funnel result, in one command from the repository:</p>
       <pre class="code"><code>git clone https://github.com/dhruv575/oWALNUTS &amp;&amp; cd oWALNUTS

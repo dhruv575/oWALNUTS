@@ -36,12 +36,13 @@ Promise.all([
   loadJson("data/site-data.json"),
   loadJson("data/story-data.json"),
   loadJson("data/funnel-orbit.json").catch(() => null),
-]).then(([D, S, O]) => build(D, S, O)).catch(err => {
-  document.getElementById("overview").textContent = "Data failed to load: " + err;
+  loadJson("data/funnel-replay.json").catch(() => null),
+]).then(([D, S, O, R]) => build(D, S, O, R)).catch(err => {
+  document.getElementById("player-note").textContent = "Data failed to load: " + err;
 });
 
-function build(D, S, O) {
-  overview(D, S);
+function build(D, S, O, R) {
+  if (R) player(R); else document.getElementById("player-note").textContent = "Replay data not available.";
   if (O) orbitViewer(O); else document.getElementById("orbit-plot").textContent = "Orbit trace not available.";
   funnelHist(D.funnel);
   funnelBars(D.funnel);
@@ -60,21 +61,189 @@ function build(D, S, O) {
   footer(D.meta, S.provenance);
 }
 
-/* ---- overview strip ---- */
-function overview(D, S) {
-  const es = S.eight_schools.backends;
-  const ow = es.find(b => b.key === "owalnuts_pymc_cfunc_t4").ess_s, np = es.find(b => b.key === "nutpie_cores4").ess_s;
-  const P = S.state_space.arms.P.seeds, Q = S.state_space.arms.Q.seeds;
-  const ratio = (P.reduce((a, s) => a + s.ess_per_call, 0) / P.length) / (Q.reduce((a, s) => a + s.ess_per_call, 0) / Q.length);
-  const items = [
-    [`${fmt(S.funnel_extra.oracle_leaves, 0)} / ${fmt(S.funnel_extra.oracle_leaves, 0)}`, "reference leaves matched to 1e-11"],
-    [S.funnel_extra.v9_F50_p5.toFixed(4) + " vs " + S.funnel_extra.exact_p5.toFixed(4), "funnel tail mass, ours vs exact · NumPyro 0.0000"],
-    ["≈" + fmt(Math.round(ratio / 100) * 100, 0) + "×", "ESS per gradient vs a prior-based metric, T = 1,000"],
-    [(ow / 1000).toFixed(1) + "k vs " + (np / 1000).toFixed(1) + "k", "Eight Schools ESS/s from PyMC: oWALNUTS vs nutpie"],
-    [`${S.provenance.preregistered_studies} · ${S.provenance.retractions.length}`, "preregistered studies · published corrections"],
-  ];
-  document.getElementById("overview").innerHTML =
-    items.map(([a, b]) => `<div><strong>${a}</strong><span>${b}</span></div>`).join("");
+/* ---- side-by-side player: NUTS vs WALNUTS on the funnel ---- */
+const EXACT_SD = 3;
+function normalPdf(x, sd) { return Math.exp(-0.5 * (x / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI)); }
+
+function player(R) {
+  const SPEEDS = [8, 20, 50, 120, 300, 800]; // evaluations per second, per panel
+  const W = 460, H = 330, m = { l: 36, r: 8, t: 8, b: 24 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const X0 = -8, X1 = 8, O0 = -9.5, O1 = 6;
+  const X = v => m.l + (v - X0) / (X1 - X0) * iw;
+  const Y = v => m.t + ih - (v - O0) / (O1 - O0) * ih;
+  const inWin = (o, x) => o != null && x != null && o >= O0 && o <= O1 && x >= X0 && x <= X1;
+
+  const sides = {
+    nuts: { key: "nuts_h011", color: COLORS.numpyro, plot: "plot-nuts", status: "status-nuts", stats: "stats-nuts", hist: "hist-nuts", sub: "nuts-sub" },
+    walnuts: { key: "walnuts", color: COLORS.owalnuts, plot: "plot-walnuts", status: "status-walnuts", stats: "stats-walnuts", hist: "hist-walnuts", sub: "walnuts-sub" },
+  };
+  const N = R.meta.replay_transitions;
+  let ti = 0, frac = 0, playing = false, last = null, raf = null;
+
+  function setup(side) {
+    const arm = R.arms[side.key];
+    const mount = document.getElementById(side.plot); mount.innerHTML = "";
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${arm.label} sampling Neal's funnel` });
+    const env = [];
+    for (let o = O0; o <= O1; o += 0.1) env.push([o, 2 * Math.exp(o / 2)]);
+    const envPath = "M" + env.map(([o, s]) => `${X(Math.max(X0, -s))},${Y(o)}`).join("L") + "L" + env.slice().reverse().map(([o, s]) => `${X(Math.min(X1, s))},${Y(o)}`).join("L") + "Z";
+    el("path", { d: envPath, fill: "#f1f0eb" }, svg);
+    for (let o = -8; o <= O1; o += 2) {
+      el("line", { x1: m.l, x2: W - m.r, y1: Y(o), y2: Y(o), class: "gridline" }, svg);
+      el("text", { x: m.l - 5, y: Y(o) + 3, "text-anchor": "end", class: "axis-label" }, svg).textContent = "ω=" + o;
+    }
+    el("line", { x1: m.l, x2: W - m.r, y1: Y(-5), y2: Y(-5), stroke: "#37352f", "stroke-width": 1, "stroke-dasharray": "2 3" }, svg);
+    el("text", { x: W - m.r - 2, y: Y(-5) - 4, "text-anchor": "end", class: "axis-label" }, svg).textContent = "ω = −5 · the neck (4.8% of the posterior lies below)";
+    for (let x = -8; x <= 8; x += 4) el("text", { x: X(x), y: H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = "x₁=" + x;
+    side.svg = svg;
+    side.gDraws = el("g", { fill: side.color, "fill-opacity": "0.55" }, svg);
+    side.gOrbit = el("g", {}, svg);
+    side.cursor = el("circle", { r: 4.5, fill: "none", stroke: "#37352f", "stroke-width": 1.5 }, svg);
+    side.divMark = el("text", { class: "div-mark", "text-anchor": "middle", fill: "#9b3b3b", "font-size": "16", "font-weight": "700" }, svg);
+    side.divMark.textContent = "";
+    mount.appendChild(svg);
+    side.arm = arm;
+    side.drawn = 0; side.below = 0; side.divergent = 0; side.evals = 0;
+    side.omegas = [];
+    side.lastFinite = null;
+    document.getElementById(side.sub).textContent = arm.label;
+    // histogram scaffold
+    const hm = document.getElementById(side.hist); hm.innerHTML = "";
+    const HW = 460, HH = 84, hmg = { l: 36, r: 8, t: 6, b: 16 };
+    side.hsvg = el("svg", { viewBox: `0 0 ${HW} ${HH}`, role: "img", "aria-label": "Histogram of accepted omega draws against the exact density" });
+    side.hg = { W: HW, H: HH, m: hmg, x0: -10, x1: 10, bins: 40, ymax: 0.16 };
+    side.hBars = el("g", { fill: side.color, "fill-opacity": "0.75" }, side.hsvg);
+    const hg = side.hg, hx = v => hg.m.l + (v - hg.x0) / (hg.x1 - hg.x0) * (hg.W - hg.m.l - hg.m.r);
+    const hy = v => hg.m.t + (hg.H - hg.m.t - hg.m.b) - Math.min(v, hg.ymax) / hg.ymax * (hg.H - hg.m.t - hg.m.b);
+    const pts = []; for (let v = hg.x0; v <= hg.x1; v += 0.1) pts.push(`${hx(v)},${hy(normalPdf(v, EXACT_SD))}`);
+    el("path", { d: "M" + pts.join("L"), fill: "none", stroke: "#37352f", "stroke-width": 1.2 }, side.hsvg);
+    el("line", { x1: hx(-5), x2: hx(-5), y1: hg.m.t, y2: hg.H - hg.m.b, stroke: "#37352f", "stroke-dasharray": "2 3" }, side.hsvg);
+    for (const v of [-10, -5, 0, 5, 10]) el("text", { x: hx(v), y: hg.H - 3, "text-anchor": "middle", class: "axis-label" }, side.hsvg).textContent = "ω=" + v;
+    el("text", { x: hg.m.l, y: hg.m.t + 8, class: "axis-label" }, side.hsvg).textContent = "accepted draws so far vs exact N(0, 3²)";
+    hm.appendChild(side.hsvg);
+    renderStats(side);
+  }
+
+  function renderHist(side) {
+    const hg = side.hg, n = side.omegas.length; if (!n) { side.hBars.innerHTML = ""; return; }
+    const bw = (hg.x1 - hg.x0) / hg.bins, counts = new Array(hg.bins).fill(0);
+    for (const o of side.omegas) { const b = Math.floor((o - hg.x0) / bw); if (b >= 0 && b < hg.bins) counts[b]++; }
+    const hx = v => hg.m.l + (v - hg.x0) / (hg.x1 - hg.x0) * (hg.W - hg.m.l - hg.m.r);
+    const hy = v => hg.m.t + (hg.H - hg.m.t - hg.m.b) - Math.min(v, hg.ymax) / hg.ymax * (hg.H - hg.m.t - hg.m.b);
+    side.hBars.innerHTML = "";
+    counts.forEach((c, b) => {
+      const dens = c / (n * bw); if (!c) return;
+      el("rect", { x: hx(hg.x0 + b * bw) + 0.5, y: hy(dens), width: hx(bw) - hx(0) - 1, height: hg.H - hg.m.b - hy(dens) }, side.hBars);
+    });
+  }
+
+  function renderStats(side) {
+    const share = side.drawn ? side.below / side.drawn : 0;
+    document.getElementById(side.stats).innerHTML =
+      `<div><strong>${side.drawn}</strong><span>draws</span></div>` +
+      `<div><strong>${(share * 100).toFixed(1)}%</strong><span>below ω = −5 in this window</span></div>` +
+      `<div><strong class="${side.divergent ? "bad" : ""}">${side.divergent}</strong><span>divergent transitions</span></div>` +
+      `<div><strong>${fmt(side.evals, 0)}</strong><span>gradient evaluations</span></div>`;
+  }
+
+  function renderTransition(side, i, f) {
+    const tr = side.arm.transitions[i]; if (!tr) return;
+    const n = tr.points.length, k = Math.min(n, Math.max(1, Math.ceil(f * n)));
+    side.gOrbit.innerHTML = "";
+    let lastFinite = tr.start, maxL = 0;
+    for (let j = 0; j < k; j++) {
+      const p = tr.points[j];
+      if (p[0] == null || p[1] == null) continue;
+      if (p[2] > maxL) maxL = p[2];
+      lastFinite = p;
+      if (!inWin(p[0], p[1])) continue;
+      el("circle", { cx: X(p[1]), cy: Y(p[0]), r: p[2] > 0 ? 2.4 : 1.9, fill: side.key === "walnuts" ? levelColor(p[2]) : side.color, "fill-opacity": "0.9" }, side.gOrbit);
+    }
+    const cur = lastFinite;
+    if (inWin(cur[0], cur[1])) { side.cursor.setAttribute("cx", X(cur[1])); side.cursor.setAttribute("cy", Y(cur[0])); side.cursor.removeAttribute("display"); }
+    else side.cursor.setAttribute("display", "none");
+    const done = k >= n;
+    let text;
+    if (!done) {
+      text = `Transition ${i + 1} of ${N} · building the orbit · ${k} of ${n} evaluations` +
+        (side.key === "walnuts" ? (maxL ? ` · refined to h/${2 ** maxL}` : " · macro step only") : ` · fixed step h = ${side.arm.h}`);
+    } else if (tr.divergent) {
+      text = tr.stop === "refinement_exhausted"
+        ? `Transition ${i + 1}: the fixed step was too coarse — energy error passed δ with no finer step available, so the orbit was cut short after ${n} evaluations; draw at ω = ${tr.accepted[0].toFixed(2)}`
+        : `Transition ${i + 1}: energy error exploded — divergent after ${n} evaluations; draw at ω = ${tr.accepted[0].toFixed(2)}`;
+    } else {
+      text = `Transition ${i + 1}: accepted ω = ${tr.accepted[0].toFixed(2)} after ${n} evaluations` + (side.key === "walnuts" && maxL ? ` (finest step h/${2 ** maxL})` : "");
+    }
+    document.getElementById(side.status).textContent = text;
+    if (done && tr.divergent && inWin(cur[0], cur[1])) { side.divMark.setAttribute("x", X(cur[1])); side.divMark.setAttribute("y", Y(cur[0]) + 6); side.divMark.textContent = "×"; }
+    else side.divMark.textContent = "";
+  }
+
+  function commit(side, i) {
+    const tr = side.arm.transitions[i]; if (!tr) return;
+    side.drawn++; side.evals += tr.evals;
+    if (tr.divergent) side.divergent++;
+    if (tr.accepted[0] < -5) side.below++;
+    side.omegas.push(tr.accepted[0]);
+    if (inWin(tr.accepted[0], tr.accepted[1])) el("circle", { cx: X(tr.accepted[1]), cy: Y(tr.accepted[0]), r: 1.8 }, side.gDraws);
+    renderStats(side); renderHist(side);
+  }
+
+  function reset() {
+    ti = 0; frac = 0;
+    for (const s of Object.values(sides)) setup(s);
+    for (const s of Object.values(sides)) renderTransition(s, 0, 0);
+  }
+  function advance(df) {
+    frac += df;
+    while (frac >= 1) {
+      for (const s of Object.values(sides)) { renderTransition(s, ti, 1); commit(s, ti); }
+      ti++; frac -= 1;
+      if (ti >= N) { ti = 0; frac = 0; for (const s of Object.values(sides)) setup(s); }
+    }
+    for (const s of Object.values(sides)) renderTransition(s, ti, frac);
+  }
+  function frame(ts) {
+    if (!playing) return;
+    if (last == null) last = ts;
+    const dt = Math.min(0.1, (ts - last) / 1000); last = ts;
+    const speed = SPEEDS[document.getElementById("speed").value - 1];
+    const nmax = Math.max(...Object.values(sides).map(s => (s.arm.transitions[ti] || { points: [1] }).points.length));
+    advance(speed * dt / Math.max(4, nmax));
+    raf = requestAnimationFrame(frame);
+  }
+  const playBtn = document.getElementById("play-btn");
+  function setPlaying(v) { playing = v; playBtn.textContent = v ? "Pause" : "Play"; last = null; if (v) raf = requestAnimationFrame(frame); else if (raf) cancelAnimationFrame(raf); }
+  playBtn.addEventListener("click", () => setPlaying(!playing));
+  document.getElementById("step-btn").addEventListener("click", () => { setPlaying(false); advance(1 - frac || 1); });
+  document.getElementById("reset-btn").addEventListener("click", () => { setPlaying(false); reset(); });
+  document.querySelectorAll("#nuts-toggle button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#nuts-toggle button").forEach(x => x.classList.toggle("active", x === b));
+    sides.nuts.key = b.dataset.arm; setPlaying(false); reset();
+  }));
+
+  const maxLevel = Math.max(...R.arms.walnuts.transitions.map(t => t.max_level));
+  let lg = `<span><i class="legend-swatch" style="background:${COLORS.numpyro};height:8px;width:8px;border-radius:50%"></i>NUTS evaluations (one fixed step)</span>`;
+  for (let l = 0; l <= maxLevel; l++) lg += `<span><i class="legend-swatch" style="background:${levelColor(l)};height:8px;width:8px;border-radius:50%"></i>WALNUTS level ${l} · step h/${2 ** l}</span>`;
+  lg += `<span><b style="color:#9b3b3b">×</b> divergent transition</span>`;
+  document.getElementById("player-legend").innerHTML = lg;
+  const wt = R.arms.walnuts.tail_mass, nt = R.arms[sides.nuts.key].tail_mass;
+  document.getElementById("player-note").innerHTML =
+    `Both panels replay real transitions recorded from the oWALNUTS kernel on the 10-D funnel (one chain from the origin, no warmup, seed ${R.meta.seed}` +
+    (R.meta.replay_start ? `; transitions ${fmt(R.meta.replay_start + 1, 0)}-${fmt(R.meta.replay_start + N, 0)} of the run, a window chosen where WALNUTS enters the neck` : "") + `). ` +
+    `The NUTS panel is the same kernel with step refinement switched off — that is standard fixed-step NUTS, and it is the paper's own control. ` +
+    `Over the full ${fmt(R.meta.full_run_retained || R.meta.retained, 0)}-draw runs: WALNUTS put ${(wt.estimate * 100).toFixed(1)}% of draws below ω = −5 (exact 4.8%) with ${R.arms.walnuts.divergent_transitions} divergent transitions; ` +
+    `fixed-step NUTS at h = ${R.arms[sides.nuts.key].h} put ${(nt.estimate * 100).toFixed(1)}% there with ${R.arms[sides.nuts.key].divergent_transitions}. ` +
+    `NumPyro's NUTS, measured on the same target in the study below, behaves the same way: 0.0% below ω = −5 and 365–3,449 divergences per run.`;
+  const params = new URLSearchParams(location.search);
+  if (params.get("nuts") && R.arms[params.get("nuts")]) {
+    sides.nuts.key = params.get("nuts");
+    document.querySelectorAll("#nuts-toggle button").forEach(x => x.classList.toggle("active", x.dataset.arm === sides.nuts.key));
+  }
+  reset();
+  const at = parseInt(params.get("at") || "0", 10);
+  if (at > 0) advance(Math.min(N - 1, at));
 }
 
 /* ---- orbit viewer ---- */
