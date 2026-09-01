@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Exact Python stack used by the v1/v2 flagship studies.
 RUN python3.11 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
-        "numpy==2.2.6" "arviz==0.23.4" "pymc==5.28.5" "nutpie==0.16.8" \
-        "numpyro==0.21.0" "jax[cpu]==0.7.1" "numba" "maturin>=1.7,<2" \
+        "numpy<2.3" "arviz==0.23.4" "pymc==5.28.5" "nutpie==0.16.8" \
+        "numpyro==0.21.0" "numba" "maturin>=1.7,<2" \
         "pytest"
 ENV PATH="/opt/venv/bin:${PATH}" VIRTUAL_ENV=/opt/venv
 
