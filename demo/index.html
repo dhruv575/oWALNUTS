@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>oWALNUTS × Crypto Volatility</title>
-  <meta name="description" content="Full-posterior stochastic volatility on the five largest cryptocurrencies, sampled with the oWALNUTS kernel. Preregistered, checksummed, honest about failures." />
+  <title>oWALNUTS</title>
+  <meta name="description" content="oWALNUTS: an independent Rust implementation of WALNUTS, verified leaf-for-leaf against the authors' reference. Exact on Neal's funnel where NUTS fails, a posterior-precision path metric that makes T=1,000 latent paths routine, nutpie-class throughput from PyMC. Every number preregistered and checksummed, misses included." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
@@ -16,38 +16,68 @@
     <span class="topnav-logo">oWALNUTS</span>
     <span class="topnav-tag">a Polyscope research demo</span>
     <div class="topnav-links">
+      <a class="topnav-link" href="#funnel">Funnel</a>
+      <a class="topnav-link" href="#paths">Long paths</a>
+      <a class="topnav-link" href="#throughput">Throughput</a>
+      <a class="topnav-link" href="#crypto">Crypto</a>
+      <a class="topnav-link" href="#evidence">Evidence</a>
       <a class="topnav-link" href="https://github.com/dhruv575/oWALNUTS" rel="noopener">GitHub</a>
-      <a class="topnav-link" href="https://github.com/dhruv575/oWALNUTS/tree/main/STUDIES/flagship_crypto_sv_v1" rel="noopener">Study</a>
-      <a class="topnav-link" href="https://github.com/dhruv575/oWALNUTS/blob/main/integrations/python/examples/crypto_sv.ipynb" rel="noopener">Notebook</a>
     </div>
   </nav>
 
   <main class="page">
-    <div class="eyebrow">Flagship demo · preregistered 2026-08-31</div>
-    <h1 class="page-title">Crypto volatility, the full posterior</h1>
+    <div class="eyebrow">Rust · kernel v10 · verified against the reference implementation</div>
+    <h1 class="page-title">Sampling the geometries NUTS gives up on</h1>
     <p class="page-subtitle">
-      Stochastic-volatility posteriors over the complete daily history of the five largest
-      cryptocurrencies — every latent volatility state sampled jointly with the model's global
-      parameters, no marginalization, no shortcuts. Sampled with
-      <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS" rel="noopener">oWALNUTS</a>,
-      a Rust implementation of the within-orbit adaptive leapfrog No-U-Turn sampler,
-      compared head-to-head against NumPyro NUTS and nutpie on the same models and seeds.
+      oWALNUTS is an independent Rust implementation of
+      <a class="inline-link" href="https://arxiv.org/abs/2506.18746" rel="noopener">WALNUTS</a> —
+      the No-U-Turn sampler whose leapfrog refines its own step size <em>inside</em> every orbit
+      (Bou-Rabee, Carpenter, Kleppe &amp; Marsden, JMLR 2026). It matches the authors' reference
+      implementation leaf for leaf, reproduces the paper's funnel result where NumPyro NUTS
+      fails, and — paired with a posterior-precision path metric — samples 1,000-step latent
+      paths that prior-based metrics cannot. Every number on this page comes from a
+      preregistered, checksummed study, and the misses are listed next to the wins.
     </p>
 
     <div class="overview" id="overview"><!-- stat strip --></div>
 
-    <hr class="page-divider" />
-
-    <section>
-      <div class="eyebrow">Why another sampler</div>
-      <h2 class="section-title">NUTS quietly misses the tail. oWALNUTS doesn't.</h2>
+    <!-- ============ 1 · FUNNEL ============ -->
+    <section id="funnel">
+      <div class="eyebrow">1 · The algorithm, visible</div>
+      <h2 class="section-title">Steps that shrink in the neck</h2>
       <p class="prose">
-        Neal's funnel is the canonical hard geometry: a scale parameter ω whose exact marginal is
-        N(0,&nbsp;3²), so exactly <strong>4.78%</strong> of posterior mass sits below ω&nbsp;=&nbsp;−5.
-        NumPyro's NUTS, at either target acceptance, places <strong>almost none of it</strong> there —
-        while emitting hundreds to thousands of divergences. oWALNUTS, whose leapfrog refines its
-        step <em>within</em> each orbit, recovers the tail exactly, with zero divergences, in a tenth
-        of the wall time. Same target, same seeds, measured — not inferred.
+        Neal's funnel is the canonical hard geometry: a scale ω ~ N(0, 3²) and nine
+        coordinates x<sub>i</sub> ~ N(0, e<sup>ω</sup>). Near ω = −6 the x-directions are a
+        thousand times stiffer than near ω = +2, so any single leapfrog step is either too coarse
+        for the neck or too fine for the mouth. WALNUTS builds each orbit with a macro step
+        h and, wherever the energy error of a macro step exceeds δ, halves the micro step
+        until it doesn't — then checks that the same choice would be made in reverse, so the
+        transition stays exactly reversible. Below is one real orbit from oWALNUTS at the
+        paper's tuning (h = 0.36, δ = 0.21): every gradient evaluation the kernel made, in order,
+        coloured by refinement level.
+      </p>
+      <div class="orbit-panel panel">
+        <div class="orbit-head">
+          <div class="panel-title">One WALNUTS orbit on the 10-D funnel · (x₁, ω) plane · grey = 2,000 retained draws</div>
+          <div class="orbit-picker" id="orbit-picker"></div>
+        </div>
+        <div class="orbit-grid">
+          <div id="orbit-plot"></div>
+          <div class="orbit-side">
+            <div class="panel-title">Micro step per evaluation, in order</div>
+            <div id="orbit-steps"></div>
+            <div class="panel-note" id="orbit-note"></div>
+          </div>
+        </div>
+        <div class="chart-legend" id="orbit-legend"></div>
+      </div>
+
+      <p class="prose" style="margin-top:26px">
+        The consequence is measurable. Exactly <strong>4.78%</strong> of the exact ω marginal
+        sits below ω = −5. NumPyro's NUTS, at either target acceptance, puts
+        <strong>almost none of it</strong> there while emitting hundreds to thousands of
+        divergences; oWALNUTS recovers the tail within Monte-Carlo error with zero divergences,
+        in a tenth of the wall time. Same target, same seeds, measured — not inferred.
       </p>
       <div class="panel-row">
         <div class="panel">
@@ -61,69 +91,160 @@
         </div>
       </div>
       <div class="chart-legend" id="funnel-legend"></div>
-    </section>
-
-    <hr class="page-divider" />
-
-    <section>
-      <div class="eyebrow">Five assets · full history · T up to 3,153 days</div>
-      <h2 class="section-title">Posterior annualized volatility</h2>
-      <p class="prose">
-        Median and 90% credible band of annualized volatility, from the oWALNUTS native run
-        (seed 97001) on each asset's complete daily close history. Hover to read the band.
-      </p>
-      <div class="asset-grid" id="asset-grid"><!-- asset cards --></div>
-    </section>
-
-    <hr class="page-divider" />
-
-    <section>
-      <div class="eyebrow">Four backends · shared seeds · shared gates</div>
-      <h2 class="section-title">The comparison, including the losses</h2>
-      <p class="prose">
-        Every cell ran 4 chains × 1,000 warmup + 3,000 retained draws against preregistered gates
-        (rank R-hat ≤ 1.01 and bulk ESS ≥ 400 on the primary functionals; zero divergences;
-        depth caps ≤ 1%). Zero divergences occurred in all 40 cells and every healthy pair of
-        backends agrees on the posterior (worst z = 2.29). Wall times are from one shared machine.
-      </p>
-      <p class="section-note">Fairness notes: oWALNUTS rows use three fresh seeds each (98001–98003) with an all-seeds-must-pass reading; nutpie/NumPyro reference rows are single-seed (97001), frozen from the v1 study. Rows marked “8 chains pooled” are a preregistered, labeled compute extension: two independent at-budget runs (partner seeds 98011–98013) pooled into one 8-chain estimate — the standard rows come first. Rows marked “fallback B” rerun cells whose chains stuck under the frozen metric with the rebuild-enabled fallback configuration, as preregistered. oWALNUTS wall times are quiet-machine re-measurements of the identical runs (same seeds, same configuration; draws verified bit-identical), PyMC-bridge rows at 4 threads with per-thread compiled gradients; the original contended walls are kept in summary.json as wall_contended. Reference walls are the v1 single-seed measurements. Gate definitions (identical for every backend, frozen in the v1 preregistration): primary = rank-normalized R-hat ≤ 1.01 and bulk/tail ESS ≥ 400 on μ, h_T, mean(h), plus zero divergences and depth caps ≤ 1% for oWALNUTS cells; globals = R-hat ≤ 1.05 and bulk ESS ≥ 100 on the (φ, σ) ridge pair, preregistered as a weaker gate before any evidence because that ridge bottlenecks every tested sampler. Under a strict 1.01/400 reading of the globals pair, exactly one cell in the whole study passes (an oWALNUTS 8-chain pooled XRP run) and no nutpie/NumPyro reference cell does; the per-cell numbers are all published, including that strict view (“globals_strict_1p01_400” in summary.json).</p>
-      <div id="comparison"><!-- per-asset tables --></div>
-      <div class="honest-box">
-        <strong>Honest edges — what did not pass</strong>
-        At this draw budget, oWALNUTS misses the primary ESS gate on BTC and ETH (T ≈ 3,150),
-        where NumPyro passes: the two observation-scale globals sit on a correlation ≈ −0.9 ridge,
-        and windowed metric adaptation (nutpie, NumPyro) extracts ~1.5–2× more effective samples
-        from it than our one-shot metric. Three PyMC-bridge seeds stalled from bad starts
-        (R-hat 1.4–1.7) — a start-sensitivity of the frozen metric, reported rather than resampled.
-        The named fix, windowed adaptation, is the next preregistered study.
+      <div class="honest-box" id="funnel-honest">
+        <strong>We got this wrong first</strong>
+        <span id="funnel-honest-text"></span>
       </div>
     </section>
 
     <hr class="page-divider" />
 
-    <section>
-      <div class="eyebrow">Run it yourself</div>
-      <h2 class="section-title">Reproduce</h2>
-      <p class="prose">Everything on this page is computed from committed, checksummed artifacts. The notebook reproduces the BTC posterior in a few seconds on a laptop:</p>
-      <pre class="code"><code>pip install maturin numba pymc arviz
-git clone https://github.com/dhruv575/oWALNUTS &amp;&amp; cd oWALNUTS/integrations/python
-maturin develop --release</code></pre>
-      <pre class="code"><code>import owalnuts
-result = owalnuts.sample(owalnuts.from_pymc(sv_model, gil_free=True), ...)
-idata = result.to_inferencedata()   # 94k gradients · 3.5 s · zero divergences</code></pre>
+    <!-- ============ 2 · LONG PATHS ============ -->
+    <section id="paths">
+      <div class="eyebrow">2 · Long latent paths</div>
+      <h2 class="section-title">A metric that makes T = 1,000 routine</h2>
       <p class="prose">
-        Full evidence: the
-        <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/tree/main/STUDIES/flagship_crypto_sv_v1" rel="noopener">study directory</a>
-        (preregistration, protocol, per-cell artifacts, checksums) and the
-        <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/blob/main/integrations/python/examples/crypto_sv.ipynb" rel="noopener">executed notebook</a>.
+        Polyscope's forecasting models carry latent random-walk paths a thousand steps long.
+        To study them without guesswork we built a fixture whose posterior is <em>exactly</em>
+        Gaussian with a tridiagonal precision — a local-level model with fixed globals — so
+        every sampler's error to the truth is known, not estimated. Four fixed metrics, same
+        kernel, same seeds: the depth histograms below are the whole story. A prior-based path
+        metric (the kind an earlier Polyscope sampler used) hits the depth cap on 92% of
+        transitions and collapses the step to 0.003; the posterior-precision tridiagonal
+        metric — a banded Cholesky the facade already represents — mixes at depth 4 with
+        roughly a thousand times the effective samples per gradient.
+      </p>
+      <div class="depth-grid" id="depth-grid"></div>
+      <div class="table-wrap" id="ss-table"></div>
+      <p class="section-note">
+        Exact state-space ground truth, T = 1,000, 4 chains × 2,000 retained after 500 warmup, depth cap 8,
+        seeds 83002 and 83004 (both shown). Mean z² is the mean squared error to the exact posterior
+        moments in standard-error units — 1.0 is perfect. Study: <span class="mono">STUDIES/exact_state_space_ground_truth_v1</span>.
+      </p>
+
+      <h3 class="sub-title">On the real Polyscope target</h3>
+      <p class="prose" id="real-target-text"></p>
+
+      <div class="panel-row panel-row-even">
+        <div class="panel">
+          <div class="panel-title">T = 1,000 local level · min bulk ESS per second · from Python</div>
+          <div id="t1000-bars"></div>
+          <div class="panel-note">Geometric mean over three seeds. Thread counts labelled; NumPyro as configured in <span class="mono">integrations/python/BENCH.md</span>. Same model family, same draw budgets.</div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Why the earlier T = 1,000 line failed</div>
+          <p class="panel-prose" id="mechanism-text"></p>
+        </div>
+      </div>
+    </section>
+
+    <hr class="page-divider" />
+
+    <!-- ============ 3 · THROUGHPUT ============ -->
+    <section id="throughput">
+      <div class="eyebrow">3 · Throughput, strictly matched</div>
+      <h2 class="section-title">nutpie-class speed from PyMC, twice CmdStan in Rust</h2>
+      <p class="prose">
+        A better kernel is worth little behind a slow transport. oWALNUTS exposes a GIL-free
+        C-ABI target, so a PyMC model compiled with numba is called at 1.25 µs per gradient
+        and four chains run in parallel. On Eight Schools that puts it ahead of nutpie — the
+        fastest Rust NUTS for PyMC — at equal per-gradient efficiency.
+      </p>
+      <div class="panel">
+        <div class="panel-title" id="es-title"></div>
+        <div id="es-bars"></div>
+        <div class="panel-note" id="es-note"></div>
+      </div>
+      <p class="prose" id="strict-text" style="margin-top:18px"></p>
+    </section>
+
+    <hr class="page-divider" />
+
+    <!-- ============ 4 · CRYPTO ============ -->
+    <section id="crypto">
+      <div class="eyebrow">4 · Real data, every gate, honest walls</div>
+      <h2 class="section-title">Crypto volatility: the ordinary test</h2>
+      <p class="prose">
+        Stochastic-volatility posteriors over the full daily history of the five largest
+        cryptocurrencies — every latent volatility state sampled jointly with the globals,
+        no marginalization. This is not a geometry where WALNUTS has much to exploit: the
+        bottleneck is a correlation ≈ −0.9 ridge between two global parameters, and every
+        sampler tested sits on it. It is here because a sampler you would use has to pass the
+        ordinary test too, and because the comparison is shown in full: nutpie is the fastest
+        wall clock on four of five assets, NumPyro's windowed adaptation passes the primary
+        gate at budget where our one-shot metric needs a labelled 2× compute tier, and every
+        cell — pass or fail — is on the page.
+      </p>
+      <div class="asset-grid" id="asset-grid"><!-- asset cards --></div>
+      <p class="section-note" style="margin-top:14px">
+        Every cell: 4 chains × 1,000 warmup + 3,000 retained against preregistered gates —
+        primary = rank R-hat ≤ 1.01 and bulk/tail ESS ≥ 400 on μ, h<sub>T</sub>, mean(h), zero divergences,
+        depth caps ≤ 1%; globals = R-hat ≤ 1.05 and bulk ESS ≥ 100 on the (φ, σ) ridge pair, preregistered as a
+        weaker gate before any evidence because that ridge bottlenecks every tested sampler. Identical gates for every
+        backend. oWALNUTS rows use three fresh seeds (98001–98003, plus partner seeds 98011–98013); nutpie/NumPyro
+        reference rows are single-seed (97001), frozen from the v1 study. “8 chains pooled” rows are a preregistered,
+        labelled 2× compute extension. “fallback B” rows rerun cells whose PyMC-bridge chains stuck under the frozen
+        metric with the rebuild-enabled configuration, as preregistered. oWALNUTS walls are quiet-machine re-measurements
+        of the identical runs (draws bit-identical; contended walls kept in <span class="mono">summary.json</span>);
+        PyMC-bridge rows ran at 4 threads through the single-thread transport and carry a ~3× penalty the
+        <span class="mono">thread_safe=True</span> path has since removed but not yet re-measured.
+      </p>
+      <div id="comparison"><!-- per-asset tables --></div>
+      <div class="honest-box">
+        <strong>What did not pass, and what it costs</strong>
+        At the standard budget oWALNUTS misses the primary ESS gate on every BTC seed (T ≈ 3,150) and on
+        one seed each of ETH and BNB; SOL passes primary but not the globals ridge on five of six seeds.
+        Passing everything required the 8-chain pooled tier — twice the compute — where BTC, ETH, XRP and
+        SOL pass both gates on all three seeds and BNB has one residual globals miss (R-hat 1.06).
+        The efficient configuration that closes the gates (Appendix C adaptation, Γ = 0.95) takes finer
+        micro steps, so its wall is ~1.7× the earlier configuration at roughly the same ESS per second;
+        contention explained only 10–30% of the earlier walls. Three PyMC-bridge seeds stalled from
+        bad starts and are shown as they ran. The named next step is a pooled rank-2 arrowhead metric
+        (~1.4× per call in pilots) generalized beyond Polyscope's parameter layout.
+      </div>
+    </section>
+
+    <hr class="page-divider" />
+
+    <!-- ============ EVIDENCE ============ -->
+    <section id="evidence">
+      <div class="eyebrow">How we know</div>
+      <h2 class="section-title">Verified against the reference, preregistered, corrected in public</h2>
+      <div class="evidence-grid" id="evidence-grid"></div>
+      <h3 class="sub-title">Corrections we published</h3>
+      <div class="table-wrap" id="retractions"></div>
+      <p class="section-note">
+        Each study directory under <span class="mono">STUDIES/</span> holds its preregistration (written
+        before sampling), protocol JSON, analysis script, per-cell artifacts and a <span class="mono">CHECKSUMS.sha256</span>;
+        the <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/blob/main/wiki/research-ledger-2026-08-31.md" rel="noopener">research ledger</a>
+        records every entry with seeds, hashes, and the claims each result does and does not support.
       </p>
     </section>
 
-    <footer class="footer">
-      Kernel revision v10 · commit <span class="mono">fc2b81e</span> · data through 2026-08-30 (OKX daily closes) ·
-      preregistered, checksummed, seeds 97001–97003 · zero divergences in 40/40 cells ·
-      built 2026-08-31
-    </footer>
+    <hr class="page-divider" />
+
+    <section id="reproduce">
+      <div class="eyebrow">Run it yourself</div>
+      <h2 class="section-title">Reproduce</h2>
+      <p class="prose">The orbit at the top of this page, and the funnel result, in one command from the repository:</p>
+      <pre class="code"><code>git clone https://github.com/dhruv575/oWALNUTS &amp;&amp; cd oWALNUTS
+cargo run --release --example funnel_orbit_trace      # writes demo/data/funnel-orbit.json
+cargo run --release --example funnel_paper_adaptation # P(ω&lt;−5) vs exact, with warmup</code></pre>
+      <p class="prose">From Python, against a PyMC model, GIL-free:</p>
+      <pre class="code"><code>pip install maturin numba pymc arviz
+cd integrations/python &amp;&amp; maturin develop --release</code></pre>
+      <pre class="code"><code>import owalnuts
+target, dim, q0, names, unravel = owalnuts.from_pymc(model, gil_free=True)
+result = owalnuts.sample(target, dim, init=q0, chains=4, warmup=1000, draws=1000, threads=4)
+idata = result.to_inferencedata(names)</code></pre>
+      <p class="prose">
+        Full evidence: the <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/tree/main/STUDIES" rel="noopener">study directories</a>,
+        the <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/tree/main/oracle" rel="noopener">reference oracles</a>,
+        and the <a class="inline-link" href="https://github.com/dhruv575/oWALNUTS/blob/main/integrations/python/examples/crypto_sv.ipynb" rel="noopener">executed crypto notebook</a>.
+      </p>
+    </section>
+
+    <footer class="footer" id="footer"></footer>
   </main>
 
   <div class="tooltip" id="tooltip" hidden></div>
