@@ -69,6 +69,20 @@ identical for every backend; per-cell numbers in artifacts/RESULTS.md):
   matching arm E's at-budget results at ~60% of the work on ETH. Recorded as
   the next-phase mechanism; not in any scorecard tier (and its pilot ran on a
   3-dummy-padded target to satisfy the driver's 6-global requirement).
+- **Wall times (A8 re-measurement)**: all 30 native cells were rerun
+  sequentially on a quieter machine and reproduced the evidence draws
+  bit-for-bit (`artifacts-remeasure/verify.json`), so their walls replace the
+  contended ones (`wall_contended` retained in summary.json). The effect was
+  small — 0.9–1.1× on most cells, 1.05–1.48× on BTC — so contention was NOT
+  the main reason v2 walls exceed v1's: arm E's finer steps cost ~1.7× more
+  gradient calls per draw, the price of the extra ESS that closes the gates.
+  ESS per second is roughly flat versus v1 (BTC 7.5–13 → 8.7–11.7; XRP up,
+  ETH slightly down). The PyMC rows still carry the `threads=1` transport
+  penalty (~3×): the thread-safe re-measurement phase did not run (the job
+  was stopped before it) and is the one-command follow-up
+  (`THREAD_SAFE=1 OUT_DIR=artifacts-remeasure scripts/run_python_cells.py pymc …`).
+  Restoring v1's raw wall lead is an operating-point choice (arm C or O) or
+  the arrowhead line, not a measurement fix.
 - **Package improvements shipped alongside**: `owalnuts.sample(refresh=...)`
   (structured-metric refresh from Python, with telemetry) and
   `from_pymc(thread_safe=True)` (per-thread compiled functions; restores

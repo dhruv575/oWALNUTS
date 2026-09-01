@@ -248,6 +248,23 @@ not a wrong target). Actions, per A3 clause 4 and A6:
    budget if all three at-budget seeds pass; the extension and fallback
    columns are reported separately and labeled. No at-budget row is replaced.
 
+## Amendment A8 — quiet-machine paired wall re-measurement (2026-08-31, after all evidence cells, before the re-measurement runs)
+
+Every v2 wall was measured with 3–5 concurrent heavy jobs on the machine,
+while the v1 reference walls (nutpie/NumPyro) were quieter; and the pymc
+cells ran `threads=1` (A2b). Both bias the wall comparison against
+oWALNUTS. Re-measurement rule, frozen now: rerun the SAME cells (same seeds,
+same frozen arm-E configuration, same binary/package) sequentially with
+nothing else running, native at 4 threads and pymc at 4 threads with
+`from_pymc(thread_safe=True)` (per-thread compiled functions). Because the
+facade is deterministic per seed and sequential/parallel identical, the
+draws must be bit-identical to the evidence draws — this is verified before
+any wall is swapped — so ONLY wall and ESS/s change. Outputs go to
+`artifacts-remeasure/`; the analyzer records both `wall_contended` and
+`wall_remeasured_quiet` and uses the quiet wall for ESS/s; gates and ESS
+values are untouched. Pooled rows keep summed walls. The demo shows the
+quiet walls and says so.
+
 ## Honesty rules
 
 Machine is shared (other agents run concurrently): ESS/work is primary,

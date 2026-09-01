@@ -42,8 +42,20 @@ def load_functionals(symbol, cell, seed):
     return {k: d[k] for k in ("mu", "a", "s", "phi", "sigma", "h_T", "mean_h")}
 
 
+REMEASURE = ROOT / "artifacts-remeasure"
+
+
 def load_meta(symbol, cell, seed):
     meta = json.loads((_root(cell) / "artifacts" / "runs" / f"{symbol}-{cell}-{seed}.json").read_text())
+    rm = REMEASURE / "runs" / f"{symbol}-{cell}-{seed}.json"
+    if rm.exists() and cell in ("native", "pymc"):
+        m2 = json.loads(rm.read_text())
+        w2 = m2.get("wall_sampling", m2.get("wall_seconds"))
+        meta["wall_contended"] = meta.get("wall_sampling", meta.get("wall_seconds"))
+        meta["wall_remeasured_quiet"] = w2
+        meta["wall_seconds"] = w2
+        meta["wall_sampling"] = w2
+        meta["remeasure_threads"] = m2.get("threads")
     if "wall_sampling" not in meta:  # native Rust runner schema
         meta["wall_sampling"] = meta["wall_seconds"]
         meta["wall_cell"] = meta["wall_seconds"]
@@ -116,7 +128,8 @@ def main():
                         k: meta.get(k) for k in (
                             "wall_sampling", "wall_cell", "work", "work_unit",
                             "divergences", "max_depth_rate", "algorithm_revision",
-                            "backend_version", "parity")
+                            "backend_version", "parity", "wall_contended",
+                            "wall_remeasured_quiet", "remeasure_threads")
                     },
                     "min_bulk_primary": min_bulk_primary,
                     "primary_bulk_ess_per_s": min_bulk_primary / wall,

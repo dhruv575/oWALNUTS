@@ -23,6 +23,9 @@ import time
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+import os
+OUT = ROOT / os.environ.get("OUT_DIR", "artifacts")  # re-measurement writes elsewhere (A8)
+THREAD_SAFE = os.environ.get("THREAD_SAFE", "0") == "1"
 CHAINS = 4
 WARMUP_OWALNUTS = 1000
 WARMUP_EXTERNAL = 1000
@@ -112,13 +115,13 @@ def save_outputs(symbol, cell, seed, draws, meta):
     flat_h = h.reshape(-1, h.shape[2])
     qs = np.percentile(flat_h, [5.0, 50.0, 95.0], axis=0)
     np.savez_compressed(
-        ROOT / "artifacts" / "draws" / f"{symbol}-{cell}-{seed}.npz",
+        OUT / "draws" / f"{symbol}-{cell}-{seed}.npz",
         **{k: v for k, v in f.items()},
         h_q05=qs[0],
         h_q50=qs[1],
         h_q95=qs[2],
     )
-    (ROOT / "artifacts" / "runs" / f"{symbol}-{cell}-{seed}.json").write_text(
+    (OUT / "runs" / f"{symbol}-{cell}-{seed}.json").write_text(
         json.dumps(meta)
     )
     print(symbol, cell, seed, json.dumps({k: meta[k] for k in ("wall_sampling", "work", "work_unit", "divergences")}))
@@ -216,7 +219,7 @@ def cell_pymc(symbol: str, seed: int, pilot: bool):
     model = build_pymc_model(r)
     # A2: refresh needs the callable transport; arm C has no refresh but keeps
     # the same transport for comparability.
-    target, dim, _q0, _names, _unravel = owalnuts.from_pymc(model)
+    target, dim, _q0, _names, _unravel = owalnuts.from_pymc(model, thread_safe=THREAD_SAFE)
     assert dim == t + 3, (dim, t + 3)
     # Parity on the GIL path (same compiled logp); BTC points only.
     gil_target, *_ = owalnuts.from_pymc(model)
@@ -234,9 +237,9 @@ def cell_pymc(symbol: str, seed: int, pilot: bool):
         warmup=warmup,
         draws=draws,
         seed=seed,
-        # Callable transport: the compiled PyTensor function shares storage
-        # buffers and is not thread-safe; the GIL path must run threads=1.
-        threads=1,
+        # Callable transport: the shared compiled PyTensor function is not
+        # thread-safe (threads=1); THREAD_SAFE=1 uses per-thread functions (A8).
+        threads=(4 if THREAD_SAFE else 1),
         tuning=owalnuts.Tuning(
             step_size=INITIAL_STEP,
             max_depth=MAX_DEPTH_OWALNUTS,
@@ -273,6 +276,8 @@ def cell_pymc(symbol: str, seed: int, pilot: bool):
         "algorithm_revision": result.algorithm_revision,
         "wall_sampling": result.wall_seconds,
         "wall_cell": wall,
+        "threads": (4 if THREAD_SAFE else 1),
+        "thread_safe": THREAD_SAFE,
         "work": result.target_calls,
         "work_retained": result.retained_target_calls,
         "work_unit": "fused target calls (exact)",
@@ -472,8 +477,8 @@ def main():
     if len(sys.argv) > 4 and sys.argv[4] in ("B", "C", "E"):
         ARM = sys.argv[4]
     pilot = sys.argv[-1] == "pilot"
-    (ROOT / "artifacts" / "runs").mkdir(parents=True, exist_ok=True)
-    (ROOT / "artifacts" / "draws").mkdir(parents=True, exist_ok=True)
+    (OUT / "runs").mkdir(parents=True, exist_ok=True)
+    (OUT / "draws").mkdir(parents=True, exist_ok=True)
     if cell == "pymcB2":
         cell = "pymcB"
     {"pymc": cell_pymc, "pymcB": cell_pymc_b, "nutpie": cell_nutpie, "numpyro": cell_numpyro}[cell](symbol, seed, pilot)

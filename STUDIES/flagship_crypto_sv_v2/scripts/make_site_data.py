@@ -31,6 +31,7 @@ def cells(summary):
             "div": r["meta"]["divergences"],
             "ess_s": round(r["min_bulk_primary"] / r["meta"]["wall_sampling"], 1),
             "phi": round(d["phi_mean"], 3),
+            "wall_contended": r["meta"].get("wall_contended"),
         })
     return rows
 
