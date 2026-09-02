@@ -1151,6 +1151,8 @@ pub struct WarmupConfig {
     metric_regularization: DiagonalMetricRegularization,
     stan_restart_reference: bool,
     initial_phase_max_error: Option<f64>,
+    minimum_step: Option<f64>,
+    warmup_exhaustion: Option<ExhaustionRule>,
 }
 
 impl Default for WarmupConfig {
@@ -1168,6 +1170,8 @@ impl Default for WarmupConfig {
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
             stan_restart_reference: false,
             initial_phase_max_error: None,
+            minimum_step: None,
+            warmup_exhaustion: None,
         }
     }
 }
@@ -1301,6 +1305,48 @@ impl WarmupConfig {
     pub fn initial_phase_max_error(&self) -> Option<f64> {
         self.initial_phase_max_error
     }
+    /// Use `rule` as the exhaustion rule for the discarded (warmup)
+    /// transitions only; retained transitions keep the tuning's own
+    /// [`KernelOptions::exhaustion`]. Adaptation does not need the
+    /// reversibility of the frozen kernel, so warmup can run under
+    /// [`ExhaustionRule::AcceptUnlessDivergent`] to slide out of a start
+    /// where every leaf exhausts (`STUDIES/freeze_mode_v1`), while the
+    /// retained draws keep the two-sided rule whose funnel tail mass has
+    /// been validated. Off by default.
+    pub fn with_warmup_exhaustion_rule(mut self, rule: ExhaustionRule) -> Self {
+        self.warmup_exhaustion = Some(rule);
+        self
+    }
+
+    pub fn warmup_exhaustion_rule(&self) -> Option<ExhaustionRule> {
+        self.warmup_exhaustion
+    }
+
+    /// Floor the adapted step: after every dual-averaging update the step
+    /// is `max(step, minimum_step)`. Off by default (no floor). A
+    /// preregistered negative control of `STUDIES/freeze_mode_v1`: a chain
+    /// whose every leaf fails at every step size is not helped by a floor.
+    pub fn with_minimum_step(mut self, minimum_step: f64) -> Result<Self, Error> {
+        if !minimum_step.is_finite() || minimum_step <= 0.0 {
+            return Err(Error::configuration(
+                "minimum step must be finite and positive",
+            ));
+        }
+        self.minimum_step = Some(minimum_step);
+        Ok(self)
+    }
+
+    pub fn minimum_step(&self) -> Option<f64> {
+        self.minimum_step
+    }
+
+    fn floored_step(&self, step: f64) -> f64 {
+        match self.minimum_step {
+            Some(floor) => step.max(floor),
+            None => step,
+        }
+    }
+
     /// Effective dual-averaging restart reference multiplier.
     fn restart_reference_multiplier(&self) -> ResearchRestartReferenceMultiplier {
         if self.stan_restart_reference {
@@ -3831,11 +3877,34 @@ pub struct TransitionDiagnostics {
     final_uturn_forward_dot: Option<f64>,
     final_uturn_backward_dot: Option<f64>,
     trajectory_macro_length: f64,
+    step_size: f64,
+    position_changed: bool,
+    acceptance_statistic: Option<f64>,
 }
 
 impl TransitionDiagnostics {
     pub fn depth(&self) -> usize {
         self.depth
+    }
+    /// Macro step `h` the transition was integrated with (the adapted step
+    /// before this transition's dual-averaging update).
+    pub fn step_size(&self) -> f64 {
+        self.step_size
+    }
+    /// Whether the selected position differs from the transition's initial
+    /// position in at least one coordinate. `false` both when the initial
+    /// state was reselected and when every built leaf sat at a position
+    /// bit-identical to the start (a step too small to move a coordinate).
+    pub fn position_changed(&self) -> bool {
+        self.position_changed
+    }
+    /// The step-adaptation statistic this transition produced (the mean of
+    /// the configured [`DualAveragingAcceptance`] over its leaves), when the
+    /// transition captured one: warmup transitions under step adaptation,
+    /// or any transition under `RunConfig::with_acceptance_capture`. `None`
+    /// when nothing was captured or the transition built no leaf.
+    pub fn acceptance_statistic(&self) -> Option<f64> {
+        self.acceptance_statistic
     }
     pub fn stop(&self) -> StopReason {
         self.stop
@@ -6022,6 +6091,9 @@ fn run_chain<T: Target>(
     let mut position = cached_state
         .as_ref()
         .map_or_else(|| initial_position.to_vec(), |state| state.theta.clone());
+    // Copy of the position before each transition, kept only to report
+    // `TransitionDiagnostics::position_changed`.
+    let mut previous_position = vec![0.0; dimension];
     let mut telemetry = RunTelemetry {
         initial_step_search: initial_step_search.clone(),
         step_searches: initial_step_search
@@ -6053,7 +6125,17 @@ fn run_chain<T: Target>(
                     config.tuning.max_error
                 };
         }
+        if let Some(warmup) = config.warmup.as_ref()
+            && let Some(rule) = warmup.warmup_exhaustion
+        {
+            active_tuning.options.exhaustion = if transition_index < config.discarded {
+                rule
+            } else {
+                config.tuning.options.exhaustion
+            };
+        }
         let step_before_transition = active_tuning.step_size;
+        previous_position.copy_from_slice(&position);
         control
             .check()
             .map_err(control_error)
@@ -6413,6 +6495,9 @@ fn run_chain<T: Target>(
             final_uturn_forward_dot: final_uturn.and_then(|value| value.0),
             final_uturn_backward_dot: final_uturn.and_then(|value| value.1),
             trajectory_macro_length: internal.leaves_built as f64 * step_before_transition,
+            step_size: step_before_transition,
+            position_changed: position != previous_position,
+            acceptance_statistic: acceptance,
         };
         let partition = if transition_index < config.discarded {
             &mut telemetry.discarded
@@ -6502,7 +6587,7 @@ fn run_chain<T: Target>(
             if warmup.adapt_step_size
                 && let (Some(dual), Some(statistic)) = (&mut dual_averaging, step_statistic)
             {
-                active_tuning.step_size = dual.update(statistic);
+                active_tuning.step_size = warmup.floored_step(dual.update(statistic));
                 if let Some(paper) = warmup.paper_adaptation.as_ref() {
                     active_tuning.step_size = clamp_paper_step_within(
                         active_tuning.step_size,
@@ -7382,6 +7467,9 @@ pub fn sample_dense_with_control<T: Target>(
                 (WarmupPhase::InitialFast, Some(max_error)) => max_error,
                 _ => config.tuning.max_error,
             };
+            if let Some(rule) = warmup.warmup_exhaustion {
+                transition_config.tuning.options.exhaustion = rule;
+            }
             transition_config.tuning.step_size = *active_step;
             segment_index += 1;
             let output = sample_dense_fixed(
@@ -7408,7 +7496,7 @@ pub fn sample_dense_with_control<T: Target>(
                 dual_averaging.as_mut(),
                 output.telemetry.acceptance_values[0],
             ) {
-                *active_step = dual.update(acceptance);
+                *active_step = warmup.floored_step(dual.update(acceptance));
             }
         }
         Ok(covariance)
@@ -8195,6 +8283,9 @@ fn run_structured_refresh_chain<T: Target>(
         one.warmup = None;
         one.capture_acceptance = true;
         one.acceptance_statistic = warmup.dual_averaging_acceptance;
+        if let Some(rule) = warmup.warmup_exhaustion {
+            one.tuning.options.exhaustion = rule;
+        }
         one.tuning.step_size = active_step;
         let direct = DirectOriginalQMass::StructuredPath(active_mass.clone());
         let output = run_chain(
@@ -8218,7 +8309,7 @@ fn run_structured_refresh_chain<T: Target>(
             variance.update(&position);
         }
         if let (Some(dual), Some(acceptance)) = (&mut dual, output.telemetry.acceptance_values[0]) {
-            active_step = dual.update(acceptance);
+            active_step = warmup.floored_step(dual.update(acceptance));
         }
         if transition == 0
             && config.discarded > 0
