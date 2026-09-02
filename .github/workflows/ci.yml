@@ -45,6 +45,8 @@ jobs:
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Tests (library, oracle parity, public facade, examples)
         run: cargo test --locked --all-targets
+      - name: Tests (research feature)
+        run: cargo test --locked --all-targets --all-features
       - name: Rustdoc (deny warnings)
         run: cargo doc --locked --no-deps
         env:

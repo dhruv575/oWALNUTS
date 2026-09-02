@@ -8,13 +8,15 @@ use std::{
 };
 
 use owalnuts::walnutpie::{
-    ChainOutput, DirectOriginalQMass, Error, ErrorKind, InitialStepSearchConfig, KernelTuning,
-    PaperAdaptationConfig, RunConfig, RunControl, STRUCTURED_REFRESH_REVISION, StepSearchReason,
-    StructuredBlockMass, StructuredCovarianceBlock, StructuredRefreshConfig,
-    StructuredRefreshOutcome, StructuredRefreshRestartPolicy, Target, TargetError, WarmupConfig,
-    WarmupWindowConfig, WindowSummary, preflight_chains_structured_refresh,
-    sample_chains_structured_refresh, sample_direct_original_q, sample_structured_refresh,
+    ChainOutput, Error, ErrorKind, InitialStepSearchConfig, KernelTuning, PaperAdaptationConfig,
+    RunConfig, RunControl, STRUCTURED_REFRESH_REVISION, StepSearchReason, StructuredBlockMass,
+    StructuredCovarianceBlock, StructuredRefreshConfig, StructuredRefreshOutcome,
+    StructuredRefreshRestartPolicy, Target, TargetError, WarmupConfig, WarmupWindowConfig,
+    WindowSummary, preflight_chains_structured_refresh, sample_chains_structured_refresh,
+    sample_structured_refresh,
 };
+#[cfg(feature = "research")]
+use owalnuts::walnutpie::{DirectOriginalQMass, sample_direct_original_q};
 
 struct TenDimensionalGaussian;
 
@@ -70,6 +72,7 @@ fn variance_refresh(
     }])
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn identity_refresh_matches_the_fixed_direct_driver_exactly() {
     let mass = fixture_mass();

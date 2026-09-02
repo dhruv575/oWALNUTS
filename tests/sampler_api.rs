@@ -1,0 +1,529 @@
+//! `owalnuts::sampler` is a thin wrapper: every `Sampler::run` path must be
+//! bit-identical to the `walnutpie` facade it dispatches to.
+
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use owalnuts::sampler::{
+    Adaptation, Cancellation, ChainOutput, Error, ErrorKind, Limits, Metric, Sampler,
+    StructuredBlockMass, StructuredCovarianceBlock, StructuredRefreshConfig, Target, TargetError,
+    Tuning, WindowSummary,
+};
+use owalnuts::walnutpie::{
+    DenseMass, DiagonalMass, KernelTuning, PaperAdaptationConfig, RunConfig, RunControl,
+    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig, sample_chains,
+    sample_chains_dense, sample_chains_structured, sample_chains_structured_refresh,
+    sample_chains_with_control, sample_chains_with_target_budget,
+};
+
+struct Gaussian(usize);
+
+impl Target for Gaussian {
+    fn dimension(&self) -> usize {
+        self.0
+    }
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        for (out, value) in gradient.iter_mut().zip(position) {
+            *out = -*value;
+        }
+        Ok(-0.5 * position.iter().map(|value| value * value).sum::<f64>())
+    }
+}
+
+struct Flag(AtomicBool);
+
+impl Cancellation for Flag {
+    fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+const WARMUP: usize = 60;
+const DRAWS: usize = 8;
+const SEED: u64 = 0x5eed_0002;
+
+fn nz(value: usize) -> NonZeroUsize {
+    NonZeroUsize::new(value).unwrap()
+}
+
+fn starts(dimension: usize) -> Vec<Vec<f64>> {
+    (0..3)
+        .map(|chain| {
+            (0..dimension)
+                .map(|i| 0.1 * (chain as f64 + 1.0) * ((i % 3) as f64 - 1.0))
+                .collect()
+        })
+        .collect()
+}
+
+/// The same numbers as `Tuning::default()`.
+fn kernel_tuning() -> KernelTuning {
+    KernelTuning::new(0.5, nz(8), nz(1), nz(4), 1.0).unwrap()
+}
+
+fn config(warmup: Option<WarmupConfig>) -> RunConfig {
+    let config = RunConfig::new(WARMUP, nz(DRAWS), SEED).with_tuning(kernel_tuning());
+    match warmup {
+        Some(warmup) => config.with_warmup(warmup),
+        None => config,
+    }
+}
+
+fn sampler() -> Sampler {
+    Sampler::new()
+        .warmup(WARMUP)
+        .draws(DRAWS)
+        .seed(SEED)
+        .threads(1)
+        .tuning(Tuning::default())
+}
+
+/// Equal draws, diagnostics, and telemetry; metadata records the thread count.
+fn assert_same_run(left: &[ChainOutput], right: &[ChainOutput]) {
+    assert_eq!(left.len(), right.len());
+    for (left, right) in left.iter().zip(right) {
+        assert_eq!(left.samples(), right.samples());
+        assert_eq!(left.diagnostics(), right.diagnostics());
+        assert_eq!(left.telemetry(), right.telemetry());
+    }
+}
+
+fn structured_mass() -> StructuredBlockMass {
+    StructuredBlockMass::new(vec![StructuredCovarianceBlock::BidiagonalCholesky {
+        diagonal: (0..10).map(|i| 1.0 + 0.05 * i as f64).collect(),
+        subdiagonal: vec![0.2; 9],
+    }])
+    .unwrap()
+}
+
+fn variance_refresh(
+    summary: &WindowSummary,
+    current: &StructuredBlockMass,
+) -> Result<StructuredBlockMass, Error> {
+    let coordinates: Vec<usize> = (0..current.dimension()).collect();
+    let precision = summary.regularized_precision(&coordinates)?;
+    StructuredBlockMass::new(vec![StructuredCovarianceBlock::BidiagonalCholesky {
+        diagonal: precision.iter().map(|p| p.sqrt()).collect(),
+        subdiagonal: vec![0.0; current.dimension() - 1],
+    }])
+}
+
+#[test]
+fn identity_metric_matches_the_diagonal_facade_without_mass_adaptation() {
+    let target = Gaussian(3);
+    let posterior = sampler()
+        .metric(Metric::Identity)
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &config(Some(
+            WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+        )),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(posterior.chains(), direct.chains());
+    assert_eq!(posterior.chain_count(), 3);
+    assert_eq!(posterior.dimension(), 3);
+    assert_eq!(posterior.draws_per_chain(), DRAWS);
+    assert_eq!(posterior.draws().count(), 3 * DRAWS);
+    assert_eq!(posterior.parameter(0).count(), 3 * DRAWS);
+    assert_eq!(posterior.seed(), SEED);
+    assert_eq!(posterior.algorithm_revision(), direct.algorithm_revision());
+    assert_eq!(
+        posterior.total_target_calls(),
+        direct
+            .chains()
+            .iter()
+            .map(|chain| chain.telemetry().total().target_calls_total())
+            .sum::<usize>()
+    );
+    assert_eq!(posterior.into_inner(), direct);
+}
+
+#[test]
+fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
+    let target = Gaussian(3);
+    let adaptive = sampler().run(&target, &starts(3)).unwrap();
+    let direct = sample_chains(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(adaptive.chains(), direct.chains());
+    assert!(adaptive.metric_updates().is_empty());
+
+    let fixed = sampler()
+        .metric(Metric::fixed_diagonal(vec![0.5, 2.0, 1.0]))
+        .adaptation(Adaptation::None)
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains(
+        &target,
+        &starts(3),
+        &DiagonalMass::from_diagonal(vec![0.5, 2.0, 1.0]).unwrap(),
+        &config(None),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(fixed.chains(), direct.chains());
+
+    let started = sampler()
+        .metric(Metric::Diagonal {
+            adapt: true,
+            initial: Some(vec![0.5, 2.0, 1.0]),
+        })
+        .adaptation(Adaptation::DualAveraging { target_accept: 0.9 })
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains(
+        &target,
+        &starts(3),
+        &DiagonalMass::from_diagonal(vec![0.5, 2.0, 1.0]).unwrap(),
+        &config(Some(WarmupConfig::new(0.9).unwrap())),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(started.chains(), direct.chains());
+}
+
+#[test]
+fn adaptive_dense_metric_matches_the_dense_facade() {
+    let target = Gaussian(3);
+    let posterior = sampler()
+        .metric(Metric::dense())
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains_dense(
+        &target,
+        &starts(3),
+        &DenseMass::identity(nz(3)).unwrap(),
+        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(posterior.chains(), direct.chains());
+
+    let matrix = vec![1.5, 0.25, 0.0, 0.25, 0.75, 0.0, 0.0, 0.0, 1.0];
+    let fixed = sampler()
+        .metric(Metric::fixed_dense(matrix.clone()))
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains_dense(
+        &target,
+        &starts(3),
+        &DenseMass::from_matrix(matrix, 3).unwrap(),
+        &config(Some(
+            WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+        )),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(fixed.chains(), direct.chains());
+}
+
+#[test]
+fn fixed_structured_metric_matches_the_structured_facade() {
+    let target = Gaussian(10);
+    let mass = structured_mass();
+    let posterior = sampler()
+        .metric(Metric::Structured(mass.clone()))
+        .run(&target, &starts(10))
+        .unwrap();
+    let direct = sample_chains_structured(
+        &target,
+        &starts(10),
+        &mass,
+        &config(Some(
+            WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+        )),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(posterior.chains(), direct.chains());
+}
+
+#[test]
+fn structured_refresh_matches_the_refresh_facade() {
+    let target = Gaussian(10);
+    let mass = structured_mass();
+    let posterior = sampler()
+        .metric(Metric::structured_refresh(mass.clone(), variance_refresh))
+        .run(&target, &starts(10))
+        .unwrap();
+    let direct = sample_chains_structured_refresh(
+        &target,
+        &starts(10),
+        &mass,
+        &variance_refresh,
+        &StructuredRefreshConfig::default(),
+        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        nz(1),
+        &RunControl::new(),
+    )
+    .unwrap();
+    assert_eq!(posterior.chains(), direct.chains().chains());
+    assert_eq!(posterior.metric_updates(), direct.metric_updates());
+    assert_eq!(posterior.final_masses(), direct.final_masses());
+    assert_eq!(
+        posterior.algorithm_revision(),
+        direct.chains().algorithm_revision()
+    );
+    assert!(
+        posterior
+            .metric_updates()
+            .iter()
+            .any(|chain| !chain.is_empty())
+    );
+}
+
+#[test]
+fn paper_adaptation_matches_the_paper_warmup_configuration() {
+    let target = Gaussian(3);
+    let paper = PaperAdaptationConfig::default();
+    let posterior = sampler()
+        .warmup(150)
+        .metric(Metric::Identity)
+        .adaptation(Adaptation::Paper(paper))
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &RunConfig::new(150, nz(DRAWS), SEED)
+            .with_tuning(kernel_tuning())
+            .with_warmup(
+                WarmupConfig::default()
+                    .with_mass_adaptation(false)
+                    .with_paper_adaptation(paper),
+            ),
+        nz(1),
+    )
+    .unwrap();
+    assert_eq!(posterior.chains(), direct.chains());
+    assert!(
+        posterior
+            .telemetry()
+            .all(|telemetry| !telemetry.paper_adaptation_updates().is_empty())
+    );
+}
+
+#[test]
+fn evaluation_budget_matches_the_budgeted_facade() {
+    let target = Gaussian(3);
+    let base = config(Some(
+        WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+    ));
+    let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
+    assert_eq!(
+        sampler()
+            .metric(Metric::Identity)
+            .worst_case_target_evaluations(3)
+            .unwrap(),
+        worst
+    );
+    let posterior = sampler()
+        .metric(Metric::Identity)
+        .limits(Limits::new().admit_worst_case())
+        .run(&target, &starts(3))
+        .unwrap();
+    let direct = sample_chains_with_target_budget(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &base,
+        nz(1),
+        TargetEvaluationAdmissionLimit::new(nz(worst)),
+        &TargetEvaluationBudget::new(nz(worst)),
+    )
+    .unwrap();
+    assert_eq!(posterior.chains(), direct.chains());
+    assert_eq!(
+        posterior
+            .metadata()
+            .map(|metadata| metadata.effective_max_target_evaluations())
+            .collect::<Vec<_>>(),
+        vec![worst; 3]
+    );
+
+    // An explicit ceiling that the run exhausts fails the same way.
+    let exhausted = sampler()
+        .metric(Metric::Identity)
+        .limits(Limits::new().max_target_evaluations(worst))
+        .run(&target, &starts(3));
+    assert_eq!(exhausted.unwrap().chains(), direct.chains());
+    let tiny = TargetEvaluationBudget::new(nz(5));
+    let direct_error = sample_chains_with_target_budget(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &base,
+        nz(1),
+        TargetEvaluationAdmissionLimit::new(nz(worst)),
+        &tiny,
+    )
+    .unwrap_err();
+    // The sampler admits against the same number it budgets, so a ceiling
+    // below the worst case is rejected at admission before any callback.
+    let sampler_error = sampler()
+        .metric(Metric::Identity)
+        .limits(Limits::new().max_target_evaluations(5))
+        .run(&target, &starts(3))
+        .unwrap_err();
+    assert_ne!(direct_error.kind(), ErrorKind::Cancelled);
+    assert_ne!(sampler_error.kind(), ErrorKind::Cancelled);
+
+    // Structured metrics have no budgeted admission; the runtime budget is
+    // applied by wrapping the target, which is bit-identical when it holds.
+    let mass = structured_mass();
+    let budgeted = sampler()
+        .metric(Metric::Structured(mass.clone()))
+        .limits(Limits::new().max_target_evaluations(usize::MAX))
+        .run(&Gaussian(10), &starts(10))
+        .unwrap();
+    let plain = sampler()
+        .metric(Metric::Structured(mass))
+        .run(&Gaussian(10), &starts(10))
+        .unwrap();
+    assert_eq!(budgeted.chains(), plain.chains());
+}
+
+#[test]
+fn cancellation_and_timeout_match_run_control() {
+    let target = Gaussian(3);
+    let flag = Arc::new(Flag(AtomicBool::new(true)));
+    let cancelled = sampler()
+        .limits(Limits::new().cancellation(flag.clone()))
+        .run(&target, &starts(3))
+        .unwrap_err();
+    let direct = sample_chains_with_control(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        nz(1),
+        &RunControl::new().with_cancellation(&*flag),
+    )
+    .unwrap_err();
+    assert_eq!(cancelled.kind(), ErrorKind::Cancelled);
+    assert_eq!(cancelled.kind(), direct.kind());
+    assert_eq!(cancelled.chain(), direct.chain());
+
+    let timed_out = sampler()
+        .limits(Limits::new().timeout(Duration::ZERO))
+        .run(&target, &starts(3))
+        .unwrap_err();
+    let direct = sample_chains_with_control(
+        &target,
+        &starts(3),
+        &DiagonalMass::identity(nz(3)),
+        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        nz(1),
+        &RunControl::new().with_timeout(Duration::ZERO).unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(timed_out.kind(), direct.kind());
+
+    // A flag that is never raised changes nothing.
+    flag.0.store(false, Ordering::Relaxed);
+    let controlled = sampler()
+        .limits(Limits::new().cancellation(flag))
+        .run(&target, &starts(3))
+        .unwrap();
+    let free = sampler().run(&target, &starts(3)).unwrap();
+    assert_eq!(controlled, free);
+}
+
+#[test]
+fn parallel_and_sequential_runs_are_identical_and_chains_replicate_a_start() {
+    let target = Gaussian(10);
+    let sequential = sampler().run(&target, &starts(10)).unwrap();
+    let parallel = sampler().threads(3).run(&target, &starts(10)).unwrap();
+    let default_threads = Sampler::new()
+        .warmup(WARMUP)
+        .draws(DRAWS)
+        .seed(SEED)
+        .run(&target, &starts(10))
+        .unwrap();
+    assert_same_run(sequential.chains(), parallel.chains());
+    assert_same_run(sequential.chains(), default_threads.chains());
+    assert_eq!(
+        parallel
+            .metadata()
+            .map(|metadata| metadata.thread_count())
+            .collect::<Vec<_>>(),
+        vec![3; 3]
+    );
+
+    let mass = structured_mass();
+    let sequential = sampler()
+        .metric(Metric::structured_refresh(mass.clone(), variance_refresh))
+        .run(&target, &starts(10))
+        .unwrap();
+    let parallel = sampler()
+        .threads(3)
+        .metric(Metric::structured_refresh(mass, variance_refresh))
+        .run(&target, &starts(10))
+        .unwrap();
+    assert_same_run(sequential.chains(), parallel.chains());
+    assert_eq!(sequential.metric_updates(), parallel.metric_updates());
+
+    let replicated = sampler()
+        .chains(3)
+        .run(&target, &[starts(10)[0].clone()])
+        .unwrap();
+    let explicit = sampler()
+        .run(&target, &vec![starts(10)[0].clone(); 3])
+        .unwrap();
+    assert_eq!(replicated.chains(), explicit.chains());
+    assert_eq!(
+        sampler()
+            .chains(2)
+            .run(&target, &starts(10))
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Configuration
+    );
+}
+
+#[test]
+fn invalid_builders_fail_closed() {
+    let target = Gaussian(3);
+    let errors = [
+        sampler().draws(0).run(&target, &starts(3)),
+        sampler().threads(0).run(&target, &starts(3)),
+        sampler()
+            .tuning(Tuning::new().max_depth(0))
+            .run(&target, &starts(3)),
+        sampler()
+            .adaptation(Adaptation::None)
+            .run(&target, &starts(3)),
+        sampler()
+            .metric(Metric::Structured(structured_mass()))
+            .run(&target, &starts(3)),
+        sampler().run(&target, &[]),
+    ];
+    for error in errors {
+        assert!(error.is_err());
+    }
+    assert!(
+        sampler()
+            .metric(Metric::Identity)
+            .adaptation(Adaptation::None)
+            .run(&target, &starts(3))
+            .is_ok()
+    );
+}

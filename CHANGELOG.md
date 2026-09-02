@@ -9,6 +9,28 @@ architecture (see the `walnutpie` module documentation).
 
 ### Added
 
+- **`owalnuts::sampler`, the 0.2 public API.** One builder, `Sampler`
+  (`warmup`, `draws`, `chains`, `seed`, `threads`, `metric`, `adaptation`,
+  `tuning`, `limits`, `run`), one result, `Posterior` (chains, flat and
+  per-draw access, telemetry, metadata, refresh records), and four small
+  option types: `Metric` (`Identity`, `Diagonal`, `Dense`, `Structured`,
+  `StructuredRefresh`), `Adaptation` (`None`, `DualAveraging` — the default —
+  and `Paper`), `Tuning`, and `Limits` (target-evaluation budget, worst-case
+  admission, deadline, timeout, cancellation, depth-stop limit). Twenty-one
+  public items including re-exports. Every `run` path is a thin wrapper over
+  one `walnutpie` entry point and produces bit-identical draws to calling it
+  directly (`tests/sampler_api.rs`); kernel behaviour is unchanged. The
+  README quick start and the `gaussian` and `funnel_paper_adaptation`
+  examples use it.
+- **`research` Cargo feature (off by default).** The research-only items
+  (`OuterOrbitSelection`, `ResearchTargetEvaluationLimit`,
+  `ResearchRestartReferenceMultiplier`,
+  `DualAveragingAcceptance::AcceptedTrajectory`,
+  `TargetEvaluationLimitProvenance::ExplicitResearchOptIn`, the
+  `direct_original_q` family, and the projected/pooled arrowhead warmup) are
+  exported from `walnutpie` only with the feature. They are still compiled
+  (`src/walnutpie/research.rs`), so no kernel path changed; the `STUDIES/`
+  crates and the Python integration enable the feature.
 - **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
   rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
   the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views
@@ -56,6 +78,12 @@ architecture (see the `walnutpie` module documentation).
   unchanged. Motivated by the T=1000 state-space result that the posterior-
   precision path block depends on global parameters best estimated during
   warmup. [WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1]
+
+### Fixed
+
+- `sample_chains_structured` and `sample_chains_structured_with_control`
+  reject a target, mass, or initial position whose dimensions differ with a
+  configuration error instead of panicking.
 
 ## [0.1.0-beta.2] - 2026-08-31
 

@@ -1,11 +1,10 @@
-//! End-to-end use of the internal fixed-diagonal beta.
+//! End-to-end use of `owalnuts::sampler` on a 2-D Gaussian: a fixed
+//! diagonal metric, multi-chain output, telemetry, and thread-count
+//! determinism.
 
 use std::error::Error;
-use std::num::NonZeroUsize;
 
-use owalnuts::walnutpie::{
-    DiagonalMass, ResourceLimits, RunConfig, Target, TargetError, sample, sample_chains,
-};
+use owalnuts::sampler::{Adaptation, Limits, Metric, Sampler, Target, TargetError, Tuning};
 
 struct Gaussian {
     dimension: usize,
@@ -30,49 +29,43 @@ impl Target for Gaussian {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let target = Gaussian { dimension: 2 };
-    let mass = DiagonalMass::from_diagonal(vec![0.5, 2.0])?;
-    let limits = ResourceLimits::new(
-        NonZeroUsize::new(2).unwrap(),
-        NonZeroUsize::new(4).unwrap(),
-        NonZeroUsize::new(1_000).unwrap(),
-        NonZeroUsize::new(113_000).unwrap(),
-        NonZeroUsize::new(1024 * 1024).unwrap(),
-        NonZeroUsize::new(1024 * 1024).unwrap(),
-    )?;
-    let config = RunConfig::new(8, NonZeroUsize::new(16).unwrap(), 0x5eed)
-        .with_limits(limits)
-        .with_maximum_depth_stop_limit(24);
+    let sampler = Sampler::new()
+        .warmup(8)
+        .draws(16)
+        .seed(0x5eed)
+        .metric(Metric::fixed_diagonal(vec![0.5, 2.0]))
+        .adaptation(Adaptation::None)
+        .tuning(Tuning::new().step_size(0.6).max_depth(3))
+        .limits(Limits::new().max_depth_stops(24));
 
-    let single = sample(&target, &[0.2, -0.1], &mass, &config)?;
+    let single = sampler.run(&target, &[vec![0.2, -0.1]])?;
+    let chain = &single.chains()[0];
     println!(
         "single: draws={}, first={:?}, diagnostics={}, target calls={}, revision={}",
-        single.retained(),
-        single.sample(0),
-        single.diagnostics().len(),
-        single.telemetry().total().target_calls_total(),
-        single.metadata().algorithm_revision(),
+        chain.retained(),
+        single.draw(0, 0),
+        chain.diagnostics().len(),
+        single.total_target_calls(),
+        single.algorithm_revision(),
     );
     println!(
         "mass={:?}, effective seed={}",
-        single.metadata().mass_diagonal(),
-        single.metadata().effective_seed(),
+        chain.metadata().mass_diagonal(),
+        chain.metadata().effective_seed(),
     );
 
     let starts = vec![vec![0.2, -0.1], vec![-0.2, 0.1]];
-    let sequential = sample_chains(
-        &target,
-        &starts,
-        &mass,
-        &config,
-        NonZeroUsize::new(1).unwrap(),
-    )?;
-    let parallel = sample_chains(
-        &target,
-        &starts,
-        &mass,
-        &config,
-        NonZeroUsize::new(2).unwrap(),
-    )?;
+    let sequential = sampler.threads(1).run(&target, &starts)?;
+    let parallel = Sampler::new()
+        .warmup(8)
+        .draws(16)
+        .seed(0x5eed)
+        .metric(Metric::fixed_diagonal(vec![0.5, 2.0]))
+        .adaptation(Adaptation::None)
+        .tuning(Tuning::new().step_size(0.6).max_depth(3))
+        .limits(Limits::new().max_depth_stops(24))
+        .threads(2)
+        .run(&target, &starts)?;
     for (sequential, parallel) in sequential.chains().iter().zip(parallel.chains()) {
         assert_eq!(sequential.samples(), parallel.samples());
         assert_eq!(sequential.diagnostics(), parallel.diagnostics());
@@ -86,5 +79,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             chain.diagnostics().last().map(|item| item.stop()),
         );
     }
+    let mean: Vec<f64> = (0..2)
+        .map(|index| parallel.parameter(index).sum::<f64>() / (parallel.draws().count() as f64))
+        .collect();
+    println!(
+        "posterior mean over {} draws: {mean:?}",
+        parallel.draws().count()
+    );
     Ok(())
 }
