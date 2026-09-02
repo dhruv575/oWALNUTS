@@ -931,6 +931,7 @@ pub struct WarmupConfig {
     paper_adaptation: Option<PaperAdaptationConfig>,
     metric_regularization: DiagonalMetricRegularization,
     stan_restart_reference: bool,
+    initial_phase_max_error: Option<f64>,
 }
 
 impl Default for WarmupConfig {
@@ -947,6 +948,7 @@ impl Default for WarmupConfig {
             paper_adaptation: None,
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
             stan_restart_reference: false,
+            initial_phase_max_error: None,
         }
     }
 }
@@ -1059,6 +1061,26 @@ impl WarmupConfig {
     }
     pub fn stan_restart_reference(&self) -> bool {
         self.stan_restart_reference
+    }
+    /// Use this `delta` (local energy-error threshold) instead of the
+    /// kernel's during the initial fast phase of warmup, restoring the
+    /// kernel's `delta` from the first slow window on. With the divergence
+    /// threshold as the value, the initial phase runs as Stan's NUTS: a chain
+    /// started far in a tail can move downhill instead of stopping at every
+    /// refinement-exhausted leaf, so the first metric window sees a moving
+    /// chain. Ignored under the paper rules (which own `delta`). Diagonal
+    /// and dense facades.
+    pub fn with_initial_phase_max_error(mut self, max_error: f64) -> Result<Self, Error> {
+        if !max_error.is_finite() || max_error <= 0.0 {
+            return Err(Error::configuration(
+                "initial-phase max_error must be finite and positive",
+            ));
+        }
+        self.initial_phase_max_error = Some(max_error);
+        Ok(self)
+    }
+    pub fn initial_phase_max_error(&self) -> Option<f64> {
+        self.initial_phase_max_error
     }
     /// Effective dual-averaging restart reference multiplier.
     fn restart_reference_multiplier(&self) -> ResearchRestartReferenceMultiplier {
@@ -5770,6 +5792,17 @@ fn run_chain<T: Target>(
         ..RunTelemetry::default()
     };
     for transition_index in 0..transitions {
+        if let (Some(warmup), Some(schedule)) = (config.warmup.as_ref(), schedule.as_ref())
+            && let Some(initial_max_error) = warmup.initial_phase_max_error
+            && warmup.paper_adaptation.is_none()
+        {
+            active_tuning.max_error =
+                if transition_index < schedule.initial_fast_end.min(config.discarded) {
+                    initial_max_error
+                } else {
+                    config.tuning.max_error
+                };
+        }
         let step_before_transition = active_tuning.step_size;
         control
             .check()
@@ -7068,6 +7101,10 @@ pub fn sample_dense_with_control<T: Target>(
             transition_config.warmup = None;
             transition_config.capture_acceptance = true;
             transition_config.acceptance_statistic = warmup.dual_averaging_acceptance;
+            transition_config.tuning.max_error = match (phase, warmup.initial_phase_max_error) {
+                (WarmupPhase::InitialFast, Some(max_error)) => max_error,
+                _ => config.tuning.max_error,
+            };
             transition_config.tuning.step_size = *active_step;
             segment_index += 1;
             let output = sample_dense_fixed(
@@ -10331,6 +10368,50 @@ mod tests {
             );
             assert!(update.step_after_search().is_none());
         }
+    }
+
+    #[test]
+    fn initial_phase_max_error_applies_only_before_the_first_slow_window() {
+        let target = Gaussian(2);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        assert!(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_initial_phase_max_error(0.0)
+                .is_err()
+        );
+        let ramp = WarmupConfig::new(0.8)
+            .unwrap()
+            .with_initial_phase_max_error(1_000.0)
+            .unwrap();
+        assert_eq!(ramp.initial_phase_max_error(), Some(1_000.0));
+        let tuning = KernelTuning::new(2.5, nz(4), nz(1), nz(3), 0.05).unwrap();
+        let with = RunConfig::new(200, NonZeroUsize::new(20).unwrap(), 99)
+            .with_tuning(tuning)
+            .with_warmup(ramp);
+        let without = RunConfig::new(200, NonZeroUsize::new(20).unwrap(), 99)
+            .with_tuning(tuning)
+            .with_warmup(WarmupConfig::new(0.8).unwrap());
+        let a = sample(&target, &[3.0, -3.0], &mass, &with).unwrap();
+        let b = sample(&target, &[3.0, -3.0], &mass, &without).unwrap();
+        // The retained kernel keeps the configured delta either way.
+        assert_eq!(a.metadata().tuning().max_error(), 0.05);
+        assert_eq!(b.metadata().tuning().max_error(), 0.05);
+        // With a large step and a tight delta the ramped initial phase stops
+        // fewer transitions on refinement exhaustion than the plain one.
+        let exhausted = |out: &ChainOutput| {
+            out.diagnostics()[..75]
+                .iter()
+                .filter(|d| d.selected_refinement_level().is_none())
+                .count()
+        };
+        assert!(
+            exhausted(&a) < exhausted(&b),
+            "{} vs {}",
+            exhausted(&a),
+            exhausted(&b)
+        );
+        assert_ne!(a.samples(), b.samples());
     }
 
     #[cfg(feature = "research")]

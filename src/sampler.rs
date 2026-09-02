@@ -56,11 +56,12 @@ use std::time::{Duration, Instant};
 pub use crate::walnutpie::{
     Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
     StructuredBlockMass, StructuredCovarianceBlock, StructuredMetricRefresh,
-    StructuredRefreshConfig, StructuredRefreshUpdate, Target, TargetError, WindowSummary,
+    StructuredRefreshConfig, StructuredRefreshUpdate, Target, TargetError, WarmupConfig,
+    WindowSummary,
 };
 use crate::walnutpie::{
     DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, KernelTuning, MultiChainOutput,
-    RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
+    RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget,
     sample_chains_dense_with_control, sample_chains_dense_with_target_budget_and_control,
     sample_chains_structured_refresh, sample_chains_structured_with_control,
     sample_chains_with_control, sample_chains_with_target_budget_and_control,
@@ -211,6 +212,9 @@ pub enum Adaptation {
     /// fraction. Supported by the identity, diagonal, and structured (fixed)
     /// metrics.
     Paper(PaperAdaptationConfig),
+    /// Any `walnutpie::WarmupConfig`; its mass-adaptation flag is replaced by
+    /// what the metric requires.
+    Custom(WarmupConfig),
 }
 
 impl Default for Adaptation {
@@ -238,6 +242,7 @@ impl Adaptation {
                     .with_mass_adaptation(adapt_mass)
                     .with_paper_adaptation(*paper),
             ),
+            Self::Custom(warmup) => Some(warmup.clone().with_mass_adaptation(adapt_mass)),
         })
     }
 }

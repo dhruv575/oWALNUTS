@@ -43,6 +43,11 @@ struct Flags {
     mu10: bool,
     depth10: bool,
     h1: bool,
+    /// Diagnostic only: `delta = 1000` (the divergence threshold), i.e. NUTS
+    /// with the refinement machinery never engaged.
+    delta1000: bool,
+    /// Round 2: `delta = 1000` during the initial fast phase only.
+    ramp: bool,
 }
 
 impl Flags {
@@ -57,6 +62,8 @@ impl Flags {
                 "mu10" => flags.mu10 = true,
                 "depth10" => flags.depth10 = true,
                 "h1" => flags.h1 = true,
+                "delta1000" => flags.delta1000 = true,
+                "ramp" => flags.ramp = true,
                 "warmup4" => {
                     flags.traj = true;
                     flags.init = true;
@@ -81,6 +88,9 @@ impl Flags {
     fn step_size(self) -> f64 {
         if self.h1 { 1.0 } else { STEP_SIZE }
     }
+    fn max_error(self) -> f64 {
+        if self.delta1000 { 1000.0 } else { MAX_ERROR }
+    }
 }
 
 fn nz(n: usize) -> NonZeroUsize {
@@ -100,7 +110,7 @@ fn config(flags: Flags, seed: u64) -> Result<RunConfig, Box<dyn Error>> {
         nz(flags.max_depth()),
         nz(MIN_MICRO_STEPS),
         nz(MAX_REFINEMENT_LEVELS),
-        MAX_ERROR,
+        flags.max_error(),
     )?;
     let mut warmup = WarmupConfig::new(TARGET_ACCEPT)?.with_mass_adaptation(true);
     if flags.traj {
@@ -115,6 +125,9 @@ fn config(flags: Flags, seed: u64) -> Result<RunConfig, Box<dyn Error>> {
     }
     if flags.mu10 {
         warmup = warmup.with_stan_restart_reference(true);
+    }
+    if flags.ramp {
+        warmup = warmup.with_initial_phase_max_error(1000.0)?;
     }
     Ok(RunConfig::new(WARMUP, nz(RETAINED), seed)
         .with_tuning(tuning)
@@ -285,13 +298,14 @@ fn run(
         "chains": CHAINS, "warmup": WARMUP, "retained": RETAINED, "threads": threads,
         "starts": starts,
         "tuning": {"step_size": flags.step_size(), "max_depth": max_depth, "min_micro_steps": MIN_MICRO_STEPS,
-                   "max_refinement_levels": MAX_REFINEMENT_LEVELS, "max_error": MAX_ERROR,
+                   "max_refinement_levels": MAX_REFINEMENT_LEVELS, "max_error": flags.max_error(),
                    "divergence_threshold": 1000.0},
         "warmup_config": {"mode": "dual_averaging", "target_accept": TARGET_ACCEPT, "mass_adaptation": true,
                           "acceptance_statistic": if flags.traj { "mean_trajectory" } else { "current_coarse_endpoint" },
                           "initial_step_search": if flags.init { "stan" } else { "none" },
                           "metric_regularization": if flags.reg { "stan" } else { "toward_unit" },
-                          "restart_reference": if flags.mu10 { "ln(10h)" } else { "ln(h)" }},
+                          "restart_reference": if flags.mu10 { "ln(10h)" } else { "ln(h)" },
+                          "initial_phase_max_error": if flags.ramp { Some(1000.0) } else { None }},
         "constructor_admission_bound": exact,
         "wall_seconds": wall,
         "target_calls_total": target.calls(),
