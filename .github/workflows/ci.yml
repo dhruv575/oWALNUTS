@@ -59,3 +59,46 @@ jobs:
           cargo run --locked --release --example state_space_path_metric
       - name: Package contents
         run: cargo package --locked --no-verify
+
+  integrations:
+    name: Integrations (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GNU 1.88
+            os: ubuntu-latest
+            toolchain: 1.88.0-x86_64-unknown-linux-gnu
+          - name: Windows GNU 1.88
+            os: windows-latest
+            toolchain: 1.88.0-x86_64-pc-windows-gnu
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+      # owalnuts-autodiff: generic log densities with a fused-primitive tape.
+      - name: autodiff — format, clippy
+        working-directory: integrations/autodiff
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: autodiff — tests (hand-gradient and finite-difference oracles)
+        working-directory: integrations/autodiff
+        run: cargo test --locked --release
+      # owalnuts-bridgestan: the sampling tests need a BridgeStan-compiled
+      # model (`bridgestan/models/*.so`, see its README) and skip themselves
+      # when it is absent; CI therefore checks, lints and runs the
+      # library-only tests without installing BridgeStan or a Stan toolchain.
+      - name: bridgestan — check, clippy
+        working-directory: integrations/bridgestan
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked --all-targets
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: bridgestan — tests (model-dependent tests skip without BridgeStan)
+        working-directory: integrations/bridgestan
+        run: cargo test --locked --release
