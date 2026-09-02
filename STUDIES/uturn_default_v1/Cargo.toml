@@ -1,0 +1,26 @@
+[package]
+name = "uturn-default-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "oWALNUTS arms of the preregistered U-turn-rule default study (posteriordb v3 harness, funnel tail mass, Eight Schools strict track)"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+sha2 = "0.10"
+
+[[bin]]
+name = "posteriordb-cell"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[[bin]]
+name = "eight-schools"
+path = "src/bin/eight_schools.rs"
+
+[workspace]
