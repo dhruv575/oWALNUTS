@@ -69,7 +69,11 @@ fn sampler(options: KernelOptions) -> Sampler {
 #[test]
 fn frozen_kernel_pins_at_a_wall_start() {
     let target = WallTarget { steepness: 100.0 };
+    // The frozen kernel for warmup as well as retained draws (the sampler's
+    // own adaptation modes apply `DEFAULT_WARMUP_EXHAUSTION` to warmup).
+    let frozen_warmup = WarmupConfig::new(0.8).unwrap();
     let posterior = sampler(KernelOptions::default())
+        .adaptation(Adaptation::Custom(frozen_warmup))
         .run_with_init(&target, &Init::Given(start()))
         .unwrap();
     let chain = &posterior.chains()[0];
@@ -109,6 +113,21 @@ fn accept_unless_divergent_escapes_the_wall_start() {
     let mean_x0 = (0..100).map(|i| chain.sample(i).unwrap()[0]).sum::<f64>() / 100.0;
     assert!(mean_x0 < 1.0 && mean_x0 > -3.0, "mean x0 {mean_x0}");
     assert!(chain.metadata().tuning().step_size() > 1e-3);
+}
+
+#[test]
+fn sampler_default_adaptation_escapes_the_wall_start() {
+    let target = WallTarget { steepness: 100.0 };
+    let posterior = sampler(KernelOptions::default())
+        .run_with_init(&target, &Init::Given(start()))
+        .unwrap();
+    let chain = &posterior.chains()[0];
+    let mean_x0 = (0..100).map(|i| chain.sample(i).unwrap()[0]).sum::<f64>() / 100.0;
+    assert!(mean_x0 < 1.0 && mean_x0 > -3.0, "mean x0 {mean_x0}");
+    assert_eq!(
+        chain.metadata().tuning().options().exhaustion,
+        ExhaustionRule::Stop
+    );
 }
 
 #[test]

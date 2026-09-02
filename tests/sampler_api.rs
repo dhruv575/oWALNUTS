@@ -7,9 +7,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use owalnuts::sampler::{
-    Adaptation, Cancellation, ChainOutput, DEFAULT_RANDOM_START_CHAINS, Error, ErrorKind, Init,
-    Limits, Metric, Sampler, StructuredBlockMass, StructuredCovarianceBlock,
-    StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, uniform_starts,
+    Adaptation, Cancellation, ChainOutput, DEFAULT_RANDOM_START_CHAINS, DEFAULT_WARMUP_EXHAUSTION,
+    Error, ErrorKind, Init, Limits, Metric, Sampler, StructuredBlockMass,
+    StructuredCovarianceBlock, StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary,
+    uniform_starts,
 };
 use owalnuts::walnutpie::{
     DenseMass, DiagonalMass, KernelTuning, PaperAdaptationConfig, RunConfig, RunControl,
@@ -131,7 +132,10 @@ fn identity_metric_matches_the_diagonal_facade_without_mass_adaptation() {
         &starts(3),
         &DiagonalMass::identity(nz(3)),
         &config(Some(
-            WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_mass_adaptation(false),
         )),
         nz(1),
     )
@@ -163,7 +167,11 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
         &target,
         &starts(3),
         &DiagonalMass::identity(nz(3)),
-        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        &config(Some(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        )),
         nz(1),
     )
     .unwrap();
@@ -197,7 +205,11 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
         &target,
         &starts(3),
         &DiagonalMass::from_diagonal(vec![0.5, 2.0, 1.0]).unwrap(),
-        &config(Some(WarmupConfig::new(0.9).unwrap())),
+        &config(Some(
+            WarmupConfig::new(0.9)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        )),
         nz(1),
     )
     .unwrap();
@@ -215,7 +227,11 @@ fn adaptive_dense_metric_matches_the_dense_facade() {
         &target,
         &starts(3),
         &DenseMass::identity(nz(3)).unwrap(),
-        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        &config(Some(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        )),
         nz(1),
     )
     .unwrap();
@@ -231,7 +247,10 @@ fn adaptive_dense_metric_matches_the_dense_facade() {
         &starts(3),
         &DenseMass::from_matrix(matrix, 3).unwrap(),
         &config(Some(
-            WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_mass_adaptation(false),
         )),
         nz(1),
     )
@@ -252,7 +271,10 @@ fn fixed_structured_metric_matches_the_structured_facade() {
         &starts(10),
         &mass,
         &config(Some(
-            WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_mass_adaptation(false),
         )),
         nz(1),
     )
@@ -274,7 +296,11 @@ fn structured_refresh_matches_the_refresh_facade() {
         &mass,
         &variance_refresh,
         &StructuredRefreshConfig::default(),
-        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        &config(Some(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        )),
         nz(1),
         &RunControl::new(),
     )
@@ -314,7 +340,8 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
             .with_warmup(
                 WarmupConfig::default()
                     .with_mass_adaptation(false)
-                    .with_paper_adaptation(paper),
+                    .with_paper_adaptation(paper)
+                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
             ),
         nz(1),
     )
@@ -331,7 +358,10 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
 fn evaluation_budget_matches_the_budgeted_facade() {
     let target = Gaussian(3);
     let base = config(Some(
-        WarmupConfig::new(0.8).unwrap().with_mass_adaptation(false),
+        WarmupConfig::new(0.8)
+            .unwrap()
+            .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+            .with_mass_adaptation(false),
     ));
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
     assert_eq!(
@@ -419,7 +449,11 @@ fn cancellation_and_timeout_match_run_control() {
         &target,
         &starts(3),
         &DiagonalMass::identity(nz(3)),
-        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        &config(Some(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        )),
         nz(1),
         &RunControl::new().with_cancellation(&*flag),
     )
@@ -436,7 +470,11 @@ fn cancellation_and_timeout_match_run_control() {
         &target,
         &starts(3),
         &DiagonalMass::identity(nz(3)),
-        &config(Some(WarmupConfig::new(0.8).unwrap())),
+        &config(Some(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        )),
         nz(1),
         &RunControl::new().with_timeout(Duration::ZERO).unwrap(),
     )
