@@ -10170,6 +10170,169 @@ mod tests {
         assert_eq!(target.0.load(Ordering::Relaxed), 0);
     }
 
+    fn stan_option_config(warmup: WarmupConfig) -> RunConfig {
+        RunConfig::new(200, NonZeroUsize::new(20).unwrap(), 4_242).with_warmup(warmup)
+    }
+
+    fn nz(value: usize) -> NonZeroUsize {
+        NonZeroUsize::new(value).unwrap()
+    }
+
+    #[test]
+    fn mean_trajectory_acceptance_is_opt_in_and_the_default_is_unchanged() {
+        let target = Gaussian(3);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(3).unwrap());
+        let start = [0.3, -0.2, 0.1];
+        let base = WarmupConfig::new(0.8).unwrap();
+        let explicit = base
+            .clone()
+            .with_dual_averaging_acceptance(DualAveragingAcceptance::CurrentCoarseEndpoint);
+        let trajectory = base
+            .clone()
+            .with_dual_averaging_acceptance(DualAveragingAcceptance::MeanTrajectoryAcceptance);
+        let a = sample(&target, &start, &mass, &stan_option_config(base)).unwrap();
+        let b = sample(&target, &start, &mass, &stan_option_config(explicit)).unwrap();
+        let c = sample(&target, &start, &mass, &stan_option_config(trajectory)).unwrap();
+        assert_eq!(a, b);
+        assert!(c.metadata().qualified_step_size().is_finite());
+        assert_ne!(
+            a.metadata().qualified_step_size(),
+            c.metadata().qualified_step_size(),
+            "the trajectory statistic must drive dual averaging differently"
+        );
+    }
+
+    #[test]
+    fn trajectory_acceptance_statistic_is_a_leafwise_metropolis_mean() {
+        // Every traced leaf carries min(1, exp(H_0 - H_leaf)) in [0, 1]; on a
+        // Gaussian with a tiny step the statistic is essentially one.
+        let target = Gaussian(2);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        let mut config = RunConfig::new(0, NonZeroUsize::new(3).unwrap(), 7)
+            .with_tuning(KernelTuning::new(1.0e-3, nz(3), nz(1), nz(1), 1.0).unwrap());
+        config.capture_acceptance = true;
+        config.acceptance_statistic = DualAveragingAcceptance::MeanTrajectoryAcceptance;
+        let out = sample(&target, &[0.5, -0.5], &mass, &config).unwrap();
+        for value in &out.telemetry().acceptance_values {
+            let value = value.expect("statistic present");
+            assert!(value > 0.999 && value <= 1.0, "{value}");
+        }
+    }
+
+    #[test]
+    fn stan_initial_step_search_doubles_and_halves_toward_the_target() {
+        let target = Gaussian(4);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(4).unwrap());
+        let inverse = inverse_mass(&mass).unwrap();
+        let control = ExecutionControl {
+            public: &RunControl::new(),
+            failed_chain: None,
+            chain: 0,
+        };
+        let search = InitialStepSearchConfig::stan();
+        assert_eq!(search.strategy(), InitialStepSearchStrategy::StanDoubling);
+        let small = KernelTuning::new(1.0e-4, nz(3), nz(1), nz(1), 1.0).unwrap();
+        let (from_small, telemetry) = search_initial_step(
+            &target,
+            &[0.1, 0.2, -0.3, 0.4],
+            &mass,
+            &inverse,
+            small,
+            0.8,
+            &search,
+            11,
+            &control,
+        )
+        .unwrap();
+        assert!(from_small > 1.0e-4, "{from_small}");
+        assert!(telemetry.steps() >= 2);
+        assert!(telemetry.target_calls() <= search.max_target_calls());
+        let large = KernelTuning::new(50.0, nz(3), nz(1), nz(1), 1.0).unwrap();
+        let (from_large, _) = search_initial_step(
+            &target,
+            &[0.1, 0.2, -0.3, 0.4],
+            &mass,
+            &inverse,
+            large,
+            0.8,
+            &search,
+            11,
+            &control,
+        )
+        .unwrap();
+        assert!(from_large < 50.0, "{from_large}");
+        // Both land on a step of the same order for a unit Gaussian.
+        assert!(from_large / from_small < 8.0 && from_small / from_large < 8.0);
+    }
+
+    #[test]
+    fn stan_metric_regularisation_matches_the_formula() {
+        let mut variance = DiagonalVariance::new(1);
+        for value in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0] {
+            variance.update(&[0.01 * value]);
+        }
+        let n: f64 = 10.0;
+        let sample_variance: f64 = 0.01 * 0.01 * 9.166_666_666_666_666;
+        let unit = variance
+            .regularized_mass(DiagonalMetricRegularization::TowardUnit)
+            .unwrap()[0];
+        let stan = variance
+            .regularized_mass(DiagonalMetricRegularization::Stan)
+            .unwrap()[0];
+        let expected_unit = ((n / (n + 5.0)) * sample_variance + 5.0 / (n + 5.0)).recip();
+        let expected_stan =
+            ((n / (n + 5.0)) * sample_variance + 1.0e-3 * (5.0 / (n + 5.0))).recip();
+        assert!((unit - expected_unit).abs() < 1.0e-9 * expected_unit);
+        assert!((stan - expected_stan).abs() < 1.0e-9 * expected_stan);
+        assert!(stan > 100.0 * unit);
+    }
+
+    #[test]
+    fn stan_style_preset_restarts_with_ten_times_the_step_and_runs_searches() {
+        let target = Gaussian(2);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        let warmup = WarmupConfig::stan_style(0.8).unwrap();
+        assert_eq!(
+            warmup.dual_averaging_acceptance(),
+            DualAveragingAcceptance::MeanTrajectoryAcceptance
+        );
+        assert_eq!(
+            warmup.metric_regularization(),
+            DiagonalMetricRegularization::Stan
+        );
+        assert!(warmup.stan_restart_reference());
+        assert_eq!(
+            warmup.initial_step_search().unwrap().strategy(),
+            InitialStepSearchStrategy::StanDoubling
+        );
+        let out = sample(&target, &[0.3, -0.2], &mass, &stan_option_config(warmup)).unwrap();
+        let telemetry = out.telemetry();
+        assert!(telemetry.initial_step_search().is_some());
+        let updates = telemetry.metric_updates();
+        assert!(!updates.is_empty());
+        for update in updates.iter().filter(|u| u.step_after_restart().is_some()) {
+            assert_eq!(
+                update.restart_reference_multiplier,
+                Some(ResearchRestartReferenceMultiplier::Ten)
+            );
+            assert!(update.step_after_search().is_some());
+        }
+        let legacy = sample(
+            &target,
+            &[0.3, -0.2],
+            &mass,
+            &stan_option_config(WarmupConfig::new(0.8).unwrap()),
+        )
+        .unwrap();
+        for update in legacy.telemetry().metric_updates() {
+            assert_ne!(
+                update.restart_reference_multiplier,
+                Some(ResearchRestartReferenceMultiplier::Ten)
+            );
+            assert!(update.step_after_search().is_none());
+        }
+    }
+
     #[cfg(feature = "research")]
     #[test]
     fn trajectory_acceptance_dual_averaging_is_opt_in_and_default_identical() {
