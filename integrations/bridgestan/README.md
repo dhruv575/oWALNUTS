@@ -53,3 +53,12 @@ GIL-free, and the direct impl preserves Stan's error-message slot
 appear in the facade `Error`'s `Display`). With the new `?Sized` support a
 loaded model can be held as `Box<dyn Target>`. All tests pass unchanged
 against facade commit `3b14d64`.
+
+## Error semantics (robustness fix after `STUDIES/posteriordb_bench_v1`)
+
+A Stan exception, a `-inf`/`NaN`/`+inf` log density, and a finite log
+density with a nonfinite gradient are all mapped to the recoverable
+zero-density path (`map_evaluation`), which is what CmdStan and nutpie do
+with such a proposal. Before this fix a `NaN` log density or gradient was
+fatal and killed every `arma11` cell of the benchmark. Only a
+position/gradient dimension mismatch remains fatal.
