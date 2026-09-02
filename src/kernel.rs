@@ -9,7 +9,8 @@
 use crate::types::{State, ValidationError};
 use rand::RngCore;
 use rand_distr::{Distribution, StandardNormal};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EvaluationPhase {
@@ -24,6 +25,8 @@ pub(crate) struct EvaluationContext {
     pub direction: Option<Direction>,
     pub refinement_level: Option<usize>,
     pub evaluation_in_attempt: usize,
+    /// Kinetic energy at the evaluated momentum, or NaN inside a
+    /// [`ContextKineticScope`] that declared it unobserved.
     pub kinetic: f64,
     pub initial_hamiltonian: Option<f64>,
 }
@@ -34,6 +37,41 @@ thread_local! {
 
 pub(crate) fn take_evaluation_context() -> Option<EvaluationContext> {
     EVALUATION_CONTEXT.take()
+}
+
+thread_local! {
+    static CONTEXT_KINETIC_REQUIRED: Cell<bool> = const { Cell::new(true) };
+}
+
+/// Declares, for the current thread and the lifetime of the guard, whether
+/// [`EvaluationContext::kinetic`] is observed. When it is not, the kernel
+/// skips that per-call kinetic energy and reports NaN; nothing else reads
+/// the value, so sampler output is unaffected. The previous setting is
+/// restored on drop.
+pub(crate) struct ContextKineticScope {
+    previous: bool,
+}
+
+impl ContextKineticScope {
+    pub(crate) fn new(required: bool) -> Self {
+        let previous = CONTEXT_KINETIC_REQUIRED.replace(required);
+        Self { previous }
+    }
+}
+
+impl Drop for ContextKineticScope {
+    fn drop(&mut self) {
+        CONTEXT_KINETIC_REQUIRED.set(self.previous);
+    }
+}
+
+#[inline]
+fn context_kinetic<M: MassOperator + ?Sized>(momentum: &[f64], mass: &M) -> f64 {
+    if CONTEXT_KINETIC_REQUIRED.get() {
+        kinetic_energy(momentum, mass)
+    } else {
+        f64::NAN
+    }
 }
 
 fn set_evaluation_context(context: EvaluationContext) {
@@ -49,6 +87,13 @@ pub(crate) trait MassOperator {
     fn dimension(&self) -> usize;
     fn sample_momentum(&self, rng: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError>;
     fn velocity(&self, momentum: &[f64]) -> Vec<f64>;
+    /// Write `velocity(momentum)` into `out` without allocating. The default
+    /// forwards to [`MassOperator::velocity`] and copies, so every
+    /// implementation produces identical bits either way.
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        let velocity = self.velocity(momentum);
+        out.copy_from_slice(&velocity);
+    }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64;
     fn is_valid(&self) -> bool;
 }
@@ -83,6 +128,14 @@ impl MassOperator for [f64] {
             .collect()
     }
 
+    #[inline]
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        for ((out, p), inverse_mass) in out.iter_mut().zip(momentum).zip(self) {
+            *out = p * inverse_mass;
+        }
+    }
+
+    #[inline]
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         0.5 * momentum
             .iter()
@@ -109,6 +162,11 @@ impl<const N: usize> MassOperator for [f64; N] {
         self.as_slice().velocity(momentum)
     }
 
+    #[inline]
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        self.as_slice().velocity_into(momentum, out)
+    }
+
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         self.as_slice().kinetic_energy(momentum)
     }
@@ -131,6 +189,11 @@ impl MassOperator for Vec<f64> {
         self.as_slice().velocity(momentum)
     }
 
+    #[inline]
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        self.as_slice().velocity_into(momentum, out)
+    }
+
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         self.as_slice().kinetic_energy(momentum)
     }
@@ -140,14 +203,172 @@ impl MassOperator for Vec<f64> {
     }
 }
 
+#[inline]
 fn kinetic_energy<M: MassOperator + ?Sized>(momentum: &[f64], mass: &M) -> f64 {
     mass.kinetic_energy(momentum)
 }
 
+/// Fused log-density/gradient evaluation at the kernel boundary.
+///
+/// `gradient` has exactly the position's length; an implementation writes
+/// every component into it and returns the log density together with a flag
+/// that is `false` only when it could not produce a gradient of that length
+/// (the kernel then treats the call as an invalid evaluation, exactly as it
+/// treats a wrong-length gradient vector).
+pub trait FusedEval {
+    fn evaluate(&mut self, theta: &[f64], gradient: &mut [f64]) -> (f64, bool);
+}
+
+impl<F> FusedEval for F
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+{
+    #[inline]
+    fn evaluate(&mut self, theta: &[f64], gradient: &mut [f64]) -> (f64, bool) {
+        let (log_prob, returned) = self(theta);
+        if returned.len() == gradient.len() {
+            gradient.copy_from_slice(&returned);
+            (log_prob, true)
+        } else {
+            (log_prob, false)
+        }
+    }
+}
+
+/// Adapter for callbacks that write the gradient in place.
+pub struct InPlaceEval<F>(pub F);
+
+impl<F> FusedEval for InPlaceEval<F>
+where
+    F: FnMut(&[f64], &mut [f64]) -> f64,
+{
+    #[inline]
+    fn evaluate(&mut self, theta: &[f64], gradient: &mut [f64]) -> (f64, bool) {
+        ((self.0)(theta, gradient), true)
+    }
+}
+
+/// Per-transition scratch storage reused by every leaf and micro-step.
+struct Workspace {
+    candidate: State,
+    reversed: State,
+    velocity: Vec<f64>,
+    difference: Vec<f64>,
+    scaled_difference: Vec<f64>,
+}
+
+/// Leaf states of this thread. The ring holds one strong reference to each
+/// state it has handed out, so a state whose spans have all been dropped is
+/// uniquely owned again and is reused in place by the next accepted leaf
+/// without allocating. Entries are scanned from a moving cursor; the number
+/// of simultaneously live states is a few times the tree depth, so the ring
+/// stays small.
+struct StateRing {
+    entries: Vec<Rc<State>>,
+    cursor: usize,
+}
+
+// Most recently released workspace and the leaf-state ring of this thread.
+// Both are pure allocation caches: their contents are always overwritten
+// before use, so they cannot influence any numerical result.
+thread_local! {
+    static WORKSPACE_CACHE: RefCell<Option<Workspace>> = const { RefCell::new(None) };
+    static STATE_RING: RefCell<StateRing> = const {
+        RefCell::new(StateRing {
+            entries: Vec::new(),
+            cursor: 0,
+        })
+    };
+}
+
+/// Upper bound on ring entries per thread.
+const STATE_RING_LIMIT: usize = 1024;
+
+impl Workspace {
+    fn new(dimension: usize) -> Self {
+        let blank = || State {
+            theta: vec![0.0; dimension],
+            rho: vec![0.0; dimension],
+            log_prob: 0.0,
+            grad: vec![0.0; dimension],
+        };
+        Self {
+            candidate: blank(),
+            reversed: blank(),
+            velocity: vec![0.0; dimension],
+            difference: vec![0.0; dimension],
+            scaled_difference: vec![0.0; dimension],
+        }
+    }
+
+    /// Reuse this thread's released workspace when its dimension matches.
+    fn acquire(dimension: usize) -> Self {
+        WORKSPACE_CACHE
+            .with(|cache| cache.borrow_mut().take())
+            .filter(|workspace| workspace.velocity.len() == dimension)
+            .unwrap_or_else(|| Self::new(dimension))
+    }
+
+    fn release(self) {
+        WORKSPACE_CACHE.with(|cache| *cache.borrow_mut() = Some(self));
+    }
+}
+
+#[inline]
+fn copy_state(into: &mut State, from: &State) {
+    into.theta.copy_from_slice(&from.theta);
+    into.rho.copy_from_slice(&from.rho);
+    into.grad.copy_from_slice(&from.grad);
+    into.log_prob = from.log_prob;
+}
+
+/// A shared copy of `from`, placed in a ring entry that no span references
+/// any more when one exists, otherwise freshly allocated (and, while the
+/// ring is below its limit, retained by the ring for later reuse).
+fn pooled_state(from: &State) -> Rc<State> {
+    STATE_RING.with(|ring| {
+        let mut ring = ring.borrow_mut();
+        let len = ring.entries.len();
+        let mut index = if ring.cursor < len { ring.cursor } else { 0 };
+        for _ in 0..len {
+            let reusable = match Rc::get_mut(&mut ring.entries[index]) {
+                Some(state) if state.theta.len() == from.theta.len() => {
+                    copy_state(state, from);
+                    true
+                }
+                Some(_) => {
+                    // Uniquely owned but of another dimension: replace it.
+                    ring.entries[index] = Rc::new(from.clone());
+                    true
+                }
+                None => false,
+            };
+            if reusable {
+                ring.cursor = index + 1;
+                return Rc::clone(&ring.entries[index]);
+            }
+            index += 1;
+            if index == len {
+                index = 0;
+            }
+        }
+        let fresh = Rc::new(from.clone());
+        if len < STATE_RING_LIMIT {
+            ring.entries.push(Rc::clone(&fresh));
+            ring.cursor = 0;
+        }
+        fresh
+    })
+}
+
 /// One physical endpoint of a span, including its cached joint log density.
+///
+/// The state is shared: a fresh leaf span's two endpoints and its selected
+/// candidate are the same allocation, and merging spans moves the surviving
+/// endpoints without copying.
 #[derive(Clone, Debug)]
 pub struct Endpoint {
-    pub state: State,
+    pub state: Rc<State>,
     pub log_joint: f64,
 }
 
@@ -164,7 +385,9 @@ pub struct SelectedState {
 pub struct Span {
     pub backward: Endpoint,
     pub forward: Endpoint,
-    pub selected: SelectedState,
+    /// The position-valued candidate retained by progressive sampling; its
+    /// `rho` is incidental and never read.
+    pub selected: Rc<State>,
     /// Log of the sum of the leaves' unnormalized joint densities.
     pub log_weight: f64,
 }
@@ -177,26 +400,46 @@ impl Span {
     ) -> Result<Self, ValidationError> {
         validate_state_and_mass(&state, mass)?;
         let log_joint = joint_log_density(&state, mass);
+        Self::from_leaf_state(Rc::new(state), log_joint, mass.dimension())
+    }
+
+    /// Build a one-state span from a leaf produced under an already validated
+    /// metric, with the joint log density that was evaluated on that exact
+    /// state.
+    ///
+    /// An accepted endpoint's log density and momentum are finite because its
+    /// finite Hamiltonian error was tested, and its gradient because the
+    /// final fused call was checked; only the position can be nonfinite
+    /// (a callback that returns finite values at a nonfinite position), and
+    /// that is rejected exactly as [`Span::from_state`] rejects it.
+    fn from_leaf_state(
+        state: Rc<State>,
+        log_joint: f64,
+        mass_dimension: usize,
+    ) -> Result<Self, ValidationError> {
+        if state.theta.len() != mass_dimension {
+            return Err(ValidationError(
+                "state and diagonal inverse mass dimensions must match and be nonzero".into(),
+            ));
+        }
+        if state.theta.iter().any(|value| !value.is_finite()) {
+            return Err(ValidationError("state must be finite".into()));
+        }
         if !log_joint.is_finite() {
             return Err(ValidationError(
                 "state joint log density must be finite".into(),
             ));
         }
-        let selected = SelectedState {
-            theta: state.theta.clone(),
-            grad: state.grad.clone(),
-            log_prob: state.log_prob,
-        };
         let endpoint = Endpoint { state, log_joint };
         Ok(Self {
             backward: endpoint.clone(),
+            selected: Rc::clone(&endpoint.state),
             forward: endpoint,
-            selected,
             log_weight: log_joint,
         })
     }
 
-    fn from_subspans(earlier: Span, later: Span, selected: SelectedState, log_weight: f64) -> Self {
+    fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
         Self {
             backward: earlier.backward,
             forward: later.forward,
@@ -290,11 +533,13 @@ pub enum Rejection {
     InvalidEvaluation,
 }
 
-/// Deterministic result of attempting one macro leaf.
+/// Deterministic result of attempting one macro leaf, with the accepted
+/// endpoint materialised as `S` (an owned [`State`] for [`macro_leaf`], a
+/// shared ring state inside a transition).
 #[derive(Clone, Debug)]
-pub struct MacroLeafResult {
+pub struct MacroLeafOutcome<S> {
     /// The accepted endpoint, or `None` when the leaf was rejected.
-    pub end_state: Option<State>,
+    pub end_state: Option<S>,
     /// Accepted micro-step count, or the last attempted count on exhaustion.
     pub micro_steps: usize,
     /// Total target log-density/gradient evaluations.
@@ -307,6 +552,9 @@ pub struct MacroLeafResult {
     pub adaptation_value: f64,
     /// Metropolis acceptance probability at the accepted refined endpoint.
     pub accepted_trajectory_adaptation_value: Option<f64>,
+    /// Joint log density of the accepted endpoint, as evaluated by the final
+    /// micro-step; NaN when the leaf was rejected.
+    pub end_log_joint: f64,
     pub rejection: Option<Rejection>,
     pub selected_refinement_level: Option<usize>,
     pub refinement_attempts: usize,
@@ -316,7 +564,10 @@ pub struct MacroLeafResult {
     pub maximum_absolute_energy_error: f64,
 }
 
-impl MacroLeafResult {
+/// Deterministic result of attempting one macro leaf.
+pub type MacroLeafResult = MacroLeafOutcome<State>;
+
+impl<S> MacroLeafOutcome<S> {
     pub fn accepted(&self) -> bool {
         self.end_state.is_some()
     }
@@ -447,6 +698,9 @@ pub fn build_leaf<F, M: MassOperator + ?Sized>(
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
+    validate_span(last_span, mass)?;
+    validate(&last_span.forward.state, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
     build_leaf_observed(
         last_span,
         mass,
@@ -454,27 +708,40 @@ where
         direction,
         eval,
         &mut TransitionWorkTelemetry::default(),
+        &mut workspace,
     )
 }
 
-fn build_leaf_observed<F, M: MassOperator + ?Sized>(
+/// Extend an internally built span by one leaf. The span, metric and tuning
+/// were validated when the transition (or public entry point) started.
+fn build_leaf_observed<E, M: MassOperator + ?Sized>(
     last_span: &Span,
     mass: &M,
     tuning: FixedTuning,
     direction: Direction,
-    eval: &mut F,
+    eval: &mut E,
     work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
 ) -> Result<BuildLeafResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
 {
-    validate_span(last_span, mass)?;
-    let start = match direction {
+    let start: &State = match direction {
         Direction::Forward => &last_span.forward.state,
         Direction::Backward => &last_span.backward.state,
     };
     increment(&mut work.leaves_attempted)?;
-    let result = macro_leaf_observed(start, mass, tuning, direction, eval, work)?;
+    let result = macro_leaf_in_workspace(
+        start,
+        mass,
+        tuning,
+        direction,
+        eval,
+        work,
+        workspace,
+        pooled_state,
+    )?;
+    let end_log_joint = result.end_log_joint;
     match (result.end_state, result.rejection) {
         (Some(state), None) => {
             increment(&mut work.leaves_built)?;
@@ -485,7 +752,7 @@ where
                 increment(&mut work.histograms.refinement_level_built[level])?;
             }
             Ok(BuildLeafResult::Built {
-                span: Span::from_state(state, mass)?,
+                span: Span::from_leaf_state(state, end_log_joint, mass.dimension())?,
                 micro_steps: result.micro_steps,
                 evaluations: result.evaluations,
                 adaptation_value: result.adaptation_value,
@@ -520,6 +787,8 @@ where
     R: Uniform01,
 {
     validate_span(last_span, mass)?;
+    validate(&last_span.forward.state, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
     let shift = u32::try_from(depth)
         .map_err(|_| ValidationError("span depth overflows leaf count".into()))?;
     let leaves = 1usize
@@ -542,6 +811,7 @@ where
         &mut leaves_attempted,
         &mut leaves_built,
         &mut work,
+        &mut workspace,
     )
 }
 
@@ -560,6 +830,8 @@ where
     R: Uniform01,
 {
     validate_span(last_span, mass)?;
+    validate(&last_span.forward.state, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
     let shift = u32::try_from(depth)
         .map_err(|_| ValidationError("span depth overflows leaf count".into()))?;
     let leaves = 1usize
@@ -580,11 +852,12 @@ where
         &mut evaluations,
         &mut |event| events.push(event),
         &mut work,
+        &mut workspace,
     )?;
     Ok(TracedBuildSpanResult { result, events })
 }
 
-fn build_span_inner<F, R, M: MassOperator + ?Sized>(
+fn build_span_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
     mass: &M,
@@ -592,13 +865,14 @@ fn build_span_inner<F, R, M: MassOperator + ?Sized>(
     direction: Direction,
     depth: usize,
     leaves: usize,
-    eval: &mut F,
+    eval: &mut E,
     cumulative_evaluations: &mut usize,
     trace: &mut impl FnMut(SpanTraceEvent),
     work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
 ) -> Result<BuildSpanResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: Uniform01,
 {
     trace(SpanTraceEvent::basic(
@@ -610,7 +884,7 @@ where
     ));
     if depth == 0 {
         return Ok(
-            match build_leaf_observed(last_span, mass, tuning, direction, eval, work)? {
+            match build_leaf_observed(last_span, mass, tuning, direction, eval, work, workspace)? {
                 BuildLeafResult::Built {
                     span,
                     evaluations,
@@ -678,6 +952,7 @@ where
         cumulative_evaluations,
         trace,
         work,
+        workspace,
     )?;
     let (first_span, first_evaluations) = match first {
         BuildSpanResult::Built {
@@ -706,6 +981,7 @@ where
         cumulative_evaluations,
         trace,
         work,
+        workspace,
     )?;
     let (second_span, second_evaluations) = match second {
         BuildSpanResult::Built {
@@ -727,7 +1003,7 @@ where
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
     let (made_u_turn, forward_dot, backward_dot) =
-        spans_make_u_turn_observed(&first_span, &second_span, mass, direction);
+        spans_make_u_turn_observed(&first_span, &second_span, mass, direction, workspace);
     let mut predicate = SpanTraceEvent::basic(
         "uturn_predicate",
         None,
@@ -778,7 +1054,7 @@ where
     })
 }
 
-fn build_span_counted_inner<F, R, M: MassOperator + ?Sized>(
+fn build_span_counted_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
     mass: &M,
@@ -786,14 +1062,15 @@ fn build_span_counted_inner<F, R, M: MassOperator + ?Sized>(
     direction: Direction,
     depth: usize,
     leaves: usize,
-    eval: &mut F,
+    eval: &mut E,
     cumulative_evaluations: &mut usize,
     leaves_attempted: &mut usize,
     leaves_built: &mut usize,
     work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
 ) -> Result<BuildSpanResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: Uniform01,
 {
     if depth == 0 {
@@ -801,7 +1078,7 @@ where
             .checked_add(1)
             .ok_or_else(|| ValidationError("leaf count overflowed usize".into()))?;
         return Ok(
-            match build_leaf_observed(last_span, mass, tuning, direction, eval, work)? {
+            match build_leaf_observed(last_span, mass, tuning, direction, eval, work, workspace)? {
                 BuildLeafResult::Built {
                     span, evaluations, ..
                 } => {
@@ -845,6 +1122,7 @@ where
         leaves_attempted,
         leaves_built,
         work,
+        workspace,
     )?;
     let (first_span, first_evaluations) = match first {
         BuildSpanResult::Built {
@@ -867,6 +1145,7 @@ where
         leaves_attempted,
         leaves_built,
         work,
+        workspace,
     )?;
     let (second_span, second_evaluations) = match second {
         BuildSpanResult::Built {
@@ -881,7 +1160,7 @@ where
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
     let (made_u_turn, _, _) =
-        spans_make_u_turn_observed(&first_span, &second_span, mass, direction);
+        spans_make_u_turn_observed(&first_span, &second_span, mass, direction, workspace);
     if made_u_turn {
         return Ok(BuildSpanResult::Stopped {
             cause: SpanStop::UTurn,
@@ -923,9 +1202,9 @@ fn combine_barker_observed<R: Uniform01>(
     let draw = rng.uniform_01()?;
     let update = draw.ln() < update_log_probability;
     let selected = if update {
-        new.selected.clone()
+        Rc::clone(&new.selected)
     } else {
-        old.selected.clone()
+        Rc::clone(&old.selected)
     };
     let (earlier, later) = match direction {
         Direction::Forward => (old, new),
@@ -944,26 +1223,28 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
     second: &Span,
     mass: &M,
     direction: Direction,
+    workspace: &mut Workspace,
 ) -> (bool, f64, Option<f64>) {
     let (earlier, later) = match direction {
         Direction::Forward => (first, second),
         Direction::Backward => (second, first),
     };
-    let difference = later
-        .forward
-        .state
-        .theta
-        .iter()
+    let difference = workspace.difference.as_mut_slice();
+    for ((difference, later), earlier) in difference
+        .iter_mut()
+        .zip(&later.forward.state.theta)
         .zip(&earlier.backward.state.theta)
-        .map(|(later, earlier)| later - earlier)
-        .collect::<Vec<_>>();
-    let scaled_difference = mass.velocity(&difference);
+    {
+        *difference = later - earlier;
+    }
+    let scaled_difference = workspace.scaled_difference.as_mut_slice();
+    mass.velocity_into(difference, scaled_difference);
     let later_dot = later
         .forward
         .state
         .rho
         .iter()
-        .zip(&scaled_difference)
+        .zip(&*scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     if later_dot < 0.0 {
@@ -974,22 +1255,25 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
         .state
         .rho
         .iter()
-        .zip(&scaled_difference)
+        .zip(&*scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     (earlier_dot < 0.0, later_dot, Some(earlier_dot))
 }
 
+#[inline]
 fn checked_add_evaluations(left: usize, right: usize) -> Result<usize, ValidationError> {
     left.checked_add(right)
         .ok_or_else(|| ValidationError("evaluation count overflowed usize".into()))
 }
 
+#[inline]
 fn checked_add_work(left: usize, right: usize) -> Result<usize, ValidationError> {
     left.checked_add(right)
         .ok_or_else(|| ValidationError("work telemetry count overflowed usize".into()))
 }
 
+#[inline]
 fn increment(value: &mut usize) -> Result<(), ValidationError> {
     *value = checked_add_work(*value, 1)?;
     Ok(())
@@ -1622,16 +1906,16 @@ where
     )
 }
 
-pub(crate) fn transition_w_with_telemetry_and_outer_policy<F, R, M: MassOperator + ?Sized>(
+pub(crate) fn transition_w_with_telemetry_and_outer_policy<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     transition_w_untraced_inner(rng, input, mass, tuning, eval, None, policy)
@@ -1667,7 +1951,7 @@ where
 }
 
 pub(crate) fn transition_w_from_evaluated_with_telemetry_and_outer_policy<
-    F,
+    E,
     R,
     M: MassOperator + ?Sized,
 >(
@@ -1675,11 +1959,11 @@ pub(crate) fn transition_w_from_evaluated_with_telemetry_and_outer_policy<
     input: EvaluatedTransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     transition_w_untraced_inner(
@@ -1755,16 +2039,16 @@ where
     })
 }
 
-pub(crate) fn transition_w_traced_with_telemetry_and_outer_policy<F, R, M: MassOperator + ?Sized>(
+pub(crate) fn transition_w_traced_with_telemetry_and_outer_policy<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TracedTelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     let mut events = Vec::new();
@@ -1812,7 +2096,7 @@ where
 }
 
 pub(crate) fn transition_w_from_evaluated_traced_with_telemetry_and_outer_policy<
-    F,
+    E,
     R,
     M: MassOperator + ?Sized,
 >(
@@ -1820,11 +2104,11 @@ pub(crate) fn transition_w_from_evaluated_traced_with_telemetry_and_outer_policy
     input: EvaluatedTransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TracedTelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     let mut events = Vec::new();
@@ -1847,21 +2131,22 @@ where
         events,
     })
 }
-fn transition_w_untraced_inner<F, R, M: MassOperator + ?Sized>(
+fn transition_w_untraced_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     cached: Option<(f64, Vec<f64>)>,
     outer_policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
+    let mut workspace = Workspace::acquire(mass.dimension());
     let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
         (log_prob, grad, 0)
     } else {
@@ -1870,11 +2155,17 @@ where
             direction: None,
             refinement_level: None,
             evaluation_in_attempt: 0,
-            kinetic: kinetic_energy(&input.rho, mass),
+            kinetic: context_kinetic(&input.rho, mass),
             initial_hamiltonian: None,
         });
-        let (log_prob, grad) = eval(&input.theta);
+        let mut grad = vec![0.0; input.theta.len()];
+        let (log_prob, gradient_shaped) = eval.evaluate(&input.theta, &mut grad);
         work.fused_calls.initial = 1;
+        if !gradient_shaped {
+            return Err(ValidationError(
+                "state and diagonal inverse mass dimensions must match and be nonzero".into(),
+            ));
+        }
         (log_prob, grad, 1)
     };
     let mut counts = TransitionCounts {
@@ -1888,7 +2179,9 @@ where
         grad,
     };
     validate_state_and_mass(&state, mass)?;
-    let mut span_accum = Span::from_state(state, mass)?;
+    let initial_log_joint = joint_log_density(&state, mass);
+    let mut span_accum =
+        Span::from_leaf_state(Rc::new(state), initial_log_joint, mass.dimension())?;
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -1927,6 +2220,7 @@ where
                 &mut counts.leaves_attempted,
                 &mut counts.leaves_built,
                 &mut work,
+                &mut workspace,
             )?
         };
         counts.recursive_barker_draws = counts
@@ -1943,7 +2237,7 @@ where
         };
 
         let (outer_uturn, _, _) =
-            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction);
+            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction, &mut workspace);
         let combined = {
             let mut counted_rng = CountedTransitionRng {
                 inner: rng,
@@ -1980,9 +2274,10 @@ where
     work.direction_draws = counts.direction_draws;
     record_stop(&mut work, final_stop)?;
     work.validate_invariants()?;
+    workspace.release();
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
-            selected: span_accum.selected,
+            selected: take_selected(span_accum),
             diagnostics: TransitionDiagnostics {
                 depth: final_depth,
                 stop: final_stop,
@@ -2008,22 +2303,23 @@ where
         work,
     })
 }
-fn transition_w_inner<F, R, M: MassOperator + ?Sized>(
+fn transition_w_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     cached: Option<(f64, Vec<f64>)>,
     outer_policy: OuterSelectionPolicy,
     trace: &mut impl FnMut(TransitionTraceEvent),
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
+    let mut workspace = Workspace::acquire(mass.dimension());
     let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
         (log_prob, grad, 0)
     } else {
@@ -2032,11 +2328,17 @@ where
             direction: None,
             refinement_level: None,
             evaluation_in_attempt: 0,
-            kinetic: kinetic_energy(&input.rho, mass),
+            kinetic: context_kinetic(&input.rho, mass),
             initial_hamiltonian: None,
         });
-        let (log_prob, grad) = eval(&input.theta);
+        let mut grad = vec![0.0; input.theta.len()];
+        let (log_prob, gradient_shaped) = eval.evaluate(&input.theta, &mut grad);
         work.fused_calls.initial = 1;
+        if !gradient_shaped {
+            return Err(ValidationError(
+                "state and diagonal inverse mass dimensions must match and be nonzero".into(),
+            ));
+        }
         (log_prob, grad, 1)
     };
     let mut counts = TransitionCounts {
@@ -2050,7 +2352,9 @@ where
         grad,
     };
     validate_state_and_mass(&state, mass)?;
-    let mut span_accum = Span::from_state(state, mass)?;
+    let initial_log_joint = joint_log_density(&state, mass);
+    let mut span_accum =
+        Span::from_leaf_state(Rc::new(state), initial_log_joint, mass.dimension())?;
     if initial_evaluations != 0 {
         trace(TransitionTraceEvent::basic(
             "initial_evaluation",
@@ -2110,6 +2414,7 @@ where
                 &mut counts.target_evaluations,
                 &mut |event| recursive_events.push(event),
                 &mut work,
+                &mut workspace,
             )?
         };
         counts.recursive_barker_draws = counts
@@ -2174,7 +2479,7 @@ where
         };
 
         let (outer_uturn, forward_dot, backward_dot) =
-            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction);
+            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction, &mut workspace);
         let mut event = TransitionTraceEvent::basic(
             "outer_uturn_predicate",
             Some(depth),
@@ -2271,9 +2576,10 @@ where
     work.direction_draws = counts.direction_draws;
     record_stop(&mut work, final_stop)?;
     work.validate_invariants()?;
+    workspace.release();
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
-            selected: span_accum.selected,
+            selected: take_selected(span_accum),
             diagnostics,
         },
         work,
@@ -2290,9 +2596,9 @@ fn combine_metropolis_observed<R: Uniform01>(
     let draw = rng.uniform_01()?;
     let update = draw.ln() < update_log_probability;
     let selected = if update {
-        new.selected.clone()
+        Rc::clone(&new.selected)
     } else {
-        old.selected.clone()
+        Rc::clone(&old.selected)
     };
     let (earlier, later) = match direction {
         Direction::Forward => (old, new),
@@ -2355,13 +2661,32 @@ fn validate_transition_input<M: MassOperator + ?Sized>(
     1usize
         .checked_shl(shift)
         .ok_or_else(|| ValidationError("transition depth overflows leaf count".into()))?;
-    let validation_state = State {
-        theta: input.theta.clone(),
-        rho: input.rho.clone(),
-        log_prob: 0.0,
-        grad: vec![0.0; dim],
-    };
-    validate(&validation_state, mass, tuning.leaf)
+    validate_tuning(tuning.leaf)
+}
+
+/// Move the selected candidate out of the final span, copying only when a
+/// surviving endpoint still shares it.
+fn take_selected(span: Span) -> SelectedState {
+    let Span {
+        backward,
+        forward,
+        selected,
+        ..
+    } = span;
+    drop(backward);
+    drop(forward);
+    match Rc::try_unwrap(selected) {
+        Ok(state) => SelectedState {
+            theta: state.theta,
+            grad: state.grad,
+            log_prob: state.log_prob,
+        },
+        Err(shared) => SelectedState {
+            theta: shared.theta.clone(),
+            grad: shared.grad.clone(),
+            log_prob: shared.log_prob,
+        },
+    }
 }
 
 /// Build one fixed-tuning macro leaf using a diagonal inverse mass.
@@ -2408,6 +2733,41 @@ where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
     validate(start, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
+    macro_leaf_in_workspace(
+        start,
+        mass,
+        tuning,
+        direction,
+        eval,
+        work,
+        &mut workspace,
+        State::clone,
+    )
+}
+
+/// One macro leaf from a validated start under validated metric and tuning,
+/// integrating in the transition's scratch states. Only the accepted endpoint
+/// is copied out.
+fn macro_leaf_in_workspace<E, M: MassOperator + ?Sized, S>(
+    start: &State,
+    mass: &M,
+    tuning: FixedTuning,
+    direction: Direction,
+    eval: &mut E,
+    work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
+    materialize: impl FnOnce(&State) -> S,
+) -> Result<MacroLeafOutcome<S>, ValidationError>
+where
+    E: FusedEval,
+{
+    let Workspace {
+        candidate,
+        reversed,
+        velocity,
+        ..
+    } = workspace;
 
     let initial_h = -joint_log_density(start, mass);
     observe_initial_energy(work, initial_h);
@@ -2442,9 +2802,9 @@ where
         record_histogram(&mut work.histograms.forward_micro_steps, micro_steps)?;
         last_steps = micro_steps;
         let step = signed_step / multiplier as f64;
-        let mut candidate = start.clone();
+        copy_state(candidate, start);
         let integration = integrate(
-            &mut candidate,
+            candidate,
             step,
             micro_steps,
             mass,
@@ -2453,10 +2813,12 @@ where
             direction,
             level,
             eval,
+            velocity,
         );
         last_integration = Some(integration);
         let attempted = integration.attempted;
         let valid = integration.valid;
+        let forward_log_joint = integration.endpoint_log_joint;
         work.zero_density_evaluations =
             checked_add_work(work.zero_density_evaluations, integration.zero_density)?;
         work.forward_micro_steps_executed =
@@ -2466,7 +2828,7 @@ where
         if !valid {
             observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
             increment(&mut work.rejections.invalid_forward_evaluation)?;
-            return Ok(MacroLeafResult {
+            return Ok(MacroLeafOutcome {
                 end_state: None,
                 micro_steps,
                 evaluations: forward_evaluations,
@@ -2474,6 +2836,7 @@ where
                 reverse_evaluations: 0,
                 adaptation_value: 0.0,
                 accepted_trajectory_adaptation_value: None,
+                end_log_joint: f64::NAN,
                 rejection: Some(Rejection::InvalidEvaluation),
                 selected_refinement_level: None,
                 refinement_attempts: level + 1,
@@ -2501,13 +2864,13 @@ where
                 work.reverse_micro_steps_requested =
                     checked_add_work(work.reverse_micro_steps_requested, coarse_steps)?;
                 record_histogram(&mut work.histograms.reverse_micro_steps, coarse_steps)?;
-                let mut reversed = candidate.clone();
+                copy_state(reversed, candidate);
                 for momentum in &mut reversed.rho {
                     *momentum = -*momentum;
                 }
-                let reverse_initial_h = -joint_log_density(&candidate, mass);
+                let reverse_initial_h = -forward_log_joint;
                 let integration = integrate(
-                    &mut reversed,
+                    reversed,
                     coarse_step,
                     coarse_steps,
                     mass,
@@ -2519,6 +2882,7 @@ where
                     },
                     level,
                     eval,
+                    velocity,
                 );
                 let attempted = integration.attempted;
                 let valid = integration.valid;
@@ -2536,7 +2900,7 @@ where
                         reverse_initial_h,
                     );
                     increment(&mut work.rejections.invalid_reverse_evaluation)?;
-                    return Ok(MacroLeafResult {
+                    return Ok(MacroLeafOutcome {
                         end_state: None,
                         micro_steps,
                         evaluations: checked_add_evaluations(
@@ -2547,6 +2911,7 @@ where
                         reverse_evaluations,
                         adaptation_value: last_adaptation_value,
                         accepted_trajectory_adaptation_value: None,
+                        end_log_joint: f64::NAN,
                         rejection: Some(Rejection::InvalidEvaluation),
                         selected_refinement_level: None,
                         refinement_attempts: level + 1,
@@ -2559,7 +2924,7 @@ where
                 if integration.endpoint_error <= tuning.max_error {
                     increment(&mut work.reverse_coarsening_accepted)?;
                     increment(&mut work.rejections.reverse_coarser_accepted)?;
-                    return Ok(MacroLeafResult {
+                    return Ok(MacroLeafOutcome {
                         end_state: None,
                         micro_steps,
                         evaluations: checked_add_evaluations(
@@ -2570,6 +2935,7 @@ where
                         reverse_evaluations,
                         adaptation_value: last_adaptation_value,
                         accepted_trajectory_adaptation_value: None,
+                        end_log_joint: f64::NAN,
                         rejection: Some(Rejection::ReverseCoarserAccepted),
                         selected_refinement_level: None,
                         refinement_attempts: level + 1,
@@ -2585,18 +2951,17 @@ where
                     .map_or(level, |selected| selected.max(level)),
             );
             observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
-            let accepted_trajectory_adaptation_value = (initial_h
-                + joint_log_density(&candidate, mass))
-            .min(0.0)
-            .exp();
-            return Ok(MacroLeafResult {
-                end_state: Some(candidate),
+            let accepted_trajectory_adaptation_value =
+                (initial_h + forward_log_joint).min(0.0).exp();
+            return Ok(MacroLeafOutcome {
+                end_state: Some(materialize(candidate)),
                 micro_steps,
                 evaluations: checked_add_evaluations(forward_evaluations, reverse_evaluations)?,
                 forward_evaluations,
                 reverse_evaluations,
                 adaptation_value: last_adaptation_value,
                 accepted_trajectory_adaptation_value: Some(accepted_trajectory_adaptation_value),
+                end_log_joint: forward_log_joint,
                 rejection: None,
                 selected_refinement_level: Some(level),
                 refinement_attempts: level + 1,
@@ -2612,7 +2977,7 @@ where
     if let Some(integration) = last_integration {
         observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
     }
-    Ok(MacroLeafResult {
+    Ok(MacroLeafOutcome {
         end_state: None,
         micro_steps: last_steps,
         evaluations: forward_evaluations,
@@ -2620,6 +2985,7 @@ where
         reverse_evaluations: 0,
         adaptation_value: last_adaptation_value,
         accepted_trajectory_adaptation_value: None,
+        end_log_joint: f64::NAN,
         rejection: Some(Rejection::RefinementExhausted),
         selected_refinement_level: None,
         refinement_attempts: tuning.max_refinement_levels,
@@ -2636,6 +3002,10 @@ fn validate<M: MassOperator + ?Sized>(
     tuning: FixedTuning,
 ) -> Result<(), ValidationError> {
     validate_state_and_mass(start, mass)?;
+    validate_tuning(tuning)
+}
+
+fn validate_tuning(tuning: FixedTuning) -> Result<(), ValidationError> {
     if !tuning.step_size.is_finite() || tuning.step_size <= 0.0 {
         return Err(ValidationError(
             "step_size must be finite and positive".into(),
@@ -2673,8 +3043,21 @@ fn validate_state_and_mass<M: MassOperator + ?Sized>(
     state: &State,
     mass: &M,
 ) -> Result<(), ValidationError> {
+    validate_state_shape_and_finiteness(state, mass.dimension())?;
+    if !mass.is_valid() {
+        return Err(ValidationError(
+            "inverse mass entries must be finite and positive".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_state_shape_and_finiteness(
+    state: &State,
+    mass_dimension: usize,
+) -> Result<(), ValidationError> {
     let dim = state.theta.len();
-    if dim == 0 || state.rho.len() != dim || state.grad.len() != dim || mass.dimension() != dim {
+    if dim == 0 || state.rho.len() != dim || state.grad.len() != dim || mass_dimension != dim {
         return Err(ValidationError(
             "state and diagonal inverse mass dimensions must match and be nonzero".into(),
         ));
@@ -2688,11 +3071,6 @@ fn validate_state_and_mass<M: MassOperator + ?Sized>(
             .any(|value| !value.is_finite())
     {
         return Err(ValidationError("state must be finite".into()));
-    }
-    if !mass.is_valid() {
-        return Err(ValidationError(
-            "inverse mass entries must be finite and positive".into(),
-        ));
     }
     Ok(())
 }
@@ -2739,9 +3117,12 @@ struct IntegrationObservation {
     /// Fused calls in this attempt that returned a zero-density point
     /// (log density exactly `-inf` with a finite gradient).
     zero_density: usize,
+    /// Joint log density of the state after the final micro-step, exactly
+    /// the negated `energy` tested there. NaN when the attempt is invalid.
+    endpoint_log_joint: f64,
 }
 
-fn integrate<F, M: MassOperator + ?Sized>(
+fn integrate<E, M: MassOperator + ?Sized>(
     state: &mut State,
     step: f64,
     count: usize,
@@ -2750,23 +3131,25 @@ fn integrate<F, M: MassOperator + ?Sized>(
     phase: EvaluationPhase,
     direction: Direction,
     refinement_level: usize,
-    eval: &mut F,
+    eval: &mut E,
+    velocity: &mut [f64],
 ) -> IntegrationObservation
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
 {
     let half_step = 0.5 * step;
     let mut minimum = initial_hamiltonian;
     let mut maximum = initial_hamiltonian;
     let mut maximum_absolute_error = 0.0_f64;
     let mut endpoint_error = 0.0_f64;
+    let mut endpoint_log_joint = f64::NAN;
     let mut zero_density = 0usize;
     for evaluation in 0..count {
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        let velocity = mass.velocity(&state.rho);
-        for (position, velocity) in state.theta.iter_mut().zip(velocity) {
+        mass.velocity_into(&state.rho, velocity);
+        for (position, velocity) in state.theta.iter_mut().zip(&*velocity) {
             *position += step * velocity;
         }
         set_evaluation_context(EvaluationContext {
@@ -2774,12 +3157,11 @@ where
             direction: Some(direction),
             refinement_level: Some(refinement_level),
             evaluation_in_attempt: evaluation,
-            kinetic: kinetic_energy(&state.rho, mass),
+            kinetic: context_kinetic(&state.rho, mass),
             initial_hamiltonian: Some(initial_hamiltonian),
         });
-        let (log_prob, gradient) = eval(&state.theta);
-        let gradient_finite =
-            gradient.len() == state.theta.len() && gradient.iter().all(|value| value.is_finite());
+        let (log_prob, gradient_shaped) = eval.evaluate(&state.theta, &mut state.grad);
+        let gradient_finite = gradient_shaped && state.grad.iter().all(|value| value.is_finite());
         if log_prob == f64::NEG_INFINITY && gradient_finite {
             // Zero-density point (upstream maps a failed evaluation to
             // `logp = -inf`, `grad = 0`). Integration continues with the
@@ -2789,7 +3171,6 @@ where
             // at every micro-step and test the final one.
             zero_density += 1;
             state.log_prob = f64::NEG_INFINITY;
-            state.grad.copy_from_slice(&gradient);
         } else if !log_prob.is_finite() || !gradient_finite {
             state.log_prob = f64::NEG_INFINITY;
             state.grad.fill(0.0);
@@ -2801,15 +3182,16 @@ where
                 maximum_absolute_error: f64::INFINITY,
                 endpoint_error: f64::INFINITY,
                 zero_density,
+                endpoint_log_joint: f64::NAN,
             };
         } else {
             state.log_prob = log_prob;
-            state.grad.copy_from_slice(&gradient);
         }
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        let energy = -joint_log_density(state, mass);
+        let log_joint = joint_log_density(state, mass);
+        let energy = -log_joint;
         if energy.is_nan() {
             return IntegrationObservation {
                 attempted: evaluation + 1,
@@ -2819,6 +3201,7 @@ where
                 maximum_absolute_error: f64::INFINITY,
                 endpoint_error: f64::INFINITY,
                 zero_density,
+                endpoint_log_joint: f64::NAN,
             };
         }
         if energy.is_finite() {
@@ -2831,6 +3214,7 @@ where
                 maximum_absolute_error.max((energy - initial_hamiltonian).abs());
         }
         endpoint_error = (energy - initial_hamiltonian).abs();
+        endpoint_log_joint = log_joint;
     }
     IntegrationObservation {
         attempted: count,
@@ -2840,6 +3224,7 @@ where
         maximum_absolute_error,
         endpoint_error,
         zero_density,
+        endpoint_log_joint,
     }
 }
 
@@ -2863,6 +3248,7 @@ fn observe_energy_range(
     work.maximum_absolute_energy_error = work.maximum_absolute_energy_error.max(error);
 }
 
+#[inline]
 fn joint_log_density<M: MassOperator + ?Sized>(state: &State, mass: &M) -> f64 {
     state.log_prob - mass.kinetic_energy(&state.rho)
 }
@@ -2871,6 +3257,53 @@ fn joint_log_density<M: MassOperator + ?Sized>(state: &State, mass: &M) -> f64 {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    fn same_selected(left: &State, right: &State) -> bool {
+        left.theta == right.theta && left.grad == right.grad && left.log_prob == right.log_prob
+    }
+
+    #[test]
+    fn state_ring_hands_out_shared_copies_for_any_dimension() {
+        let one = state(0.25, -0.5);
+        let first = pooled_state(&one);
+        assert!(same_selected(&first, &one));
+        assert_eq!(first.rho, one.rho);
+        // The ring keeps its own reference so the entry can be reused later.
+        assert_eq!(Rc::strong_count(&first), 2);
+        drop(first);
+        let again = pooled_state(&one);
+        assert!(same_selected(&again, &one));
+        assert_eq!(Rc::strong_count(&again), 2);
+        let two = State {
+            theta: vec![1.0, 2.0],
+            rho: vec![0.5, -0.5],
+            log_prob: -2.5,
+            grad: vec![-1.0, -2.0],
+        };
+        let other = pooled_state(&two);
+        assert!(same_selected(&other, &two));
+        assert_eq!(other.rho, two.rho);
+        assert_eq!(Rc::strong_count(&other), 2);
+        // Live entries are never handed out twice.
+        assert!(!Rc::ptr_eq(&again, &other));
+    }
+
+    #[test]
+    fn context_kinetic_scope_restores_the_previous_setting() {
+        assert!(CONTEXT_KINETIC_REQUIRED.get());
+        {
+            let _unobserved = ContextKineticScope::new(false);
+            assert!(!CONTEXT_KINETIC_REQUIRED.get());
+            assert!(context_kinetic(&[1.0], &[1.0]).is_nan());
+            {
+                let _observed = ContextKineticScope::new(true);
+                assert_eq!(context_kinetic(&[2.0], &[1.0]), 2.0);
+            }
+            assert!(!CONTEXT_KINETIC_REQUIRED.get());
+        }
+        assert!(CONTEXT_KINETIC_REQUIRED.get());
+        assert_eq!(context_kinetic(&[2.0], &[1.0]), 2.0);
+    }
 
     struct CoupledMass {
         generation: u64,
@@ -2921,6 +3354,7 @@ mod tests {
             grad: vec![-0.2, 0.4],
         };
         let mut state = initial.clone();
+        let mut velocity = vec![0.0; 2];
         let initial_h = -joint_log_density(&state, &mass);
         let mut eval = |q: &[f64]| {
             (
@@ -2938,6 +3372,7 @@ mod tests {
             Direction::Forward,
             0,
             &mut eval,
+            &mut velocity,
         );
         assert!(forward.valid);
         let reverse_h = -joint_log_density(&state, &mass);
@@ -2951,6 +3386,7 @@ mod tests {
             Direction::Backward,
             0,
             &mut eval,
+            &mut velocity,
         );
         assert!(reverse.valid);
         for (actual, expected) in state.theta.iter().zip(&initial.theta) {
@@ -4080,7 +4516,7 @@ mod tests {
         .unwrap();
         assert_eq!(log_probability, 0.5_f64.ln());
         assert!(!updated);
-        assert_eq!(combined.selected, old.selected);
+        assert!(same_selected(&combined.selected, &old.selected));
         assert_eq!(boundary.consumed(), 1);
 
         new.log_weight = 1.0;
@@ -4090,7 +4526,7 @@ mod tests {
                 .unwrap();
         assert_eq!(log_probability, 1.0);
         assert!(updated);
-        assert_eq!(combined.selected, new.selected);
+        assert!(same_selected(&combined.selected, &new.selected));
         assert_eq!(certain.consumed(), 1);
     }
 
@@ -4121,7 +4557,7 @@ mod tests {
                 assert_eq!(observed, draw);
                 assert_eq!(rng.consumed(), 1);
                 assert!((combined.log_weight - 3.0_f64.ln()).abs() < 2.0e-15);
-                assert_eq!(update, combined.selected == new.selected);
+                assert_eq!(update, same_selected(&combined.selected, &new.selected));
                 if update {
                     selected += 1;
                 }
