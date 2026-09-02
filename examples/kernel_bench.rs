@@ -330,15 +330,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!(
-        "{:<14} {:>10} {:>10} {:>10} {:>12} {:>10} {:>10}  {}",
-        "workload",
-        "wall ms",
-        "calls",
-        "target ns",
-        "overhead ns",
-        "alloc/cl",
-        "bytes/cl",
-        "fingerprint"
+        "{:<14} {:>10} {:>10} {:>10} {:>12} {:>10} {:>10}  fingerprint",
+        "workload", "wall ms", "calls", "target ns", "overhead ns", "alloc/cl", "bytes/cl",
     );
     for report in &reports {
         println!(
