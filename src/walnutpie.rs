@@ -6752,7 +6752,7 @@ fn run_chain<T: Target>(
             if transition_index + 1 == config.discarded
                 && let Some(dual) = &dual_averaging
             {
-                active_tuning.step_size = dual.final_step();
+                active_tuning.step_size = warmup.floored_step(dual.final_step());
                 if let Some(paper) = warmup.paper_adaptation.as_ref() {
                     active_tuning.step_size = clamp_paper_step_within(
                         active_tuning.step_size,
@@ -7623,7 +7623,7 @@ pub fn sample_dense_with_control<T: Target>(
         &mut dual_averaging,
     )?;
     if let Some(dual) = &dual_averaging {
-        active_step = dual.final_step();
+        active_step = warmup.floored_step(dual.final_step());
     }
 
     let mut retained_config = config.clone();
@@ -8476,7 +8476,7 @@ fn run_structured_refresh_chain<T: Target>(
         if transition + 1 == config.discarded
             && let Some(value) = &dual
         {
-            active_step = value.final_step();
+            active_step = warmup.floored_step(value.final_step());
         }
         append_projected_transition(
             &mut combined,

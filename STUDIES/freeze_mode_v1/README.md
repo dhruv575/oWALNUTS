@@ -206,11 +206,94 @@ which pin `RunConfig` defaults, untouched by a `sampler` flip) still pass.
 
 ## 3. Results
 
-(filled in after the table.)
+Full per-cell table: `artifacts/results-table.md` (from `analyze.py`);
+per-cell JSON with the four chains' escape transitions and final steps:
+`artifacts/table/`. Seed medians (frozen chains of 12 / seeds with min bulk
+ESS >= 400 / median min bulk ESS / median min bulk ESS per gradient x1e3):
+
+| arm | arma11 | lotka_volterra |
+|---|---|---|
+| baseline | 7 / 0/3 / 4.4 / 0.035 | 0 / 1/3 / 6.8 / 0.026 |
+| exhaust-accept | 7 / 0/3 / 4.4 / 0.035 | 0 / 1/3 / 122 / 0.48 |
+| mean-accept | 7 / 0/3 / 4.4 / 0.035 | 0 / 1/3 / 6.7 / 0.027 |
+| stan-style | 7 / 0/3 / 4.4 / 0.026 | 0 / 2/3 / 763 / 3.2 |
+| step-floor | 9 / 0/3 / 4.1 / 0.0036 | 3 / 1/3 / 7.2 / 0.0058 |
+| **exhaust-signed** | **0 / 3/3 / 1418 / 13.5** | **0 / 2/3 / 842 / 2.9** |
+| exhaust-signed+mean-accept | 2 / 2/3 / 1413 / 12.8 | 0 / 2/3 / 752 / 2.6 |
+| stan-style+exhaust-signed | 2 / 1/3 / 7.2 / 0.0032 | 0 / 2/3 / 745 / 3.1 |
+| **warmup-signed** | **0 / 3/3 / 1418 / 13.5** | **0 / 2/3 / 842 / 2.9** |
+
+`arma11`: `warmup-signed` and `exhaust-signed` produce identical cells (the
+retained transitions never exhaust once the chain is in the bulk, so the
+retained rule is inert there): every one of the seven v2-frozen chains
+escapes, at warmup transitions 6-85 (start log density -4.5e19 to
+-1.8e115), all twelve final steps are 0.03-0.12, max R-hat 1.003, min bulk
+ESS 1,290-1,460 against the healthy v2 chains' ~1,400 (P1 held). Every
+two-sided arm -- `baseline`, `exhaust-accept`, `mean-accept`, `stan-style` --
+freezes exactly the v2 chains with the same final steps to three digits
+(P2 and the first half of P3 held); `step-floor` freezes two more (floored
+warmup steps fail every leaf) at 10x the gradients (P2 held).
+`exhaust-signed+mean-accept` re-freezes two 78103 chains (Stan's statistic
+at the no-op pin sends orbits to depth 10, 4.2 M gradients, without leaving
+it) and `stan-style+exhaust-signed` re-freezes one chain per seed on
+78101/78103 (the preset's Stan metric prior and initial step search after
+the slide): P5 and the second half of P3 did **not** hold -- the rule works
+with the coarse-endpoint statistic and the default warmup, not with Stan's.
+
+`lotka_volterra`: no arm has a frozen chain by the study's definition except
+`step-floor` (3); `warmup-signed` / `exhaust-signed` pass 78101 and 78103
+(min bulk ESS 900 and 842; the baseline's 78103 was 6.8 with one chain at
+`h = 3.6e-6`) and, as predicted (P4), not 78102, whose two chains start on
+the `rk45` failure boundary: they move every transition (escape at 0-2)
+but crawl down a stiff valley at `h ~ 3e-6 to 4e-5` with depth-9/10 orbits
+(2.6 M gradients on the cell, min bulk ESS 4.5). No arm passes that seed;
+`stan-style` (the v2 stan-style arm) is at the same 2/3.
 
 ## 4. Side checks
 
-(filled in after the checks.)
+`src/bin/checks.rs`, `artifacts/checks/`; sampler defaults, seed
+`0x0f0f2026`.
+
+| check | variant | grads | retained exhaustions | divergences | min bulk ESS | max R-hat | tail mass (exact 0.0478) | z |
+|---|---|---:|---:|---:|---:|---:|---|---:|
+| funnel 4 x 2,000/20,000 | baseline | 2,483,660 | 812 | 9 | 137 | 1.019 | 0.0236 +- 0.0142 | -1.70 |
+| funnel | exhaust-accept | 2,550,810 | 19 | 19 | 243 | 1.011 | 0.0133 +- 0.0047 | -7.30 |
+| funnel | exhaust-signed | 2,509,800 | 26 | 27 | 249 | 1.010 | 0.0141 +- 0.0047 | -7.20 |
+| funnel | **warmup-signed** | 2,535,045 | 748 | 9 | 148 | 1.024 | 0.0214 +- 0.0142 | -1.85 |
+| eight schools centered 4 x 1,000/1,000 | baseline | 164,460 | 2 | 0 | 21 | 1.138 | | |
+| eight schools centered | exhaust-signed | 145,936 | 1 | 1 | 104 | 1.027 | | |
+| eight schools centered | **warmup-signed** | 145,914 | 1 | 0 | 104 | 1.027 | | |
+
+Two findings beyond P6 (held: `warmup-signed` |z| = 1.85, 748 retained
+exhaustions against the baseline's 812, the same draw-generating kernel
+after warmup): (i) **any rule that keeps exhausted leaves in retained
+transitions loses the funnel neck at the sampler's four levels** -- the
+existing two-sided `AcceptBelowDivergenceThreshold` (z = -7.3) as much as
+the one-sided rule (z = -7.2). `kernel_efficiency_v1` had cleared
+`AcceptBelowDivergenceThreshold` on the funnel at eight levels, where
+nothing exhausts; at four levels the exhaustion stop *is* what keeps the
+tail mass, so neither accepting rule is a retained-phase default. (ii) The
+baseline funnel at the sampler defaults is itself poor from these starts
+(min bulk ESS 137, z = -1.7): a separate matter (four levels, `h0 = 0.5`),
+recorded, not pursued.
+
+Fingerprints: `tests/kernel_fingerprint.rs` (which pins `RunConfig`
+defaults, untouched) and the full suites pass with and without `research`
+before and after the default flip; `tests/sampler_api.rs` mirrors the new
+default in its direct `WarmupConfig`s.
+
+## 5. Decision
+
+`warmup-signed` becomes the `sampler` default: `Adaptation::DualAveraging`
+and `Adaptation::Paper` apply `sampler::DEFAULT_WARMUP_EXHAUSTION =
+ExhaustionRule::AcceptUnlessDivergent` to the discarded transitions;
+retained transitions keep `Tuning::kernel_options` (the frozen `Stop`);
+`Adaptation::Custom` is used as given. The kernel revision is unchanged:
+no retained draw of the frozen kernel changes, and warmup differs only
+where a leaf exhausts. Not recommended: the rule for retained draws
+(section 4), Stan's statistic or preset with the rule (section 3), a step
+floor, an init check. The v3 posteriordb protocol is the breadth
+confirmation.
 
 ## Appendix: start-density Monte Carlo
 
