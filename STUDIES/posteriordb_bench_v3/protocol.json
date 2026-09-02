@@ -1,0 +1,146 @@
+{
+  "schema": "posteriordb-bench-v3",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-02",
+  "purpose": "Preregistered validation of the WP24 sampler default (ExhaustionRule::AcceptUnlessDivergent applied to warmup transitions by Adaptation::DualAveraging and Adaptation::Paper, STUDIES/freeze_mode_v1) on the posteriordb_bench_v2 protocol: identical model set, gates, estimators, chains/iterations, competitor versions and settings; fresh seeds; the harness rebuilt against the current src/; arms reduced to owalnuts-da, owalnuts-stan-style, cmdstan, nutpie (the paper arm tracked DA at 0.995x in v2 and is dropped).",
+  "predecessor": {
+    "study": "STUDIES/posteriordb_bench_v2",
+    "seeds": [
+      78101,
+      78102,
+      78103
+    ],
+    "artifacts_reused": "none for measurement (summary.json read only for the v2-vs-v3 comparison table); the v2 compiled BridgeStan/CmdStan models, venv and posteriordb checkout no longer exist (their worktree was removed), so every model is compiled fresh with the same BridgeStan 2.9.0 / Stan 2.39.0 / CmdStan 2.39.0 toolchain and the same flags (no STAN_THREADS); the posteriordb checkout is a fresh shallow clone at commit 28f8d3d as in v2"
+  },
+  "kernel_under_test": {
+    "algorithm_revision_required": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+    "paper_adaptation_revision_required": "walnutpie-paper-adaptation-kquantile-gamma-v4",
+    "api": "owalnuts::sampler (Sampler, Init::uniform(), Tuning::default(), Metric::diagonal(), Adaptation); harness src/main.rs identical to v2 except the recorded warmup_exhaustion_rule field",
+    "sampler_default_under_test": {
+      "constant": "owalnuts::sampler::DEFAULT_WARMUP_EXHAUSTION",
+      "value": "ExhaustionRule::AcceptUnlessDivergent",
+      "applies_to": "warmup (discarded) transitions of Adaptation::DualAveraging and Adaptation::Paper; retained transitions keep Tuning::kernel_options (Stop); Adaptation::Custom (the stan-style arm) is used as given, i.e. two-sided as in v2",
+      "source": "STUDIES/freeze_mode_v1 (WP24)"
+    }
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "arms": {
+    "owalnuts-da": {
+      "target": "owalnuts-bridgestan ReplicatedStanTarget, 4 replicas (BridgeStan 2.9.0, Stan 2.39.0, built WITHOUT STAN_THREADS, fresh compile for this study)",
+      "tuning": {
+        "source": "sampler::Tuning::default()",
+        "step_size": 0.5,
+        "max_depth": 10,
+        "min_micro_steps": 1,
+        "max_refinement_levels": 4,
+        "max_error": 1.0,
+        "divergence_threshold": 1000.0
+      },
+      "warmup": {
+        "mode": "Adaptation::DualAveraging (default)",
+        "target_accept": 0.8,
+        "metric": "Metric::diagonal() (adapted from identity)",
+        "warmup_exhaustion_rule": "AcceptUnlessDivergent (sampler default since WP24; v2 ran Stop)"
+      },
+      "threads": 4,
+      "starts": "sampler::Init::uniform(): uniform(-2,2) unconstrained, redrawn up to 100 times until finite density and gradient; SmallRng(splitmix64(seed ^ INIT_SEED_TAG))",
+      "limits": "Limits::admit_worst_case()"
+    },
+    "owalnuts-stan-style": {
+      "same_as": "owalnuts-da",
+      "warmup": {
+        "mode": "Adaptation::Custom(WarmupConfig::stan_style(0.8))",
+        "contents": "mean-trajectory acceptance statistic, Stan initial step search, Stan metric regularisation, Stan restart reference mu = ln(10 h), delta = divergence threshold during the initial 75-transition phase",
+        "warmup_exhaustion_rule": "as the preset (two-sided Stop; Adaptation::Custom is used as given) — identical to v2"
+      }
+    },
+    "cmdstan": {
+      "version": "2.39.0",
+      "driver": "cmdstanpy 1.3.0 CmdStanModel.sample defaults",
+      "settings": {
+        "adapt_delta": 0.8,
+        "max_treedepth": 10,
+        "metric": "diag_e",
+        "inits": "random uniform(-2,2)",
+        "chains": 4,
+        "parallel_chains": 4,
+        "threads_per_chain": 1
+      }
+    },
+    "nutpie": {
+      "version": "0.16.8",
+      "backend": "bridgestan (nutpie.compile_stan_model; nutpie builds its own STAN_THREADS library)",
+      "settings": {
+        "target_accept": 0.8,
+        "maxdepth": 10,
+        "chains": 4,
+        "cores": "default (all)",
+        "init": "nutpie default"
+      }
+    }
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "seeds": [
+    79101,
+    79102,
+    79103
+  ],
+  "seeds_verified_unused": true,
+  "run_order": "models in listed order; arms owalnuts-da, owalnuts-stan-style, cmdstan, nutpie; seeds ascending; strictly sequential",
+  "cell_timeout_seconds": 2700,
+  "parameter_set": "columns of the posteriordb reference draws; oWALNUTS draws constrained by BridgeStan param_constrain(include_tp=True)",
+  "estimators": "arviz 0.23.4: rank rhat; bulk ESS; tail ESS prob (0.05, 0.95); mcse method mean",
+  "metrics": {
+    "gradients_total": "owalnuts target calls (start search + warmup + sampling, all chains); cmdstan sum n_leapfrog__ (warmup+sampling); nutpie sum n_steps (warmup+sampling)",
+    "wall": "seconds around the single sampler call (Sampler::run, CmdStanModel.sample, nutpie.sample), warmup included, compile excluded; the oWALNUTS start search (a handful of evaluations) is outside the wall",
+    "wall_per_gradient_us": "1e6 * wall / gradients_total",
+    "wall_sampling_estimated": "wall * gradients_sampling / gradients_total (all arms); cmdstan CSV elapsed times also recorded",
+    "ess_per_second": "min over parameters of bulk (tail) ESS / wall",
+    "ess_per_gradient": "min over parameters of bulk (tail) ESS / gradients_total; sampling-only variant also reported",
+    "agreement": "z = (mean - mean_ref)/sqrt(mcse^2 + mcse_ref^2) with arviz mean MCSE on both sides; max |z| over parameters; flag if > 4",
+    "frozen_chain": "an oWALNUTS chain with more than 500 of its 1,000 retained transitions ending in refinement exhaustion; a cell is frozen if any chain is"
+  },
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "head_to_head": "per (owalnuts arm, competitor): geometric mean over models with all seeds ok on both sides of the seed-median ratios of min bulk ESS/gradient, min bulk ESS/s and wall per gradient; wins counted per model; 'outright win' = gates passed >= competitor and higher seed-median ESS/gradient and ESS/s",
+  "predictions": {
+    "P1": "owalnuts-da passes all gates on >= 33 of 51 cells (v2: 32)",
+    "P2": "owalnuts-da passes all gates on >= 2 of 3 arma11 seeds (v2: 0/3, all frozen; freeze_mode_v1 on the v2 seeds: 3/3)",
+    "P3": "owalnuts-da geometric-mean min-bulk-ESS/gradient vs CmdStan >= 0.40 over all 17 models (v2: 0.233), and >= 0.45 over the 16 models excluding lotka_volterra (P3b; v2 post hoc excluding arma11 and lotka_volterra: 0.447)",
+    "P4": "no model has owalnuts-da seed-median min-bulk-ESS/gradient below 0.8x its v2 value (seed noise; the rule only changes warmup where a leaf exhausts)",
+    "P5": "owalnuts-da geometric-mean wall per gradient <= 1.0x CmdStan (v2: 0.771)"
+  },
+  "decision_rules": "Report all cells; no reruns; failures are results; nothing tuned after seeing results. A driver crash is relaunched and the interrupted cell re-run from scratch (seeded), recorded as a deviation. No default changes from this study; it is the breadth confirmation named in the WP24 ledger entry, and the release gate for a breadth claim is P1, P3 and P5 together.",
+  "versus_v2": "per model and arm (owalnuts-da, owalnuts-stan-style, cmdstan, nutpie): seed-median v3 / v2 ratios of min bulk ESS/gradient and ESS/s from v2 summary.json; geomean over models"
+}
