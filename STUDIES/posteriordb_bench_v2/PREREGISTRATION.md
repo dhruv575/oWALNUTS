@@ -128,3 +128,10 @@ machine-independent primary figure.
 ## Deviations
 
 (none at freeze)
+
+* 2026-09-02 02:36 local — nutpie `hudson_lynx_hare-lotka_volterra` seed 78102
+  panicked inside `nuts-rs` ("failed to constrain the parameters of the
+  draw", poisoned sampler mutex) and the child process exited 1 before seed
+  78103 was attempted; both cells are recorded as `timeout_or_crash` by the
+  driver. No rerun; no settings changed; no driver restart was needed for
+  any other cell.
