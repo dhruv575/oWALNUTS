@@ -41,6 +41,11 @@ ARMS = ["owalnuts-da", "owalnuts-paper", "cmdstan", "nutpie"]
 SEEDS = PROTOCOL["seeds"]
 TIMEOUT = PROTOCOL["cell_timeout_seconds"]
 os.environ.setdefault("MAKE", "mingw32-make")
+# BridgeStan make arguments. v1 (2026-09-01) used ["STAN_THREADS=true"], which on
+# mingw-w64 GCC costs 9-16x per gradient (emulated TLS on every autodiff node);
+# see artifacts/wall-gap/README.md. The harness now loads one library copy per
+# chain thread (ReplicatedStanTarget), so STAN_THREADS is not needed.
+BRIDGESTAN_MAKE_ARGS: list[str] = []
 
 
 def short(model: str) -> str:
@@ -118,7 +123,7 @@ def prepare_bridgestan(model: str) -> tuple[Path, Path]:
     so = stan.with_name(f"{stan.stem}_model.so")
     if not so.exists():
         t = time.perf_counter()
-        bs.compile_model(stan, make_args=["STAN_THREADS=true"])
+        bs.compile_model(stan, make_args=BRIDGESTAN_MAKE_ARGS)
         log(f"bridgestan compiled {model} in {time.perf_counter() - t:.1f}s")
     return so, data
 

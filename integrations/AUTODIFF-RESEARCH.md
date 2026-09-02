@@ -103,9 +103,17 @@ On Windows `tbb.dll` must be resident before the model library loads
 
 | model | hand-written Rust | BridgeStan | ratio |
 |---|---:|---:|---:|
-| Eight Schools | 40 ns | 6.68 µs | 167× |
+| Eight Schools | 40 ns | 6.68 µs (0.59 µs without `STAN_THREADS`, see note) | 167× |
 | Local level T=100 | 201 ns | 8.39 µs | 42× |
 | Local level T=1000 | 2.88 µs | 38.1 µs | 13× |
+
+> **Note (2026-09-02):** the BridgeStan numbers in this document were measured
+> on libraries built with `STAN_THREADS=true`, which on mingw-w64 GCC uses
+> emulated TLS for Stan's autodiff stack and costs 9-16x per gradient. Built
+> without `STAN_THREADS` the eight-schools gradient is 0.59 µs (15x the hand
+> gradient, not 167x). See
+> `STUDIES/posteriordb_bench_v1/artifacts/wall-gap/README.md` and
+> `bridgestan/README.md` (recommended build configuration).
 
 The ratio shrinks with model size because Stan Math's fixed per-evaluation
 cost (arena setup, exception frame, Eigen temporaries, the C call) is a few
