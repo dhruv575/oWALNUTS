@@ -11,17 +11,21 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 
-use numpy::{IntoPyArray, PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
+    PyReadonlyArray3,
+};
+use owalnuts::diagnostics::ParameterSummary;
+use owalnuts::sampler::uniform_starts;
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, ChainOutput, DiagonalMass, Error, KernelTuning, MultiChainOutput,
     PAPER_ADAPTATION_REVISION, PaperAdaptationConfig, PaperRestartPolicy, PaperStepStatistic,
-    RawTarget, RawTargetFn, RunConfig, StopReason, StructuredBlockMass, StructuredCovarianceBlock,
-    Target, TargetError,
-    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig, WorkTotals,
-    preflight_chains, preflight_chains_structured, preflight_chains_with_target_budget,
-    sample_chains, sample_chains_structured, sample_chains_with_target_budget,
-    sample_chains_structured_refresh, StructuredMetricRefresh, StructuredRefreshConfig,
-    StructuredRefreshRestartPolicy, RunControl, WindowSummary,
+    RawTarget, RawTargetFn, RunConfig, RunControl, StopReason, StructuredBlockMass,
+    StructuredCovarianceBlock, StructuredMetricRefresh, StructuredRefreshConfig,
+    StructuredRefreshRestartPolicy, Target, TargetError, TargetEvaluationAdmissionLimit,
+    TargetEvaluationBudget, WarmupConfig, WindowSummary, WorkTotals, preflight_chains,
+    preflight_chains_structured, preflight_chains_with_target_budget, sample_chains,
+    sample_chains_structured, sample_chains_structured_refresh, sample_chains_with_target_budget,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -350,7 +354,7 @@ fn parse_mass(py: Python<'_>, dimension: usize, spec: Option<Bound<'_, PyAny>>) 
     let blocks = spec.cast::<PyList>().map_err(|_| {
         value_error("mass must be None, a 1-D float64 array, or a list of block dicts")
     })?;
-    let parsed = parse_blocks(&blocks)?;
+    let parsed = parse_blocks(blocks)?;
     let _ = py;
     StructuredBlockMass::new(parsed)
         .map(Mass::Structured)
@@ -407,6 +411,7 @@ fn parse_blocks(blocks: &Bound<'_, PyList>) -> PyResult<Vec<StructuredCovariance
 fn parse_run(
     py: Python<'_>,
     dimension: usize,
+    chains: usize,
     cfg: &Bound<'_, PyDict>,
     refresh_active: bool,
 ) -> PyResult<Run> {
@@ -414,8 +419,9 @@ fn parse_run(
     let retained: usize = required(cfg, "draws")?;
     let seed: u64 = required(cfg, "seed")?;
     let threads: usize = get(cfg, "threads")?.unwrap_or(1);
-    let step_size: f64 = get(cfg, "step_size")?.unwrap_or(0.1);
-    let max_depth: usize = get(cfg, "max_depth")?.unwrap_or(8);
+    // Defaults match `owalnuts::sampler::Tuning::default()`.
+    let step_size: f64 = get(cfg, "step_size")?.unwrap_or(0.5);
+    let max_depth: usize = get(cfg, "max_depth")?.unwrap_or(10);
     let min_micro_steps: usize = get(cfg, "min_micro_steps")?.unwrap_or(1);
     let max_refinement_levels: usize = get(cfg, "max_refinement_levels")?.unwrap_or(4);
     let max_error: f64 = get(cfg, "max_error")?.unwrap_or(1.0);
@@ -441,12 +447,33 @@ fn parse_run(
     if let Some(limit) = max_depth_stop_limit {
         config = config.with_maximum_depth_stop_limit(limit);
     }
-    if let Some(budget) = budget {
-        // A caller-supplied budget is authoritative for the runtime cap; also
-        // raise the conservative constructor admission ceiling accordingly so
-        // structured-mass runs (which have no budgeted entry point) admit the
-        // same configurations the budgeted diagonal path does. Bounded by the
-        // facade's hard research maximum.
+    let mass = parse_mass(py, dimension, cfg.get_item("mass")?)?;
+
+    // `admit_worst_case` (default) mirrors `sampler::Limits::admit_worst_case`:
+    // when the conservative default admission ceiling would reject the run,
+    // admit it with its exact worst-case evaluation count instead. Needed
+    // at the sampler defaults (depth 10, four refinement levels) for four
+    // chains of a few thousand transitions.
+    let admit_worst_case: bool = get(cfg, "admit_worst_case")?.unwrap_or(true);
+    let chains = nonzero(chains, "chains")?;
+    let budget = match budget {
+        Some(budget) => Some(budget),
+        None if admit_worst_case => {
+            let worst = config
+                .worst_case_target_evaluations(chains)
+                .map_err(facade_error)?;
+            (worst > owalnuts::walnutpie::CONSERVATIVE_MAX_TARGET_EVALUATIONS)
+                .then(|| nonzero(worst, "worst_case_target_evaluations"))
+                .transpose()?
+        }
+        None => None,
+    };
+    if let (Some(budget), Mass::Structured(_)) = (budget, &mass) {
+        // Structured-mass runs have no budgeted entry point: raise the
+        // constructor admission ceiling to the budget instead (bounded by
+        // the facade's hard research maximum). Diagonal runs go through the
+        // budgeted entry point with an explicit admission limit and must
+        // not also carry a research limit.
         let ceiling = budget
             .get()
             .min(owalnuts::walnutpie::RESEARCH_MAX_TARGET_EVALUATIONS);
@@ -456,8 +483,6 @@ fn parse_run(
         .map_err(facade_error)?;
         config = config.with_research_target_evaluation_limit(limit);
     }
-
-    let mass = parse_mass(py, dimension, cfg.get_item("mass")?)?;
 
     let adapt: bool = get(cfg, "adapt")?.unwrap_or(true);
     if adapt {
@@ -779,9 +804,11 @@ impl StructuredMetricRefresh for PyRefresh {
                 return Ok(current.clone());
             }
             let list = result.cast::<PyList>().map_err(|_| {
-                Error::metric_candidate("refresh callback must return None or a list of mass blocks")
+                Error::metric_candidate(
+                    "refresh callback must return None or a list of mass blocks",
+                )
             })?;
-            let blocks = parse_blocks(&list)
+            let blocks = parse_blocks(list)
                 .map_err(|e| Error::metric_candidate(format!("refresh blocks invalid: {e}")))?;
             StructuredBlockMass::new(blocks)
         })
@@ -807,7 +834,7 @@ fn sample_callable<'py>(
         .first()
         .map(Vec::len)
         .ok_or_else(|| value_error("starts is empty"))?;
-    let run = parse_run(py, dimension, config, refresh.is_some())?;
+    let run = parse_run(py, dimension, starts.len(), config, refresh.is_some())?;
     let py_target = PyTarget {
         callable: target,
         dimension,
@@ -896,7 +923,7 @@ fn preflight_callable<'py>(
         .first()
         .map(Vec::len)
         .ok_or_else(|| value_error("starts is empty"))?;
-    let run = parse_run(py, dimension, config, false)?;
+    let run = parse_run(py, dimension, starts.len(), config, false)?;
     struct Never(usize);
     impl Target for Never {
         fn dimension(&self) -> usize {
@@ -930,7 +957,7 @@ fn sample_eight_schools<'py>(
         calls: AtomicUsize::new(0),
     };
     let starts = parse_starts(starts)?;
-    let run = parse_run(py, target.dimension(), config, false)?;
+    let run = parse_run(py, target.dimension(), starts.len(), config, false)?;
     let started = Instant::now();
     let output = py
         .detach(|| execute(&target, &starts, &run))
@@ -971,7 +998,7 @@ fn sample_local_level<'py>(
         calls: AtomicUsize::new(0),
     };
     let starts = parse_starts(starts)?;
-    let run = parse_run(py, target.dimension(), config, false)?;
+    let run = parse_run(py, target.dimension(), starts.len(), config, false)?;
     let started = Instant::now();
     let output = py
         .detach(|| execute(&target, &starts, &run))
@@ -1014,7 +1041,7 @@ fn sample_cfunc<'py>(
             "starts must be (chains, {dimension}) to match the cfunc dimension"
         )));
     }
-    let run = parse_run(py, dimension, config, false)?;
+    let run = parse_run(py, dimension, starts.len(), config, false)?;
     // SAFETY: the caller passes the address of a compiled callback with the
     // documented `RawTargetFn` ABI and keeps it alive for the whole call; the
     // remaining contract is asserted through `RawTarget::new` below.
@@ -1064,6 +1091,137 @@ fn eight_schools_logp_grad<'py>(
     Ok((v, g.into_pyarray(py)))
 }
 
+/// Uniform starts with retries (`owalnuts::sampler::uniform_starts`) for a
+/// callable target: Stan's uniform(-radius, radius) rule, redrawn until the
+/// log density and gradient are finite, deterministic given `seed`.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (target, dimension, chains, seed, radius=2.0, max_attempts=100, nonfinite="zero_density"))]
+fn uniform_starts_callable<'py>(
+    py: Python<'py>,
+    target: Py<PyAny>,
+    dimension: usize,
+    chains: usize,
+    seed: u64,
+    radius: f64,
+    max_attempts: usize,
+    nonfinite: &str,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let py_target = PyTarget {
+        callable: target,
+        dimension,
+        policy: NonFinitePolicy::parse(nonfinite)?,
+        calls: AtomicUsize::new(0),
+        recoverable: AtomicUsize::new(0),
+        attached_nanos: AtomicU64::new(0),
+        last_fatal: Mutex::new(None),
+    };
+    let starts = py
+        .detach(|| uniform_starts(&py_target, chains, seed, radius, max_attempts))
+        .map_err(|e| py_target.fatal_error(e))?;
+    starts_array(py, starts, dimension)
+}
+
+/// Uniform starts with retries for a GIL-free `cfunc` target.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (address, dimension, chains, seed, radius=2.0, max_attempts=100, user_data=0))]
+fn uniform_starts_cfunc<'py>(
+    py: Python<'py>,
+    address: usize,
+    dimension: usize,
+    chains: usize,
+    seed: u64,
+    radius: f64,
+    max_attempts: usize,
+    user_data: usize,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    if address == 0 {
+        return Err(value_error("address must be a nonzero cfunc address"));
+    }
+    // SAFETY: see `sample_cfunc`; the same `from_cfunc` contract applies.
+    let function: RawTargetFn = unsafe { std::mem::transmute::<usize, RawTargetFn>(address) };
+    // SAFETY: as in `sample_cfunc`.
+    let target = unsafe {
+        RawTarget::new(
+            nonzero(dimension, "dimension")?,
+            function,
+            user_data as *mut core::ffi::c_void,
+        )
+    };
+    let starts = py
+        .detach(|| uniform_starts(&target, chains, seed, radius, max_attempts))
+        .map_err(facade_error)?;
+    starts_array(py, starts, dimension)
+}
+
+fn starts_array<'py>(
+    py: Python<'py>,
+    starts: Vec<Vec<f64>>,
+    dimension: usize,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let chains = starts.len();
+    let flat: Vec<f64> = starts.into_iter().flatten().collect();
+    flat.into_pyarray(py).reshape([chains, dimension])
+}
+
+/// Per-parameter summary rows (`owalnuts::diagnostics::ParameterSummary`)
+/// for a `(chains, draws, dim)` array of retained draws.
+#[pyfunction]
+#[pyo3(signature = (samples, names=None))]
+fn summary<'py>(
+    py: Python<'py>,
+    samples: PyReadonlyArray3<'py, f64>,
+    names: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyList>> {
+    let view = samples.as_array();
+    let (chains, draws, dimension) = view.dim();
+    if chains == 0 || draws == 0 {
+        return Err(value_error(
+            "samples must have at least one chain and one draw",
+        ));
+    }
+    let names = match names {
+        Some(names) if names.len() != dimension => {
+            return Err(value_error(format!(
+                "names must have exactly {dimension} entries (got {})",
+                names.len()
+            )));
+        }
+        Some(names) => names,
+        None => owalnuts::diagnostics::default_parameter_names(dimension),
+    };
+    let rows: Vec<ParameterSummary> = py.detach(|| {
+        names
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| {
+                let columns: Vec<Vec<f64>> = (0..chains)
+                    .map(|chain| (0..draws).map(|draw| view[[chain, draw, index]]).collect())
+                    .collect();
+                let views: Vec<&[f64]> = columns.iter().map(Vec::as_slice).collect();
+                ParameterSummary::compute(name, &views)
+            })
+            .collect()
+    });
+    let out = PyList::empty(py);
+    for row in rows {
+        let d = PyDict::new(py);
+        d.set_item("name", &row.name)?;
+        d.set_item("mean", row.mean)?;
+        d.set_item("sd", row.sd)?;
+        d.set_item("mcse_mean", row.mcse_mean)?;
+        d.set_item("q5", row.quantiles[0])?;
+        d.set_item("q50", row.quantiles[1])?;
+        d.set_item("q95", row.quantiles[2])?;
+        d.set_item("ess_bulk", row.ess_bulk)?;
+        d.set_item("ess_tail", row.ess_tail)?;
+        d.set_item("rhat", row.rhat)?;
+        out.append(d)?;
+    }
+    Ok(out)
+}
+
 #[pymodule]
 fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("ALGORITHM_REVISION", ALGORITHM_REVISION)?;
@@ -1089,5 +1247,8 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sample_eight_schools, m)?)?;
     m.add_function(wrap_pyfunction!(sample_local_level, m)?)?;
     m.add_function(wrap_pyfunction!(eight_schools_logp_grad, m)?)?;
+    m.add_function(wrap_pyfunction!(uniform_starts_callable, m)?)?;
+    m.add_function(wrap_pyfunction!(uniform_starts_cfunc, m)?)?;
+    m.add_function(wrap_pyfunction!(summary, m)?)?;
     Ok(())
 }

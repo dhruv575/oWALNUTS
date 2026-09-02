@@ -171,6 +171,23 @@ def test_preflight_reports_zero_callbacks():
     assert report["worst_case_target_evaluations"] <= report["admission_ceiling"]
 
 
+def test_defaults_admit_worst_case_above_conservative_ceiling():
+    # Four chains x 3,000 transitions at the sampler defaults (depth 10, four
+    # refinement levels) exceed the conservative 113M preflight ceiling; the
+    # default admit_worst_case=True admits the run with its exact worst case,
+    # as Rust's Limits::admit_worst_case does, and an explicit budget works
+    # on the diagonal path.
+    report = owalnuts.preflight(10, chains=4, warmup=1000, draws=2000)
+    assert report["worst_case_target_evaluations"] > 113_000_000
+    assert report["admission_ceiling"] >= report["worst_case_target_evaluations"]
+    with pytest.raises(RuntimeError, match="resource limit"):
+        owalnuts.preflight(10, chains=4, warmup=1000, draws=2000, admit_worst_case=False)
+    budgeted = owalnuts.preflight(10, chains=4, warmup=1000, draws=2000, max_target_evaluations=10**9)
+    assert budgeted["worst_case_target_evaluations"] == report["worst_case_target_evaluations"]
+    small = owalnuts.preflight(3, chains=4, warmup=100, draws=100, tuning=owalnuts.Tuning(step_size=0.1, max_depth=8))
+    assert small["admission_ceiling"] == 113_000_000
+
+
 def test_from_cfunc_numba_gaussian_parallel_chains():
     numba = pytest.importorskip("numba")
     sig = owalnuts.numba_raw_signature()
@@ -323,3 +340,61 @@ def test_from_pymc_thread_safe_matches_single_thread():
     m1 = out1.samples[:, :, 0].mean()
     m4 = out4.samples[:, :, 0].mean()
     assert abs(m1 - m4) < 0.2, (m1, m4)
+
+
+def test_uniform_init_retries_until_evaluable_and_is_deterministic():
+    # Log density is only finite for x0 > 0.5, so about three quarters of
+    # uniform(-2, 2) draws must be rejected and redrawn.
+    def target(q):
+        if q[0] <= 0.5:
+            return -np.inf, np.zeros_like(q)
+        return -0.5 * float(q @ q), -q
+
+    starts = owalnuts.uniform_starts(target, 3, chains=4, seed=17)
+    assert starts.shape == (4, 3)
+    assert (starts[:, 0] > 0.5).all() and (np.abs(starts) <= 2.0).all()
+    np.testing.assert_array_equal(starts, owalnuts.uniform_starts(target, 3, chains=4, seed=17))
+    r1 = owalnuts.sample(target, 3, init="uniform", chains=2, warmup=100, draws=100, seed=17)
+    r2 = owalnuts.sample(target, 3, init="uniform", chains=2, warmup=100, draws=100, seed=17)
+    np.testing.assert_array_equal(r1.samples, r2.samples)
+    assert (r1.samples[..., 0] > 0.5).all()
+    with pytest.raises(ValueError, match="uniform"):
+        owalnuts.sample(target, 3, init="random", warmup=10, draws=10)
+
+
+def test_uniform_init_fails_closed_when_no_start_is_evaluable():
+    def never(q):
+        return -np.inf, np.zeros_like(q)
+
+    with pytest.raises(RuntimeError, match="no evaluable start"):
+        owalnuts.uniform_starts(never, 2, chains=1, seed=1, max_attempts=5)
+
+
+def test_default_tuning_matches_rust_sampler_defaults():
+    t = owalnuts.Tuning()
+    assert (t.step_size, t.max_depth, t.max_refinement_levels, t.max_error) == (0.5, 10, 4, 1.0)
+    r = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), 2, warmup=50, draws=20, seed=3, chains=1)
+    assert r.chains[0]["metadata"]["max_depth"] == 10
+
+
+def test_summary_rows_match_arviz():
+    dim = 3
+    result = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), dim, warmup=300, draws=600, seed=93_010, chains=4)
+    rows = result.summary(["a", "b", "c"])
+    assert [r["name"] for r in rows] == ["a", "b", "c"]
+    assert set(rows[0]) == {"name", "mean", "sd", "mcse_mean", "q5", "q50", "q95", "ess_bulk", "ess_tail", "rhat"}
+    assert all(isinstance(v, float) for r in rows for k, v in r.items() if k != "name")
+    assert owalnuts.summary(result.samples)[1]["name"] == "theta.2"
+    health = result.health()
+    assert health["transitions"] == 4 * 600 and health["divergences"] == 0
+    assert health["target_calls"] == result.retained_target_calls
+    az = pytest.importorskip("arviz")
+    idata = result.to_inferencedata(var_names=["a", "b", "c"])
+    for row in rows:
+        name = row["name"]
+        assert row["mean"] == pytest.approx(float(idata.posterior[name].mean()), rel=1e-9, abs=1e-12)
+        assert row["rhat"] == pytest.approx(float(az.rhat(idata)[name]), rel=1e-6)
+        assert row["ess_bulk"] == pytest.approx(float(az.ess(idata, method="bulk")[name]), rel=1e-6)
+        assert row["ess_tail"] == pytest.approx(float(az.ess(idata, method="tail")[name]), rel=1e-6)
+        assert row["mcse_mean"] == pytest.approx(float(az.mcse(idata, method="mean")[name]), rel=1e-6)
+        assert row["sd"] == pytest.approx(float(idata.posterior[name].std(ddof=1)), rel=1e-9)
