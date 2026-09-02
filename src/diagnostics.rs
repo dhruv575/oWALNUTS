@@ -682,7 +682,7 @@ impl ChainDisagreement {
             .iter()
             .map(|columns| rhat(columns))
             .fold(f64::NAN, f64::max);
-        if !(max_rhat > RHAT_DISAGREEMENT_THRESHOLD) {
+        if max_rhat.is_nan() || max_rhat <= RHAT_DISAGREEMENT_THRESHOLD {
             return None;
         }
         let max_rhat_without: Vec<f64> = (0..chains)
@@ -983,12 +983,15 @@ mod tests {
         let n = 200;
         let wave = |phase: f64, offset: f64| -> Vec<f64> {
             (0..n)
-                .map(|i| {
-                    offset + ((i as f64) * 0.7 + phase).sin() + ((i as f64) * 1.3).cos() * 0.5
-                })
+                .map(|i| offset + ((i as f64) * 0.7 + phase).sin() + ((i as f64) * 1.3).cos() * 0.5)
                 .collect()
         };
-        let chains = [wave(0.0, 0.0), wave(1.0, 0.0), wave(2.0, 0.0), wave(3.0, 5.0)];
+        let chains = [
+            wave(0.0, 0.0),
+            wave(1.0, 0.0),
+            wave(2.0, 0.0),
+            wave(3.0, 5.0),
+        ];
         let views = [vec![
             chains[0].as_slice(),
             chains[1].as_slice(),

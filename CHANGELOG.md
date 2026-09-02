@@ -42,6 +42,23 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Added
 
+- **Per-chain R-hat attribution** (`STUDIES/step_collapse_v1`,
+  [WP27-STEP-COLLAPSE-V1]). `diagnostics::Summary` carries
+  `chain_disagreement: Option<ChainDisagreement>`: when the maximum rank
+  R-hat over parameters exceeds `diagnostics::RHAT_DISAGREEMENT_THRESHOLD`
+  (1.01) and there are at least three chains, the maximum R-hat is
+  recomputed with each chain left out and the chains whose removal alone
+  brings it below the threshold are named (a chain in a second mode, a
+  chain that never left its start); an empty list says no single chain
+  explains the failure. `Summary`'s `Display` prints the line.
+- **Two opt-in warmup step floors**, off by default, measured and not
+  recommended (`STUDIES/step_collapse_v1`): `WarmupConfig::with_step_floor_relative_to_search`
+  (the adapted step is at least a fraction of the latest initial-step
+  search result; requires a search) and `WarmupConfig::with_max_window_shrink`
+  (the adapted step never falls below the step its dual-averaging stream
+  started from divided by a factor). Neither moves a collapsed step, the
+  search floor loses 30 % on the controls, and the shrink bound pins
+  `arma11` chains that need to slide through thirty orders of magnitude.
 - **The frozen-chain escape rule** (`STUDIES/freeze_mode_v1`,
   [WP24-FREEZE-MODE-V1]). `walnutpie::ExhaustionRule::AcceptUnlessDivergent`
   keeps the finest attempt of a leaf that failed `delta` at every refinement
@@ -290,6 +307,27 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Validation (2026-09-01 program)
 
+- **Step collapse and the post-escape crawl (WP27-STEP-COLLAPSE-V1).** The
+  default step collapse on `sblrc` (h 0.003 against CmdStan's 0.10) and
+  `earnings` (0.003 against 0.017) is the `v10` diagonal regularisation
+  `(n/(n+5)) var + 5/(n+5)`, whose additive term floors every variance at
+  0.0099 for `n = 500` while those coefficients have posterior variances
+  1e-5 to 5e-4; dual averaging's statistic sits on target throughout and
+  holds `h` at the step the 30x-too-wide metric allows. Stan's statistic,
+  Stan's `init_stepsize` at every window, the delta ramp, the restart
+  reference and two step floors leave `h` unchanged;
+  `DiagonalMetricRegularization::Stan` alone restores CmdStan's step (`sblrc`
+  9.7x ESS/gradient, `earnings` 1.9x with zero depth-cap draws, `arma11`'s
+  healthy chains 2.9x, controls 1.08x) but `earnings` then fails R-hat
+  (1.02, min bulk ESS 164–179: at CmdStan's step and metric the WALNUTS
+  orbit is 49 leaves against NUTS's 163, a retained-kernel U-turn matter),
+  so the preregistered flip rule is not met and the regularisation stays
+  opt-in, recommended for regressions with coefficient scales below ~0.1.
+  The `arma11` 79103 crawl (chain 3 at `h` 5e-8 after escaping the wall) is
+  a start CmdStan cannot leave in 1,000 iterations either (same log
+  density plateau at −3.7e5 from iteration 250, final `h` 1.7e-6, R-hat
+  1.6); no warmup option changes it. Seeds 80101–80102, seven models, ten
+  arms, CmdStan 2.39.0 from the same starts.
 - **posteriordb v3 (WP25-POSTERIORDB-BENCH-V3).** With the WP24 warmup rule, the
   dual-averaging arm passes 35/51 cells (CmdStan 37, nutpie 31), zero frozen
   chains, geomean 0.34x CmdStan ESS per gradient, 0.75x wall per gradient,

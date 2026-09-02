@@ -7530,7 +7530,9 @@ pub fn sample_dense_with_control<T: Target>(
         .adapt_step_size
         .then(|| DualAveraging::new(active_step, warmup.target_acceptance));
     warmup.validate_relative_floor()?;
-    let mut search_step = restart_events.first().map(|event| event.search.selected_step);
+    let mut search_step = restart_events
+        .first()
+        .map(|event| event.search.selected_step);
     let mut stream_step = active_step;
 
     let mut run_segment = |start: usize,
@@ -10899,6 +10901,106 @@ mod tests {
             exhausted(&b)
         );
         assert_ne!(a.samples(), b.samples());
+    }
+
+    #[test]
+    fn relative_step_floors_validate_and_bound_the_adapted_step() {
+        let base = WarmupConfig::new(0.8).unwrap();
+        assert!(
+            base.clone()
+                .with_step_floor_relative_to_search(0.0)
+                .is_err()
+        );
+        assert!(
+            base.clone()
+                .with_step_floor_relative_to_search(1.5)
+                .is_err()
+        );
+        assert!(base.clone().with_max_window_shrink(1.0).is_err());
+        assert!(base.clone().with_max_window_shrink(f64::NAN).is_err());
+        assert_eq!(base.step_floor_relative_to_search(), None);
+        assert_eq!(base.max_window_shrink(), None);
+        let target = Gaussian(2);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        // The search floor needs a search: rejected at run time.
+        let floor_without_search = RunConfig::new(60, NonZeroUsize::new(4).unwrap(), 7)
+            .with_warmup(
+                base.clone()
+                    .with_step_floor_relative_to_search(0.5)
+                    .unwrap(),
+            );
+        assert!(sample(&target, &[0.3, -0.2], &mass, &floor_without_search).is_err());
+        // From an oversized initial step dual averaging shrinks aggressively;
+        // the shrink bound keeps every warmup step within the bound of the
+        // step its stream started from (the initial step before the first
+        // metric update), while the unbounded run falls below it.
+        let tuning = KernelTuning::new(50.0, nz(4), nz(1), nz(2), 0.5).unwrap();
+        let bounded = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 11)
+            .with_tuning(tuning)
+            .with_warmup(base.clone().with_max_window_shrink(4.0).unwrap());
+        let free = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 11)
+            .with_tuning(tuning)
+            .with_warmup(base.clone());
+        let a = sample(&target, &[0.3, -0.2], &mass, &bounded).unwrap();
+        let b = sample(&target, &[0.3, -0.2], &mass, &free).unwrap();
+        let first_window_end = a.metadata().warmup_schedule().unwrap().windows()[0].end();
+        assert!(
+            a.diagnostics()[..first_window_end]
+                .iter()
+                .all(|d| d.step_size() >= 50.0 / 4.0 - 1e-12)
+        );
+        assert!(
+            b.diagnostics()[..first_window_end]
+                .iter()
+                .any(|d| d.step_size() < 50.0 / 4.0)
+        );
+        // Every stream after a metric update is bounded relative to its own
+        // restart step.
+        for update in a.telemetry().metric_updates() {
+            if let Some(restart) = update.step_after_restart() {
+                let next_end = a
+                    .telemetry()
+                    .metric_updates()
+                    .iter()
+                    .find(|u| u.transition() > update.transition())
+                    .map_or(200, |u| u.transition() + 1);
+                assert!(
+                    a.diagnostics()[update.transition() + 1..next_end]
+                        .iter()
+                        .all(|d| d.step_size() >= restart / 4.0 - 1e-12)
+                );
+            }
+        }
+        // The search floor: with Stan's search the adapted step never falls
+        // below the fraction of the latest search result.
+        let searched = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 11)
+            .with_tuning(tuning)
+            .with_warmup(
+                base.with_initial_step_search(InitialStepSearchConfig::stan())
+                    .with_step_floor_relative_to_search(0.5)
+                    .unwrap(),
+            );
+        let c = sample(&target, &[0.3, -0.2], &mass, &searched).unwrap();
+        let mut floor = c.telemetry().initial_step_search().unwrap().selected_step() * 0.5;
+        let mut next_search = c
+            .telemetry()
+            .metric_updates()
+            .iter()
+            .filter(|u| u.step_after_search().is_some())
+            .collect::<Vec<_>>()
+            .into_iter();
+        let mut boundary = next_search.next();
+        for (index, d) in c.diagnostics()[..200].iter().enumerate() {
+            if let Some(update) = boundary
+                && index == update.transition() + 1
+            {
+                floor = update.step_after_search().unwrap() * 0.5;
+                boundary = next_search.next();
+            }
+            if index > 0 {
+                assert!(d.step_size() >= floor - 1e-12, "transition {index}");
+            }
+        }
     }
 
     #[cfg(feature = "research")]
