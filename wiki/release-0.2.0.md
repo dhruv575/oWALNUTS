@@ -18,6 +18,7 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `be2325c` | BridgeStan: non-threaded build, `ReplicatedStanTarget`, NaN/inf mapped to the recoverable path | `STUDIES/posteriordb_bench_v1/artifacts/wall-gap` |
 | `5417e0c` | `sampler::Init` uniform starts with retries; Appendix C v4 defaults and guards | `STUDIES/paper_adaptation_robust_v1` |
 | `80403fc` | `sampler::Tuning` default depth 10; opt-in Stan-style warmup controls | `STUDIES/adaptation_parity_v1` |
+| `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
 | this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | — |
 
 The upgrade notes (facade unchanged, research items behind the feature,
@@ -102,6 +103,26 @@ preregistered bar.
   `summary()` is the same code and is tested against `az.rhat`/`az.ess`/
   `az.mcse` in `integrations/python/tests`.
 
+### Kernel efficiency against reference NUTS (`STUDIES/kernel_efficiency_v1`)
+
+Clean-room reference NUTS harness, ESS per gradient (seed medians):
+
+| Arm | Eight Schools | 100-D Gaussian | 50-D correlated Gaussian |
+|---|---:|---:|---:|
+| reference NUTS | 1.00x | 1.00x | 1.00x |
+| oWALNUTS default kernel | 0.81x | 0.75x | 1.03x |
+| + initial-evaluation cache (now the `Sampler` default; draws bit-identical) | 0.91x | 0.81x | 1.06x |
+| + `UTurnRule::MomentumSum` (opt-in) | 0.86x | 1.09x | 1.07x |
+
+The cause of the gap is a wasted re-evaluation of the current state at the
+start of every transition (one gradient per transition, 11 % at 8-9 leaves
+per orbit; exact to cache) plus the endpoint U-turn rule, which stops 3.4
+leaves later per orbit than Stan's momentum sum on the isotropic Gaussian
+for no ESS gain (neutral within noise elsewhere). The exhaustion rule never
+triggers on these targets; the funnel tail mass is preserved under every
+option (`examples/funnel_kernel_options.rs`). The momentum-sum rule stays
+opt-in until the posteriordb re-run gates it.
+
 ### Autodiff (`integrations/AUTODIFF-RESEARCH.md`)
 
 `owalnuts-autodiff` (route (e), pure Rust, `#![forbid(unsafe_code)]`):
@@ -120,8 +141,14 @@ on Eight Schools at four threads, parity with nutpie.
 
 - **ESS per gradient on easy posteriors is 0.7-0.8x CmdStan** at matched
   step, depth histogram and gradient count (eight schools, arK, garch11,
-  mesquite in `adaptation_parity_v1`): the remaining gap is kernel-side
-  (U-turn/selection rules, reverse-check overhead), not warmup.
+  mesquite in `adaptation_parity_v1`). `kernel_efficiency_v1` accounts for
+  it: the default kernel is 0.75-0.81x reference NUTS on Gaussians and Eight
+  Schools (1.03x on the correlated Gaussian) because of the wasted
+  re-evaluation per transition (0.9x at depth 3, 0.97x at depth 5) and the
+  endpoint U-turn rule (0.75x on the isotropic Gaussian, 1.0x on the
+  correlated one), with refinement rejections at 0.85-0.95x where refinement
+  engages. The cache is now the `Sampler` default; Stan's momentum-sum
+  U-turn rule is opt-in (`KernelOptions`) until the posteriordb re-run.
 - **Refinement rarely engages on posteriordb models**: ~1 % of retained
   leaves refine (99 % at level 0), so on those targets oWALNUTS is NUTS with
   a slightly shorter step paying the reverse-check cost; the wins measured

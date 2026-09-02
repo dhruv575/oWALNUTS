@@ -231,6 +231,7 @@ use crate::kernel::{
     transition_w_traced_with_telemetry_and_outer_policy,
     transition_w_with_telemetry_and_outer_policy,
 };
+pub use crate::kernel::{ExhaustionRule, KernelOptions, UTurnRule};
 use crate::types::{State, ValidationError};
 
 mod research;
@@ -295,6 +296,7 @@ pub struct KernelTuning {
     max_refinement_levels: usize,
     max_error: f64,
     divergence_threshold: f64,
+    options: KernelOptions,
 }
 
 // All floating-point fields are finite by construction.
@@ -309,6 +311,7 @@ impl Default for KernelTuning {
             max_refinement_levels: DEFAULT_MAX_REFINEMENT_LEVELS,
             max_error: DEFAULT_MAX_ERROR,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
+            options: KernelOptions::default(),
         }
     }
 }
@@ -338,6 +341,7 @@ impl KernelTuning {
             max_refinement_levels: max_refinement_levels.get(),
             max_error,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
+            options: KernelOptions::default(),
         };
         tuning.max_leaves_per_transition()?;
         tuning.maximum_micro_steps()?;
@@ -362,6 +366,21 @@ impl KernelTuning {
     }
     pub fn divergence_threshold(&self) -> f64 {
         self.divergence_threshold
+    }
+    /// Opt-in kernel rule variants ([`KernelOptions::default`] is the frozen
+    /// `v10` kernel).
+    pub fn options(&self) -> KernelOptions {
+        self.options
+    }
+    /// Select opt-in kernel rule variants: the no-U-turn predicate
+    /// ([`UTurnRule`]) and the treatment of a leaf that fails `max_error` at
+    /// every refinement level ([`ExhaustionRule`]). The default options
+    /// reproduce the `v10` kernel bit for bit; any other value is a
+    /// different sampler whose draws are not comparable to the frozen
+    /// fingerprints. Measured in `STUDIES/kernel_efficiency_v1`.
+    pub fn with_options(mut self, options: KernelOptions) -> Self {
+        self.options = options;
+        self
     }
     pub fn with_divergence_threshold(mut self, threshold: f64) -> Result<Self, Error> {
         if !threshold.is_finite() || threshold <= 0.0 {
@@ -422,6 +441,7 @@ impl KernelTuning {
                 min_micro_steps: self.min_micro_steps,
                 max_error: self.max_error,
                 divergence_threshold: self.divergence_threshold,
+                options: self.options,
             },
             max_depth: self.max_depth,
         }
@@ -3584,6 +3604,7 @@ pub struct RunConfig {
     /// (the per-transition facades run warmup transitions without one).
     acceptance_statistic: DualAveragingAcceptance,
     outer_orbit_selection: OuterOrbitSelection,
+    cache_initial_evaluation: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -3627,7 +3648,25 @@ impl RunConfig {
             capture_acceptance: false,
             acceptance_statistic: DualAveragingAcceptance::CurrentCoarseEndpoint,
             outer_orbit_selection: OuterOrbitSelection::BiasedProgressive,
+            cache_initial_evaluation: false,
         }
+    }
+
+    /// Reuse the previous transition's selected log density and gradient
+    /// as the next transition's initial evaluation instead of re-evaluating
+    /// the target at the same position.
+    ///
+    /// The draws are bit-identical either way (the kernel's cached-input
+    /// path is exact); only the target-call count changes, by exactly one
+    /// call per transition, so this is opt-in to keep the frozen
+    /// target-call fingerprints. Structured-refresh runs always cache.
+    /// Measured in `STUDIES/kernel_efficiency_v1`.
+    pub fn with_cached_initial_evaluation(mut self, enabled: bool) -> Self {
+        self.cache_initial_evaluation = enabled;
+        self
+    }
+    pub fn cached_initial_evaluation(&self) -> bool {
+        self.cache_initial_evaluation
     }
 
     /// Select the outer-orbit candidate rule for a clean-room research
@@ -5442,6 +5481,7 @@ fn search_step_from_evaluated<T: Target>(
                 &state,
                 mass,
                 FixedTuning {
+                    options: crate::kernel::KernelOptions::default(),
                     step_size: step,
                     max_refinement_levels: 1,
                     min_micro_steps: tuning.min_micro_steps,
@@ -5659,6 +5699,7 @@ fn search_initial_step<T: Target>(
                 &state,
                 inverse_mass,
                 FixedTuning {
+                    options: crate::kernel::KernelOptions::default(),
                     step_size: step,
                     max_refinement_levels: 1,
                     min_micro_steps: tuning.min_micro_steps,
@@ -5820,6 +5861,7 @@ fn search_initial_step_stan<T: Target>(
             &state,
             inverse_mass,
             FixedTuning {
+                options: crate::kernel::KernelOptions::default(),
                 step_size: step,
                 max_refinement_levels: 1,
                 min_micro_steps: tuning.min_micro_steps,
@@ -5972,7 +6014,7 @@ fn run_chain<T: Target>(
 
     let mut local_rng = SmallRng::seed_from_u64(seed);
     let mut local_cache = None;
-    let use_persistent_cache = persistent.is_some();
+    let use_persistent_cache = persistent.is_some() || config.cache_initial_evaluation;
     let (rng, cached_state) = match persistent {
         Some(context) => (&mut context.rng, &mut context.cached_state),
         None => (&mut local_rng, &mut local_cache),
@@ -9235,6 +9277,7 @@ mod tests {
             capture_acceptance: false,
             acceptance_statistic: DualAveragingAcceptance::CurrentCoarseEndpoint,
             outer_orbit_selection: OuterOrbitSelection::BiasedProgressive,
+            cache_initial_evaluation: false,
         };
         let mass = DiagonalMass::identity(NonZeroUsize::new(1).unwrap());
         assert_eq!(

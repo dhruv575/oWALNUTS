@@ -143,6 +143,7 @@ fn matches_every_validated_upstream_transition_trace() {
             &inverse_mass,
             TransitionTuning {
                 leaf: FixedTuning {
+                    options: crate::kernel::KernelOptions::default(),
                     step_size: number(input, "step"),
                     max_refinement_levels: usize_field(input, "max_step_halvings"),
                     min_micro_steps: usize_field(input, "min_micro_steps"),

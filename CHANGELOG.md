@@ -34,6 +34,11 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   `.tuning(..)` use the new defaults.
 - `PaperAdaptationConfig::default()` changed behaviour (v4, see Changed). The
   v3 behaviour is one builder call away.
+- `Sampler` caches the initial evaluation by default (see Changed): draws
+  are bit-identical but every transition makes one target call fewer, so
+  target-call totals and ESS-per-call figures are not comparable with 0.1
+  runs; `Sampler::cache_initial_evaluation(false)` restores the old
+  accounting, and `RunConfig` keeps the cache off.
 
 ### Added
 
@@ -98,6 +103,24 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   full preset at depth 10 is 2.0x the default's ESS per gradient (0.68x
   CmdStan) but loses 12-16 % on `kidiq`, `mesquite`, `garch11` and fails
   R-hat on `kidiq`, `earnings`, so it stays opt-in.
+- **Opt-in kernel rule variants** (`STUDIES/kernel_efficiency_v1`).
+  `walnutpie::KernelOptions` (`KernelTuning::with_options`,
+  `sampler::Tuning::kernel_options`) selects the no-U-turn predicate
+  (`UTurnRule::{Endpoints, EndpointsWithCross, MomentumSum}`; `MomentumSum`
+  is Stan's generalised criterion on the sum of the leaf momenta with the
+  2.21+ cross checks) and the treatment of a leaf that fails `delta` at
+  every refinement level (`ExhaustionRule::{Stop,
+  AcceptBelowDivergenceThreshold}`; the latter is Stan's rule, subject to
+  the usual reverse coarsening check so the leaf stays reversible).
+  `RunConfig::with_cached_initial_evaluation` reuses the previous
+  transition's selected log density and gradient instead of re-evaluating
+  the current position at the start of every transition. `KernelOptions::
+  default()` and the cache off reproduce the frozen fingerprints; on the
+  100-D Gaussian `MomentumSum` with the cache takes the kernel from 0.81x to
+  1.09x reference NUTS ESS per gradient, is neutral within seed noise on the
+  correlated Gaussian and Eight Schools, and preserves the funnel tail mass
+  (`examples/funnel_kernel_options.rs`). Not yet a default pending the
+  posteriordb re-run.
 - **Additive, off-by-default Appendix C guards** on `PaperAdaptationConfig`:
   `with_min_max_error`, `with_first_update_after`,
   `with_metric_update_required`, `with_unhealthy_orbits_excluded`,
@@ -168,6 +191,12 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   `sampler` default changes; `walnutpie::KernelTuning::default()` and
   `WarmupConfig::default()` are the frozen `v10` legacy, `ALGORITHM_REVISION`
   is unchanged and the kernel fingerprints still hold.
+- **`sampler::Sampler` caches the initial evaluation by default.** Draws are
+  bit-identical to the uncached run; one target call per transition is saved
+  (11 % of the gradients on Eight Schools and the 100-D Gaussian at 8-9
+  leaves per orbit, `STUDIES/kernel_efficiency_v1`). `walnutpie::RunConfig`
+  keeps the cache off so the frozen target-call fingerprints hold;
+  `Sampler::cache_initial_evaluation(false)` restores the old accounting.
 - **`PaperAdaptationConfig::default()` is `walnutpie-paper-adaptation-kquantile-gamma-v4`.**
   `with_exhausted_transitions_as_zero(true)` and
   `with_step_relative_bound(DEFAULT_PAPER_STEP_RELATIVE_BOUND = 1e6)` are
@@ -225,6 +254,16 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 - Appendix C robustness (`STUDIES/paper_adaptation_robust_v1`): the v4
   default is robust on all 14 previously freezing posteriordb cells and
   0.90-1.35x dual averaging's minimum bulk ESS per gradient (geomean 1.04).
+- Kernel efficiency against a clean-room reference NUTS
+  (`STUDIES/kernel_efficiency_v1`, ESS per gradient, seed medians): the
+  default kernel is 0.81x on Eight Schools, 0.75x on the 100-D Gaussian and
+  1.03x on the 50-D correlated Gaussian; with the initial-evaluation cache
+  0.91x / 0.81x / 1.06x, and with Stan's momentum-sum U-turn rule as well
+  0.86x / 1.09x / 1.07x. The gap decomposes into the wasted re-evaluation
+  (exact, now cached by default), the endpoint U-turn rule (0.75x on the
+  isotropic Gaussian, 1.0x on the correlated one) and refinement rejections
+  (0.85-0.95x where refinement engages), consistent with the posteriordb
+  0.7-0.8x.
 - Sampler API parity: every `Sampler::run` path is bit-identical to the
   `walnutpie` entry point it wraps (`tests/sampler_api.rs`); the
   allocation-free kernel reproduces the pinned run fingerprints in debug and

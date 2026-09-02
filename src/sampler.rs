@@ -68,11 +68,12 @@ pub use crate::walnutpie::{
     WindowSummary,
 };
 use crate::walnutpie::{
-    DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, KernelTuning, MultiChainOutput,
-    RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget,
-    sample_chains_dense_with_control, sample_chains_dense_with_target_budget_and_control,
-    sample_chains_structured_refresh, sample_chains_structured_with_control,
-    sample_chains_with_control, sample_chains_with_target_budget_and_control,
+    DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, KernelOptions, KernelTuning,
+    MultiChainOutput, RunConfig, RunControl, TargetEvaluationAdmissionLimit,
+    TargetEvaluationBudget, sample_chains_dense_with_control,
+    sample_chains_dense_with_target_budget_and_control, sample_chains_structured_refresh,
+    sample_chains_structured_with_control, sample_chains_with_control,
+    sample_chains_with_target_budget_and_control,
 };
 
 /// Momentum covariance `M` and whether warmup adapts it.
@@ -417,6 +418,7 @@ pub struct Tuning {
     max_refinement_levels: usize,
     max_error: f64,
     divergence_threshold: f64,
+    kernel_options: KernelOptions,
 }
 
 impl Default for Tuning {
@@ -428,6 +430,7 @@ impl Default for Tuning {
             max_refinement_levels: 4,
             max_error: 1.0,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
+            kernel_options: KernelOptions::default(),
         }
     }
 }
@@ -468,6 +471,14 @@ impl Tuning {
         self.divergence_threshold = threshold;
         self
     }
+    /// Opt-in kernel rule variants (`walnutpie::KernelOptions`): the
+    /// no-U-turn predicate and the treatment of refinement exhaustion. The
+    /// default is the frozen `v10` kernel; see
+    /// `STUDIES/kernel_efficiency_v1` for the measured alternatives.
+    pub fn kernel_options(mut self, options: KernelOptions) -> Self {
+        self.kernel_options = options;
+        self
+    }
 
     /// The validated `walnutpie` tuning this configures.
     pub fn to_kernel(&self) -> Result<KernelTuning, Error> {
@@ -483,6 +494,7 @@ impl Tuning {
             self.max_error,
         )?
         .with_divergence_threshold(self.divergence_threshold)
+        .map(|tuning| tuning.with_options(self.kernel_options))
     }
 }
 
@@ -577,6 +589,7 @@ pub struct Sampler {
     adaptation: Adaptation,
     tuning: Tuning,
     limits: Limits,
+    cache_initial_evaluation: bool,
 }
 
 impl Default for Sampler {
@@ -591,6 +604,7 @@ impl Default for Sampler {
             adaptation: Adaptation::default(),
             tuning: Tuning::default(),
             limits: Limits::default(),
+            cache_initial_evaluation: true,
         }
     }
 }
@@ -647,6 +661,15 @@ impl Sampler {
         self.limits = limits;
         self
     }
+    /// Reuse each transition's selected log density and gradient as the
+    /// next transition's initial evaluation (one target call per transition
+    /// saved; draws bit-identical). On by default in `Sampler` since 0.2.0;
+    /// `walnutpie::RunConfig` keeps it off to preserve the frozen
+    /// target-call fingerprints. See `STUDIES/kernel_efficiency_v1`.
+    pub fn cache_initial_evaluation(mut self, enabled: bool) -> Self {
+        self.cache_initial_evaluation = enabled;
+        self
+    }
 
     /// Exact worst-case target-evaluation count of this configuration for
     /// `chains` chains; the number [`Limits::admit_worst_case`] admits with.
@@ -659,8 +682,9 @@ impl Sampler {
     fn run_config(&self) -> Result<RunConfig, Error> {
         let draws = NonZeroUsize::new(self.draws)
             .ok_or_else(|| Error::configuration("draws must be nonzero"))?;
-        let mut config =
-            RunConfig::new(self.warmup, draws, self.seed).with_tuning(self.tuning.to_kernel()?);
+        let mut config = RunConfig::new(self.warmup, draws, self.seed)
+            .with_tuning(self.tuning.to_kernel()?)
+            .with_cached_initial_evaluation(self.cache_initial_evaluation);
         if let Some(warmup) = self.adaptation.warmup_config(self.metric.adapts_mass())? {
             config = config.with_warmup(warmup);
         }
