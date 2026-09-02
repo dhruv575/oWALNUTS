@@ -582,6 +582,8 @@ pub enum BuildLeafResult {
         evaluations: usize,
         adaptation_value: f64,
         accepted_trajectory_adaptation_value: Option<f64>,
+        /// Joint log density of the built endpoint (`-H` at the leaf end).
+        end_log_joint: f64,
     },
     Stopped {
         rejection: Rejection,
@@ -631,6 +633,9 @@ pub struct SpanTraceEvent {
     pub backward_dot: Option<f64>,
     pub adaptation_value: Option<f64>,
     pub accepted_trajectory_adaptation_value: Option<f64>,
+    /// Joint log density at the end of a built leaf; `None` for a rejected
+    /// leaf and for non-leaf events.
+    pub end_log_joint: Option<f64>,
 }
 
 impl SpanTraceEvent {
@@ -653,6 +658,7 @@ impl SpanTraceEvent {
             backward_dot: None,
             adaptation_value: None,
             accepted_trajectory_adaptation_value: None,
+            end_log_joint: None,
         }
     }
 }
@@ -757,6 +763,7 @@ where
                 evaluations: result.evaluations,
                 adaptation_value: result.adaptation_value,
                 accepted_trajectory_adaptation_value: result.accepted_trajectory_adaptation_value,
+                end_log_joint,
             })
         }
         (None, Some(rejection)) => Ok(BuildLeafResult::Stopped {
@@ -890,6 +897,7 @@ where
                     evaluations,
                     adaptation_value,
                     accepted_trajectory_adaptation_value,
+                    end_log_joint,
                     ..
                 } => {
                     *cumulative_evaluations =
@@ -904,6 +912,7 @@ where
                     event.adaptation_value = Some(adaptation_value);
                     event.accepted_trajectory_adaptation_value =
                         accepted_trajectory_adaptation_value;
+                    event.end_log_joint = Some(end_log_joint);
                     trace(event);
                     BuildSpanResult::Built {
                         span,
@@ -1769,6 +1778,10 @@ pub struct TransitionTraceEvent {
     pub backward_dot: Option<f64>,
     pub adaptation_value: Option<f64>,
     pub accepted_trajectory_adaptation_value: Option<f64>,
+    /// Stan's per-leaf Metropolis statistic `min(1, exp(H_0 - H_leaf))`
+    /// against the trajectory's initial Hamiltonian; zero for a rejected
+    /// leaf, `None` for non-leaf events.
+    pub trajectory_acceptance_value: Option<f64>,
 }
 impl TransitionTraceEvent {
     fn basic(
@@ -1792,6 +1805,7 @@ impl TransitionTraceEvent {
             backward_dot: None,
             adaptation_value: None,
             accepted_trajectory_adaptation_value: None,
+            trajectory_acceptance_value: None,
         }
     }
 }
@@ -2458,6 +2472,13 @@ where
             transition_event.adaptation_value = event.adaptation_value;
             transition_event.accepted_trajectory_adaptation_value =
                 event.accepted_trajectory_adaptation_value;
+            if event.event == "leaf" {
+                transition_event.trajectory_acceptance_value = Some(
+                    event
+                        .end_log_joint
+                        .map_or(0.0, |end| (end - initial_log_joint).min(0.0).exp()),
+                );
+            }
             trace(transition_event);
         }
 

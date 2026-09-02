@@ -429,13 +429,36 @@ impl KernelTuning {
 }
 const MIN_ADAPTATION_VARIANCE: f64 = 1.0e-12;
 
+/// Which acceptance statistic dual averaging drives toward its target.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum DualAveragingAcceptance {
+    /// `exp(-|H_end - H_start|)` of the coarsest attempt of every leaf,
+    /// averaged over the leaves of the transition (the `v10` default).
     #[default]
     CurrentCoarseEndpoint,
+    /// Stan's `accept_stat__`: the mean over every attempted leaf of
+    /// `min(1, exp(H_0 - H_leaf))`, where `H_0` is the Hamiltonian at the
+    /// transition's initial state and `H_leaf` the Hamiltonian at the leaf's
+    /// accepted endpoint; a rejected leaf (invalid evaluation, refinement
+    /// exhaustion, reverse-coarsening rejection) contributes zero.
+    MeanTrajectoryAcceptance,
     /// Research-only: adapt on the accepted-trajectory statistic.
     #[cfg(feature = "research")]
     AcceptedTrajectory,
+}
+
+/// How the windowed diagonal variance estimate is regularised before it is
+/// installed as the inverse metric.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DiagonalMetricRegularization {
+    /// `(n / (n + 5)) * var + 5 / (n + 5)`: shrink toward unit variance
+    /// (the `v10` default).
+    #[default]
+    TowardUnit,
+    /// Stan's `(n / (n + 5)) * var + 1e-3 * (5 / (n + 5))`.
+    Stan,
 }
 
 /// Identity of the opt-in JMLR Appendix C adaptation rules.
@@ -906,6 +929,8 @@ pub struct WarmupConfig {
     research_restart_reference_multiplier: ResearchRestartReferenceMultiplier,
     dual_averaging_acceptance: DualAveragingAcceptance,
     paper_adaptation: Option<PaperAdaptationConfig>,
+    metric_regularization: DiagonalMetricRegularization,
+    stan_restart_reference: bool,
 }
 
 impl Default for WarmupConfig {
@@ -920,6 +945,8 @@ impl Default for WarmupConfig {
             research_restart_reference_multiplier: ResearchRestartReferenceMultiplier::One,
             dual_averaging_acceptance: DualAveragingAcceptance::CurrentCoarseEndpoint,
             paper_adaptation: None,
+            metric_regularization: DiagonalMetricRegularization::TowardUnit,
+            stan_restart_reference: false,
         }
     }
 }
@@ -1011,6 +1038,51 @@ impl WarmupConfig {
     }
     pub fn dual_averaging_acceptance(&self) -> DualAveragingAcceptance {
         self.dual_averaging_acceptance
+    }
+    /// Select how the windowed diagonal variance is regularised (diagonal
+    /// facade only; the dense estimator has its own shrinkage).
+    pub fn with_metric_regularization(
+        mut self,
+        regularization: DiagonalMetricRegularization,
+    ) -> Self {
+        self.metric_regularization = regularization;
+        self
+    }
+    pub fn metric_regularization(&self) -> DiagonalMetricRegularization {
+        self.metric_regularization
+    }
+    /// Restart dual averaging after a metric update with Stan's reference
+    /// `mu = ln(10 h)` instead of `mu = ln(h)`.
+    pub fn with_stan_restart_reference(mut self, enabled: bool) -> Self {
+        self.stan_restart_reference = enabled;
+        self
+    }
+    pub fn stan_restart_reference(&self) -> bool {
+        self.stan_restart_reference
+    }
+    /// Effective dual-averaging restart reference multiplier.
+    fn restart_reference_multiplier(&self) -> ResearchRestartReferenceMultiplier {
+        if self.stan_restart_reference {
+            ResearchRestartReferenceMultiplier::Ten
+        } else {
+            self.research_restart_reference_multiplier
+        }
+    }
+
+    /// Stan-style warmup: dual averaging on the mean trajectory acceptance
+    /// ([`DualAveragingAcceptance::MeanTrajectoryAcceptance`]), Stan's
+    /// doubling/halving initial-step heuristic at the start and after every
+    /// metric update ([`InitialStepSearchConfig::stan`]), Stan's diagonal
+    /// metric regularisation ([`DiagonalMetricRegularization::Stan`]) and
+    /// Stan's restart reference `mu = ln(10 h)`. The window schedule (75 /
+    /// 25, 50, 100, ... / 50) and the dual-averaging constants (`gamma =
+    /// 0.05`, `t_0 = 10`, `kappa = 0.75`) are already Stan's in the default.
+    pub fn stan_style(target_acceptance: f64) -> Result<Self, Error> {
+        Ok(Self::new(target_acceptance)?
+            .with_dual_averaging_acceptance(DualAveragingAcceptance::MeanTrajectoryAcceptance)
+            .with_initial_step_search(InitialStepSearchConfig::stan())
+            .with_metric_regularization(DiagonalMetricRegularization::Stan)
+            .with_stan_restart_reference(true))
     }
 
     /// Replace acceptance-driven step adaptation by the JMLR Appendix C
@@ -1206,12 +1278,28 @@ fn warmup_schedule(
     })
 }
 
-/// Bounds for the opt-in walnutpie-native initial macro-step search.
+/// Which initial macro-step heuristic runs before dual averaging.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum InitialStepSearchStrategy {
+    /// The walnutpie-native bracket search: several momentum probes per
+    /// candidate step, bisecting in log-step between an adequate and an
+    /// inadequate step.
+    #[default]
+    ProbeBracket,
+    /// Stan's `init_stepsize`: one fresh momentum and one coarse leapfrog per
+    /// probe; double the step while `exp(H_0 - H_1)` exceeds the target
+    /// acceptance, otherwise halve it, until the comparison flips.
+    StanDoubling,
+}
+
+/// Bounds for the opt-in initial macro-step search.
 #[derive(Clone, Debug, PartialEq)]
 pub struct InitialStepSearchConfig {
     probes: usize,
     max_steps: usize,
     max_target_calls: usize,
+    strategy: InitialStepSearchStrategy,
 }
 
 impl InitialStepSearchConfig {
@@ -1233,7 +1321,28 @@ impl InitialStepSearchConfig {
             probes,
             max_steps,
             max_target_calls,
+            strategy: InitialStepSearchStrategy::ProbeBracket,
         })
+    }
+
+    /// Stan's heuristic with one probe per step, at most 64 doublings or
+    /// halvings and at most 1,024 target calls per search.
+    pub fn stan() -> Self {
+        Self {
+            probes: 1,
+            max_steps: 64,
+            max_target_calls: 1_024,
+            strategy: InitialStepSearchStrategy::StanDoubling,
+        }
+    }
+
+    pub fn with_strategy(mut self, strategy: InitialStepSearchStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    pub fn strategy(&self) -> InitialStepSearchStrategy {
+        self.strategy
     }
 
     pub fn probes(&self) -> usize {
@@ -1253,6 +1362,7 @@ impl Default for InitialStepSearchConfig {
             probes: 4,
             max_steps: 16,
             max_target_calls: 1_024,
+            strategy: InitialStepSearchStrategy::ProbeBracket,
         }
     }
 }
@@ -3240,6 +3350,9 @@ pub struct RunConfig {
     warmup: Option<WarmupConfig>,
     research_target_evaluation_limit: Option<ResearchTargetEvaluationLimit>,
     capture_acceptance: bool,
+    /// Statistic captured by `capture_acceptance` when no warmup is attached
+    /// (the per-transition facades run warmup transitions without one).
+    acceptance_statistic: DualAveragingAcceptance,
     outer_orbit_selection: OuterOrbitSelection,
 }
 
@@ -3282,6 +3395,7 @@ impl RunConfig {
             warmup: None,
             research_target_evaluation_limit: None,
             capture_acceptance: false,
+            acceptance_statistic: DualAveragingAcceptance::CurrentCoarseEndpoint,
             outer_orbit_selection: OuterOrbitSelection::BiasedProgressive,
         }
     }
@@ -4510,16 +4624,20 @@ impl DiagonalVariance {
         }
     }
 
-    fn regularized_mass(&self) -> Option<Vec<f64>> {
+    fn regularized_mass(&self, regularization: DiagonalMetricRegularization) -> Option<Vec<f64>> {
         if self.count < 2 {
             return None;
         }
         let n = self.count as f64;
+        let prior = match regularization {
+            DiagonalMetricRegularization::TowardUnit => 5.0 / (n + 5.0),
+            DiagonalMetricRegularization::Stan => 1.0e-3 * (5.0 / (n + 5.0)),
+        };
         Some(
             self.m2
                 .iter()
                 .map(|m2| {
-                    ((n / (n + 5.0)) * (m2 / (n - 1.0)) + 5.0 / (n + 5.0))
+                    ((n / (n + 5.0)) * (m2 / (n - 1.0)) + prior)
                         .max(MIN_ADAPTATION_VARIANCE)
                         .recip()
                 })
@@ -5188,6 +5306,19 @@ fn search_initial_step<T: Target>(
     seed: u64,
     control: &ExecutionControl<'_>,
 ) -> Result<(f64, InitialStepSearchTelemetry), Error> {
+    if config.strategy == InitialStepSearchStrategy::StanDoubling {
+        return search_initial_step_stan(
+            target,
+            position,
+            mass,
+            inverse_mass,
+            tuning,
+            target_acceptance,
+            config,
+            seed,
+            control,
+        );
+    }
     let mut probe_rng = SmallRng::seed_from_u64(seed ^ 0x69d2_343f_d15e_a5b9);
     let mut momenta = Vec::with_capacity(config.probes);
     for _ in 0..config.probes {
@@ -5350,6 +5481,173 @@ fn search_initial_step<T: Target>(
     let selected = adequate.unwrap_or(smallest_tried);
     telemetry.selected_step = selected;
     Ok((selected, telemetry))
+}
+
+/// Stan's `init_stepsize` on the coarsest macro step.
+///
+/// Each probe draws a fresh momentum from the current mass, takes one macro
+/// step at the candidate `h` with refinement disabled and reads the signed
+/// energy change `H_0 - H_1`. The first probe fixes the direction (double
+/// while `H_0 - H_1 > ln(target)`, else halve); later probes move `h` in
+/// that direction until the comparison flips, at which point the last
+/// probed `h` is returned unchanged (Stan's behaviour). A rejected macro
+/// step reads as `H_0 - H_1 = -inf`. The search stops early at
+/// `max_steps` probes or `max_target_calls` target calls.
+#[allow(clippy::too_many_arguments)]
+fn search_initial_step_stan<T: Target>(
+    target: &T,
+    position: &[f64],
+    mass: &DiagonalMass,
+    inverse_mass: &[f64],
+    tuning: KernelTuning,
+    target_acceptance: f64,
+    config: &InitialStepSearchConfig,
+    seed: u64,
+    control: &ExecutionControl<'_>,
+) -> Result<(f64, InitialStepSearchTelemetry), Error> {
+    let mut probe_rng = SmallRng::seed_from_u64(seed ^ 0x69d2_343f_d15e_a5b9);
+    let mut telemetry = InitialStepSearchTelemetry {
+        probes: 1,
+        initial_step: tuning.step_size,
+        selected_step: tuning.step_size,
+        ..InitialStepSearchTelemetry::default()
+    };
+    control.check().map_err(control_error)?;
+    let mut gradient = vec![f64::NAN; position.len()];
+    let log_prob = target
+        .log_density_gradient(position, &mut gradient)
+        .map_err(|source| Error {
+            kind: ErrorKind::Target,
+            message: if source.kind == TargetErrorKind::Recoverable {
+                "current position is not evaluable during initial-step search".into()
+            } else {
+                "target evaluation failed during initial-step search".into()
+            },
+            chain: None,
+            transition: None,
+            target_source: Some(source),
+        })?;
+    telemetry.target_calls += 1;
+    if !log_prob.is_finite() || gradient.iter().any(|value| !value.is_finite()) {
+        return Err(Error::new(
+            ErrorKind::Target,
+            "target returned a nonfinite value during initial-step search",
+        ));
+    }
+    let log_target = target_acceptance.ln();
+    let mut step = tuning.step_size;
+    let mut direction: Option<bool> = None;
+    for _ in 0..config.max_steps {
+        control.check().map_err(control_error)?;
+        if telemetry.target_calls >= config.max_target_calls {
+            break;
+        }
+        let momentum: Vec<f64> = mass
+            .diagonal()
+            .iter()
+            .map(|value| {
+                let normal: f64 = StandardNormal.sample(&mut probe_rng);
+                normal * value.sqrt()
+            })
+            .collect();
+        let state = State {
+            theta: position.to_vec(),
+            rho: momentum,
+            log_prob,
+            grad: gradient.clone(),
+        };
+        let mut target_failure = None;
+        let mut malformed_target_output = false;
+        let mut eval = |theta: &[f64]| {
+            if telemetry.target_calls >= config.max_target_calls
+                || theta.iter().any(|value| !value.is_finite())
+            {
+                return (f64::NAN, vec![f64::NAN; theta.len()]);
+            }
+            let mut gradient = vec![f64::NAN; theta.len()];
+            telemetry.target_calls += 1;
+            match target.log_density_gradient(theta, &mut gradient) {
+                Ok(log_prob)
+                    if log_prob.is_finite() && gradient.iter().all(|value| value.is_finite()) =>
+                {
+                    (log_prob, gradient)
+                }
+                Ok(_) => {
+                    malformed_target_output = true;
+                    (f64::NAN, gradient)
+                }
+                Err(error) if error.kind == TargetErrorKind::Recoverable => {
+                    telemetry.recoverable_target_failures += 1;
+                    (f64::NEG_INFINITY, vec![0.0; theta.len()])
+                }
+                Err(error) => {
+                    target_failure = Some(error);
+                    (f64::NAN, gradient)
+                }
+            }
+        };
+        let result = macro_leaf(
+            &state,
+            inverse_mass,
+            FixedTuning {
+                step_size: step,
+                max_refinement_levels: 1,
+                min_micro_steps: tuning.min_micro_steps,
+                // Read the raw energy change: `delta` must not reject the probe.
+                max_error: f64::MAX,
+                divergence_threshold: tuning.divergence_threshold,
+            },
+            Direction::Forward,
+            &mut eval,
+        );
+        if let Some(source) = target_failure {
+            return Err(Error {
+                kind: ErrorKind::Target,
+                message: "target evaluation failed during initial-step search".into(),
+                chain: None,
+                transition: None,
+                target_source: Some(source),
+            });
+        }
+        let result = result.map_err(Error::internal)?;
+        if malformed_target_output {
+            return Err(Error::new(
+                ErrorKind::Target,
+                "target returned a nonfinite value during initial-step search",
+            ));
+        }
+        telemetry.micro_steps = telemetry
+            .micro_steps
+            .checked_add(result.forward_evaluations + result.reverse_evaluations)
+            .ok_or_else(Error::overflow)?;
+        telemetry.steps += 1;
+        // `H_0 - H_1 = log_joint_1 - log_joint_0`; a rejected step is `-inf`.
+        let delta_h = if result.end_log_joint.is_finite() {
+            result.end_log_joint + result.initial_hamiltonian
+        } else {
+            f64::NEG_INFINITY
+        };
+        let Some(doubling) = direction else {
+            direction = Some(delta_h > log_target);
+            continue;
+        };
+        // `delta_h` is never NaN, so these are Stan's negated comparisons.
+        let flipped = if doubling {
+            delta_h <= log_target
+        } else {
+            delta_h >= log_target
+        };
+        if flipped {
+            break;
+        }
+        let next = if doubling { step * 2.0 } else { step * 0.5 };
+        if !next.is_finite() || next <= 0.0 || next > 1.0e7 {
+            break;
+        }
+        step = next;
+    }
+    telemetry.selected_step = step;
+    Ok((step, telemetry))
 }
 
 struct PersistentChainContext {
@@ -5619,135 +5917,145 @@ fn run_chain<T: Target>(
             }
         });
         let mut rng_stop = None;
-        let (result, work, acceptance, current_summary, accepted_summary, final_uturn) =
+        let (result, work, acceptance, current_summary, accepted_summary, final_uturn) = {
+            let mut kernel_rng = KernelRng {
+                rng,
+                control,
+                stopped: &mut rng_stop,
+            };
+            let cached_input = use_persistent_cache
+                .then_some(cached_state.as_ref())
+                .flatten()
+                .map(|state| EvaluatedTransitionInput {
+                    theta: position.clone(),
+                    rho: momentum.clone(),
+                    log_prob: state.log_prob,
+                    grad: state.grad.clone(),
+                });
+            let input = TransitionInput {
+                theta: position,
+                rho: momentum,
+            };
+            if (config.warmup.is_some() && transition_index < config.discarded)
+                || config.capture_acceptance
             {
-                let mut kernel_rng = KernelRng {
-                    rng,
-                    control,
-                    stopped: &mut rng_stop,
+                let traced = if let Some(cached) = cached_input {
+                    transition_w_from_evaluated_traced_with_telemetry_and_outer_policy(
+                        &mut kernel_rng,
+                        cached,
+                        transition_mass,
+                        active_tuning.transition_tuning(),
+                        &mut eval,
+                        config.outer_orbit_selection.into(),
+                    )
+                } else {
+                    transition_w_traced_with_telemetry_and_outer_policy(
+                        &mut kernel_rng,
+                        input,
+                        transition_mass,
+                        active_tuning.transition_tuning(),
+                        &mut eval,
+                        config.outer_orbit_selection.into(),
+                    )
                 };
-                let cached_input = use_persistent_cache
-                    .then_some(cached_state.as_ref())
-                    .flatten()
-                    .map(|state| EvaluatedTransitionInput {
-                        theta: position.clone(),
-                        rho: momentum.clone(),
-                        log_prob: state.log_prob,
-                        grad: state.grad.clone(),
-                    });
-                let input = TransitionInput {
-                    theta: position,
-                    rho: momentum,
-                };
-                if (config.warmup.is_some() && transition_index < config.discarded)
-                    || config.capture_acceptance
-                {
-                    let traced = if let Some(cached) = cached_input {
-                        transition_w_from_evaluated_traced_with_telemetry_and_outer_policy(
-                            &mut kernel_rng,
-                            cached,
-                            transition_mass,
-                            active_tuning.transition_tuning(),
-                            &mut eval,
-                            config.outer_orbit_selection.into(),
-                        )
-                    } else {
-                        transition_w_traced_with_telemetry_and_outer_policy(
-                            &mut kernel_rng,
-                            input,
-                            transition_mass,
-                            active_tuning.transition_tuning(),
-                            &mut eval,
-                            config.outer_orbit_selection.into(),
-                        )
-                    };
-                    match traced {
-                        Ok(output) => {
-                            let current_summary = acceptance_summary(
-                                output
-                                    .events
-                                    .iter()
-                                    .filter_map(|event| event.adaptation_value),
-                            );
-                            let accepted_summary =
-                                acceptance_summary(output.events.iter().filter_map(|event| {
-                                    event.accepted_trajectory_adaptation_value
-                                }));
-                            let adaptation = match config
-                                .warmup
-                                .as_ref()
-                                .map(|warmup| warmup.dual_averaging_acceptance)
-                            {
-                                #[cfg(feature = "research")]
-                                Some(DualAveragingAcceptance::AcceptedTrajectory) => {
-                                    accepted_summary.mean
-                                }
-                                _ => current_summary.mean,
-                            };
-                            let final_uturn = output
+                match traced {
+                    Ok(output) => {
+                        let current_summary = acceptance_summary(
+                            output
                                 .events
                                 .iter()
-                                .rev()
-                                .find(|event| event.event == "outer_uturn_predicate")
-                                .map(|event| (event.forward_dot, event.backward_dot));
-                            (
-                                Ok(output.result),
-                                Some(output.work),
-                                adaptation,
-                                current_summary,
-                                accepted_summary,
-                                final_uturn,
-                            )
-                        }
-                        Err(error) => (
-                            Err(error),
-                            None,
-                            None,
-                            AcceptanceStatisticSummary::default(),
-                            AcceptanceStatisticSummary::default(),
-                            None,
-                        ),
-                    }
-                } else {
-                    let transitioned = if let Some(cached) = cached_input {
-                        transition_w_from_evaluated_with_telemetry_and_outer_policy(
-                            &mut kernel_rng,
-                            cached,
-                            transition_mass,
-                            active_tuning.transition_tuning(),
-                            &mut eval,
-                            config.outer_orbit_selection.into(),
-                        )
-                    } else {
-                        transition_w_with_telemetry_and_outer_policy(
-                            &mut kernel_rng,
-                            input,
-                            transition_mass,
-                            active_tuning.transition_tuning(),
-                            &mut eval,
-                            config.outer_orbit_selection.into(),
-                        )
-                    };
-                    match transitioned {
-                        Ok(output) => (
+                                .filter_map(|event| event.adaptation_value),
+                        );
+                        let accepted_summary = acceptance_summary(
+                            output
+                                .events
+                                .iter()
+                                .filter_map(|event| event.accepted_trajectory_adaptation_value),
+                        );
+                        let statistic = config
+                            .warmup
+                            .as_ref()
+                            .map_or(config.acceptance_statistic, |warmup| {
+                                warmup.dual_averaging_acceptance
+                            });
+                        let adaptation = match statistic {
+                            DualAveragingAcceptance::CurrentCoarseEndpoint => current_summary.mean,
+                            DualAveragingAcceptance::MeanTrajectoryAcceptance => {
+                                acceptance_summary(
+                                    output
+                                        .events
+                                        .iter()
+                                        .filter_map(|event| event.trajectory_acceptance_value),
+                                )
+                                .mean
+                            }
+                            #[cfg(feature = "research")]
+                            DualAveragingAcceptance::AcceptedTrajectory => accepted_summary.mean,
+                        };
+                        let final_uturn = output
+                            .events
+                            .iter()
+                            .rev()
+                            .find(|event| event.event == "outer_uturn_predicate")
+                            .map(|event| (event.forward_dot, event.backward_dot));
+                        (
                             Ok(output.result),
                             Some(output.work),
-                            None,
-                            AcceptanceStatisticSummary::default(),
-                            AcceptanceStatisticSummary::default(),
-                            None,
-                        ),
-                        Err(error) => (
-                            Err(error),
-                            None,
-                            None,
-                            AcceptanceStatisticSummary::default(),
-                            AcceptanceStatisticSummary::default(),
-                            None,
-                        ),
+                            adaptation,
+                            current_summary,
+                            accepted_summary,
+                            final_uturn,
+                        )
                     }
+                    Err(error) => (
+                        Err(error),
+                        None,
+                        None,
+                        AcceptanceStatisticSummary::default(),
+                        AcceptanceStatisticSummary::default(),
+                        None,
+                    ),
                 }
-            };
+            } else {
+                let transitioned = if let Some(cached) = cached_input {
+                    transition_w_from_evaluated_with_telemetry_and_outer_policy(
+                        &mut kernel_rng,
+                        cached,
+                        transition_mass,
+                        active_tuning.transition_tuning(),
+                        &mut eval,
+                        config.outer_orbit_selection.into(),
+                    )
+                } else {
+                    transition_w_with_telemetry_and_outer_policy(
+                        &mut kernel_rng,
+                        input,
+                        transition_mass,
+                        active_tuning.transition_tuning(),
+                        &mut eval,
+                        config.outer_orbit_selection.into(),
+                    )
+                };
+                match transitioned {
+                    Ok(output) => (
+                        Ok(output.result),
+                        Some(output.work),
+                        None,
+                        AcceptanceStatisticSummary::default(),
+                        AcceptanceStatisticSummary::default(),
+                        None,
+                    ),
+                    Err(error) => (
+                        Err(error),
+                        None,
+                        None,
+                        AcceptanceStatisticSummary::default(),
+                        AcceptanceStatisticSummary::default(),
+                        None,
+                    ),
+                }
+            }
+        };
         if control_failure.is_none()
             && rng_stop.is_none()
             && let Err(stop) = control.check()
@@ -5939,7 +6247,7 @@ fn run_chain<T: Target>(
                     restart_reference_multiplier: None,
                     dual_averaging_after_restart: None,
                 };
-                if let Some(diagonal) = variance.regularized_mass() {
+                if let Some(diagonal) = variance.regularized_mass(warmup.metric_regularization) {
                     // Build and validate both candidates before changing either
                     // half of the active metric pair.
                     let candidate_mass = DiagonalMass::from_diagonal(diagonal)?;
@@ -5975,11 +6283,11 @@ fn run_chain<T: Target>(
                         dual_averaging = Some(DualAveraging::restart(
                             active_tuning.step_size,
                             step_adaptation_target(warmup),
-                            warmup.research_restart_reference_multiplier,
+                            warmup.restart_reference_multiplier(),
                         ));
                         update.step_after_restart = Some(active_tuning.step_size);
                         update.restart_reference_multiplier =
-                            Some(warmup.research_restart_reference_multiplier);
+                            Some(warmup.restart_reference_multiplier());
                         update.dual_averaging_after_restart =
                             dual_averaging.as_ref().map(DualAveraging::telemetry);
                     }
@@ -6018,7 +6326,7 @@ fn run_chain<T: Target>(
                             dual_averaging = Some(DualAveraging::restart(
                                 active_tuning.step_size,
                                 paper.unrefined_fraction_target,
-                                warmup.research_restart_reference_multiplier,
+                                warmup.restart_reference_multiplier(),
                             ));
                             dual_averaging_restarted = true;
                         }
@@ -6759,6 +7067,7 @@ pub fn sample_dense_with_control<T: Target>(
                 splitmix64(config.seed ^ transition as u64 ^ segment_index as u64);
             transition_config.warmup = None;
             transition_config.capture_acceptance = true;
+            transition_config.acceptance_statistic = warmup.dual_averaging_acceptance;
             transition_config.tuning.step_size = *active_step;
             segment_index += 1;
             let output = sample_dense_fixed(
@@ -6866,7 +7175,7 @@ pub fn sample_dense_with_control<T: Target>(
                 dual_averaging = Some(DualAveraging::restart(
                     active_step,
                     warmup.target_acceptance,
-                    warmup.research_restart_reference_multiplier,
+                    warmup.restart_reference_multiplier(),
                 ));
                 dual_averaging_after_restart =
                     dual_averaging.as_ref().map(DualAveraging::telemetry);
@@ -6897,7 +7206,7 @@ pub fn sample_dense_with_control<T: Target>(
             mass_dense_before: Some(mass_dense_before),
             step_after_restart: dual_averaging_after_restart.map(|_| active_step),
             restart_reference_multiplier: dual_averaging_after_restart
-                .map(|_| warmup.research_restart_reference_multiplier),
+                .map(|_| warmup.restart_reference_multiplier()),
             dual_averaging_after_restart,
         });
     }
@@ -7571,6 +7880,7 @@ fn run_structured_refresh_chain<T: Target>(
         one.retained = 1;
         one.warmup = None;
         one.capture_acceptance = true;
+        one.acceptance_statistic = warmup.dual_averaging_acceptance;
         one.tuning.step_size = active_step;
         let direct = DirectOriginalQMass::StructuredPath(active_mass.clone());
         let output = run_chain(
@@ -7746,7 +8056,7 @@ fn run_structured_refresh_chain<T: Target>(
                                 dual = Some(DualAveraging::restart(
                                     active_step,
                                     warmup.target_acceptance,
-                                    warmup.research_restart_reference_multiplier,
+                                    warmup.restart_reference_multiplier(),
                                 ));
                                 update.dual_averaging_restarted = true;
                             }
@@ -8651,6 +8961,7 @@ mod tests {
             warmup: None,
             research_target_evaluation_limit: None,
             capture_acceptance: false,
+            acceptance_statistic: DualAveragingAcceptance::CurrentCoarseEndpoint,
             outer_orbit_selection: OuterOrbitSelection::BiasedProgressive,
         };
         let mass = DiagonalMass::identity(NonZeroUsize::new(1).unwrap());
