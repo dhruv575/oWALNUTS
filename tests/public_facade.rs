@@ -1821,8 +1821,9 @@ fn conservative_bound_overflow_fails_before_target_callbacks() {
 // ── JMLR Appendix C paper adaptation ─────────────────────────────────────────
 
 use owalnuts::walnutpie::{
-    PAPER_ADAPTATION_REVISION, PAPER_STEP_RELATIVE_BOUND, PaperAdaptationConfig,
-    PaperAdaptationOutcome, PaperRestartPolicy, PaperStepStatistic,
+    DEFAULT_PAPER_STEP_RELATIVE_BOUND, MetricUpdateOutcome, PAPER_ADAPTATION_REVISION,
+    PAPER_STEP_RELATIVE_BOUND, PaperAdaptationConfig, PaperAdaptationOutcome,
+    PaperAdaptationUpdate, PaperRestartPolicy, PaperStepStatistic,
 };
 
 /// Ten-dimensional Neal funnel: `omega ~ N(0, 3^2)`, `x_i | omega ~ N(0, e^omega)`.
@@ -2207,12 +2208,17 @@ fn paper_step_never_updates_from_transitions_without_built_leaves() {
     }
     let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
     let discarded = 200;
+    // The `v3` semantics: since `v4` leaf-less transitions feed zero by
+    // default, which is covered by
+    // `paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start`.
     let config = RunConfig::new(discarded, NonZeroUsize::new(5).unwrap(), 0x5eed_9003)
         .with_tuning(paper_tuning(0.1, 1.0, 3, 3))
         .with_warmup(
             WarmupConfig::default()
                 .with_mass_adaptation(false)
-                .with_paper_adaptation(PaperAdaptationConfig::default()),
+                .with_paper_adaptation(
+                    PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(false),
+                ),
         );
     let output = sample(&Wall, &[0.0, 0.0], &mass, &config).unwrap();
     // The averaged iterate of a never-updated stream is the initial step
@@ -2249,7 +2255,10 @@ fn paper_step_never_updates_from_transitions_without_built_leaves() {
                 WarmupConfig::default()
                     .with_mass_adaptation(false)
                     .with_paper_adaptation(
-                        PaperAdaptationConfig::default().with_local_error_adaptation(false),
+                        PaperAdaptationConfig::default()
+                            .with_local_error_adaptation(false)
+                            .with_step_relative_bound(PAPER_STEP_RELATIVE_BOUND)
+                            .unwrap(),
                     ),
             ),
     )
@@ -2518,4 +2527,179 @@ fn parameter_names_default_to_none_and_validate_on_raw_targets() {
     }
     .with_parameter_names(vec!["only-one".into()]);
     assert!(wrong.is_err());
+}
+
+#[test]
+fn paper_robustness_guards_defer_and_floor_without_changing_the_default() {
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let discarded = 300;
+    let run = |paper: PaperAdaptationConfig, adapt_mass: bool| {
+        sample(
+            &Gaussian,
+            &[0.3, -0.2],
+            &mass,
+            &RunConfig::new(discarded, NonZeroUsize::new(20).unwrap(), 0x9a9f)
+                .with_tuning(paper_tuning(0.1, 1.0, 4, 4))
+                .with_warmup(
+                    WarmupConfig::default()
+                        .with_mass_adaptation(adapt_mass)
+                        .with_paper_adaptation(paper),
+                ),
+        )
+        .unwrap()
+    };
+    // Every guard at its default reproduces the default run exactly.
+    let explicit = PaperAdaptationConfig::default()
+        .with_min_max_error(1e-8)
+        .unwrap()
+        .with_first_update_after(0)
+        .with_metric_update_required(false)
+        .with_unhealthy_orbits_excluded(false)
+        .with_trim_fraction(0.0)
+        .unwrap();
+    assert_eq!(explicit, PaperAdaptationConfig::default());
+    assert_eq!(
+        run(explicit, true).samples(),
+        run(PaperAdaptationConfig::default(), true).samples()
+    );
+
+    // `first_update_after`: boundaries before the cut report `Deferred`
+    // with their statistics and leave delta untouched; later ones install.
+    let deferred = run(
+        PaperAdaptationConfig::default().with_first_update_after(150),
+        false,
+    );
+    let updates = deferred.telemetry().paper_adaptation_updates();
+    let (early, late): (Vec<&PaperAdaptationUpdate>, Vec<&PaperAdaptationUpdate>) =
+        updates.iter().partition(|u| u.transition() + 1 < 150);
+    assert!(!early.is_empty() && !late.is_empty());
+    for update in &early {
+        assert_eq!(update.outcome(), PaperAdaptationOutcome::Deferred);
+        assert_eq!(update.max_error_after(), update.max_error_before());
+        assert!(update.inflation_quantile().is_some());
+    }
+    assert!(
+        late.iter()
+            .any(|u| u.outcome() == PaperAdaptationOutcome::Installed)
+    );
+
+    // `require_metric_update`: with mass adaptation the fast-phase boundary
+    // and the first slow-window boundary defer, the next one installs.
+    let gated = run(
+        PaperAdaptationConfig::default().with_metric_update_required(true),
+        true,
+    );
+    let updates = gated.telemetry().paper_adaptation_updates();
+    let first_install = gated
+        .telemetry()
+        .metric_updates()
+        .iter()
+        .find(|u| u.outcome() == MetricUpdateOutcome::Installed)
+        .map(|u| u.transition())
+        .expect("a metric installation");
+    for update in updates {
+        if update.transition() <= first_install {
+            assert_ne!(update.outcome(), PaperAdaptationOutcome::Installed);
+        }
+    }
+    assert!(
+        updates
+            .iter()
+            .any(|u| u.outcome() == PaperAdaptationOutcome::Installed)
+    );
+    // Without mass adaptation the requirement is vacuous.
+    let ungated = run(
+        PaperAdaptationConfig::default().with_metric_update_required(true),
+        false,
+    );
+    assert_eq!(
+        ungated.samples(),
+        run(PaperAdaptationConfig::default(), false).samples()
+    );
+
+    // The floor bounds every installed delta from below.
+    let floored = run(
+        PaperAdaptationConfig::default()
+            .with_min_max_error(0.5)
+            .unwrap(),
+        false,
+    );
+    for update in floored.telemetry().paper_adaptation_updates() {
+        if update.outcome() == PaperAdaptationOutcome::Installed {
+            assert!(update.max_error_after() >= 0.5);
+        }
+    }
+    assert!(floored.metadata().tuning().max_error() >= 0.5);
+}
+
+#[test]
+fn paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start() {
+    // A step so large that every leaf exhausts both refinement levels:
+    // the default rule never sees a statistic and leaves `h` at the initial
+    // value; the guard feeds zero and dual averaging shrinks it.
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let run = |paper: PaperAdaptationConfig| {
+        sample(
+            &Gaussian,
+            &[0.3, -0.2],
+            &mass,
+            &RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 0x9aa0)
+                .with_tuning(paper_tuning(400.0, 1e-6, 4, 2))
+                .with_warmup(
+                    WarmupConfig::default()
+                        .with_mass_adaptation(false)
+                        .with_paper_adaptation(paper),
+                ),
+        )
+        .unwrap()
+    };
+    let stuck = run(PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(false));
+    assert!((stuck.metadata().tuning().step_size() - 400.0).abs() < 1e-9);
+    assert!(PaperAdaptationConfig::default().exhausted_transitions_as_zero());
+    let freed = run(PaperAdaptationConfig::default());
+    assert!(freed.metadata().tuning().step_size() < 200.0);
+    assert!(freed.metadata().tuning().step_size() >= 400.0 / DEFAULT_PAPER_STEP_RELATIVE_BOUND);
+}
+
+#[test]
+fn paper_step_relative_bound_is_configurable() {
+    assert!(
+        PaperAdaptationConfig::default()
+            .with_step_relative_bound(0.5)
+            .is_err()
+    );
+    assert!(
+        PaperAdaptationConfig::default()
+            .with_step_relative_bound(f64::INFINITY)
+            .is_err()
+    );
+    assert_eq!(
+        PaperAdaptationConfig::default().step_relative_bound(),
+        DEFAULT_PAPER_STEP_RELATIVE_BOUND
+    );
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let run = |paper: PaperAdaptationConfig| {
+        sample(
+            &Gaussian,
+            &[0.3, -0.2],
+            &mass,
+            &RunConfig::new(300, NonZeroUsize::new(10).unwrap(), 0x9aa1)
+                .with_tuning(paper_tuning(400.0, 1e-6, 4, 2))
+                .with_warmup(
+                    WarmupConfig::default()
+                        .with_mass_adaptation(false)
+                        .with_paper_adaptation(paper),
+                ),
+        )
+        .unwrap()
+    };
+    // With zero-fed exhausted transitions the step falls until leaves build
+    // (well below the initial 400); a tight band of 10x stops it at 40.
+    let free = run(PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(true));
+    assert!(free.metadata().tuning().step_size() < 40.0);
+    let tight = run(PaperAdaptationConfig::default()
+        .with_exhausted_transitions_as_zero(true)
+        .with_step_relative_bound(10.0)
+        .unwrap());
+    assert!((tight.metadata().tuning().step_size() - 40.0).abs() < 1e-9);
 }

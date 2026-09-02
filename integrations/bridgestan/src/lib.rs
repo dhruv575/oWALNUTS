@@ -20,8 +20,12 @@
 //!   [`TargetError::recoverable`], i.e. zero density at the proposed point.
 //!   This is exactly the convention of the reference walnutpie
 //!   (`NoExceptLogpGrad`) and of kernel v10: the leaf refines and, at the
-//!   finest level, is rejected. A returned `-inf` log density is treated the
-//!   same way. `NaN`/`+inf` values or nonfinite gradients are fatal.
+//!   finest level, is rejected. A returned `-inf`, `NaN` or `+inf` log
+//!   density, and a finite log density with a nonfinite gradient element,
+//!   are treated the same way (see [`map_evaluation`]): CmdStan and nutpie
+//!   reject such a proposal rather than abort the run, and the posteriordb
+//!   benchmark (`STUDIES/posteriordb_bench_v1`) lost every `arma11` cell to
+//!   the previous fatal mapping. Only a failed dimension check remains fatal.
 //! * Thread safety: with `STAN_THREADS=true` Stan's autodiff stack is
 //!   thread-local and one model instance may be evaluated from many threads
 //!   concurrently, which is what the parallel facade entry points do. The
@@ -241,7 +245,8 @@ impl StanTarget {
         self.calls.load(Ordering::Relaxed)
     }
 
-    /// Evaluations that raised a Stan exception or returned `-inf`.
+    /// Evaluations that raised a Stan exception or returned a nonfinite log
+    /// density or gradient (all mapped to zero density; see [`map_evaluation`]).
     pub fn recoverable_failures(&self) -> usize {
         self.recoverable.load(Ordering::Relaxed)
     }
@@ -263,22 +268,18 @@ impl StanTarget {
                 &mut err,
             )
         };
-        if rc != 0 {
+        let outcome = if rc != 0 {
             let message = take_error(err, self.model.free_error);
+            Err(TargetError::recoverable(format!(
+                "stan exception: {message}"
+            )))
+        } else {
+            map_evaluation(value, gradient)
+        };
+        if outcome.is_err() {
             self.recoverable.fetch_add(1, Ordering::Relaxed);
-            return Err(TargetError::recoverable(message));
         }
-        if value == f64::NEG_INFINITY {
-            self.recoverable.fetch_add(1, Ordering::Relaxed);
-            return Err(TargetError::recoverable("stan log density is -inf"));
-        }
-        if !value.is_finite() {
-            return Err(TargetError::new(format!("stan log density is {value}")));
-        }
-        if let Some(bad) = gradient.iter().find(|g| !g.is_finite()) {
-            return Err(TargetError::new(format!("stan gradient contains {bad}")));
-        }
-        Ok(value)
+        outcome
     }
 }
 
@@ -298,6 +299,34 @@ fn module_lock(model_so: &Path) -> Arc<Mutex<()>> {
     map.retain(|_, w| w.strong_count() > 0);
     map.insert(key, Arc::downgrade(&fresh));
     fresh
+}
+
+/// Map a BridgeStan evaluation that returned without an exception to the
+/// [`Target`] contract.
+///
+/// A finite log density with a finite gradient is returned as is. A `-inf`,
+/// `NaN` or `+inf` log density, or a finite log density whose gradient
+/// contains a nonfinite element, is a [`TargetError::recoverable`]
+/// zero-density result: the kernel refines the leaf and rejects it at the
+/// finest level, exactly as it treats a Stan exception. This is the CmdStan
+/// and nutpie convention (a rejected proposal, never an aborted run) and
+/// avoids the run-killing `NaN` evaluations of models such as posteriordb's
+/// `arma11` far from the typical set. The message names the cause.
+pub fn map_evaluation(value: f64, gradient: &[f64]) -> Result<f64, TargetError> {
+    if value == f64::NEG_INFINITY {
+        return Err(TargetError::recoverable("stan log density is -inf"));
+    }
+    if !value.is_finite() {
+        return Err(TargetError::recoverable(format!(
+            "stan log density is {value}; treated as zero density"
+        )));
+    }
+    if let Some(bad) = gradient.iter().find(|g| !g.is_finite()) {
+        return Err(TargetError::recoverable(format!(
+            "stan gradient contains {bad}; treated as zero density"
+        )));
+    }
+    Ok(value)
 }
 
 fn take_error(err: *mut c_char, free: FreeErrorFn) -> String {

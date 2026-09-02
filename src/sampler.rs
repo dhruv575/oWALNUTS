@@ -40,6 +40,12 @@
 //! target in the same runtime [`TargetEvaluationBudget`] (there is no
 //! budgeted admission variant for them).
 //!
+//! [`Init`] chooses the starting positions: [`Init::Given`] (the positions
+//! passed to [`Sampler::run`]) or [`Init::Uniform`], the CmdStan rule of
+//! uniform(-r, r) unconstrained starts redrawn until the log density and
+//! gradient are finite ([`Sampler::run_with_init`],
+//! [`Sampler::run_from_random_starts`]).
+//!
 //! [`Adaptation`] selects the warmup rules: acceptance-driven dual averaging
 //! (`WarmupConfig::new(target_accept)`, the default), the JMLR Appendix C
 //! rules (`WarmupConfig::default().with_paper_adaptation(..)`), or none. The
@@ -52,6 +58,8 @@ use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 
 pub use crate::walnutpie::{
     Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
@@ -242,6 +250,141 @@ impl Adaptation {
     }
 }
 
+/// Where the chains start.
+///
+/// [`Init::Uniform`] is the CmdStan/Stan initialisation rule: every
+/// unconstrained coordinate is drawn uniformly from `(-radius, radius)` and a
+/// start is redrawn until the target returns a finite log density and a
+/// finite gradient, up to `max_attempts` draws per chain (Stan's defaults
+/// are `radius = 2`, 100 attempts). The draws consume no kernel randomness:
+/// they come from `SmallRng` seeded by `splitmix64(seed ^ INIT_SEED_TAG)`, so
+/// the starts, and therefore the run, are deterministic given the sampler
+/// seed. The evaluations made while searching count against nothing but the
+/// target's own call counter.
+///
+/// `STUDIES/posteriordb_bench_v1` drew one uniform(-2, 2) start per chain and
+/// aborted when it was not evaluable (two `lotka_volterra` seeds); with this
+/// rule those runs proceed exactly as CmdStan's do.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum Init {
+    /// Use these positions, one per chain (the [`Sampler::run`] contract).
+    Given(Vec<Vec<f64>>),
+    /// Uniform unconstrained starts with retries; see the type docs.
+    Uniform {
+        /// Half-width of the uniform box; finite and positive.
+        radius: f64,
+        /// Draws tried per chain before the run errors; nonzero.
+        max_attempts: usize,
+    },
+}
+
+/// Tag mixed into the sampler seed for the start RNG so that start draws are
+/// independent of the chain seeds `splitmix64(seed + i)`.
+pub const INIT_SEED_TAG: u64 = 0x5eed_1417_0000_0000_u64;
+
+impl Init {
+    /// Stan's default: uniform(-2, 2) with up to 100 attempts per chain.
+    pub fn uniform() -> Self {
+        Self::Uniform {
+            radius: 2.0,
+            max_attempts: 100,
+        }
+    }
+}
+
+impl Default for Init {
+    fn default() -> Self {
+        Self::uniform()
+    }
+}
+
+/// Draw `chains` starts by the [`Init::Uniform`] rule.
+///
+/// Errors with [`ErrorKind::Target`] (fatal target error), or
+/// [`ErrorKind::Numerical`] with a message naming the chain, the number of
+/// attempts and the last failure when no evaluable start is found.
+pub fn uniform_starts<T: Target + ?Sized>(
+    target: &T,
+    chains: usize,
+    seed: u64,
+    radius: f64,
+    max_attempts: usize,
+) -> Result<Vec<Vec<f64>>, Error> {
+    if !radius.is_finite() || radius <= 0.0 {
+        return Err(Error::configuration(
+            "initialisation radius must be finite and positive",
+        ));
+    }
+    if max_attempts == 0 {
+        return Err(Error::configuration(
+            "initialisation must allow at least one attempt",
+        ));
+    }
+    if chains == 0 {
+        return Err(Error::configuration("chain count must be nonzero"));
+    }
+    let dimension = catch_unwind(AssertUnwindSafe(|| target.dimension()))
+        .map_err(|_| Error::new(ErrorKind::Panic, "target dimension callback panicked"))?;
+    if dimension == 0 {
+        return Err(Error::configuration("target dimension must be nonzero"));
+    }
+    let mut rng = SmallRng::seed_from_u64(crate::walnutpie::splitmix64(seed ^ INIT_SEED_TAG));
+    let mut gradient = vec![0.0; dimension];
+    let mut starts = Vec::with_capacity(chains);
+    for chain in 0..chains {
+        let mut last_failure = String::new();
+        let mut found = None;
+        for _attempt in 0..max_attempts {
+            let candidate: Vec<f64> = (0..dimension)
+                .map(|_| rng.random_range(-radius..radius))
+                .collect();
+            gradient.iter_mut().for_each(|g| *g = f64::NAN);
+            let evaluated = catch_unwind(AssertUnwindSafe(|| {
+                target.log_density_gradient(&candidate, &mut gradient)
+            }))
+            .map_err(|_| Error::new(ErrorKind::Panic, "target callback panicked"))?;
+            match evaluated {
+                Ok(value) if value.is_finite() && gradient.iter().all(|g| g.is_finite()) => {
+                    found = Some(candidate);
+                    break;
+                }
+                Ok(value) => {
+                    last_failure = if value.is_finite() {
+                        String::from("gradient is not finite")
+                    } else {
+                        format!("log density is {value}")
+                    };
+                }
+                Err(error) if error.kind() == crate::walnutpie::TargetErrorKind::Fatal => {
+                    return Err(Error::new(
+                        ErrorKind::Target,
+                        format!(
+                            "fatal target error while drawing the start of chain {chain}: {}",
+                            error.message()
+                        ),
+                    ));
+                }
+                Err(error) => last_failure = error.message().to_owned(),
+            }
+        }
+        match found {
+            Some(start) => starts.push(start),
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Numerical,
+                    format!(
+                        "no evaluable start for chain {chain} after {max_attempts} uniform(-{radius}, \
+                         {radius}) draws (last failure: {last_failure}); the log density and \
+                         gradient must be finite at the start, check the model or supply starts"
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(starts)
+}
+
 /// Kernel tuning: the macro step, tree depth, refinement, and error
 /// threshold. Values are validated when the run starts.
 ///
@@ -397,6 +540,10 @@ impl fmt::Debug for Limits {
     }
 }
 
+/// Chains used by [`Sampler::run_with_init`] with [`Init::Uniform`] when
+/// [`Sampler::chains`] was not set.
+pub const DEFAULT_RANDOM_START_CHAINS: usize = 4;
+
 /// Builder for one sampling run.
 ///
 /// Defaults: 1,000 warmup transitions, 1,000 retained draws per chain, one
@@ -515,6 +662,32 @@ impl Sampler {
                 "chain count must equal the number of starts, or exactly one start must be given",
             )),
         }
+    }
+
+    /// Run from starts chosen by `init`.
+    ///
+    /// [`Init::Given`] is [`Sampler::run`]. [`Init::Uniform`] draws one start
+    /// per chain by [`uniform_starts`] with this sampler's seed; the chain
+    /// count is [`Sampler::chains`] or, if unset, four.
+    pub fn run_with_init<T: Target>(&self, target: &T, init: &Init) -> Result<Posterior, Error> {
+        match init {
+            Init::Given(starts) => self.run(target, starts),
+            Init::Uniform {
+                radius,
+                max_attempts,
+            } => {
+                let chains = self.chains.unwrap_or(DEFAULT_RANDOM_START_CHAINS);
+                let starts = uniform_starts(target, chains, self.seed, *radius, *max_attempts)?;
+                self.run(target, &starts)
+            }
+        }
+    }
+
+    /// Run from Stan-style random starts ([`Init::uniform`]): uniform(-2, 2)
+    /// unconstrained coordinates, redrawn up to 100 times per chain until the
+    /// log density and gradient are finite. Deterministic given the seed.
+    pub fn run_from_random_starts<T: Target>(&self, target: &T) -> Result<Posterior, Error> {
+        self.run_with_init(target, &Init::uniform())
     }
 
     /// Run the configured sampler from `starts` (one position per chain).

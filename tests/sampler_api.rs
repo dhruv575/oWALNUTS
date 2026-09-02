@@ -7,9 +7,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use owalnuts::sampler::{
-    Adaptation, Cancellation, ChainOutput, Error, ErrorKind, Limits, Metric, Sampler,
-    StructuredBlockMass, StructuredCovarianceBlock, StructuredRefreshConfig, Target, TargetError,
-    Tuning, WindowSummary,
+    Adaptation, Cancellation, ChainOutput, DEFAULT_RANDOM_START_CHAINS, Error, ErrorKind, Init,
+    Limits, Metric, Sampler, StructuredBlockMass, StructuredCovarianceBlock,
+    StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, uniform_starts,
 };
 use owalnuts::walnutpie::{
     DenseMass, DiagonalMass, KernelTuning, PaperAdaptationConfig, RunConfig, RunControl,
@@ -526,4 +526,195 @@ fn invalid_builders_fail_closed() {
             .run(&target, &starts(3))
             .is_ok()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Init: Stan-style uniform(-r, r) starts with retries.
+
+/// A standard normal that is a recoverable zero-density failure wherever the
+/// first coordinate is negative (a Stan exception) or exceeds one (a
+/// gradient overflow mapped by the BridgeStan integration).
+struct HalfLine(usize);
+
+impl Target for HalfLine {
+    fn dimension(&self) -> usize {
+        self.0
+    }
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        for (out, value) in gradient.iter_mut().zip(position) {
+            *out = -*value;
+        }
+        if position[0] < 0.0 {
+            return Err(TargetError::recoverable("log of a negative argument"));
+        }
+        if position[0] > 1.0 {
+            return Err(TargetError::recoverable("gradient overflow"));
+        }
+        Ok(-0.5 * position.iter().map(|value| value * value).sum::<f64>())
+    }
+}
+
+/// A target that (wrongly, but as raw callbacks can) returns `Ok(NaN)` left
+/// of zero and a nonfinite gradient right of one: the start search must
+/// reject both without relying on the error path.
+struct RawNan;
+
+impl Target for RawNan {
+    fn dimension(&self) -> usize {
+        2
+    }
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        gradient[0] = -position[0];
+        gradient[1] = -position[1];
+        if position[0] < 0.0 {
+            return Ok(f64::NAN);
+        }
+        if position[0] > 1.0 {
+            gradient[1] = f64::INFINITY;
+        }
+        Ok(-0.5 * (position[0] * position[0] + position[1] * position[1]))
+    }
+}
+
+struct Void;
+
+impl Target for Void {
+    fn dimension(&self) -> usize {
+        2
+    }
+    fn log_density_gradient(&self, _: &[f64], _: &mut [f64]) -> Result<f64, TargetError> {
+        Err(TargetError::recoverable("nowhere is evaluable"))
+    }
+}
+
+#[test]
+fn uniform_starts_are_deterministic_inside_the_box_and_evaluable() {
+    let target = HalfLine(3);
+    let first = uniform_starts(&target, 4, SEED, 2.0, 100).unwrap();
+    let second = uniform_starts(&target, 4, SEED, 2.0, 100).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(first.len(), 4);
+    for start in &first {
+        assert_eq!(start.len(), 3);
+        assert!(start.iter().all(|x| x.abs() < 2.0));
+        // Retries stopped only at a finite log density and gradient.
+        assert!(start[0] >= 0.0 && start[0] <= 1.0, "{start:?}");
+    }
+    let other = uniform_starts(&target, 4, SEED + 1, 2.0, 100).unwrap();
+    assert_ne!(first, other);
+    for start in uniform_starts(&RawNan, 8, SEED, 2.0, 100).unwrap() {
+        assert!(start[0] >= 0.0 && start[0] <= 1.0, "{start:?}");
+    }
+    // The start RNG is independent of the chain seeds: a wider box changes
+    // the coordinates, not the retry logic.
+    let wide = uniform_starts(&Gaussian(3), 2, SEED, 5.0, 1).unwrap();
+    assert!(wide.iter().flatten().any(|x| x.abs() > 2.0));
+}
+
+#[test]
+fn uniform_starts_fail_clearly_after_max_attempts() {
+    let error = uniform_starts(&Void, 2, SEED, 2.0, 7).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Numerical);
+    let message = error.to_string();
+    assert!(message.contains("chain 0"), "{message}");
+    assert!(message.contains("after 7"), "{message}");
+    assert!(message.contains("nowhere is evaluable"), "{message}");
+
+    // A start box that is entirely in the NaN region exhausts the attempts
+    // with the last failure named.
+    struct Negative;
+    impl Target for Negative {
+        fn dimension(&self) -> usize {
+            1
+        }
+        fn log_density_gradient(&self, _: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+            g[0] = 0.0;
+            Ok(f64::NEG_INFINITY)
+        }
+    }
+    let error = uniform_starts(&Negative, 1, SEED, 2.0, 3).unwrap_err();
+    assert!(error.to_string().contains("log density is -inf"), "{error}");
+
+    assert_eq!(
+        uniform_starts(&Gaussian(2), 1, SEED, 0.0, 3)
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Configuration
+    );
+    assert_eq!(
+        uniform_starts(&Gaussian(2), 1, SEED, 2.0, 0)
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Configuration
+    );
+    assert_eq!(
+        uniform_starts(&Gaussian(2), 0, SEED, 2.0, 1)
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Configuration
+    );
+}
+
+#[test]
+fn uniform_starts_propagate_fatal_target_errors() {
+    struct Broken;
+    impl Target for Broken {
+        fn dimension(&self) -> usize {
+            1
+        }
+        fn log_density_gradient(&self, _: &[f64], _: &mut [f64]) -> Result<f64, TargetError> {
+            Err(TargetError::new("bug"))
+        }
+    }
+    let error = uniform_starts(&Broken, 1, SEED, 2.0, 100).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Target);
+    assert!(error.to_string().contains("bug"), "{error}");
+}
+
+#[test]
+fn run_with_init_matches_run_from_the_drawn_starts() {
+    let target = HalfLine(3);
+    let init = Init::Uniform {
+        radius: 2.0,
+        max_attempts: 100,
+    };
+    let posterior = sampler()
+        .chains(3)
+        .metric(Metric::Identity)
+        .run_with_init(&target, &init)
+        .unwrap();
+    let starts = uniform_starts(&target, 3, SEED, 2.0, 100).unwrap();
+    let direct = sampler()
+        .metric(Metric::Identity)
+        .run(&target, &starts)
+        .unwrap();
+    assert_eq!(posterior.chains(), direct.chains());
+    assert_eq!(posterior.chain_count(), 3);
+
+    // `Init::Given` is `run`; `run_from_random_starts` is `Init::uniform()`
+    // with four chains when none were requested.
+    let given = sampler()
+        .metric(Metric::Identity)
+        .run_with_init(&target, &Init::Given(starts.clone()))
+        .unwrap();
+    assert_eq!(given.chains(), direct.chains());
+    let random = sampler()
+        .metric(Metric::Identity)
+        .run_from_random_starts(&target)
+        .unwrap();
+    assert_eq!(random.chain_count(), DEFAULT_RANDOM_START_CHAINS);
+    assert_eq!(Init::default(), Init::uniform());
+    let again = sampler()
+        .metric(Metric::Identity)
+        .run_from_random_starts(&target)
+        .unwrap();
+    assert_eq!(random.chains(), again.chains());
 }
