@@ -47,9 +47,9 @@ pub const MODELS: [&str; 7] = [
     "mesquite__logmesquite_logvash",
     "hmm_example__hmm_example",
 ];
-/// Round 1 (preregistered) arms, then the round 2 amendment arms (see
-/// `PREREGISTRATION.md`, "Round 2").
-pub const ARMS: [&str; 9] = [
+/// Round 1 (preregistered) arms, then the round 2 and round 3 amendment
+/// arms (see `PREREGISTRATION.md`).
+pub const ARMS: [&str; 11] = [
     "da",
     "paper",
     "floor",
@@ -59,6 +59,8 @@ pub const ARMS: [&str; 9] = [
     "zero",
     "floor-zero",
     "guarded-zero",
+    "zero-wide",
+    "guarded-zero-wide",
 ];
 pub const SEEDS: [u64; 2] = [77201, 77202];
 /// v1 `owalnuts-da` seed-median min bulk ESS per gradient (x1e3), from
@@ -103,6 +105,16 @@ pub fn paper_config(arm: &str) -> Result<Option<PaperAdaptationConfig>, Box<dyn 
             defer(floor(base)?)
                 .with_unhealthy_orbits_excluded(true)
                 .with_exhausted_transitions_as_zero(true),
+        ),
+        "zero-wide" => Some(
+            base.with_exhausted_transitions_as_zero(true)
+                .with_step_relative_bound(1e6)?,
+        ),
+        "guarded-zero-wide" => Some(
+            defer(floor(base)?)
+                .with_unhealthy_orbits_excluded(true)
+                .with_exhausted_transitions_as_zero(true)
+                .with_step_relative_bound(1e6)?,
         ),
         other => return Err(format!("unknown arm {other:?}").into()),
     })

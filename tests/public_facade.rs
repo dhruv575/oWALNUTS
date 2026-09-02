@@ -2652,3 +2652,46 @@ fn paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start() {
     assert!(freed.metadata().tuning().step_size() < 200.0);
     assert!(freed.metadata().tuning().step_size() >= 400.0 / PAPER_STEP_RELATIVE_BOUND);
 }
+
+#[test]
+fn paper_step_relative_bound_is_configurable() {
+    assert!(
+        PaperAdaptationConfig::default()
+            .with_step_relative_bound(0.5)
+            .is_err()
+    );
+    assert!(
+        PaperAdaptationConfig::default()
+            .with_step_relative_bound(f64::INFINITY)
+            .is_err()
+    );
+    assert_eq!(
+        PaperAdaptationConfig::default().step_relative_bound(),
+        PAPER_STEP_RELATIVE_BOUND
+    );
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let run = |paper: PaperAdaptationConfig| {
+        sample(
+            &Gaussian,
+            &[0.3, -0.2],
+            &mass,
+            &RunConfig::new(300, NonZeroUsize::new(10).unwrap(), 0x9aa1)
+                .with_tuning(paper_tuning(400.0, 1e-6, 4, 2))
+                .with_warmup(
+                    WarmupConfig::default()
+                        .with_mass_adaptation(false)
+                        .with_paper_adaptation(paper),
+                ),
+        )
+        .unwrap()
+    };
+    // With zero-fed exhausted transitions the step falls until leaves build
+    // (well below the initial 400); a tight band of 10x stops it at 40.
+    let free = run(PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(true));
+    assert!(free.metadata().tuning().step_size() < 40.0);
+    let tight = run(PaperAdaptationConfig::default()
+        .with_exhausted_transitions_as_zero(true)
+        .with_step_relative_bound(10.0)
+        .unwrap());
+    assert!((tight.metadata().tuning().step_size() - 40.0).abs() < 1e-9);
+}

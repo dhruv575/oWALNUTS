@@ -132,3 +132,30 @@ now `floor`, `defer`, `guarded`, `guarded-trim`, `zero`, `floor-zero`,
 `guarded-zero`. Prediction P5: `zero` alone still freezes (the `delta ~ 0`
 installation at transition 74 remains), `floor-zero` and `guarded-zero` do
 not freeze; whether they reach 0.8x of `da` on the regressions is open.
+
+## Round 3 amendment (written after round 2, before any round 3 cell)
+
+Round 2: `guarded-zero` was robust on `nes2000`, `mesquite`, `hmm_example`
+and `diamonds` (r = 0.87–1.07 on the first three) but froze on `sblrc`
+(2/2), `earnings` (2/2) and one `kidiq` seed. The telemetry of every frozen
+chain is the same: the zero-fed `h` rule drives the step to the paper-mode
+band floor `h0 / PAPER_STEP_RELATIVE_BOUND = 1e-4` within the first
+transitions and every leaf still exhausts refinement there (warmup
+divergences ~1000: the energy error exceeds 1000 at micro-step 6e-6, the
+uniform start sits where the gradient is enormous), so `h` cannot go lower
+and the chain never builds a leaf. Dual averaging has no such bound and
+passes through steps far below 1e-4 before growing back.
+
+Added guard: `with_step_relative_bound(bound)` replaces the fixed `1e3`.
+Round 3 arms, same protocol:
+
+| arm | configuration |
+|---|---|
+| `zero-wide` | `zero` + `with_step_relative_bound(1e6)` |
+| `guarded-zero-wide` | `guarded-zero` + `with_step_relative_bound(1e6)` |
+
+Decision rule unchanged; candidate order appends `zero-wide`,
+`guarded-zero-wide`. Prediction P6: both are robust on every model;
+`guarded-zero-wide` is within 0.8x of `da` on all but `sblrc`, `earnings`
+and `diamonds`, where the DA arm itself is depth-capped and the ratio is
+uncertain in either direction.

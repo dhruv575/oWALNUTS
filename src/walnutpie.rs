@@ -526,7 +526,9 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 ///   largest fraction of energy ranges dropped first;
 /// * [`Self::with_exhausted_transitions_as_zero`] — a transition that built
 ///   no leaf feeds unrefined fraction zero to the `h` rule instead of nothing,
-///   so `h` can shrink out of a start where every leaf exhausts refinement.
+///   so `h` can shrink out of a start where every leaf exhausts refinement;
+/// * [`Self::with_step_relative_bound`] — widen the `[h0 / 1e3, h0 * 1e3]`
+///   band the paper-mode step is confined to.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PaperAdaptationConfig {
     global_energy_bound: f64,
@@ -542,6 +544,7 @@ pub struct PaperAdaptationConfig {
     exclude_unhealthy_orbits: bool,
     trim_fraction: f64,
     exhausted_as_zero: bool,
+    step_relative_bound: f64,
 }
 
 /// Which unrefined-fraction statistic drives the paper `h` rule.
@@ -586,6 +589,7 @@ impl Default for PaperAdaptationConfig {
             exclude_unhealthy_orbits: false,
             trim_fraction: 0.0,
             exhausted_as_zero: false,
+            step_relative_bound: PAPER_STEP_RELATIVE_BOUND,
         }
     }
 }
@@ -721,6 +725,27 @@ impl PaperAdaptationConfig {
 
     pub fn exhausted_transitions_as_zero(&self) -> bool {
         self.exhausted_as_zero
+    }
+
+    /// Bound the paper-mode step to `[h0 / bound, h0 * bound]` around the
+    /// configured initial step instead of the default
+    /// [`PAPER_STEP_RELATIVE_BOUND`]. Must be finite and at least one. From
+    /// uniform(-2, 2) starts on badly scaled regressions the default bound
+    /// (`1e3`) is reached while every leaf still exhausts refinement, which
+    /// freezes the chain; acceptance-driven dual averaging has no such bound
+    /// (`STUDIES/paper_adaptation_robust_v1`, round 3).
+    pub fn with_step_relative_bound(mut self, bound: f64) -> Result<Self, Error> {
+        if !bound.is_finite() || bound < 1.0 {
+            return Err(Error::configuration(
+                "paper adaptation step relative bound must be finite and at least one",
+            ));
+        }
+        self.step_relative_bound = bound;
+        Ok(self)
+    }
+
+    pub fn step_relative_bound(&self) -> f64 {
+        self.step_relative_bound
     }
 
     pub fn min_max_error(&self) -> f64 {
@@ -873,11 +898,14 @@ fn unrefined_leaf_fraction(work: &TransitionWorkTelemetry) -> Option<f64> {
 }
 
 /// Bound a paper-mode step to [`PAPER_STEP_RELATIVE_BOUND`] around `initial`.
+#[cfg(test)]
 fn clamp_paper_step(step: f64, initial: f64) -> f64 {
-    step.clamp(
-        initial / PAPER_STEP_RELATIVE_BOUND,
-        initial * PAPER_STEP_RELATIVE_BOUND,
-    )
+    clamp_paper_step_within(step, initial, PAPER_STEP_RELATIVE_BOUND)
+}
+
+/// Bound a paper-mode step to `bound` times `initial` in either direction.
+fn clamp_paper_step_within(step: f64, initial: f64, bound: f64) -> f64 {
+    step.clamp(initial / bound, initial * bound)
 }
 
 /// Linear-interpolation sample quantile of finite values; `None` when empty.
@@ -6061,9 +6089,12 @@ fn run_chain<T: Target>(
                 && let (Some(dual), Some(statistic)) = (&mut dual_averaging, step_statistic)
             {
                 active_tuning.step_size = dual.update(statistic);
-                if warmup.paper_adaptation.is_some() {
-                    active_tuning.step_size =
-                        clamp_paper_step(active_tuning.step_size, config.tuning.step_size);
+                if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                    active_tuning.step_size = clamp_paper_step_within(
+                        active_tuning.step_size,
+                        config.tuning.step_size,
+                        paper.step_relative_bound,
+                    );
                 }
             }
             if warmup.adapt_mass
@@ -6223,9 +6254,12 @@ fn run_chain<T: Target>(
                 && let Some(dual) = &dual_averaging
             {
                 active_tuning.step_size = dual.final_step();
-                if warmup.paper_adaptation.is_some() {
-                    active_tuning.step_size =
-                        clamp_paper_step(active_tuning.step_size, config.tuning.step_size);
+                if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                    active_tuning.step_size = clamp_paper_step_within(
+                        active_tuning.step_size,
+                        config.tuning.step_size,
+                        paper.step_relative_bound,
+                    );
                 }
             }
             if warmup

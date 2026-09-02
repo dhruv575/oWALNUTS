@@ -9,6 +9,21 @@ architecture (see the `walnutpie` module documentation).
 
 ### Added
 
+- **Robustness after the posteriordb benchmark (WP22 follow-up).**
+  (1) `owalnuts-bridgestan` maps a `NaN`/`+inf` log density and a finite log
+  density with a nonfinite gradient to the recoverable zero-density path
+  (`map_evaluation`), as CmdStan and nutpie reject such proposals; only a
+  dimension mismatch stays fatal. (2) `owalnuts::sampler::Init`
+  (`Given`, `Uniform { radius, max_attempts }`), `uniform_starts`,
+  `Sampler::run_with_init` and `Sampler::run_from_random_starts`: Stan's
+  uniform(-2, 2) start rule with retries until the log density and gradient
+  are finite, deterministic given the seed. (3) Additive, off-by-default
+  guards on `PaperAdaptationConfig`: `with_min_max_error`,
+  `with_first_update_after`, `with_metric_update_required`,
+  `with_unhealthy_orbits_excluded`, `with_trim_fraction`,
+  `with_exhausted_transitions_as_zero`, plus
+  `PaperAdaptationOutcome::Deferred`. Measured in
+  `STUDIES/paper_adaptation_robust_v1`; kernel fingerprints unchanged.
 - **`owalnuts::sampler`, the 0.2 public API.** One builder, `Sampler`
   (`warmup`, `draws`, `chains`, `seed`, `threads`, `metric`, `adaptation`,
   `tuning`, `limits`, `run`), one result, `Posterior` (chains, flat and
