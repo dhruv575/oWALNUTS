@@ -213,7 +213,7 @@ use rand_distr::StandardNormal;
 use rayon::prelude::*;
 
 use crate::kernel::{
-    Direction, EvaluatedTransitionInput, EvaluationPhase, FixedTuning, MassOperator,
+    Direction, EvaluatedTransitionInput, EvaluationPhase, FixedTuning, InPlaceEval, MassOperator,
     OuterSelectionPolicy, Rejection, SelectedState, SpanStop, TransitionInput, TransitionRng,
     TransitionStop, TransitionTuning, TransitionWorkTelemetry, Uniform01, macro_leaf,
     take_evaluation_context, transition_w_from_evaluated_traced_with_telemetry_and_outer_policy,
@@ -5628,7 +5628,7 @@ fn run_chain<T: Target>(
         let mut recoverable_target_failures = 0usize;
         let mut observed_target_calls = 0usize;
         let mut observed_phase_calls = [0usize; 3];
-        let mut eval = |theta: &[f64]| {
+        let mut eval = InPlaceEval(|theta: &[f64], gradient: &mut [f64]| {
             let context = take_evaluation_context();
             observed_target_calls = observed_target_calls.saturating_add(1);
             let phase_index = match context.map(|x| x.phase).unwrap_or(EvaluationPhase::Initial) {
@@ -5659,32 +5659,35 @@ fn run_chain<T: Target>(
                     }
                 };
             }
-            let mut gradient = vec![f64::NAN; dimension];
+            // The kernel hands over the state's own gradient buffer; start
+            // from NaN so an implementation that leaves a component
+            // unwritten is rejected as nonfinite, exactly as before.
+            gradient.fill(f64::NAN);
             if observer_panic {
-                return (f64::NAN, gradient);
+                return f64::NAN;
             }
             if let Err(stop) = control.check() {
                 control_failure = Some(stop);
-                return (f64::NAN, gradient);
+                return f64::NAN;
             }
             if theta.len() != dimension || theta.iter().any(|value| !value.is_finite()) {
                 numerical_failure = true;
                 observe!(ProposalTargetOutcome::KernelNonfinite, None, gradient);
-                return (f64::NAN, gradient);
+                return f64::NAN;
             }
             let evaluated = catch_unwind(AssertUnwindSafe(|| {
-                target.log_density_gradient(theta, &mut gradient)
+                target.log_density_gradient(theta, gradient)
             }));
             if let Err(stop) = control.check() {
                 control_failure = Some(stop);
-                return (f64::NAN, gradient);
+                return f64::NAN;
             }
             let evaluated = match evaluated {
                 Ok(value) => value,
                 Err(_) => {
                     target_panic = true;
                     observe!(ProposalTargetOutcome::Panicked, None, gradient);
-                    return (f64::NAN, gradient);
+                    return f64::NAN;
                 }
             };
             match evaluated {
@@ -5693,12 +5696,12 @@ fn run_chain<T: Target>(
                         && gradient.iter().all(|value| value.is_finite()) =>
                 {
                     observe!(ProposalTargetOutcome::Finite, Some(log_density), gradient);
-                    (log_density, gradient)
+                    log_density
                 }
                 Ok(_) => {
                     target_failure = Some(TargetError::new("target returned a nonfinite value"));
                     observe!(ProposalTargetOutcome::Nonfinite, None, gradient);
-                    (f64::NAN, gradient)
+                    f64::NAN
                 }
                 Err(error) if error.kind == TargetErrorKind::Recoverable => {
                     recoverable_target_failures += 1;
@@ -5709,15 +5712,15 @@ fn run_chain<T: Target>(
                     // gradient. The kernel refines through it instead of
                     // stopping the transition.
                     gradient.fill(0.0);
-                    (f64::NEG_INFINITY, gradient)
+                    f64::NEG_INFINITY
                 }
                 Err(error) => {
                     target_failure = Some(error);
                     observe!(ProposalTargetOutcome::Fatal, None, gradient);
-                    (f64::NAN, gradient)
+                    f64::NAN
                 }
             }
-        };
+        });
         let mut rng_stop = None;
         let (result, work, acceptance, current_summary, accepted_summary, final_uturn) =
             {
