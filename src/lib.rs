@@ -1,4 +1,10 @@
-//! oWALNUTS: the Within-orbit Adaptive Leapfrog No-U-Turn Sampler.
+//! oWALNUTS: the Within-orbit Adaptive Leapfrog No-U-Turn Sampler
+//! (Bou-Rabee, Carpenter, Kleppe, Liu; JMLR 27, 2026) in Rust. NUTS with a
+//! second time scale: each macro leapfrog step is subdivided into micro-steps
+//! chosen so the local energy error stays under `delta`, which samples
+//! multi-scale targets such as Neal's funnel without the bias of fixed-step
+//! NUTS. The kernel is tested leaf-for-leaf against the Flatiron reference
+//! implementation `walnutpie`.
 //!
 //! Start with [`sampler`]: a builder ([`sampler::Sampler`]) over the complete
 //! facade in [`walnutpie`], which documents the kernel, its numerical
