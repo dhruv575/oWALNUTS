@@ -47,7 +47,19 @@ pub const MODELS: [&str; 7] = [
     "mesquite__logmesquite_logvash",
     "hmm_example__hmm_example",
 ];
-pub const ARMS: [&str; 6] = ["da", "paper", "floor", "defer", "guarded", "guarded-trim"];
+/// Round 1 (preregistered) arms, then the round 2 amendment arms (see
+/// `PREREGISTRATION.md`, "Round 2").
+pub const ARMS: [&str; 9] = [
+    "da",
+    "paper",
+    "floor",
+    "defer",
+    "guarded",
+    "guarded-trim",
+    "zero",
+    "floor-zero",
+    "guarded-zero",
+];
 pub const SEEDS: [u64; 2] = [77201, 77202];
 /// v1 `owalnuts-da` seed-median min bulk ESS per gradient (x1e3), from
 /// `STUDIES/posteriordb_bench_v1/artifacts/results-table.md` (arviz, over the
@@ -84,6 +96,13 @@ pub fn paper_config(arm: &str) -> Result<Option<PaperAdaptationConfig>, Box<dyn 
             defer(floor(base)?)
                 .with_unhealthy_orbits_excluded(true)
                 .with_trim_fraction(0.1)?,
+        ),
+        "zero" => Some(base.with_exhausted_transitions_as_zero(true)),
+        "floor-zero" => Some(floor(base)?.with_exhausted_transitions_as_zero(true)),
+        "guarded-zero" => Some(
+            defer(floor(base)?)
+                .with_unhealthy_orbits_excluded(true)
+                .with_exhausted_transitions_as_zero(true),
         ),
         other => return Err(format!("unknown arm {other:?}").into()),
     })
@@ -349,9 +368,15 @@ fn analyze(cells: &Path, out_md: &Path, out_json: &Path) -> Result<(), Box<dyn E
         }
     }
     md.push_str("\n## Decision rule\n\n| arm | robust (no frozen/error cell on any model) | models with r >= 0.8 | geomean r | clears the bar |\n|---|---|---:|---:|---|\n");
+    md.push_str(
+        "
+(`paper` is never a candidate; the winner is the first clearing arm in the listed order.)
+
+",
+    );
     let mut decision = BTreeMap::new();
     let mut winner: Option<String> = None;
-    for arm in ARMS.iter().skip(1) {
+    for arm in ARMS.iter().filter(|arm| **arm != "da") {
         let Some(per_model) = ratios.get(*arm) else {
             continue;
         };

@@ -523,7 +523,10 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 /// * [`Self::with_unhealthy_orbits_excluded`] and
 ///   [`Self::with_trim_fraction`] — the quantile is taken over orbits that
 ///   neither diverged nor stopped in refinement exhaustion, and/or with the
-///   largest fraction of energy ranges dropped first.
+///   largest fraction of energy ranges dropped first;
+/// * [`Self::with_exhausted_transitions_as_zero`] — a transition that built
+///   no leaf feeds unrefined fraction zero to the `h` rule instead of nothing,
+///   so `h` can shrink out of a start where every leaf exhausts refinement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PaperAdaptationConfig {
     global_energy_bound: f64,
@@ -538,6 +541,7 @@ pub struct PaperAdaptationConfig {
     require_metric_update: bool,
     exclude_unhealthy_orbits: bool,
     trim_fraction: f64,
+    exhausted_as_zero: bool,
 }
 
 /// Which unrefined-fraction statistic drives the paper `h` rule.
@@ -581,6 +585,7 @@ impl Default for PaperAdaptationConfig {
             require_metric_update: false,
             exclude_unhealthy_orbits: false,
             trim_fraction: 0.0,
+            exhausted_as_zero: false,
         }
     }
 }
@@ -700,6 +705,22 @@ impl PaperAdaptationConfig {
         }
         self.trim_fraction = fraction;
         Ok(self)
+    }
+
+    /// Feed the `h` rule an unrefined fraction of zero for a transition that
+    /// built no macro leaf (every attempted leaf exhausted refinement) instead
+    /// of skipping the step update. Without this, a start whose leaves all
+    /// exhaust at the initial step leaves `h` frozen for the whole warmup
+    /// because no statistic is ever produced (`STUDIES/paper_adaptation_robust_v1`,
+    /// `sblrc`), whereas acceptance-driven dual averaging sees acceptance zero
+    /// and shrinks the step.
+    pub fn with_exhausted_transitions_as_zero(mut self, enabled: bool) -> Self {
+        self.exhausted_as_zero = enabled;
+        self
+    }
+
+    pub fn exhausted_transitions_as_zero(&self) -> bool {
+        self.exhausted_as_zero
     }
 
     pub fn min_max_error(&self) -> f64 {
@@ -6027,6 +6048,10 @@ fn run_chain<T: Target>(
             if warmup.adapt_mass && window_index.is_some() {
                 variance.update(&position);
             }
+            let unrefined_fraction = match warmup.paper_adaptation.as_ref() {
+                Some(paper) if paper.exhausted_as_zero => unrefined_fraction.or(Some(0.0)),
+                _ => unrefined_fraction,
+            };
             let step_statistic = if let Some(paper) = warmup.paper_adaptation.as_ref() {
                 paper_window.step_statistic(paper.step_statistic, unrefined_fraction)
             } else {

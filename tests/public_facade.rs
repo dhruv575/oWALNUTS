@@ -2623,3 +2623,32 @@ fn paper_robustness_guards_defer_and_floor_without_changing_the_default() {
     }
     assert!(floored.metadata().tuning().max_error() >= 0.5);
 }
+
+#[test]
+fn paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start() {
+    // A step so large that every leaf exhausts both refinement levels:
+    // the default rule never sees a statistic and leaves `h` at the initial
+    // value; the guard feeds zero and dual averaging shrinks it.
+    let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+    let run = |paper: PaperAdaptationConfig| {
+        sample(
+            &Gaussian,
+            &[0.3, -0.2],
+            &mass,
+            &RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 0x9aa0)
+                .with_tuning(paper_tuning(400.0, 1e-6, 4, 2))
+                .with_warmup(
+                    WarmupConfig::default()
+                        .with_mass_adaptation(false)
+                        .with_paper_adaptation(paper),
+                ),
+        )
+        .unwrap()
+    };
+    let stuck = run(PaperAdaptationConfig::default());
+    assert!((stuck.metadata().tuning().step_size() - 400.0).abs() < 1e-9);
+    assert!(!PaperAdaptationConfig::default().exhausted_transitions_as_zero());
+    let freed = run(PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(true));
+    assert!(freed.metadata().tuning().step_size() < 200.0);
+    assert!(freed.metadata().tuning().step_size() >= 400.0 / PAPER_STEP_RELATIVE_BOUND);
+}

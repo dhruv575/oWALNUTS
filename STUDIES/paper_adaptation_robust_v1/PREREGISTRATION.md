@@ -101,3 +101,34 @@ it is and the report says which models fail and how.
   uniform starts can still contain the fall into the typical set.
 * P4: `guarded` is robust and within 0.8x of `da` on at least five of the
   seven models; `guarded-trim` is not distinguishable from `guarded`.
+
+## Round 2 amendment (written after round 1, before any round 2 cell)
+
+Round 1 (commit with the round 1 artifacts) showed a second freeze mechanism
+that none of the preregistered guards touches: on `sblrc`, `diamonds`,
+`earnings` and one `mesquite` chain every leaf of the very first transitions
+exhausts refinement at the initial step `h0 = 0.1` even with `delta = 1`
+(the DA arm's adapted step on these models is 0.0004–0.003, and four
+refinement levels only reach `h0 / 16`). A transition that builds no leaf
+produces no unrefined-fraction statistic, so the paper `h` rule never
+updates and `h` stays at 0.1 for the whole warmup; acceptance-driven dual
+averaging sees acceptance zero at the same transitions and shrinks the step.
+`guarded` therefore froze with `delta` still at 1 on those models.
+
+Added guard: `with_exhausted_transitions_as_zero(true)` feeds unrefined
+fraction 0 for a transition that built no leaf (all attempted leaves
+exhausted refinement). Round 2 arms, same models, seeds, protocol and
+estimands as round 1:
+
+| arm | configuration |
+|---|---|
+| `zero` | default + `with_exhausted_transitions_as_zero(true)` |
+| `floor-zero` | `floor` + zero |
+| `guarded-zero` | `guarded` + zero (floor 0.05, defer 150 + metric, unhealthy excluded) |
+
+Decision rule unchanged (robust on every cell and `r >= 0.8` on every
+model against the in-study `da` arm); candidate order for the default is
+now `floor`, `defer`, `guarded`, `guarded-trim`, `zero`, `floor-zero`,
+`guarded-zero`. Prediction P5: `zero` alone still freezes (the `delta ~ 0`
+installation at transition 74 remains), `floor-zero` and `guarded-zero` do
+not freeze; whether they reach 0.8x of `da` on the regressions is open.
