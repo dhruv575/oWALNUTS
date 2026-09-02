@@ -213,10 +213,11 @@ use rand_distr::StandardNormal;
 use rayon::prelude::*;
 
 use crate::kernel::{
-    Direction, EvaluatedTransitionInput, EvaluationPhase, FixedTuning, InPlaceEval, MassOperator,
-    OuterSelectionPolicy, Rejection, SelectedState, SpanStop, TransitionInput, TransitionRng,
-    TransitionStop, TransitionTuning, TransitionWorkTelemetry, Uniform01, macro_leaf,
-    take_evaluation_context, transition_w_from_evaluated_traced_with_telemetry_and_outer_policy,
+    ContextKineticScope, Direction, EvaluatedTransitionInput, EvaluationPhase, FixedTuning,
+    InPlaceEval, MassOperator, OuterSelectionPolicy, Rejection, SelectedState, SpanStop,
+    TransitionInput, TransitionRng, TransitionStop, TransitionTuning, TransitionWorkTelemetry,
+    Uniform01, macro_leaf, take_evaluation_context,
+    transition_w_from_evaluated_traced_with_telemetry_and_outer_policy,
     transition_w_from_evaluated_with_telemetry_and_outer_policy,
     transition_w_traced_with_telemetry_and_outer_policy,
     transition_w_with_telemetry_and_outer_policy,
@@ -5491,6 +5492,9 @@ fn run_chain<T: Target>(
         .discarded
         .checked_add(config.retained)
         .ok_or_else(Error::overflow)?;
+    // Only proposal observers read the per-call kinetic energy the kernel
+    // attaches to each evaluation; skip it when none is attached.
+    let _context_kinetic = ContextKineticScope::new(control.public.proposal_observations.is_some());
     let initial_mass = mass.diagonal.clone();
     let mut active_mass = mass.clone();
     let mut inverse_mass = inverse_mass(&active_mass)?;

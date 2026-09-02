@@ -10,7 +10,6 @@ use crate::types::{State, ValidationError};
 use rand::RngCore;
 use rand_distr::{Distribution, StandardNormal};
 use std::cell::{Cell, RefCell};
-use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,6 +25,8 @@ pub(crate) struct EvaluationContext {
     pub direction: Option<Direction>,
     pub refinement_level: Option<usize>,
     pub evaluation_in_attempt: usize,
+    /// Kinetic energy at the evaluated momentum, or NaN inside a
+    /// [`ContextKineticScope`] that declared it unobserved.
     pub kinetic: f64,
     pub initial_hamiltonian: Option<f64>,
 }
@@ -36,6 +37,41 @@ thread_local! {
 
 pub(crate) fn take_evaluation_context() -> Option<EvaluationContext> {
     EVALUATION_CONTEXT.take()
+}
+
+thread_local! {
+    static CONTEXT_KINETIC_REQUIRED: Cell<bool> = const { Cell::new(true) };
+}
+
+/// Declares, for the current thread and the lifetime of the guard, whether
+/// [`EvaluationContext::kinetic`] is observed. When it is not, the kernel
+/// skips that per-call kinetic energy and reports NaN; nothing else reads
+/// the value, so sampler output is unaffected. The previous setting is
+/// restored on drop.
+pub(crate) struct ContextKineticScope {
+    previous: bool,
+}
+
+impl ContextKineticScope {
+    pub(crate) fn new(required: bool) -> Self {
+        let previous = CONTEXT_KINETIC_REQUIRED.replace(required);
+        Self { previous }
+    }
+}
+
+impl Drop for ContextKineticScope {
+    fn drop(&mut self) {
+        CONTEXT_KINETIC_REQUIRED.set(self.previous);
+    }
+}
+
+#[inline]
+fn context_kinetic<M: MassOperator + ?Sized>(momentum: &[f64], mass: &M) -> f64 {
+    if CONTEXT_KINETIC_REQUIRED.get() {
+        kinetic_energy(momentum, mass)
+    } else {
+        f64::NAN
+    }
 }
 
 fn set_evaluation_context(context: EvaluationContext) {
@@ -221,16 +257,32 @@ struct Workspace {
     scaled_difference: Vec<f64>,
 }
 
-// Most recently released workspace and the freed leaf states of this
-// thread. Both are pure allocation caches: their contents are always
-// overwritten before use, so they cannot influence any numerical result.
-thread_local! {
-    static WORKSPACE_CACHE: RefCell<Option<Workspace>> = const { RefCell::new(None) };
-    static STATE_POOL: RefCell<Vec<State>> = const { RefCell::new(Vec::new()) };
+/// Leaf states of this thread. The ring holds one strong reference to each
+/// state it has handed out, so a state whose spans have all been dropped is
+/// uniquely owned again and is reused in place by the next accepted leaf
+/// without allocating. Entries are scanned from a moving cursor; the number
+/// of simultaneously live states is a few times the tree depth, so the ring
+/// stays small.
+struct StateRing {
+    entries: Vec<Rc<State>>,
+    cursor: usize,
 }
 
-/// Upper bound on pooled leaf states per thread.
-const STATE_POOL_LIMIT: usize = 4096;
+// Most recently released workspace and the leaf-state ring of this thread.
+// Both are pure allocation caches: their contents are always overwritten
+// before use, so they cannot influence any numerical result.
+thread_local! {
+    static WORKSPACE_CACHE: RefCell<Option<Workspace>> = const { RefCell::new(None) };
+    static STATE_RING: RefCell<StateRing> = const {
+        RefCell::new(StateRing {
+            entries: Vec::new(),
+            cursor: 0,
+        })
+    };
+}
+
+/// Upper bound on ring entries per thread.
+const STATE_RING_LIMIT: usize = 1024;
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
@@ -270,58 +322,43 @@ fn copy_state(into: &mut State, from: &State) {
     into.log_prob = from.log_prob;
 }
 
-/// A copy of `from` in storage taken from this thread's pool when possible.
-fn pooled_copy(from: &State) -> State {
-    let recycled = STATE_POOL.with(|pool| pool.borrow_mut().pop());
-    match recycled {
-        Some(mut state) if state.theta.len() == from.theta.len() => {
-            copy_state(&mut state, from);
-            state
-        }
-        _ => from.clone(),
-    }
-}
-
-/// A leaf state whose storage returns to the thread pool when the last
-/// span referencing it is dropped.
-#[derive(Debug)]
-pub(crate) struct PooledState(Option<State>);
-
-impl PooledState {
-    fn new(state: State) -> Rc<Self> {
-        Rc::new(Self(Some(state)))
-    }
-
-    fn into_inner(mut self) -> State {
-        self.0
-            .take()
-            .expect("pooled state is present until dropped")
-    }
-}
-
-impl Deref for PooledState {
-    type Target = State;
-
-    #[inline]
-    fn deref(&self) -> &State {
-        self.0
-            .as_ref()
-            .expect("pooled state is present until dropped")
-    }
-}
-
-impl Drop for PooledState {
-    fn drop(&mut self) {
-        if let Some(state) = self.0.take() {
-            // Ignore a torn-down thread-local: the state is simply freed.
-            let _ = STATE_POOL.try_with(|pool| {
-                let mut pool = pool.borrow_mut();
-                if pool.len() < STATE_POOL_LIMIT {
-                    pool.push(state);
+/// A shared copy of `from`, placed in a ring entry that no span references
+/// any more when one exists, otherwise freshly allocated (and, while the
+/// ring is below its limit, retained by the ring for later reuse).
+fn pooled_state(from: &State) -> Rc<State> {
+    STATE_RING.with(|ring| {
+        let mut ring = ring.borrow_mut();
+        let len = ring.entries.len();
+        let mut index = if ring.cursor < len { ring.cursor } else { 0 };
+        for _ in 0..len {
+            let reusable = match Rc::get_mut(&mut ring.entries[index]) {
+                Some(state) if state.theta.len() == from.theta.len() => {
+                    copy_state(state, from);
+                    true
                 }
-            });
+                Some(_) => {
+                    // Uniquely owned but of another dimension: replace it.
+                    ring.entries[index] = Rc::new(from.clone());
+                    true
+                }
+                None => false,
+            };
+            if reusable {
+                ring.cursor = index + 1;
+                return Rc::clone(&ring.entries[index]);
+            }
+            index += 1;
+            if index == len {
+                index = 0;
+            }
         }
-    }
+        let fresh = Rc::new(from.clone());
+        if len < STATE_RING_LIMIT {
+            ring.entries.push(Rc::clone(&fresh));
+            ring.cursor = 0;
+        }
+        fresh
+    })
 }
 
 /// One physical endpoint of a span, including its cached joint log density.
@@ -331,7 +368,7 @@ impl Drop for PooledState {
 /// endpoints without copying.
 #[derive(Clone, Debug)]
 pub struct Endpoint {
-    pub state: Rc<PooledState>,
+    pub state: Rc<State>,
     pub log_joint: f64,
 }
 
@@ -350,7 +387,7 @@ pub struct Span {
     pub forward: Endpoint,
     /// The position-valued candidate retained by progressive sampling; its
     /// `rho` is incidental and never read.
-    pub selected: Rc<PooledState>,
+    pub selected: Rc<State>,
     /// Log of the sum of the leaves' unnormalized joint densities.
     pub log_weight: f64,
 }
@@ -363,7 +400,7 @@ impl Span {
     ) -> Result<Self, ValidationError> {
         validate_state_and_mass(&state, mass)?;
         let log_joint = joint_log_density(&state, mass);
-        Self::from_leaf_state(state, log_joint, mass.dimension())
+        Self::from_leaf_state(Rc::new(state), log_joint, mass.dimension())
     }
 
     /// Build a one-state span from a leaf produced under an already validated
@@ -376,7 +413,7 @@ impl Span {
     /// (a callback that returns finite values at a nonfinite position), and
     /// that is rejected exactly as [`Span::from_state`] rejects it.
     fn from_leaf_state(
-        state: State,
+        state: Rc<State>,
         log_joint: f64,
         mass_dimension: usize,
     ) -> Result<Self, ValidationError> {
@@ -393,7 +430,6 @@ impl Span {
                 "state joint log density must be finite".into(),
             ));
         }
-        let state = PooledState::new(state);
         let endpoint = Endpoint { state, log_joint };
         Ok(Self {
             backward: endpoint.clone(),
@@ -403,12 +439,7 @@ impl Span {
         })
     }
 
-    fn from_subspans(
-        earlier: Span,
-        later: Span,
-        selected: Rc<PooledState>,
-        log_weight: f64,
-    ) -> Self {
+    fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
         Self {
             backward: earlier.backward,
             forward: later.forward,
@@ -502,11 +533,13 @@ pub enum Rejection {
     InvalidEvaluation,
 }
 
-/// Deterministic result of attempting one macro leaf.
+/// Deterministic result of attempting one macro leaf, with the accepted
+/// endpoint materialised as `S` (an owned [`State`] for [`macro_leaf`], a
+/// shared ring state inside a transition).
 #[derive(Clone, Debug)]
-pub struct MacroLeafResult {
+pub struct MacroLeafOutcome<S> {
     /// The accepted endpoint, or `None` when the leaf was rejected.
-    pub end_state: Option<State>,
+    pub end_state: Option<S>,
     /// Accepted micro-step count, or the last attempted count on exhaustion.
     pub micro_steps: usize,
     /// Total target log-density/gradient evaluations.
@@ -531,7 +564,10 @@ pub struct MacroLeafResult {
     pub maximum_absolute_energy_error: f64,
 }
 
-impl MacroLeafResult {
+/// Deterministic result of attempting one macro leaf.
+pub type MacroLeafResult = MacroLeafOutcome<State>;
+
+impl<S> MacroLeafOutcome<S> {
     pub fn accepted(&self) -> bool {
         self.end_state.is_some()
     }
@@ -695,7 +731,16 @@ where
         Direction::Backward => &last_span.backward.state,
     };
     increment(&mut work.leaves_attempted)?;
-    let result = macro_leaf_in_workspace(start, mass, tuning, direction, eval, work, workspace)?;
+    let result = macro_leaf_in_workspace(
+        start,
+        mass,
+        tuning,
+        direction,
+        eval,
+        work,
+        workspace,
+        pooled_state,
+    )?;
     let end_log_joint = result.end_log_joint;
     match (result.end_state, result.rejection) {
         (Some(state), None) => {
@@ -2110,7 +2155,7 @@ where
             direction: None,
             refinement_level: None,
             evaluation_in_attempt: 0,
-            kinetic: kinetic_energy(&input.rho, mass),
+            kinetic: context_kinetic(&input.rho, mass),
             initial_hamiltonian: None,
         });
         let mut grad = vec![0.0; input.theta.len()];
@@ -2135,7 +2180,8 @@ where
     };
     validate_state_and_mass(&state, mass)?;
     let initial_log_joint = joint_log_density(&state, mass);
-    let mut span_accum = Span::from_leaf_state(state, initial_log_joint, mass.dimension())?;
+    let mut span_accum =
+        Span::from_leaf_state(Rc::new(state), initial_log_joint, mass.dimension())?;
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -2282,7 +2328,7 @@ where
             direction: None,
             refinement_level: None,
             evaluation_in_attempt: 0,
-            kinetic: kinetic_energy(&input.rho, mass),
+            kinetic: context_kinetic(&input.rho, mass),
             initial_hamiltonian: None,
         });
         let mut grad = vec![0.0; input.theta.len()];
@@ -2307,7 +2353,8 @@ where
     };
     validate_state_and_mass(&state, mass)?;
     let initial_log_joint = joint_log_density(&state, mass);
-    let mut span_accum = Span::from_leaf_state(state, initial_log_joint, mass.dimension())?;
+    let mut span_accum =
+        Span::from_leaf_state(Rc::new(state), initial_log_joint, mass.dimension())?;
     if initial_evaluations != 0 {
         trace(TransitionTraceEvent::basic(
             "initial_evaluation",
@@ -2629,14 +2676,11 @@ fn take_selected(span: Span) -> SelectedState {
     drop(backward);
     drop(forward);
     match Rc::try_unwrap(selected) {
-        Ok(pooled) => {
-            let state = pooled.into_inner();
-            SelectedState {
-                theta: state.theta,
-                grad: state.grad,
-                log_prob: state.log_prob,
-            }
-        }
+        Ok(state) => SelectedState {
+            theta: state.theta,
+            grad: state.grad,
+            log_prob: state.log_prob,
+        },
         Err(shared) => SelectedState {
             theta: shared.theta.clone(),
             grad: shared.grad.clone(),
@@ -2690,13 +2734,22 @@ where
 {
     validate(start, mass, tuning)?;
     let mut workspace = Workspace::new(mass.dimension());
-    macro_leaf_in_workspace(start, mass, tuning, direction, eval, work, &mut workspace)
+    macro_leaf_in_workspace(
+        start,
+        mass,
+        tuning,
+        direction,
+        eval,
+        work,
+        &mut workspace,
+        State::clone,
+    )
 }
 
 /// One macro leaf from a validated start under validated metric and tuning,
 /// integrating in the transition's scratch states. Only the accepted endpoint
 /// is copied out.
-fn macro_leaf_in_workspace<E, M: MassOperator + ?Sized>(
+fn macro_leaf_in_workspace<E, M: MassOperator + ?Sized, S>(
     start: &State,
     mass: &M,
     tuning: FixedTuning,
@@ -2704,7 +2757,8 @@ fn macro_leaf_in_workspace<E, M: MassOperator + ?Sized>(
     eval: &mut E,
     work: &mut TransitionWorkTelemetry,
     workspace: &mut Workspace,
-) -> Result<MacroLeafResult, ValidationError>
+    materialize: impl FnOnce(&State) -> S,
+) -> Result<MacroLeafOutcome<S>, ValidationError>
 where
     E: FusedEval,
 {
@@ -2774,7 +2828,7 @@ where
         if !valid {
             observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
             increment(&mut work.rejections.invalid_forward_evaluation)?;
-            return Ok(MacroLeafResult {
+            return Ok(MacroLeafOutcome {
                 end_state: None,
                 micro_steps,
                 evaluations: forward_evaluations,
@@ -2846,7 +2900,7 @@ where
                         reverse_initial_h,
                     );
                     increment(&mut work.rejections.invalid_reverse_evaluation)?;
-                    return Ok(MacroLeafResult {
+                    return Ok(MacroLeafOutcome {
                         end_state: None,
                         micro_steps,
                         evaluations: checked_add_evaluations(
@@ -2870,7 +2924,7 @@ where
                 if integration.endpoint_error <= tuning.max_error {
                     increment(&mut work.reverse_coarsening_accepted)?;
                     increment(&mut work.rejections.reverse_coarser_accepted)?;
-                    return Ok(MacroLeafResult {
+                    return Ok(MacroLeafOutcome {
                         end_state: None,
                         micro_steps,
                         evaluations: checked_add_evaluations(
@@ -2899,8 +2953,8 @@ where
             observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
             let accepted_trajectory_adaptation_value =
                 (initial_h + forward_log_joint).min(0.0).exp();
-            return Ok(MacroLeafResult {
-                end_state: Some(pooled_copy(candidate)),
+            return Ok(MacroLeafOutcome {
+                end_state: Some(materialize(candidate)),
                 micro_steps,
                 evaluations: checked_add_evaluations(forward_evaluations, reverse_evaluations)?,
                 forward_evaluations,
@@ -2923,7 +2977,7 @@ where
     if let Some(integration) = last_integration {
         observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
     }
-    Ok(MacroLeafResult {
+    Ok(MacroLeafOutcome {
         end_state: None,
         micro_steps: last_steps,
         evaluations: forward_evaluations,
@@ -3103,7 +3157,7 @@ where
             direction: Some(direction),
             refinement_level: Some(refinement_level),
             evaluation_in_attempt: evaluation,
-            kinetic: kinetic_energy(&state.rho, mass),
+            kinetic: context_kinetic(&state.rho, mass),
             initial_hamiltonian: Some(initial_hamiltonian),
         });
         let (log_prob, gradient_shaped) = eval.evaluate(&state.theta, &mut state.grad);
@@ -3206,6 +3260,49 @@ mod tests {
 
     fn same_selected(left: &State, right: &State) -> bool {
         left.theta == right.theta && left.grad == right.grad && left.log_prob == right.log_prob
+    }
+
+    #[test]
+    fn state_ring_hands_out_shared_copies_for_any_dimension() {
+        let one = state(0.25, -0.5);
+        let first = pooled_state(&one);
+        assert!(same_selected(&first, &one));
+        assert_eq!(first.rho, one.rho);
+        // The ring keeps its own reference so the entry can be reused later.
+        assert_eq!(Rc::strong_count(&first), 2);
+        drop(first);
+        let again = pooled_state(&one);
+        assert!(same_selected(&again, &one));
+        assert_eq!(Rc::strong_count(&again), 2);
+        let two = State {
+            theta: vec![1.0, 2.0],
+            rho: vec![0.5, -0.5],
+            log_prob: -2.5,
+            grad: vec![-1.0, -2.0],
+        };
+        let other = pooled_state(&two);
+        assert!(same_selected(&other, &two));
+        assert_eq!(other.rho, two.rho);
+        assert_eq!(Rc::strong_count(&other), 2);
+        // Live entries are never handed out twice.
+        assert!(!Rc::ptr_eq(&again, &other));
+    }
+
+    #[test]
+    fn context_kinetic_scope_restores_the_previous_setting() {
+        assert!(CONTEXT_KINETIC_REQUIRED.get());
+        {
+            let _unobserved = ContextKineticScope::new(false);
+            assert!(!CONTEXT_KINETIC_REQUIRED.get());
+            assert!(context_kinetic(&[1.0], &[1.0]).is_nan());
+            {
+                let _observed = ContextKineticScope::new(true);
+                assert_eq!(context_kinetic(&[2.0], &[1.0]), 2.0);
+            }
+            assert!(!CONTEXT_KINETIC_REQUIRED.get());
+        }
+        assert!(CONTEXT_KINETIC_REQUIRED.get());
+        assert_eq!(context_kinetic(&[2.0], &[1.0]), 2.0);
     }
 
     struct CoupledMass {
