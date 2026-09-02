@@ -12,8 +12,9 @@ NUTS shows there.
 
 The numerical kernel is derived from, and tested leaf-for-leaf against, the
 Flatiron reference implementation
-[`walnutpie`](https://github.com/flatironinstitute/walnutpie) (MIT). The public
-API is the single module `owalnuts::walnutpie`; the kernel itself is private.
+[`walnutpie`](https://github.com/flatironinstitute/walnutpie) (MIT). The
+recommended API is `owalnuts::sampler` (a builder over the complete facade in
+`owalnuts::walnutpie`); the kernel itself is private.
 
 **Status: release candidate (`0.1.0-beta.2`).** The kernel is at revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`. What is and is not
@@ -31,27 +32,42 @@ Implement `Target` (log density and gradient in one call, unconstrained `f64`
 coordinates), then sample:
 
 ```rust,ignore
-use std::num::NonZeroUsize;
-use owalnuts::walnutpie::{DiagonalMass, KernelTuning, RunConfig, WarmupConfig, sample_chains};
+use owalnuts::sampler::{Metric, Sampler, Target, TargetError};
 
-let nz = |n| NonZeroUsize::new(n).unwrap();
-// h = 0.5, depth 8, 1 minimum micro-step, up to 4 refinement levels, delta = 1.0
-let tuning = KernelTuning::new(0.5, nz(8), nz(1), nz(4), 1.0)?;
-let config = RunConfig::new(500, nz(2_000), 0x5eed)          // discarded, retained, seed
-    .with_tuning(tuning)
-    .with_warmup(WarmupConfig::new(0.8)?);                     // dual-averaged step + diagonal mass
-let output = sample_chains(&target, &starts, &DiagonalMass::identity(nz(dim)), &config, nz(4))?;
-for chain in output.chains() {
-    let draws = chain.samples();          // flat [draw][parameter]
-    let work  = chain.telemetry().total(); // exact target-call accounting
+struct Gaussian;
+impl Target for Gaussian {
+    fn dimension(&self) -> usize { 2 }
+    fn log_density_gradient(&self, q: &[f64], grad: &mut [f64]) -> Result<f64, TargetError> {
+        for (g, x) in grad.iter_mut().zip(q) { *g = -x; }
+        Ok(-0.5 * q.iter().map(|x| x * x).sum::<f64>())
+    }
 }
+
+let posterior = Sampler::new()
+    .warmup(1_000)                 // discarded, adapts step size and metric
+    .draws(2_000)                  // retained per chain
+    .seed(0x5eed)
+    .metric(Metric::diagonal())    // adaptive diagonal mass (the default)
+    .run(&Gaussian, &[vec![0.1, -0.2], vec![-0.3, 0.4]])?;   // one start per chain
+for draw in posterior.draws() {    // &[f64], chain by chain
+    let _ = draw[0];
+}
+let work = posterior.total_target_calls();       // exact target-call accounting
+let chain = &posterior.chains()[0];              // draws, diagnostics, telemetry, metadata
 ```
+
+`Sampler` also takes `.chains(n)` (replicates a single start), `.threads(n)`
+(output is independent of the thread count), `.adaptation(..)`, `.tuning(..)`
+(step size, depth, refinement levels, `delta`), and `.limits(..)`
+(target-evaluation budget, deadline, cancellation). Every path is a thin
+wrapper over one `walnutpie` entry point and produces bit-identical draws to
+calling it directly; `walnutpie` remains public for the full contract.
 
 Three worked examples:
 
 | Example | Shows |
 |---|---|
-| `cargo run --release --example gaussian` | the full facade on a 2-D Gaussian: single/multi-chain, telemetry, determinism |
+| `cargo run --release --example gaussian` | the `Sampler` builder on a 2-D Gaussian: single/multi-chain, telemetry, determinism |
 | `cargo run --release --example funnel_paper_adaptation` | Neal's funnel with the paper's Appendix C warmup; prints the tail mass `P(omega<-5)` against the exact 0.0478 |
 | `cargo run --release --example state_space_path_metric` | a T=200 state-space path with the posterior-precision tridiagonal metric versus identity, against the exact posterior mean |
 
@@ -61,18 +77,19 @@ For funnel-like or stiff targets, opt into the JMLR Appendix C rules instead of
 acceptance-driven dual averaging:
 
 ```rust,ignore
-use owalnuts::walnutpie::{PaperAdaptationConfig, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, sample_chains_with_target_budget};
+use owalnuts::sampler::{Adaptation, Limits, Metric, PaperAdaptationConfig, Sampler, Tuning};
 
-let tuning = KernelTuning::new(0.1, nz(10), nz(1), nz(8), 1.0)?;   // conservative start
-let warmup = WarmupConfig::default()
-    .with_mass_adaptation(false)
-    .with_paper_adaptation(PaperAdaptationConfig::default());     // Delta = 2, p_a = 0.95, Gamma = 0.8
-let config = RunConfig::new(2_000, nz(20_000), seed).with_tuning(tuning).with_warmup(warmup);
-// Deep refinement × deep trees exceeds the conservative admission ceiling;
-// admit the run with its exact worst-case evaluation count instead.
-let worst = config.worst_case_target_evaluations(nz(4))?;
-let output = sample_chains_with_target_budget(&target, &starts, &mass, &config, nz(4),
-    TargetEvaluationAdmissionLimit::new(nz(worst)), &TargetEvaluationBudget::new(nz(worst)))?;
+let posterior = Sampler::new()
+    .warmup(2_000)
+    .draws(20_000)
+    .seed(seed)
+    .metric(Metric::Identity)                                    // only delta and h adapt
+    .adaptation(Adaptation::Paper(PaperAdaptationConfig::default())) // Delta = 2, p_a = 0.95, Gamma = 0.8
+    .tuning(Tuning::new().step_size(0.1).max_depth(10).max_refinement_levels(8).max_error(1.0))
+    // Deep refinement x deep trees exceeds the conservative admission ceiling;
+    // admit the run with its exact worst-case evaluation count instead.
+    .limits(Limits::new().admit_worst_case())
+    .run(&target, &starts)?;
 ```
 
 `delta` (`max_error`) follows the K-quantile rule
@@ -89,19 +106,20 @@ target call) more efficient than the paper's own fixed funnel tuning
 
 `StructuredBlockMass` (`BidiagonalCholesky`, `ScaledAr1`; linear time),
 `DenseMass`, `BlockDiagonalMass`, and `LowRankArrowheadMass` are fixed momentum
-covariances `M` (kinetic energy `p'M⁻¹p/2`). For a Gaussian state-space path,
+covariances `M` (kinetic energy `p'M⁻¹p/2`); `Metric::Structured` and
+`Metric::Dense` run them from the `Sampler`. For a Gaussian state-space path,
 supplying the tridiagonal posterior precision `Q_rw + diag(1/r_t)` as `M`
 (its Cholesky factor is bidiagonal) whitens the whole path: trajectories
 U-turn at depth 3–4 at any `T`, whereas a prior-based metric collapses the
 step and caps the tree at `T = 1000` (`WP4-ESSGT-V1`). The versioned
-`sample_direct_original_q` family runs the same metrics directly in target
-coordinates (`DIRECT_ORIGINAL_Q_REVISION`).
+`sample_direct_original_q` family (research feature) runs the same metrics
+directly in target coordinates (`DIRECT_ORIGINAL_Q_REVISION`).
 
 When the right block depends on parameters that are themselves being sampled
 (for a state-space path, the innovation scale and observation noise),
-`sample_chains_structured_refresh` rebuilds the `StructuredBlockMass` from a
-caller-supplied `StructuredMetricRefresh` at every completed slow
-warmup-window boundary and freezes it before retention. Installations never
+`Metric::StructuredRefresh` (`sample_chains_structured_refresh`) rebuilds the
+`StructuredBlockMass` from a caller-supplied `StructuredMetricRefresh` at every
+completed slow warmup-window boundary and freezes it before retention. Installations never
 change the position or its cached evaluation, failed candidates keep the
 previous metric, and every boundary emits a typed `StructuredRefreshUpdate`
 (`STRUCTURED_REFRESH_REVISION`).
@@ -158,23 +176,29 @@ pinned orbit fixtures.
 
 ## API stability
 
-Only `owalnuts::walnutpie` is public. Items documented as *research-only*
-(`OuterOrbitSelection`, `ResearchTargetEvaluationLimit`,
-`DualAveragingAcceptance::AcceptedTrajectory`, the projected/pooled arrowhead
-facades) may change or disappear between minor versions. Everything else
-follows semver from `0.1.0`.
+`owalnuts::sampler` and `owalnuts::walnutpie` are public and follow semver
+from `0.1.0`. Research-only items (`OuterOrbitSelection`,
+`ResearchTargetEvaluationLimit`, `ResearchRestartReferenceMultiplier`,
+`DualAveragingAcceptance::AcceptedTrajectory`, the `direct_original_q`
+family, and the projected/pooled arrowhead facades) are exported from
+`walnutpie` only with the `research` Cargo feature
+(`owalnuts = { version = "...", features = ["research"] }`) and may change or
+disappear between minor versions. The `STUDIES/` crates and the Python
+integration enable it.
 
 ## Research-only evaluation ceiling
 
 Production runs retain a conservative `113_000_000` target-evaluation
-preflight ceiling. A bounded experiment that needs a larger conservative
-preflight estimate must explicitly construct `ResearchTargetEvaluationLimit`
-and attach it with `RunConfig::with_research_target_evaluation_limit`; this
-raises only that ceiling, up to `RESEARCH_MAX_TARGET_EVALUATIONS`, and records
+preflight ceiling. With the `research` feature, a bounded experiment that
+needs a larger conservative preflight estimate may construct
+`ResearchTargetEvaluationLimit` and attach it with
+`RunConfig::with_research_target_evaluation_limit`; this raises only that
+ceiling, up to `RESEARCH_MAX_TARGET_EVALUATIONS`, and records
 `TargetEvaluationLimitProvenance::ExplicitResearchOptIn` in `RunMetadata`. It
 does not raise dimension, chain, transition, or memory caps and does not relax
-cancellation checks. Alternatively, `sample_chains_with_target_budget` admits a
-run against an explicit `TargetEvaluationAdmissionLimit` and a runtime
+cancellation checks. Without the feature, `Limits::max_target_evaluations` /
+`Limits::admit_worst_case` (`sample_chains_with_target_budget`) admit a run
+against an explicit `TargetEvaluationAdmissionLimit` and a runtime
 `TargetEvaluationBudget`.
 
 ## Research record

@@ -1,4 +1,4 @@
-//! Neal's 10-D funnel with the JMLR Appendix C warmup (`PaperAdaptationConfig`).
+//! Neal's 10-D funnel with the JMLR Appendix C warmup (`Adaptation::Paper`).
 //!
 //! The funnel is the paper's headline target: `omega ~ Normal(0, 3)` and
 //! `x_i | omega ~ Normal(0, exp(omega))` for nine `x_i`. Its `omega` marginal is
@@ -10,16 +10,13 @@
 //! `WP9-PAPER-H-RULE-STABILISATION-V2`).
 //!
 //! Deep refinement with deep trees exceeds the conservative admission ceiling,
-//! so the run is admitted through `sample_chains_with_target_budget` with the
-//! exact worst-case target-evaluation count as its limit.
+//! so the run is admitted with its exact worst-case target-evaluation count
+//! (`Limits::admit_worst_case`).
 
 use std::error::Error;
-use std::num::NonZeroUsize;
 
-use owalnuts::walnutpie::{
-    DiagonalMass, KernelTuning, PaperAdaptationConfig, RunConfig, Target, TargetError,
-    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
-    sample_chains_with_target_budget,
+use owalnuts::sampler::{
+    Adaptation, Limits, Metric, PaperAdaptationConfig, Sampler, Target, TargetError, Tuning,
 };
 
 const DIMENSION: usize = 10;
@@ -56,19 +53,23 @@ impl Target for Funnel {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let nz = |value: usize| NonZeroUsize::new(value).expect("nonzero");
-
     // Conservative fixed kernel that the paper rules will tune: delta = 1.0,
-    // h = 0.1, up to eight refinement levels, trees up to depth ten.
-    let tuning = KernelTuning::new(0.1, nz(10), nz(1), nz(8), 1.0)?;
-    let warmup = WarmupConfig::default()
-        .with_mass_adaptation(false)
-        .with_paper_adaptation(PaperAdaptationConfig::default());
-    let discarded = 2_000;
-    let retained = 20_000;
-    let config = RunConfig::new(discarded, nz(retained), 0x0f0f_2026)
-        .with_tuning(tuning)
-        .with_warmup(warmup);
+    // h = 0.1, up to eight refinement levels, trees up to depth ten. The
+    // identity metric is not adapted; only delta and h are.
+    let sampler = Sampler::new()
+        .warmup(2_000)
+        .draws(20_000)
+        .seed(0x0f0f_2026)
+        .metric(Metric::Identity)
+        .adaptation(Adaptation::Paper(PaperAdaptationConfig::default()))
+        .tuning(
+            Tuning::new()
+                .step_size(0.1)
+                .max_depth(10)
+                .max_refinement_levels(8)
+                .max_error(1.0),
+        )
+        .limits(Limits::new().admit_worst_case());
 
     // Four dispersed starts along the funnel axis.
     let starts: Vec<Vec<f64>> = [-3.0, -1.0, 1.0, 3.0]
@@ -79,20 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             q
         })
         .collect();
-    let chains = nz(starts.len());
-    let mass = DiagonalMass::identity(nz(DIMENSION));
-
-    let worst_case = config.worst_case_target_evaluations(chains)?;
-    let budget = TargetEvaluationBudget::new(nz(worst_case));
-    let output = sample_chains_with_target_budget(
-        &Funnel,
-        &starts,
-        &mass,
-        &config,
-        chains,
-        TargetEvaluationAdmissionLimit::new(nz(worst_case)),
-        &budget,
-    )?;
+    let posterior = sampler.run(&Funnel, &starts)?;
 
     let mut below = 0usize;
     let mut total = 0usize;
@@ -100,7 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // standard error for the tail-mass estimate.
     const BATCH: usize = 500;
     let mut batch_means: Vec<f64> = Vec::new();
-    for (index, chain) in output.chains().iter().enumerate() {
+    for (index, chain) in posterior.chains().iter().enumerate() {
         let tuning = chain.metadata().tuning();
         let updates = chain.telemetry().paper_adaptation_updates();
         let work = chain.telemetry().total();
@@ -138,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "P(omega < -5): estimate {estimate:.4} vs exact {EXACT_TAIL_MASS:.4} \
          (batch-means s.e. {standard_error:.4}, z = {:+.2}, {total} draws; revision {})",
         (estimate - EXACT_TAIL_MASS) / standard_error,
-        output.chains()[0].metadata().algorithm_revision(),
+        posterior.algorithm_revision(),
     );
     Ok(())
 }
