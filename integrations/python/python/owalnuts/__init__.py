@@ -54,10 +54,13 @@ class PaperAdaptation:
 @dataclass(frozen=True)
 class Tuning:
     """Kernel tuning. ``step_size`` is the macro step ``h``; ``max_error`` is
-    the local energy-error threshold ``delta``."""
+    the local energy-error threshold ``delta``. The defaults match
+    ``owalnuts::sampler::Tuning::default()`` (``h = 0.5``, depth 10, four
+    refinement levels, ``delta = 1``); the 0.1 package used ``h = 0.1`` and
+    depth 8."""
 
-    step_size: float = 0.1
-    max_depth: int = 8
+    step_size: float = 0.5
+    max_depth: int = 10
     min_micro_steps: int = 1
     max_refinement_levels: int = 4
     max_error: float = 1.0
@@ -110,6 +113,38 @@ class SampleResult:
     def to_inferencedata(self, var_names: Sequence[str] | None = None, warmup: int | None = None):
         return to_inferencedata(self, var_names=var_names, warmup=warmup)
 
+    def summary(self, var_names: Sequence[str] | None = None) -> list[dict[str, Any]]:
+        """Stan/ArviZ-style per-parameter rows from ``owalnuts::diagnostics``.
+
+        Each row is a dict with ``name``, ``mean``, ``sd``, ``mcse_mean``,
+        ``q5``, ``q50``, ``q95``, ``ess_bulk``, ``ess_tail`` and ``rhat``
+        (rank-normalised folded split R-hat and bulk/tail ESS after Vehtari
+        et al. 2021, matching ``az.rhat``/``az.ess``/``az.mcse``). Pure
+        Python objects; no pandas.
+        """
+        return summary(self.samples, var_names)
+
+    def health(self) -> dict[str, Any]:
+        """Pooled sampler-health counts over the retained transitions:
+        ``transitions``, ``divergences``, ``maximum_depth_stops``,
+        ``refinement_exhaustion_stops``, ``invalid_evaluation_stops``,
+        ``zero_density_evaluations``, ``target_calls``, ``mean_tree_depth``
+        and ``step_size`` (mean over chains)."""
+        n = int(self.config.get("warmup", 0))
+        work = [c["work_retained"] for c in self.chains]
+        depth = np.concatenate([np.asarray(c["depth"])[n:] for c in self.chains])
+        return {
+            "transitions": int(sum(w["transitions"] for w in work)),
+            "divergences": int(sum(w["divergences"] for w in work)),
+            "maximum_depth_stops": int(sum(w["maximum_depth_stops"] for w in work)),
+            "refinement_exhaustion_stops": int(sum(w["refinement_exhaustion_stops"] for w in work)),
+            "invalid_evaluation_stops": int(sum(w["invalid_evaluation_stops"] for w in work)),
+            "zero_density_evaluations": int(sum(w["zero_density_evaluations"] for w in work)),
+            "target_calls": int(sum(w["target_calls_total"] for w in work)),
+            "mean_tree_depth": float(depth.mean()) if depth.size else float("nan"),
+            "step_size": float(self.final_step_size.mean()),
+        }
+
 
 # ── Core entry points ────────────────────────────────────────────────────
 
@@ -125,6 +160,7 @@ def _config_dict(
     mass: Any,
     max_target_evaluations: int | None,
     max_depth_stop_limit: int | None,
+    admit_worst_case: bool = True,
 ) -> dict[str, Any]:
     cfg: dict[str, Any] = {
         "warmup": int(warmup),
@@ -140,6 +176,7 @@ def _config_dict(
         "mass": _normalize_mass(mass),
         "max_target_evaluations": max_target_evaluations,
         "max_depth_stop_limit": max_depth_stop_limit,
+        "admit_worst_case": bool(admit_worst_case),
     }
     if adaptation is None:
         cfg["adapt"] = False
@@ -170,6 +207,8 @@ def _normalize_mass(mass: Any) -> Any:
 
 
 def _starts(init: Any, dim: int, chains: int, seed: int, jitter: float) -> np.ndarray:
+    if isinstance(init, str):
+        raise ValueError(f"init={init!r}: only init='uniform' is a named start rule")
     if init is None:
         rng = np.random.default_rng(seed)
         starts = rng.uniform(-jitter, jitter, size=(chains, dim))
@@ -262,12 +301,24 @@ def sample(
     nonfinite: str = "zero_density",
     max_target_evaluations: int | None = None,
     max_depth_stop_limit: int | None = None,
+    admit_worst_case: bool = True,
     init_jitter: float = 2.0,
+    init_radius: float = 2.0,
+    init_max_attempts: int = 100,
     coerce: bool = True,
     refresh: Callable[..., Any] | None = None,
     refresh_restart: str = "continue",
 ) -> SampleResult:
     """Sample ``logp_and_grad`` with oWALNUTS.
+
+    ``init`` is ``None`` (independent uniform(-``init_jitter``, ``init_jitter``)
+    starts drawn in numpy without evaluating the target), a ``(dim,)`` point
+    (jittered per chain), a ``(chains, dim)`` array, or ``"uniform"``: Stan's
+    rule as implemented by ``owalnuts::sampler::Init::uniform`` — uniform
+    (-``init_radius``, ``init_radius``) starts redrawn up to
+    ``init_max_attempts`` times per chain until the log density and gradient
+    are finite, deterministic given ``seed`` and identical to the Rust
+    sampler's starts for the same seed.
 
     ``mass`` is the momentum covariance: ``None`` (identity), a 1-D array
     (diagonal), or a list of structured blocks such as
@@ -281,12 +332,20 @@ def sample(
     the previous metric (typed ``RefreshFailed`` fallback in the facade).
     ``refresh_restart`` is ``"continue"`` (default) or ``"restart"`` for the
     dual-averaging state at installs.
+
+    ``max_target_evaluations`` is an exact ceiling on started target
+    evaluations across all chains (the run is also admitted against it).
+    Without one, ``admit_worst_case=True`` (the default, mirroring the Rust
+    ``Limits::admit_worst_case``) admits a run whose exact worst-case
+    evaluation count exceeds the conservative default preflight ceiling —
+    which the sampler defaults (depth 10, four refinement levels) do at four
+    chains of a few thousand transitions; ``admit_worst_case=False`` keeps
+    the conservative ceiling and fails such runs at admission.
     """
-    starts = _starts(init, dim, chains, seed, init_jitter)
     cfg = _config_dict(
         warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning,
         adaptation=adaptation, mass=mass, max_target_evaluations=max_target_evaluations,
-        max_depth_stop_limit=max_depth_stop_limit,
+        max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,
     )
     if isinstance(logp_and_grad, CFuncTarget):
         if refresh is not None:
@@ -297,12 +356,24 @@ def sample(
         cft = logp_and_grad
         if cft.dim != dim:
             raise ValueError(f"CFuncTarget dim {cft.dim} != sample dim {dim}")
+        if isinstance(init, str) and init == "uniform":
+            starts = _owalnuts.uniform_starts_cfunc(
+                cft.address, cft.dim, chains, seed, init_radius, init_max_attempts, cft.user_data,
+            )
+        else:
+            starts = _starts(init, dim, chains, seed, init_jitter)
         raw = _owalnuts.sample_cfunc(
             cft.address, cft.dim, starts, cfg, cft.user_data,
             list(cft.parameter_names) if cft.parameter_names else None,
         )
         return _result(raw, cfg)
     target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
+    if isinstance(init, str) and init == "uniform":
+        starts = _owalnuts.uniform_starts_callable(
+            target, dim, chains, seed, init_radius, init_max_attempts, nonfinite,
+        )
+    else:
+        starts = _starts(init, dim, chains, seed, init_jitter)
     raw = _owalnuts.sample_callable(target, starts, cfg, nonfinite, refresh, refresh_restart)
     return _result(raw, cfg)
 
@@ -319,13 +390,14 @@ def preflight(
     adaptation: Adaptation | None = Adaptation(),
     mass: Any = None,
     max_target_evaluations: int | None = None,
+    admit_worst_case: bool = True,
 ) -> dict[str, int]:
     """Zero-callback admission check: worst-case target evaluations vs ceiling."""
     starts = np.zeros((chains, dim))
     cfg = _config_dict(
         warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning,
         adaptation=adaptation, mass=mass, max_target_evaluations=max_target_evaluations,
-        max_depth_stop_limit=None,
+        max_depth_stop_limit=None, admit_worst_case=admit_worst_case,
     )
     return dict(_owalnuts.preflight_callable(starts, cfg))
 
@@ -342,6 +414,32 @@ def _result(raw: dict[str, Any], cfg: dict[str, Any]) -> SampleResult:
         config=cfg,
         refresh_updates=raw.get("refresh_updates"),
     )
+
+
+# ── Diagnostics ──────────────────────────────────────────────────────────
+
+
+def summary(samples: np.ndarray, var_names: Sequence[str] | None = None) -> list[dict[str, Any]]:
+    """Per-parameter summary rows for a ``(chains, draws, dim)`` array of
+    retained draws, computed by ``owalnuts::diagnostics`` (see
+    ``SampleResult.summary``). Default names are ``theta.1 .. theta.d``."""
+    samples = np.ascontiguousarray(samples, dtype=np.float64)
+    if samples.ndim != 3:
+        raise ValueError(f"samples must be (chains, draws, dim); got shape {samples.shape}")
+    names = [str(n) for n in var_names] if var_names is not None else None
+    return list(_owalnuts.summary(samples, names))
+
+
+def uniform_starts(logp_and_grad: LogpGrad, dim: int, *, chains: int = 4, seed: int = 0,
+                   radius: float = 2.0, max_attempts: int = 100, nonfinite: str = "zero_density",
+                   coerce: bool = True) -> np.ndarray:
+    """Draw ``(chains, dim)`` starts by the ``init="uniform"`` rule without sampling."""
+    if isinstance(logp_and_grad, CFuncTarget):
+        return np.asarray(_owalnuts.uniform_starts_cfunc(
+            logp_and_grad.address, logp_and_grad.dim, chains, seed, radius, max_attempts,
+            logp_and_grad.user_data))
+    target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
+    return np.asarray(_owalnuts.uniform_starts_callable(target, dim, chains, seed, radius, max_attempts, nonfinite))
 
 
 # ── Structured metrics ───────────────────────────────────────────────────
@@ -657,6 +755,7 @@ def eight_schools_logp_grad(y: np.ndarray, se: np.ndarray, q: np.ndarray) -> tup
 __all__ = [
     "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
+    "summary", "uniform_starts", "CFuncTarget", "from_cfunc", "numba_raw_signature",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",
     "sample_native_eight_schools", "sample_native_local_level", "eight_schools_logp_grad",

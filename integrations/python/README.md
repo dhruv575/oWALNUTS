@@ -26,8 +26,37 @@ def logp_and_grad(q):
     return -0.5 * float(q @ q), -q
 
 result = owalnuts.sample(logp_and_grad, dim=10, warmup=1000, draws=1000, seed=1)
+rows = result.summary()             # list of dicts: mean, sd, mcse_mean, q5/q50/q95,
+                                    # ess_bulk, ess_tail, rhat (owalnuts::diagnostics)
+result.health()                     # pooled divergences, depth-cap stops, target calls, ...
 idata = result.to_inferencedata()   # arviz InferenceData with sample_stats
 ```
+
+`summary()` is the Rust `owalnuts::diagnostics` estimator set (rank-normalised
+folded split R-hat, bulk/tail ESS, MCSE; matches `az.rhat`/`az.ess`/`az.mcse`
+to 1e-6 relative) with no pandas dependency; `owalnuts.summary(samples,
+names)` does the same for any `(chains, draws, dim)` array.
+
+Starts: `init=None` draws independent uniform(-2, 2) starts in numpy;
+`init=q0` jitters one point per chain; `init="uniform"` is Stan's rule as
+implemented by `owalnuts::sampler::Init::uniform` — uniform(-`init_radius`,
+`init_radius`) redrawn up to `init_max_attempts` times per chain until the
+log density and gradient are finite, deterministic given `seed`
+(`owalnuts.uniform_starts(target, dim, chains=4, seed=1)` returns the
+starts without sampling).
+
+Defaults follow `owalnuts::sampler::Tuning::default()`: macro step
+`h = 0.5`, maximum tree depth 10 (Stan's default; the 0.1 package used 8,
+chosen by `STUDIES/adaptation_parity_v1`), four refinement levels,
+`delta = 1`; dual-averaging warmup at target acceptance 0.8 with a diagonal
+metric. Pass `tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the
+0.1 package's behaviour. At depth 10 the exact worst-case evaluation count
+of four chains x a few thousand transitions exceeds the facade's
+conservative 113M preflight ceiling, so `sample` admits such runs with
+their exact worst case by default (`admit_worst_case=True`, the Rust
+`Limits::admit_worst_case`); `max_target_evaluations=N` is an exact runtime
+ceiling instead, and `admit_worst_case=False` restores the conservative
+admission.
 
 Adapters produce that callable from autodiff frameworks:
 
@@ -50,7 +79,14 @@ Zero-density regions: return `-np.inf` (or raise `owalnuts.ZeroDensityError`)
 and the kernel refines the step like the reference implementation instead of
 rejecting the transition; `nonfinite="fatal"` makes any nonfinite output fail
 the run. Paper Appendix C adaptation is
-`Adaptation(paper=owalnuts.PaperAdaptation())`.
+`Adaptation(paper=owalnuts.PaperAdaptation())`; since 0.2.0 its defaults are
+the Rust `PaperAdaptationConfig::default()` v4
+(`walnutpie-paper-adaptation-kquantile-gamma-v4`: exhausted transitions count
+as unrefined and the step band is 1e6), which is robust on the posteriordb
+cells where v3 froze (`STUDIES/paper_adaptation_robust_v1`).
+
+The extension builds the crate with the `research` Cargo feature (needed
+for the raised evaluation ceiling behind `max_target_evaluations`).
 
 ## What Python costs (measured; see BENCH.md and bench/artifacts)
 
