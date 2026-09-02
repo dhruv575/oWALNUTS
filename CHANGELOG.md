@@ -22,6 +22,24 @@ architecture (see the `walnutpie` module documentation).
 
 ### Added
 
+- **Opt-in kernel rule variants and an initial-evaluation cache**
+  (`STUDIES/kernel_efficiency_v1`). `walnutpie::KernelOptions`
+  (`KernelTuning::with_options`, `sampler::Tuning::kernel_options`) selects
+  the no-U-turn predicate (`UTurnRule::{Endpoints, EndpointsWithCross,
+  MomentumSum}`; `MomentumSum` is Stan's generalised criterion on the sum of
+  the leaf momenta with the 2.21+ cross checks) and the treatment of a leaf
+  that fails `delta` at every refinement level
+  (`ExhaustionRule::{Stop, AcceptBelowDivergenceThreshold}`; the latter is
+  Stan's rule, subject to the usual reverse coarsening check so the leaf
+  stays reversible). `RunConfig::with_cached_initial_evaluation` /
+  `Sampler::cache_initial_evaluation` reuse the previous transition's
+  selected log density and gradient instead of re-evaluating the current
+  position at the start of every transition (one target call per transition;
+  draws bit-identical). Every default is unchanged: `KernelOptions::default()`
+  and the cache off reproduce the frozen fingerprints. See the study README
+  for the measured ESS per gradient against a clean-room reference NUTS and
+  the funnel check.
+
 - **Robustness after the posteriordb benchmark (WP22 follow-up).**
   (1) `owalnuts-bridgestan` maps a `NaN`/`+inf` log density and a finite log
   density with a nonfinite gradient to the recoverable zero-density path

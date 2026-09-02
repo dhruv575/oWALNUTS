@@ -390,6 +390,9 @@ pub struct Span {
     pub selected: Rc<State>,
     /// Log of the sum of the leaves' unnormalized joint densities.
     pub log_weight: f64,
+    /// Sum of the leaf momenta, kept only under [`UTurnRule::MomentumSum`];
+    /// empty otherwise.
+    pub rho_sum: Vec<f64>,
 }
 
 impl Span {
@@ -400,7 +403,7 @@ impl Span {
     ) -> Result<Self, ValidationError> {
         validate_state_and_mass(&state, mass)?;
         let log_joint = joint_log_density(&state, mass);
-        Self::from_leaf_state(Rc::new(state), log_joint, mass.dimension())
+        Self::from_leaf_state(Rc::new(state), log_joint, mass.dimension(), true)
     }
 
     /// Build a one-state span from a leaf produced under an already validated
@@ -416,6 +419,7 @@ impl Span {
         state: Rc<State>,
         log_joint: f64,
         mass_dimension: usize,
+        momentum_sum: bool,
     ) -> Result<Self, ValidationError> {
         if state.theta.len() != mass_dimension {
             return Err(ValidationError(
@@ -430,21 +434,36 @@ impl Span {
                 "state joint log density must be finite".into(),
             ));
         }
+        let rho_sum = if momentum_sum {
+            state.rho.clone()
+        } else {
+            Vec::new()
+        };
         let endpoint = Endpoint { state, log_joint };
         Ok(Self {
             backward: endpoint.clone(),
             selected: Rc::clone(&endpoint.state),
             forward: endpoint,
             log_weight: log_joint,
+            rho_sum,
         })
     }
 
     fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
+        let mut rho_sum = earlier.rho_sum;
+        if !rho_sum.is_empty() && rho_sum.len() == later.rho_sum.len() {
+            for (sum, value) in rho_sum.iter_mut().zip(&later.rho_sum) {
+                *sum += value;
+            }
+        } else {
+            rho_sum.clear();
+        }
         Self {
             backward: earlier.backward,
             forward: later.forward,
             selected,
             log_weight,
+            rho_sum,
         }
     }
 }
@@ -501,6 +520,57 @@ pub enum Direction {
     Backward,
 }
 
+/// Which no-U-turn predicate ends a trajectory.
+///
+/// Every variant is applied at the same points (between the two halves of
+/// every recursively built subtree and across the whole orbit after every
+/// doubling); they differ only in the statistic.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UTurnRule {
+    /// The `v10` default: the metric-scaled position difference between the
+    /// two extreme states of the merged span, dotted with the momentum at
+    /// each extreme (`rho_end . M^-1 (q_end - q_start) < 0` or the same at
+    /// the start).
+    #[default]
+    Endpoints,
+    /// [`UTurnRule::Endpoints`] plus Stan's (2.21+) two cross checks, with
+    /// the same position-difference statistic: the earlier span's extreme
+    /// against the first state of the later span, and the last state of
+    /// the earlier span against the later span's extreme.
+    EndpointsWithCross,
+    /// Stan's generalised criterion: `rho` is the sum of the momenta of the
+    /// leaves of the span (one momentum per macro leaf), the test is
+    /// `(M^-1 p_extreme) . rho > 0` at both extremes, with the two cross
+    /// checks. Costs one `dimension`-length vector per span.
+    MomentumSum,
+}
+
+/// What happens to a macro leaf whose endpoint energy error exceeds
+/// `max_error` at every refinement level.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ExhaustionRule {
+    /// The `v10` default: the leaf is rejected (`Rejection::RefinementExhausted`)
+    /// and the orbit ends there.
+    #[default]
+    Stop,
+    /// Stan's rule: the finest attempt is accepted as long as its endpoint
+    /// error is at most `divergence_threshold`, subject to the same reverse
+    /// coarsening check as any accepted level (every coarser reverse level
+    /// must also fail `max_error`, which keeps the leaf reversible). Only an
+    /// error above the divergence threshold (or an invalid evaluation) ends
+    /// the orbit. With one refinement level this is NUTS with a per-leaf
+    /// divergence check.
+    AcceptBelowDivergenceThreshold,
+}
+
+/// Opt-in kernel rule variants. [`KernelOptions::default`] is the frozen
+/// `v10` behaviour.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KernelOptions {
+    pub u_turn: UTurnRule,
+    pub exhaustion: ExhaustionRule,
+}
+
 /// Immutable tuning for one macro-leaf decision.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FixedTuning {
@@ -515,6 +585,8 @@ pub struct FixedTuning {
     pub max_error: f64,
     /// Maximum absolute trajectory energy error before a transition is divergent.
     pub divergence_threshold: f64,
+    /// Opt-in rule variants; the default is the frozen `v10` kernel.
+    pub options: KernelOptions,
 }
 
 /// Why a deterministic leaf was rejected.
@@ -758,7 +830,12 @@ where
                 increment(&mut work.histograms.refinement_level_built[level])?;
             }
             Ok(BuildLeafResult::Built {
-                span: Span::from_leaf_state(state, end_log_joint, mass.dimension())?,
+                span: Span::from_leaf_state(
+                    state,
+                    end_log_joint,
+                    mass.dimension(),
+                    tuning.options.u_turn == UTurnRule::MomentumSum,
+                )?,
                 micro_steps: result.micro_steps,
                 evaluations: result.evaluations,
                 adaptation_value: result.adaptation_value,
@@ -1011,8 +1088,14 @@ where
         }
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
-    let (made_u_turn, forward_dot, backward_dot) =
-        spans_make_u_turn_observed(&first_span, &second_span, mass, direction, workspace);
+    let (made_u_turn, forward_dot, backward_dot) = spans_make_u_turn_observed(
+        &first_span,
+        &second_span,
+        mass,
+        direction,
+        tuning.options.u_turn,
+        workspace,
+    );
     let mut predicate = SpanTraceEvent::basic(
         "uturn_predicate",
         None,
@@ -1168,8 +1251,14 @@ where
         }
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
-    let (made_u_turn, _, _) =
-        spans_make_u_turn_observed(&first_span, &second_span, mass, direction, workspace);
+    let (made_u_turn, _, _) = spans_make_u_turn_observed(
+        &first_span,
+        &second_span,
+        mass,
+        direction,
+        tuning.options.u_turn,
+        workspace,
+    );
     if made_u_turn {
         return Ok(BuildSpanResult::Stopped {
             cause: SpanStop::UTurn,
@@ -1232,25 +1321,104 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
     second: &Span,
     mass: &M,
     direction: Direction,
+    rule: UTurnRule,
     workspace: &mut Workspace,
 ) -> (bool, f64, Option<f64>) {
     let (earlier, later) = match direction {
         Direction::Forward => (first, second),
         Direction::Backward => (second, first),
     };
+    match rule {
+        UTurnRule::Endpoints => endpoint_u_turn(
+            &earlier.backward.state,
+            &later.forward.state,
+            mass,
+            workspace,
+        ),
+        UTurnRule::EndpointsWithCross => {
+            let full = endpoint_u_turn(
+                &earlier.backward.state,
+                &later.forward.state,
+                mass,
+                workspace,
+            );
+            if full.0 {
+                return full;
+            }
+            if endpoint_u_turn(
+                &earlier.backward.state,
+                &later.backward.state,
+                mass,
+                workspace,
+            )
+            .0 || endpoint_u_turn(
+                &earlier.forward.state,
+                &later.forward.state,
+                mass,
+                workspace,
+            )
+            .0
+            {
+                return (true, full.1, full.2);
+            }
+            full
+        }
+        UTurnRule::MomentumSum => {
+            let full = momentum_sum_u_turn(
+                &earlier.backward.state,
+                &later.forward.state,
+                &earlier.rho_sum,
+                &later.rho_sum,
+                mass,
+                workspace,
+            );
+            if full.0 {
+                return full;
+            }
+            let cross_first = momentum_sum_u_turn(
+                &earlier.backward.state,
+                &later.backward.state,
+                &earlier.rho_sum,
+                &later.backward.state.rho,
+                mass,
+                workspace,
+            );
+            if cross_first.0 {
+                return (true, full.1, full.2);
+            }
+            let cross_second = momentum_sum_u_turn(
+                &earlier.forward.state,
+                &later.forward.state,
+                &earlier.forward.state.rho,
+                &later.rho_sum,
+                mass,
+                workspace,
+            );
+            if cross_second.0 {
+                return (true, full.1, full.2);
+            }
+            full
+        }
+    }
+}
+
+/// The `v10` predicate between two states in physical order: the later
+/// momentum and then the earlier momentum against `M^-1 (q_later - q_earlier)`.
+fn endpoint_u_turn<M: MassOperator + ?Sized>(
+    earlier: &State,
+    later: &State,
+    mass: &M,
+    workspace: &mut Workspace,
+) -> (bool, f64, Option<f64>) {
     let difference = workspace.difference.as_mut_slice();
-    for ((difference, later), earlier) in difference
-        .iter_mut()
-        .zip(&later.forward.state.theta)
-        .zip(&earlier.backward.state.theta)
+    for ((difference, later), earlier) in
+        difference.iter_mut().zip(&later.theta).zip(&earlier.theta)
     {
         *difference = later - earlier;
     }
     let scaled_difference = workspace.scaled_difference.as_mut_slice();
     mass.velocity_into(difference, scaled_difference);
     let later_dot = later
-        .forward
-        .state
         .rho
         .iter()
         .zip(&*scaled_difference)
@@ -1260,14 +1428,46 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
         return (true, later_dot, None);
     }
     let earlier_dot = earlier
-        .backward
-        .state
         .rho
         .iter()
         .zip(&*scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     (earlier_dot < 0.0, later_dot, Some(earlier_dot))
+}
+
+/// Stan's `compute_criterion` on `rho = rho_earlier + rho_later`: a U-turn
+/// when `(M^-1 p_later) . rho <= 0` or `(M^-1 p_earlier) . rho <= 0`.
+fn momentum_sum_u_turn<M: MassOperator + ?Sized>(
+    earlier: &State,
+    later: &State,
+    rho_earlier: &[f64],
+    rho_later: &[f64],
+    mass: &M,
+    workspace: &mut Workspace,
+) -> (bool, f64, Option<f64>) {
+    let rho = workspace.difference.as_mut_slice();
+    for ((rho, left), right) in rho.iter_mut().zip(rho_earlier).zip(rho_later) {
+        *rho = left + right;
+    }
+    let scaled = workspace.scaled_difference.as_mut_slice();
+    mass.velocity_into(rho, scaled);
+    let later_dot = later
+        .rho
+        .iter()
+        .zip(&*scaled)
+        .map(|(p, rho)| p * rho)
+        .sum::<f64>();
+    if later_dot <= 0.0 {
+        return (true, later_dot, None);
+    }
+    let earlier_dot = earlier
+        .rho
+        .iter()
+        .zip(&*scaled)
+        .map(|(p, rho)| p * rho)
+        .sum::<f64>();
+    (earlier_dot <= 0.0, later_dot, Some(earlier_dot))
 }
 
 #[inline]
@@ -2194,8 +2394,12 @@ where
     };
     validate_state_and_mass(&state, mass)?;
     let initial_log_joint = joint_log_density(&state, mass);
-    let mut span_accum =
-        Span::from_leaf_state(Rc::new(state), initial_log_joint, mass.dimension())?;
+    let mut span_accum = Span::from_leaf_state(
+        Rc::new(state),
+        initial_log_joint,
+        mass.dimension(),
+        tuning.leaf.options.u_turn == UTurnRule::MomentumSum,
+    )?;
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -2250,8 +2454,14 @@ where
             }
         };
 
-        let (outer_uturn, _, _) =
-            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction, &mut workspace);
+        let (outer_uturn, _, _) = spans_make_u_turn_observed(
+            &span_accum,
+            &next_span,
+            mass,
+            direction,
+            tuning.leaf.options.u_turn,
+            &mut workspace,
+        );
         let combined = {
             let mut counted_rng = CountedTransitionRng {
                 inner: rng,
@@ -2367,8 +2577,12 @@ where
     };
     validate_state_and_mass(&state, mass)?;
     let initial_log_joint = joint_log_density(&state, mass);
-    let mut span_accum =
-        Span::from_leaf_state(Rc::new(state), initial_log_joint, mass.dimension())?;
+    let mut span_accum = Span::from_leaf_state(
+        Rc::new(state),
+        initial_log_joint,
+        mass.dimension(),
+        tuning.leaf.options.u_turn == UTurnRule::MomentumSum,
+    )?;
     if initial_evaluations != 0 {
         trace(TransitionTraceEvent::basic(
             "initial_evaluation",
@@ -2499,8 +2713,14 @@ where
             }
         };
 
-        let (outer_uturn, forward_dot, backward_dot) =
-            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction, &mut workspace);
+        let (outer_uturn, forward_dot, backward_dot) = spans_make_u_turn_observed(
+            &span_accum,
+            &next_span,
+            mass,
+            direction,
+            tuning.leaf.options.u_turn,
+            &mut workspace,
+        );
         let mut event = TransitionTraceEvent::basic(
             "outer_uturn_predicate",
             Some(depth),
@@ -2871,7 +3091,16 @@ where
             last_adaptation_value = (-integration.endpoint_error).exp();
         }
 
-        if integration.endpoint_error <= tuning.max_error {
+        // Under `ExhaustionRule::AcceptBelowDivergenceThreshold` the finest
+        // level is also accepted when its endpoint error is merely below the
+        // divergence threshold; the reverse coarsening check below then
+        // guarantees that every coarser reverse level fails `max_error`, so
+        // the reverse leaf selects the same level by the same exhaustion.
+        let exhaustion_accept = tuning.options.exhaustion
+            == ExhaustionRule::AcceptBelowDivergenceThreshold
+            && level + 1 == tuning.max_refinement_levels
+            && integration.endpoint_error <= tuning.divergence_threshold;
+        if integration.endpoint_error <= tuning.max_error || exhaustion_accept {
             increment(&mut work.forward_refinement_accepted)?;
             work.accepted_forward_micro_steps =
                 checked_add_work(work.accepted_forward_micro_steps, micro_steps)?;
@@ -3461,6 +3690,7 @@ mod tests {
             &mass,
             TransitionTuning {
                 leaf: FixedTuning {
+                    options: KernelOptions::default(),
                     step_size: 0.03,
                     max_refinement_levels: 1,
                     min_micro_steps: 1,
@@ -3499,6 +3729,7 @@ mod tests {
 
     fn tuning(step_size: f64, levels: usize, min_steps: usize, error: f64) -> FixedTuning {
         FixedTuning {
+            options: KernelOptions::default(),
             step_size,
             max_refinement_levels: levels,
             min_micro_steps: min_steps,
@@ -4818,5 +5049,258 @@ mod tests {
             telemetry.work.metropolis.attempted,
             telemetry.result.diagnostics.outer_metropolis_draws
         );
+    }
+    fn tuning_with(options: KernelOptions, step: f64, levels: usize, error: f64) -> FixedTuning {
+        FixedTuning {
+            options,
+            ..tuning(step, levels, 1, error)
+        }
+    }
+
+    #[test]
+    fn default_kernel_options_are_the_frozen_rules() {
+        let options = KernelOptions::default();
+        assert_eq!(options.u_turn, UTurnRule::Endpoints);
+        assert_eq!(options.exhaustion, ExhaustionRule::Stop);
+        // Ablation (iv): a level-0 leaf with one minimum micro-step never runs
+        // a reverse coarsening (there is no coarser level), so "skip the
+        // reverse check for single-micro-step leaves" is already a no-op.
+        let result = macro_leaf(
+            &state(0.7, 0.4),
+            &[1.0],
+            tuning(0.1, 4, 1, 1.0),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap();
+        assert_eq!(result.selected_refinement_level, Some(0));
+        assert_eq!(result.reverse_evaluations, 0);
+        assert_eq!(result.evaluations, 1);
+    }
+
+    #[test]
+    fn exhaustion_accept_keeps_the_finest_leaf_below_the_divergence_threshold() {
+        let accept = KernelOptions {
+            exhaustion: ExhaustionRule::AcceptBelowDivergenceThreshold,
+            ..KernelOptions::default()
+        };
+        let stop = macro_leaf(
+            &state(1.0, 0.0),
+            &[1.0],
+            tuning(3.0, 3, 1, 1e-14),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap();
+        assert_eq!(stop.rejection, Some(Rejection::RefinementExhausted));
+        let kept = macro_leaf(
+            &state(1.0, 0.0),
+            &[1.0],
+            tuning_with(accept, 3.0, 3, 1e-14),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap();
+        assert!(kept.accepted());
+        assert_eq!(kept.selected_refinement_level, Some(2));
+        assert_eq!(kept.micro_steps, 4);
+        // Forward 1 + 2 + 4, reverse coarsenings at 2 and 1 micro-steps.
+        assert_eq!(kept.forward_evaluations, 7);
+        assert_eq!(kept.reverse_evaluations, 3);
+        assert_eq!(kept.evaluations, 10);
+
+        // Reversibility: from the accepted endpoint with flipped momentum the
+        // same rule selects the same level (by the same exhaustion) and lands
+        // back on the start.
+        let mut flipped = kept.end_state.clone().unwrap();
+        flipped.rho[0] = -flipped.rho[0];
+        let back = macro_leaf(
+            &flipped,
+            &[1.0],
+            tuning_with(accept, 3.0, 3, 1e-14),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap();
+        assert!(back.accepted());
+        assert_eq!(back.selected_refinement_level, Some(2));
+        let returned = back.end_state.unwrap();
+        assert!((returned.theta[0] - 1.0).abs() < 1e-12);
+        assert!(returned.rho[0].abs() < 1e-12);
+
+        // Above the divergence threshold the leaf is still rejected.
+        let mut divergent = tuning_with(accept, 3.0, 3, 1e-14);
+        divergent.divergence_threshold = 1e-12;
+        let rejected = macro_leaf(
+            &state(1.0, 0.0),
+            &[1.0],
+            divergent,
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap();
+        assert_eq!(rejected.rejection, Some(Rejection::RefinementExhausted));
+    }
+
+    #[test]
+    fn exhaustion_accept_with_one_level_is_nuts() {
+        let accept = KernelOptions {
+            exhaustion: ExhaustionRule::AcceptBelowDivergenceThreshold,
+            ..KernelOptions::default()
+        };
+        let result = macro_leaf(
+            &state(1.0, 0.0),
+            &[1.0],
+            tuning_with(accept, 3.0, 1, 1e-14),
+            Direction::Forward,
+            &mut gaussian,
+        )
+        .unwrap();
+        assert!(result.accepted());
+        assert_eq!(result.evaluations, 1);
+        assert_eq!(result.reverse_evaluations, 0);
+    }
+
+    #[test]
+    fn momentum_sum_spans_accumulate_leaf_momenta() {
+        let a = Span::from_state(state(0.0, 1.0), &[1.0]).unwrap();
+        let b = Span::from_state(state(0.5, 0.25), &[1.0]).unwrap();
+        assert_eq!(a.rho_sum, vec![1.0]);
+        let selected = Rc::clone(&a.selected);
+        let merged = Span::from_subspans(a, b, selected, 0.0);
+        assert_eq!(merged.rho_sum, vec![1.25]);
+        // A span built without the momentum sum stays empty after merging.
+        let empty = Span::from_leaf_state(Rc::new(state(0.0, 1.0)), -0.5, 1, false).unwrap();
+        assert!(empty.rho_sum.is_empty());
+        let b = Span::from_state(state(0.5, 0.25), &[1.0]).unwrap();
+        let selected = Rc::clone(&empty.selected);
+        assert!(
+            Span::from_subspans(empty, b, selected, 0.0)
+                .rho_sum
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn u_turn_rules_agree_with_their_closed_forms() {
+        // Two-dimensional states so the momentum sum and the position
+        // difference can disagree. Metric M^-1 = diag(1, 4).
+        let mass = [1.0, 4.0];
+        let make = |theta: [f64; 2], rho: [f64; 2]| State {
+            theta: theta.to_vec(),
+            rho: rho.to_vec(),
+            log_prob: 0.0,
+            grad: vec![0.0; 2],
+        };
+        // Earlier span: leaves A then B; later span: single leaf C.
+        let a = Span::from_state(make([0.0, 0.0], [1.0, 1.0]), &mass[..]).unwrap();
+        let b = Span::from_state(make([1.0, 0.5], [1.0, -2.0]), &mass[..]).unwrap();
+        let c = Span::from_state(make([2.0, -0.4], [1.0, -0.2]), &mass[..]).unwrap();
+        let selected = Rc::clone(&a.selected);
+        let earlier = Span::from_subspans(a, b, selected, 0.0);
+        let mut workspace = Workspace::new(2);
+
+        // Endpoints: d = M^-1 (q_C - q_A) = (2, -1.6);
+        // rho_C . d = 2 + 0.32 > 0, rho_A . d = 2 - 1.6 > 0: no U-turn.
+        let (turned, later_dot, earlier_dot) = spans_make_u_turn_observed(
+            &earlier,
+            &c,
+            &mass[..],
+            Direction::Forward,
+            UTurnRule::Endpoints,
+            &mut workspace,
+        );
+        assert!(!turned);
+        assert!((later_dot - 2.32).abs() < 1e-12);
+        assert!((earlier_dot.unwrap() - 0.4).abs() < 1e-12);
+
+        // Cross check earlier.forward (B) against C: d = M^-1 (q_C - q_B) =
+        // (1, -3.6); rho_C . d = 1 + 0.72 > 0, rho_B . d = 1 + 7.2 > 0. The
+        // other cross check (A against C's first state) equals the full
+        // check for a one-leaf later span. Still no U-turn.
+        let (turned, ..) = spans_make_u_turn_observed(
+            &earlier,
+            &c,
+            &mass[..],
+            Direction::Forward,
+            UTurnRule::EndpointsWithCross,
+            &mut workspace,
+        );
+        assert!(!turned);
+
+        // Momentum sum: rho = rho_A + rho_B + rho_C = (3, -1.2),
+        // M^-1 rho = (3, -4.8); rho_C . that = 3 + 0.96 > 0;
+        // rho_A . that = 3 - 4.8 < 0: Stan's criterion turns.
+        let (turned, later_dot, earlier_dot) = spans_make_u_turn_observed(
+            &earlier,
+            &c,
+            &mass[..],
+            Direction::Forward,
+            UTurnRule::MomentumSum,
+            &mut workspace,
+        );
+        assert!(turned);
+        assert!((later_dot - 3.96).abs() < 1e-12);
+        assert!((earlier_dot.unwrap() + 1.8).abs() < 1e-12);
+
+        // Backward direction swaps the roles: `first` is the later span.
+        let (turned_backward, ..) = spans_make_u_turn_observed(
+            &c,
+            &earlier,
+            &mass[..],
+            Direction::Backward,
+            UTurnRule::MomentumSum,
+            &mut workspace,
+        );
+        assert!(turned_backward);
+    }
+
+    #[test]
+    fn momentum_sum_cross_check_can_turn_when_the_full_check_does_not() {
+        // Earlier span A..B with a strong momentum, later span C..D whose
+        // first state C has reversed momentum: the full sum still points
+        // forward, but the extension `rho_earlier + p_C` tested against
+        // `p_C` turns.
+        let mass = [1.0];
+        let a = Span::from_state(state(0.0, 1.0), &mass[..]).unwrap();
+        let b = Span::from_state(state(1.0, 1.0), &mass[..]).unwrap();
+        let c = Span::from_state(state(1.5, -0.5), &mass[..]).unwrap();
+        let d = Span::from_state(state(2.0, 3.0), &mass[..]).unwrap();
+        let selected = Rc::clone(&a.selected);
+        let earlier = Span::from_subspans(a, b, selected, 0.0);
+        let selected = Rc::clone(&c.selected);
+        let later = Span::from_subspans(c, d, selected, 0.0);
+        let mut workspace = Workspace::new(1);
+        // Full: rho = 1 + 1 - 0.5 + 3 = 4.5; p_D . rho > 0, p_A . rho > 0.
+        // Cross 1: rho_earlier + p_C = 1.5; p_C . 1.5 < 0: turn.
+        let (turned, ..) = spans_make_u_turn_observed(
+            &earlier,
+            &later,
+            &mass[..],
+            Direction::Forward,
+            UTurnRule::MomentumSum,
+            &mut workspace,
+        );
+        assert!(turned);
+        // The endpoint rule sees only A and D: d = 2, both dots positive.
+        let (turned, ..) = spans_make_u_turn_observed(
+            &earlier,
+            &later,
+            &mass[..],
+            Direction::Forward,
+            UTurnRule::Endpoints,
+            &mut workspace,
+        );
+        assert!(!turned);
+        // The endpoint cross check A against C: d = 1.5, p_C . d < 0: turn.
+        let (turned, ..) = spans_make_u_turn_observed(
+            &earlier,
+            &later,
+            &mass[..],
+            Direction::Forward,
+            UTurnRule::EndpointsWithCross,
+            &mut workspace,
+        );
+        assert!(turned);
     }
 }
