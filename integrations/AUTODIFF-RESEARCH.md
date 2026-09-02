@@ -358,3 +358,152 @@ Stan model be stored dynamically, which the README now notes.
   time (documented); models mutating `pm.Data` between runs must recompile.
 * Free-threaded CPython and per-chain subprocess fallbacks (proposal 3)
   are now unnecessary for numba-capable models and were not built.
+
+## Route (e): fused-primitive tape (`integrations/autodiff`)
+
+Crate `owalnuts-autodiff` (pure Rust, stable 1.88 GNU, `#![forbid(unsafe_code)]`,
+one dependency: `libm` for `lgamma`). A model is one generic function
+`fn log_density<S: Scalar>(&self, q: &[S]) -> S`; `AutodiffTarget<M>`
+implements `Target` by evaluating it with `S = Var` on a reusable
+thread-local arena tape. Kernel `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`,
+same machine as the sections above; per-call figures are best-of-5 rounds
+of 4k-200k calls over 16 random points; other agents were running, so treat
+the ratios as the robust figures.
+
+### Tape design (what made it 3-4x instead of 60x)
+
+1. `Var { value: f64, index: u32 }` (16 bytes, `Copy`) carries its value, so
+   an operation never reads the tape: it appends one node. Inputs are the
+   indices `1..=n` with no stored node; constants are index 0 (their adjoint
+   goes to a dummy slot, so nothing branches on "is this a constant").
+2. Scalar nodes are an enum with inline operand indices and partials
+   (`Unary`/`Binary`/`Ternary`, 40 bytes; no boxed closures, no per-node
+   allocation). `Var + f64` / `Var - f64` reuse the operand's index.
+3. Fused primitives (`normal_lpdf`, `normal_lupdf`, `student_t`, `cauchy`,
+   `lognormal`, `exponential`, `gamma`, `half_normal`, `bernoulli_logit`,
+   `poisson_log`, `dot`, `sum`, `log_sum_exp`, the constraining transforms)
+   record one node per call, made of one *segment* per operand. A segment
+   over a contiguous run of tape indices stores partials only and its
+   reverse sweep is an `axpy`; any sub-slice of the inputs is detected as
+   contiguous in O(1) by address; scattered operands store index/partial
+   pairs; broadcast scalars accumulate into one entry. Operand wrappers
+   `Const`, `Data`, `Shifted(&x, c)` and `Linear::new(a, b, &x)` (elements
+   `a + b x_i`) let data, drift terms and linear predictors enter a
+   primitive with no extra nodes; `normal_lupdf` drops the `ln sigma` and
+   constant terms when `sigma` is data (Stan `~` semantics).
+4. `cumsum` / `cumsum_affine(x, scale, shift)` over a contiguous input is one
+   *block* node spanning its `T` outputs whose reverse sweep is a single
+   reverse scan (the noncentered local level is 6 real nodes at any `T`).
+5. The same elementwise kernel produces the value and the partials on both
+   paths, so `f64` and `Var` evaluation are bit-identical by construction.
+
+Iterations measured on the way (Eight Schools fused form / local level
+T=1000 `lupdf`): closure-free enum tape with (index, partial) pairs for every
+fused entry: 362 ns / 19.2 us; segmented nodes with contiguous `axpy`
+sweeps and implicit input leaves: 240 ns / 5.1 us; O(1) contiguity check and
+no re-entrant thread-local access inside the fused drivers: 206 ns / 3.9 us.
+Thread-local access itself measured 0.9 ns (a `Cell`) to 2 ns (`RefCell<Vec>`
+push) per operation, so it is not the bottleneck; a scalar node costs ~5 ns
+(the reverse sweep is a store-to-load chain through the adjoint buffer) and a
+call ~25 ns fixed (two borrows, reset, input setup, adjoint buffer, gradient
+copy) plus ~1 ns per input.
+
+### Agreement (16 random points per model, 50 in the tests)
+
+| model | values | max rel. gradient diff |
+|---|---|---:|
+| Eight Schools, term-by-term form (57 nodes) | bit-identical to the v38 density | 1.2e-16 |
+| Eight Schools, fused form (9 nodes, `normal_lupdf` likelihood) | differ by the constant `sum_j (0.5 ln 2pi + ln se_j)` (spread 2.5e-14) | 1.8e-16 |
+| Neal's funnel 10-D | bit-identical to `examples/funnel_paper_adaptation.rs` | 3.1e-16 |
+| Local level T=100 / 1000, `normal_lpdf` | bit-identical to a hand density with the same terms | 2.9e-14 |
+| Local level T=100 / 1000, `normal_lupdf` vs the WP4 hand form | 5e-11 / 2.8e-9 absolute (different formula for the same quantity) | 1.1e-13 |
+| Noncentered local level T=100 / 1000 (`cumsum_affine`) | bit-identical | 7.2e-14 |
+
+Every primitive is also checked against central finite differences (1e-6
+relative) in `tests/gradients.rs`, including broadcast, `Data`, `Shifted`,
+`Linear`, scattered-versus-contiguous layouts and the cumsum block versus
+its chain fallback.
+
+### Per-call gradient cost (release, single thread)
+
+| model | hand-written | value-only `f64` path | autodiff | ratio | tape |
+|---|---:|---:|---:|---:|---|
+| Eight Schools, term-by-term (bit-identical) form | 31 ns (const data) / 51 ns (struct data) | 68 ns | 407-430 ns | 14x / 8.0x | 57 nodes |
+| Eight Schools, fused form | 27 ns (const data) / 51 ns (struct data) | 27 ns | 206 ns | **7.6x / 4.1x** | 9 nodes, 18 partials, 2 indices |
+| Neal's funnel 10-D | 7.6 ns | 7.0 ns | 104 ns | 13.7x | 11 nodes, 18 partials |
+| Local level T=100, `lupdf` vs WP4 hand | 144 ns | 118 ns | 435 ns | **3.0x** | 5 nodes, 298 partials |
+| Local level T=100, `lpdf` vs full hand | 244 ns | 352 ns | 914 ns | 3.7x | 5 nodes, 298 partials |
+| Local level T=1000, `lupdf` vs WP4 hand | 1.38 us | 1.18 us | 3.93 us | **2.8x** | 5 nodes, 2998 partials |
+| Local level T=1000, `lpdf` vs full hand | 2.39 us | 3.42 us | 8.93 us | 3.7x | 5 nodes, 2998 partials |
+| Noncentered local level T=100 | 255 ns | 371 ns | 1.22 us | 4.8x | 106 (6 + 100 fillers) |
+| Noncentered local level T=1000 | 2.55 us | 3.62 us | 11.7 us | 4.6x | 1006 (6 + 1000 fillers) |
+
+For comparison, the same three models through BridgeStan cost 6.7 us,
+8.4 us and 38 us, and the `reverse`-crate tape 10.7 us (T=100) and 88 us
+(T=1000).
+
+Targets: **<= 3x on the T=1000 state space: met (2.8x)**, and 3.0x at T=100.
+**<= 5x on Eight Schools and the funnel: not met against the repository's
+hand gradients**, for two reasons that the numbers isolate. (i) The study
+densities keep the data as compile-time constants, so the compiler folds
+`ln(se_j)` and `1/se_j^2` away; a hand gradient that reads its data from a
+struct costs 51 ns, against which the fused form is 4.1x. (ii) The funnel
+hand gradient is a 10-flop loop at 7.6 ns, below the ~25 ns fixed cost of any
+tape call (thread-local borrow, reset, adjoint buffer, gradient copy) plus
+~5 ns per scalar node; 11 nodes and a 9-element `dot` give 104 ns. Shrinking
+this further needs either compile-time expression templates (no tape at all,
+i.e. the Enzyme route once it ships) or a fused-call overhead below ~10 ns;
+the remaining per-fused-call cost (~17 ns: two `Vec` resizes, a segment
+push, the reverse-sweep segment loop) is where the next 20-30% would come
+from. The value-only `f64` path of the fused form equals the hand cost, so
+the whole overhead is tape recording and the reverse sweep.
+
+### Paired sampling (same seeds, starts, settings; `artifacts/bench.json`)
+
+Eight Schools, v38 settings (4 chains x 1,000/1,000, accept .95), hand target
+= the verbatim v38 density:
+
+| seed | threads | hand wall | autodiff wall | wall ratio | ESS/call hand = autodiff | draws |
+|---:|---:|---:|---:|---:|---|---|
+| 82001 | 1 | 0.106 s | 0.163 s | 1.53x | 0.01089 = 0.01089 (129,871 calls both) | differ from draw 0 |
+| 82001 | 4 | 0.047 s | 0.062 s | 1.34x | same | |
+| 82002 | 1 | 0.093 s | 0.144 s | 1.55x | 0.01442 vs 0.01445 (104,669 vs 104,644 calls) | |
+| 82002 | 4 | 0.034 s | 0.045 s | 1.36x | same | |
+| 82003 | 1 | 0.104 s | 0.155 s | 1.49x | 0.01162 = 0.01162 (117,452 calls both) | |
+| 82003 | 4 | 0.041 s | 0.050 s | 1.21x | same | |
+| fused form, 82001-82003 | 1 | 0.093-0.120 s | 0.114-0.163 s | 1.23-1.35x | identical to 4 digits | |
+
+Local level (4 chains x 500/2,000, depth 8, 3 levels, hand = WP4 form,
+autodiff = `normal_lupdf` form):
+
+| T | threads | hand wall | autodiff wall | wall ratio | calls hand / autodiff | divergences |
+|---:|---:|---:|---:|---:|---|---|
+| 100 | 1 | 0.620 s | 0.733 s | 1.18x | 241,804 / 248,125 | 0 / 0 |
+| 100 | 4 | 0.193 s | 0.239 s | 1.24x | same | |
+| 1000 | 1 | 4.54 s | 5.52 s | 1.21x | 296,366 / 300,895 | 2 / 2 |
+| 1000 | 4 | 1.17 s | 1.57 s | 1.34x | same | |
+
+Draws are **not** bit-identical: the log-density values are, but the
+gradients differ in the last bits (a hand gradient factors the algebra
+differently from a reverse sweep), and after a few leapfrog steps the chains
+de-synchronise, exactly as observed for the Python backends in WP15b. Two of
+the three Eight Schools seeds nevertheless make the same number of target
+calls with the same ESS/call to four digits, posterior means agree, and
+divergence counts match. Single-functional batch-means ESS is noisy across
+de-synchronised chains (T=1000 shows autodiff "ahead" on ESS/s while its wall
+time is 1.21x longer), so the wall-time ratio is the honest end-to-end cost:
+1.2-1.5x on Eight Schools, 1.2-1.3x on the state space, versus the 4.7-11x
+of the `reverse` tape and the 2.3-10x of BridgeStan in the sections above.
+
+### What this means for the facade
+
+Route (e) is now the Rust-native answer while Enzyme is unavailable: a
+20-line model, no gradient code, 3-4x per-call cost on realistic models and
+1.2-1.5x end to end, with per-thread tapes so the existing parallel entry
+points work unchanged. The crate implements `Target` directly (nothing in
+`src/` changed). Follow-ups in order of value: (1) point users at
+`last_tape_stats` in the docs so they see when a loop should be a fused
+call; (2) a fused-call fast path with the segment inline in the node for the
+single-contiguous-operand case (most of the remaining 17 ns); (3) a
+multivariate normal / Cholesky primitive for the structured-metric studies;
+(4) re-measure against Enzyme when `rustup component add enzyme` exists.
