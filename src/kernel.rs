@@ -10,6 +10,7 @@ use crate::types::{State, ValidationError};
 use rand::RngCore;
 use rand_distr::{Distribution, StandardNormal};
 use std::cell::Cell;
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EvaluationPhase {
@@ -49,6 +50,13 @@ pub(crate) trait MassOperator {
     fn dimension(&self) -> usize;
     fn sample_momentum(&self, rng: &mut dyn RngCore) -> Result<Vec<f64>, ValidationError>;
     fn velocity(&self, momentum: &[f64]) -> Vec<f64>;
+    /// Write `velocity(momentum)` into `out` without allocating. The default
+    /// forwards to [`MassOperator::velocity`] and copies, so every
+    /// implementation produces identical bits either way.
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        let velocity = self.velocity(momentum);
+        out.copy_from_slice(&velocity);
+    }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64;
     fn is_valid(&self) -> bool;
 }
@@ -83,6 +91,13 @@ impl MassOperator for [f64] {
             .collect()
     }
 
+    #[inline]
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        for ((out, p), inverse_mass) in out.iter_mut().zip(momentum).zip(self) {
+            *out = p * inverse_mass;
+        }
+    }
+
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         0.5 * momentum
             .iter()
@@ -109,6 +124,11 @@ impl<const N: usize> MassOperator for [f64; N] {
         self.as_slice().velocity(momentum)
     }
 
+    #[inline]
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        self.as_slice().velocity_into(momentum, out)
+    }
+
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         self.as_slice().kinetic_energy(momentum)
     }
@@ -131,6 +151,11 @@ impl MassOperator for Vec<f64> {
         self.as_slice().velocity(momentum)
     }
 
+    #[inline]
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        self.as_slice().velocity_into(momentum, out)
+    }
+
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         self.as_slice().kinetic_energy(momentum)
     }
@@ -144,10 +169,89 @@ fn kinetic_energy<M: MassOperator + ?Sized>(momentum: &[f64], mass: &M) -> f64 {
     mass.kinetic_energy(momentum)
 }
 
+/// Fused log-density/gradient evaluation at the kernel boundary.
+///
+/// `gradient` has exactly the position's length; an implementation writes
+/// every component into it and returns the log density together with a flag
+/// that is `false` only when it could not produce a gradient of that length
+/// (the kernel then treats the call as an invalid evaluation, exactly as it
+/// treats a wrong-length gradient vector).
+pub trait FusedEval {
+    fn evaluate(&mut self, theta: &[f64], gradient: &mut [f64]) -> (f64, bool);
+}
+
+impl<F> FusedEval for F
+where
+    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+{
+    #[inline]
+    fn evaluate(&mut self, theta: &[f64], gradient: &mut [f64]) -> (f64, bool) {
+        let (log_prob, returned) = self(theta);
+        if returned.len() == gradient.len() {
+            gradient.copy_from_slice(&returned);
+            (log_prob, true)
+        } else {
+            (log_prob, false)
+        }
+    }
+}
+
+/// Adapter for callbacks that write the gradient in place.
+pub struct InPlaceEval<F>(pub F);
+
+impl<F> FusedEval for InPlaceEval<F>
+where
+    F: FnMut(&[f64], &mut [f64]) -> f64,
+{
+    #[inline]
+    fn evaluate(&mut self, theta: &[f64], gradient: &mut [f64]) -> (f64, bool) {
+        ((self.0)(theta, gradient), true)
+    }
+}
+
+/// Per-transition scratch storage reused by every leaf and micro-step.
+struct Workspace {
+    candidate: State,
+    reversed: State,
+    velocity: Vec<f64>,
+    difference: Vec<f64>,
+    scaled_difference: Vec<f64>,
+}
+
+impl Workspace {
+    fn new(dimension: usize) -> Self {
+        let blank = || State {
+            theta: vec![0.0; dimension],
+            rho: vec![0.0; dimension],
+            log_prob: 0.0,
+            grad: vec![0.0; dimension],
+        };
+        Self {
+            candidate: blank(),
+            reversed: blank(),
+            velocity: vec![0.0; dimension],
+            difference: vec![0.0; dimension],
+            scaled_difference: vec![0.0; dimension],
+        }
+    }
+}
+
+#[inline]
+fn copy_state(into: &mut State, from: &State) {
+    into.theta.copy_from_slice(&from.theta);
+    into.rho.copy_from_slice(&from.rho);
+    into.grad.copy_from_slice(&from.grad);
+    into.log_prob = from.log_prob;
+}
+
 /// One physical endpoint of a span, including its cached joint log density.
+///
+/// The state is shared: a fresh leaf span's two endpoints and its selected
+/// candidate are the same allocation, and merging spans moves the surviving
+/// endpoints without copying.
 #[derive(Clone, Debug)]
 pub struct Endpoint {
-    pub state: State,
+    pub state: Rc<State>,
     pub log_joint: f64,
 }
 
@@ -164,7 +268,9 @@ pub struct SelectedState {
 pub struct Span {
     pub backward: Endpoint,
     pub forward: Endpoint,
-    pub selected: SelectedState,
+    /// The position-valued candidate retained by progressive sampling; its
+    /// `rho` is incidental and never read.
+    pub selected: Rc<State>,
     /// Log of the sum of the leaves' unnormalized joint densities.
     pub log_weight: f64,
 }
@@ -176,27 +282,33 @@ impl Span {
         mass: &M,
     ) -> Result<Self, ValidationError> {
         validate_state_and_mass(&state, mass)?;
+        Self::from_leaf_state(state, mass)
+    }
+
+    /// Build a one-state span from a leaf produced under an already validated
+    /// metric. The state itself is still checked for shape and finiteness.
+    fn from_leaf_state<M: MassOperator + ?Sized>(
+        state: State,
+        mass: &M,
+    ) -> Result<Self, ValidationError> {
+        validate_state_shape_and_finiteness(&state, mass.dimension())?;
         let log_joint = joint_log_density(&state, mass);
         if !log_joint.is_finite() {
             return Err(ValidationError(
                 "state joint log density must be finite".into(),
             ));
         }
-        let selected = SelectedState {
-            theta: state.theta.clone(),
-            grad: state.grad.clone(),
-            log_prob: state.log_prob,
-        };
+        let state = Rc::new(state);
         let endpoint = Endpoint { state, log_joint };
         Ok(Self {
             backward: endpoint.clone(),
+            selected: Rc::clone(&endpoint.state),
             forward: endpoint,
-            selected,
             log_weight: log_joint,
         })
     }
 
-    fn from_subspans(earlier: Span, later: Span, selected: SelectedState, log_weight: f64) -> Self {
+    fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
         Self {
             backward: earlier.backward,
             forward: later.forward,
@@ -447,6 +559,9 @@ pub fn build_leaf<F, M: MassOperator + ?Sized>(
 where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
+    validate_span(last_span, mass)?;
+    validate(&last_span.forward.state, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
     build_leaf_observed(
         last_span,
         mass,
@@ -454,27 +569,30 @@ where
         direction,
         eval,
         &mut TransitionWorkTelemetry::default(),
+        &mut workspace,
     )
 }
 
-fn build_leaf_observed<F, M: MassOperator + ?Sized>(
+/// Extend an internally built span by one leaf. The span, metric and tuning
+/// were validated when the transition (or public entry point) started.
+fn build_leaf_observed<E, M: MassOperator + ?Sized>(
     last_span: &Span,
     mass: &M,
     tuning: FixedTuning,
     direction: Direction,
-    eval: &mut F,
+    eval: &mut E,
     work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
 ) -> Result<BuildLeafResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
 {
-    validate_span(last_span, mass)?;
-    let start = match direction {
+    let start: &State = match direction {
         Direction::Forward => &last_span.forward.state,
         Direction::Backward => &last_span.backward.state,
     };
     increment(&mut work.leaves_attempted)?;
-    let result = macro_leaf_observed(start, mass, tuning, direction, eval, work)?;
+    let result = macro_leaf_in_workspace(start, mass, tuning, direction, eval, work, workspace)?;
     match (result.end_state, result.rejection) {
         (Some(state), None) => {
             increment(&mut work.leaves_built)?;
@@ -485,7 +603,7 @@ where
                 increment(&mut work.histograms.refinement_level_built[level])?;
             }
             Ok(BuildLeafResult::Built {
-                span: Span::from_state(state, mass)?,
+                span: Span::from_leaf_state(state, mass)?,
                 micro_steps: result.micro_steps,
                 evaluations: result.evaluations,
                 adaptation_value: result.adaptation_value,
@@ -520,6 +638,8 @@ where
     R: Uniform01,
 {
     validate_span(last_span, mass)?;
+    validate(&last_span.forward.state, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
     let shift = u32::try_from(depth)
         .map_err(|_| ValidationError("span depth overflows leaf count".into()))?;
     let leaves = 1usize
@@ -542,6 +662,7 @@ where
         &mut leaves_attempted,
         &mut leaves_built,
         &mut work,
+        &mut workspace,
     )
 }
 
@@ -560,6 +681,8 @@ where
     R: Uniform01,
 {
     validate_span(last_span, mass)?;
+    validate(&last_span.forward.state, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
     let shift = u32::try_from(depth)
         .map_err(|_| ValidationError("span depth overflows leaf count".into()))?;
     let leaves = 1usize
@@ -580,11 +703,12 @@ where
         &mut evaluations,
         &mut |event| events.push(event),
         &mut work,
+        &mut workspace,
     )?;
     Ok(TracedBuildSpanResult { result, events })
 }
 
-fn build_span_inner<F, R, M: MassOperator + ?Sized>(
+fn build_span_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
     mass: &M,
@@ -592,13 +716,14 @@ fn build_span_inner<F, R, M: MassOperator + ?Sized>(
     direction: Direction,
     depth: usize,
     leaves: usize,
-    eval: &mut F,
+    eval: &mut E,
     cumulative_evaluations: &mut usize,
     trace: &mut impl FnMut(SpanTraceEvent),
     work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
 ) -> Result<BuildSpanResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: Uniform01,
 {
     trace(SpanTraceEvent::basic(
@@ -610,7 +735,7 @@ where
     ));
     if depth == 0 {
         return Ok(
-            match build_leaf_observed(last_span, mass, tuning, direction, eval, work)? {
+            match build_leaf_observed(last_span, mass, tuning, direction, eval, work, workspace)? {
                 BuildLeafResult::Built {
                     span,
                     evaluations,
@@ -678,6 +803,7 @@ where
         cumulative_evaluations,
         trace,
         work,
+        workspace,
     )?;
     let (first_span, first_evaluations) = match first {
         BuildSpanResult::Built {
@@ -706,6 +832,7 @@ where
         cumulative_evaluations,
         trace,
         work,
+        workspace,
     )?;
     let (second_span, second_evaluations) = match second {
         BuildSpanResult::Built {
@@ -727,7 +854,7 @@ where
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
     let (made_u_turn, forward_dot, backward_dot) =
-        spans_make_u_turn_observed(&first_span, &second_span, mass, direction);
+        spans_make_u_turn_observed(&first_span, &second_span, mass, direction, workspace);
     let mut predicate = SpanTraceEvent::basic(
         "uturn_predicate",
         None,
@@ -778,7 +905,7 @@ where
     })
 }
 
-fn build_span_counted_inner<F, R, M: MassOperator + ?Sized>(
+fn build_span_counted_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     last_span: &Span,
     mass: &M,
@@ -786,14 +913,15 @@ fn build_span_counted_inner<F, R, M: MassOperator + ?Sized>(
     direction: Direction,
     depth: usize,
     leaves: usize,
-    eval: &mut F,
+    eval: &mut E,
     cumulative_evaluations: &mut usize,
     leaves_attempted: &mut usize,
     leaves_built: &mut usize,
     work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
 ) -> Result<BuildSpanResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: Uniform01,
 {
     if depth == 0 {
@@ -801,7 +929,7 @@ where
             .checked_add(1)
             .ok_or_else(|| ValidationError("leaf count overflowed usize".into()))?;
         return Ok(
-            match build_leaf_observed(last_span, mass, tuning, direction, eval, work)? {
+            match build_leaf_observed(last_span, mass, tuning, direction, eval, work, workspace)? {
                 BuildLeafResult::Built {
                     span, evaluations, ..
                 } => {
@@ -845,6 +973,7 @@ where
         leaves_attempted,
         leaves_built,
         work,
+        workspace,
     )?;
     let (first_span, first_evaluations) = match first {
         BuildSpanResult::Built {
@@ -867,6 +996,7 @@ where
         leaves_attempted,
         leaves_built,
         work,
+        workspace,
     )?;
     let (second_span, second_evaluations) = match second {
         BuildSpanResult::Built {
@@ -881,7 +1011,7 @@ where
     };
     let evaluations = checked_add_evaluations(first_evaluations, second_evaluations)?;
     let (made_u_turn, _, _) =
-        spans_make_u_turn_observed(&first_span, &second_span, mass, direction);
+        spans_make_u_turn_observed(&first_span, &second_span, mass, direction, workspace);
     if made_u_turn {
         return Ok(BuildSpanResult::Stopped {
             cause: SpanStop::UTurn,
@@ -923,9 +1053,9 @@ fn combine_barker_observed<R: Uniform01>(
     let draw = rng.uniform_01()?;
     let update = draw.ln() < update_log_probability;
     let selected = if update {
-        new.selected.clone()
+        Rc::clone(&new.selected)
     } else {
-        old.selected.clone()
+        Rc::clone(&old.selected)
     };
     let (earlier, later) = match direction {
         Direction::Forward => (old, new),
@@ -944,26 +1074,28 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
     second: &Span,
     mass: &M,
     direction: Direction,
+    workspace: &mut Workspace,
 ) -> (bool, f64, Option<f64>) {
     let (earlier, later) = match direction {
         Direction::Forward => (first, second),
         Direction::Backward => (second, first),
     };
-    let difference = later
-        .forward
-        .state
-        .theta
-        .iter()
+    let difference = workspace.difference.as_mut_slice();
+    for ((difference, later), earlier) in difference
+        .iter_mut()
+        .zip(&later.forward.state.theta)
         .zip(&earlier.backward.state.theta)
-        .map(|(later, earlier)| later - earlier)
-        .collect::<Vec<_>>();
-    let scaled_difference = mass.velocity(&difference);
+    {
+        *difference = later - earlier;
+    }
+    let scaled_difference = workspace.scaled_difference.as_mut_slice();
+    mass.velocity_into(difference, scaled_difference);
     let later_dot = later
         .forward
         .state
         .rho
         .iter()
-        .zip(&scaled_difference)
+        .zip(&*scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     if later_dot < 0.0 {
@@ -974,7 +1106,7 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
         .state
         .rho
         .iter()
-        .zip(&scaled_difference)
+        .zip(&*scaled_difference)
         .map(|(rho, difference)| rho * difference)
         .sum::<f64>();
     (earlier_dot < 0.0, later_dot, Some(earlier_dot))
@@ -1622,16 +1754,16 @@ where
     )
 }
 
-pub(crate) fn transition_w_with_telemetry_and_outer_policy<F, R, M: MassOperator + ?Sized>(
+pub(crate) fn transition_w_with_telemetry_and_outer_policy<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     transition_w_untraced_inner(rng, input, mass, tuning, eval, None, policy)
@@ -1667,7 +1799,7 @@ where
 }
 
 pub(crate) fn transition_w_from_evaluated_with_telemetry_and_outer_policy<
-    F,
+    E,
     R,
     M: MassOperator + ?Sized,
 >(
@@ -1675,11 +1807,11 @@ pub(crate) fn transition_w_from_evaluated_with_telemetry_and_outer_policy<
     input: EvaluatedTransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     transition_w_untraced_inner(
@@ -1755,16 +1887,16 @@ where
     })
 }
 
-pub(crate) fn transition_w_traced_with_telemetry_and_outer_policy<F, R, M: MassOperator + ?Sized>(
+pub(crate) fn transition_w_traced_with_telemetry_and_outer_policy<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TracedTelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     let mut events = Vec::new();
@@ -1812,7 +1944,7 @@ where
 }
 
 pub(crate) fn transition_w_from_evaluated_traced_with_telemetry_and_outer_policy<
-    F,
+    E,
     R,
     M: MassOperator + ?Sized,
 >(
@@ -1820,11 +1952,11 @@ pub(crate) fn transition_w_from_evaluated_traced_with_telemetry_and_outer_policy
     input: EvaluatedTransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     policy: OuterSelectionPolicy,
 ) -> Result<TracedTelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     let mut events = Vec::new();
@@ -1847,21 +1979,22 @@ where
         events,
     })
 }
-fn transition_w_untraced_inner<F, R, M: MassOperator + ?Sized>(
+fn transition_w_untraced_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     cached: Option<(f64, Vec<f64>)>,
     outer_policy: OuterSelectionPolicy,
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
+    let mut workspace = Workspace::new(mass.dimension());
     let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
         (log_prob, grad, 0)
     } else {
@@ -1873,8 +2006,14 @@ where
             kinetic: kinetic_energy(&input.rho, mass),
             initial_hamiltonian: None,
         });
-        let (log_prob, grad) = eval(&input.theta);
+        let mut grad = vec![0.0; input.theta.len()];
+        let (log_prob, gradient_shaped) = eval.evaluate(&input.theta, &mut grad);
         work.fused_calls.initial = 1;
+        if !gradient_shaped {
+            return Err(ValidationError(
+                "state and diagonal inverse mass dimensions must match and be nonzero".into(),
+            ));
+        }
         (log_prob, grad, 1)
     };
     let mut counts = TransitionCounts {
@@ -1888,7 +2027,7 @@ where
         grad,
     };
     validate_state_and_mass(&state, mass)?;
-    let mut span_accum = Span::from_state(state, mass)?;
+    let mut span_accum = Span::from_leaf_state(state, mass)?;
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -1927,6 +2066,7 @@ where
                 &mut counts.leaves_attempted,
                 &mut counts.leaves_built,
                 &mut work,
+                &mut workspace,
             )?
         };
         counts.recursive_barker_draws = counts
@@ -1943,7 +2083,7 @@ where
         };
 
         let (outer_uturn, _, _) =
-            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction);
+            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction, &mut workspace);
         let combined = {
             let mut counted_rng = CountedTransitionRng {
                 inner: rng,
@@ -1982,7 +2122,7 @@ where
     work.validate_invariants()?;
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
-            selected: span_accum.selected,
+            selected: take_selected(span_accum),
             diagnostics: TransitionDiagnostics {
                 depth: final_depth,
                 stop: final_stop,
@@ -2008,22 +2148,23 @@ where
         work,
     })
 }
-fn transition_w_inner<F, R, M: MassOperator + ?Sized>(
+fn transition_w_inner<E, R, M: MassOperator + ?Sized>(
     rng: &mut R,
     input: TransitionInput,
     mass: &M,
     tuning: TransitionTuning,
-    eval: &mut F,
+    eval: &mut E,
     cached: Option<(f64, Vec<f64>)>,
     outer_policy: OuterSelectionPolicy,
     trace: &mut impl FnMut(TransitionTraceEvent),
 ) -> Result<TelemetryTransitionResult, ValidationError>
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
     R: TransitionRng,
 {
     validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
+    let mut workspace = Workspace::new(mass.dimension());
     let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
         (log_prob, grad, 0)
     } else {
@@ -2035,8 +2176,14 @@ where
             kinetic: kinetic_energy(&input.rho, mass),
             initial_hamiltonian: None,
         });
-        let (log_prob, grad) = eval(&input.theta);
+        let mut grad = vec![0.0; input.theta.len()];
+        let (log_prob, gradient_shaped) = eval.evaluate(&input.theta, &mut grad);
         work.fused_calls.initial = 1;
+        if !gradient_shaped {
+            return Err(ValidationError(
+                "state and diagonal inverse mass dimensions must match and be nonzero".into(),
+            ));
+        }
         (log_prob, grad, 1)
     };
     let mut counts = TransitionCounts {
@@ -2050,7 +2197,7 @@ where
         grad,
     };
     validate_state_and_mass(&state, mass)?;
-    let mut span_accum = Span::from_state(state, mass)?;
+    let mut span_accum = Span::from_leaf_state(state, mass)?;
     if initial_evaluations != 0 {
         trace(TransitionTraceEvent::basic(
             "initial_evaluation",
@@ -2110,6 +2257,7 @@ where
                 &mut counts.target_evaluations,
                 &mut |event| recursive_events.push(event),
                 &mut work,
+                &mut workspace,
             )?
         };
         counts.recursive_barker_draws = counts
@@ -2174,7 +2322,7 @@ where
         };
 
         let (outer_uturn, forward_dot, backward_dot) =
-            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction);
+            spans_make_u_turn_observed(&span_accum, &next_span, mass, direction, &mut workspace);
         let mut event = TransitionTraceEvent::basic(
             "outer_uturn_predicate",
             Some(depth),
@@ -2273,7 +2421,7 @@ where
     work.validate_invariants()?;
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
-            selected: span_accum.selected,
+            selected: take_selected(span_accum),
             diagnostics,
         },
         work,
@@ -2290,9 +2438,9 @@ fn combine_metropolis_observed<R: Uniform01>(
     let draw = rng.uniform_01()?;
     let update = draw.ln() < update_log_probability;
     let selected = if update {
-        new.selected.clone()
+        Rc::clone(&new.selected)
     } else {
-        old.selected.clone()
+        Rc::clone(&old.selected)
     };
     let (earlier, later) = match direction {
         Direction::Forward => (old, new),
@@ -2355,13 +2503,32 @@ fn validate_transition_input<M: MassOperator + ?Sized>(
     1usize
         .checked_shl(shift)
         .ok_or_else(|| ValidationError("transition depth overflows leaf count".into()))?;
-    let validation_state = State {
-        theta: input.theta.clone(),
-        rho: input.rho.clone(),
-        log_prob: 0.0,
-        grad: vec![0.0; dim],
-    };
-    validate(&validation_state, mass, tuning.leaf)
+    validate_tuning(tuning.leaf)
+}
+
+/// Move the selected candidate out of the final span, copying only when a
+/// surviving endpoint still shares it.
+fn take_selected(span: Span) -> SelectedState {
+    let Span {
+        backward,
+        forward,
+        selected,
+        ..
+    } = span;
+    drop(backward);
+    drop(forward);
+    match Rc::try_unwrap(selected) {
+        Ok(state) => SelectedState {
+            theta: state.theta,
+            grad: state.grad,
+            log_prob: state.log_prob,
+        },
+        Err(shared) => SelectedState {
+            theta: shared.theta.clone(),
+            grad: shared.grad.clone(),
+            log_prob: shared.log_prob,
+        },
+    }
 }
 
 /// Build one fixed-tuning macro leaf using a diagonal inverse mass.
@@ -2408,6 +2575,31 @@ where
     F: FnMut(&[f64]) -> (f64, Vec<f64>),
 {
     validate(start, mass, tuning)?;
+    let mut workspace = Workspace::new(mass.dimension());
+    macro_leaf_in_workspace(start, mass, tuning, direction, eval, work, &mut workspace)
+}
+
+/// One macro leaf from a validated start under validated metric and tuning,
+/// integrating in the transition's scratch states. Only the accepted endpoint
+/// is copied out.
+fn macro_leaf_in_workspace<E, M: MassOperator + ?Sized>(
+    start: &State,
+    mass: &M,
+    tuning: FixedTuning,
+    direction: Direction,
+    eval: &mut E,
+    work: &mut TransitionWorkTelemetry,
+    workspace: &mut Workspace,
+) -> Result<MacroLeafResult, ValidationError>
+where
+    E: FusedEval,
+{
+    let Workspace {
+        candidate,
+        reversed,
+        velocity,
+        ..
+    } = workspace;
 
     let initial_h = -joint_log_density(start, mass);
     observe_initial_energy(work, initial_h);
@@ -2442,9 +2634,9 @@ where
         record_histogram(&mut work.histograms.forward_micro_steps, micro_steps)?;
         last_steps = micro_steps;
         let step = signed_step / multiplier as f64;
-        let mut candidate = start.clone();
+        copy_state(candidate, start);
         let integration = integrate(
-            &mut candidate,
+            candidate,
             step,
             micro_steps,
             mass,
@@ -2453,6 +2645,7 @@ where
             direction,
             level,
             eval,
+            velocity,
         );
         last_integration = Some(integration);
         let attempted = integration.attempted;
@@ -2501,13 +2694,13 @@ where
                 work.reverse_micro_steps_requested =
                     checked_add_work(work.reverse_micro_steps_requested, coarse_steps)?;
                 record_histogram(&mut work.histograms.reverse_micro_steps, coarse_steps)?;
-                let mut reversed = candidate.clone();
+                copy_state(reversed, candidate);
                 for momentum in &mut reversed.rho {
                     *momentum = -*momentum;
                 }
-                let reverse_initial_h = -joint_log_density(&candidate, mass);
+                let reverse_initial_h = -joint_log_density(candidate, mass);
                 let integration = integrate(
-                    &mut reversed,
+                    reversed,
                     coarse_step,
                     coarse_steps,
                     mass,
@@ -2519,6 +2712,7 @@ where
                     },
                     level,
                     eval,
+                    velocity,
                 );
                 let attempted = integration.attempted;
                 let valid = integration.valid;
@@ -2586,11 +2780,11 @@ where
             );
             observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
             let accepted_trajectory_adaptation_value = (initial_h
-                + joint_log_density(&candidate, mass))
+                + joint_log_density(candidate, mass))
             .min(0.0)
             .exp();
             return Ok(MacroLeafResult {
-                end_state: Some(candidate),
+                end_state: Some(candidate.clone()),
                 micro_steps,
                 evaluations: checked_add_evaluations(forward_evaluations, reverse_evaluations)?,
                 forward_evaluations,
@@ -2636,6 +2830,10 @@ fn validate<M: MassOperator + ?Sized>(
     tuning: FixedTuning,
 ) -> Result<(), ValidationError> {
     validate_state_and_mass(start, mass)?;
+    validate_tuning(tuning)
+}
+
+fn validate_tuning(tuning: FixedTuning) -> Result<(), ValidationError> {
     if !tuning.step_size.is_finite() || tuning.step_size <= 0.0 {
         return Err(ValidationError(
             "step_size must be finite and positive".into(),
@@ -2673,8 +2871,21 @@ fn validate_state_and_mass<M: MassOperator + ?Sized>(
     state: &State,
     mass: &M,
 ) -> Result<(), ValidationError> {
+    validate_state_shape_and_finiteness(state, mass.dimension())?;
+    if !mass.is_valid() {
+        return Err(ValidationError(
+            "inverse mass entries must be finite and positive".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_state_shape_and_finiteness(
+    state: &State,
+    mass_dimension: usize,
+) -> Result<(), ValidationError> {
     let dim = state.theta.len();
-    if dim == 0 || state.rho.len() != dim || state.grad.len() != dim || mass.dimension() != dim {
+    if dim == 0 || state.rho.len() != dim || state.grad.len() != dim || mass_dimension != dim {
         return Err(ValidationError(
             "state and diagonal inverse mass dimensions must match and be nonzero".into(),
         ));
@@ -2688,11 +2899,6 @@ fn validate_state_and_mass<M: MassOperator + ?Sized>(
             .any(|value| !value.is_finite())
     {
         return Err(ValidationError("state must be finite".into()));
-    }
-    if !mass.is_valid() {
-        return Err(ValidationError(
-            "inverse mass entries must be finite and positive".into(),
-        ));
     }
     Ok(())
 }
@@ -2741,7 +2947,7 @@ struct IntegrationObservation {
     zero_density: usize,
 }
 
-fn integrate<F, M: MassOperator + ?Sized>(
+fn integrate<E, M: MassOperator + ?Sized>(
     state: &mut State,
     step: f64,
     count: usize,
@@ -2750,10 +2956,11 @@ fn integrate<F, M: MassOperator + ?Sized>(
     phase: EvaluationPhase,
     direction: Direction,
     refinement_level: usize,
-    eval: &mut F,
+    eval: &mut E,
+    velocity: &mut [f64],
 ) -> IntegrationObservation
 where
-    F: FnMut(&[f64]) -> (f64, Vec<f64>),
+    E: FusedEval,
 {
     let half_step = 0.5 * step;
     let mut minimum = initial_hamiltonian;
@@ -2765,8 +2972,8 @@ where
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        let velocity = mass.velocity(&state.rho);
-        for (position, velocity) in state.theta.iter_mut().zip(velocity) {
+        mass.velocity_into(&state.rho, velocity);
+        for (position, velocity) in state.theta.iter_mut().zip(&*velocity) {
             *position += step * velocity;
         }
         set_evaluation_context(EvaluationContext {
@@ -2777,9 +2984,8 @@ where
             kinetic: kinetic_energy(&state.rho, mass),
             initial_hamiltonian: Some(initial_hamiltonian),
         });
-        let (log_prob, gradient) = eval(&state.theta);
-        let gradient_finite =
-            gradient.len() == state.theta.len() && gradient.iter().all(|value| value.is_finite());
+        let (log_prob, gradient_shaped) = eval.evaluate(&state.theta, &mut state.grad);
+        let gradient_finite = gradient_shaped && state.grad.iter().all(|value| value.is_finite());
         if log_prob == f64::NEG_INFINITY && gradient_finite {
             // Zero-density point (upstream maps a failed evaluation to
             // `logp = -inf`, `grad = 0`). Integration continues with the
@@ -2789,7 +2995,6 @@ where
             // at every micro-step and test the final one.
             zero_density += 1;
             state.log_prob = f64::NEG_INFINITY;
-            state.grad.copy_from_slice(&gradient);
         } else if !log_prob.is_finite() || !gradient_finite {
             state.log_prob = f64::NEG_INFINITY;
             state.grad.fill(0.0);
@@ -2804,7 +3009,6 @@ where
             };
         } else {
             state.log_prob = log_prob;
-            state.grad.copy_from_slice(&gradient);
         }
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
@@ -2872,6 +3076,10 @@ mod tests {
     use super::*;
     use std::cell::Cell;
 
+    fn same_selected(left: &State, right: &State) -> bool {
+        left.theta == right.theta && left.grad == right.grad && left.log_prob == right.log_prob
+    }
+
     struct CoupledMass {
         generation: u64,
         calls: Cell<usize>,
@@ -2921,6 +3129,7 @@ mod tests {
             grad: vec![-0.2, 0.4],
         };
         let mut state = initial.clone();
+        let mut velocity = vec![0.0; 2];
         let initial_h = -joint_log_density(&state, &mass);
         let mut eval = |q: &[f64]| {
             (
@@ -2938,6 +3147,7 @@ mod tests {
             Direction::Forward,
             0,
             &mut eval,
+            &mut velocity,
         );
         assert!(forward.valid);
         let reverse_h = -joint_log_density(&state, &mass);
@@ -2951,6 +3161,7 @@ mod tests {
             Direction::Backward,
             0,
             &mut eval,
+            &mut velocity,
         );
         assert!(reverse.valid);
         for (actual, expected) in state.theta.iter().zip(&initial.theta) {
@@ -4080,7 +4291,7 @@ mod tests {
         .unwrap();
         assert_eq!(log_probability, 0.5_f64.ln());
         assert!(!updated);
-        assert_eq!(combined.selected, old.selected);
+        assert!(same_selected(&combined.selected, &old.selected));
         assert_eq!(boundary.consumed(), 1);
 
         new.log_weight = 1.0;
@@ -4090,7 +4301,7 @@ mod tests {
                 .unwrap();
         assert_eq!(log_probability, 1.0);
         assert!(updated);
-        assert_eq!(combined.selected, new.selected);
+        assert!(same_selected(&combined.selected, &new.selected));
         assert_eq!(certain.consumed(), 1);
     }
 
@@ -4121,7 +4332,7 @@ mod tests {
                 assert_eq!(observed, draw);
                 assert_eq!(rng.consumed(), 1);
                 assert!((combined.log_weight - 3.0_f64.ln()).abs() < 2.0e-15);
-                assert_eq!(update, combined.selected == new.selected);
+                assert_eq!(update, same_selected(&combined.selected, &new.selected));
                 if update {
                     selected += 1;
                 }

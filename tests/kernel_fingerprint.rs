@@ -183,5 +183,12 @@ fn eight_schools_adapted_four_chains_are_bit_exact() {
 // Baseline values (kernel before the hot-path work); see the module docs.
 const FUNNEL_FINGERPRINT: u64 = 0x387f_e4f4_c00c_3a05;
 const FUNNEL_CALLS: usize = 74_014;
-const EIGHT_SCHOOLS_FINGERPRINT: u64 = 0x5600_757f_2a08_6a12;
+// The adapted Eight Schools run differs between the debug and release
+// profiles on the baseline kernel already (the warmup path is sensitive to
+// profile-dependent floating-point lowering); both baselines are pinned.
+const EIGHT_SCHOOLS_FINGERPRINT: u64 = if cfg!(debug_assertions) {
+    0xcd59_b77f_fe72_c8b6
+} else {
+    0x5600_757f_2a08_6a12
+};
 const EIGHT_SCHOOLS_CALLS: usize = 38_464;
