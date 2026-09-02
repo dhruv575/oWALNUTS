@@ -16,7 +16,7 @@ Flatiron reference implementation
 recommended API is `owalnuts::sampler` (a builder over the complete facade in
 `owalnuts::walnutpie`); the kernel itself is private.
 
-**Status: release candidate (`0.1.0-beta.2`).** The kernel is at revision
+**Status: `0.2.0`.** The kernel is at revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`. What is and is not
 validated is listed below; every number links to a preregistered, checksummed
 study in `STUDIES/` and an entry in `wiki/research-ledger-2026-08-31.md`.
@@ -25,7 +25,7 @@ study in `STUDIES/` and an entry in `wiki/research-ledger-2026-08-31.md`.
 
 ```toml
 [dependencies]
-owalnuts = "0.1.0-beta.2"
+owalnuts = "0.2.0"
 ```
 
 Implement `Target` (log density and gradient in one call, unconstrained `f64`
@@ -256,7 +256,9 @@ against an explicit `TargetEvaluationAdmissionLimit` and a runtime
   release and why.
 - `wiki/research-ledger-2026-08-31.md` — one checksummed entry per study.
 - `wiki/sampler-path-ledger.md` — implementation milestones and invariants.
-- `wiki/release-0.1.0-beta.2.md` — release summary and erratum.
+- `wiki/release-0.2.0.md` — this release's summary, validation and known
+  limitations; `wiki/release-0.1.0-beta.2.md` — the previous release and its
+  erratum.
 - `STUDIES/` — every preregistration, runner, artifact and checksum.
 
 ## Toolchain

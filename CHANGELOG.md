@@ -5,76 +5,66 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, and target
 architecture (see the `walnutpie` module documentation).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-02
 
-### Changed
+The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`
+(unchanged since 0.1.0-beta.2: every pinned fingerprint and oracle still
+holds); the paper adaptation mode advances to
+`walnutpie-paper-adaptation-kquantile-gamma-v4`. Evidence for every claim is a
+checksummed study under `STUDIES/` (study codes in brackets). Summary in
+`wiki/release-0.2.0.md`.
 
-- **`sampler::Tuning::default()` max depth 8 -> 10** (Stan's default). Chosen
-  by the preregistered ablation `STUDIES/adaptation_parity_v1` (nine
-  posteriordb models, two seeds): 1.45x geometric-mean minimum bulk ESS per
-  gradient over the 0.1 defaults, 17/18 gate passes versus 12/18, no model
-  worse beyond seed noise; the correlated regressions `diamonds`, `earnings`
-  and `sblrc` capped 55-85 % of transitions at depth 8 and failed every gate.
-  Geomean versus CmdStan on the nine models: 0.34x -> 0.49x. Only the
-  `sampler` default changes; `walnutpie::KernelTuning::default()` and
-  `WarmupConfig::default()` are the frozen `v10` legacy, `ALGORITHM_REVISION`
-  is unchanged and the kernel fingerprints still hold.
+### Upgrading from 0.1.0-beta
+
+- The `walnutpie` facade is still exported unchanged; every 0.1 call site
+  compiles. New code should use `owalnuts::sampler`, whose `run` paths are
+  thin wrappers over the same entry points and produce bit-identical draws.
+- Research-only items (`OuterOrbitSelection`,
+  `ResearchTargetEvaluationLimit`, `ResearchRestartReferenceMultiplier`,
+  `DualAveragingAcceptance::AcceptedTrajectory`,
+  `TargetEvaluationLimitProvenance::ExplicitResearchOptIn`, the
+  `direct_original_q` family, the projected/pooled arrowhead warmup) now need
+  `features = ["research"]`.
+- `sampler::Tuning::default()` is **not** `walnutpie::KernelTuning::default()`,
+  and `RunConfig` keeps the frozen legacy defaults: the sampler defaults are
+  max depth 10, macro step `h = 0.5` and `delta = 1`, with four refinement
+  levels; `KernelTuning::default()` remains the frozen replay tuning of
+  `ALGORITHM_REVISION` (depth 3). Runs configured through `RunConfig` are
+  unaffected; runs configured through `Sampler` without an explicit
+  `.tuning(..)` use the new defaults.
+- `PaperAdaptationConfig::default()` changed behaviour (v4, see Changed). The
+  v3 behaviour is one builder call away.
 
 ### Added
 
-- **Robustness after the posteriordb benchmark (WP22 follow-up).**
-  (1) `owalnuts-bridgestan` maps a `NaN`/`+inf` log density and a finite log
-  density with a nonfinite gradient to the recoverable zero-density path
-  (`map_evaluation`), as CmdStan and nutpie reject such proposals; only a
-  dimension mismatch stays fatal. (2) `owalnuts::sampler::Init`
-  (`Given`, `Uniform { radius, max_attempts }`), `uniform_starts`,
-  `Sampler::run_with_init` and `Sampler::run_from_random_starts`: Stan's
-  uniform(-2, 2) start rule with retries until the log density and gradient
-  are finite, deterministic given the seed. (3) Additive, off-by-default
-  guards on `PaperAdaptationConfig`: `with_min_max_error`,
-  `with_first_update_after`, `with_metric_update_required`,
-  `with_unhealthy_orbits_excluded`, `with_trim_fraction`,
-  `with_exhausted_transitions_as_zero`, plus
-  `PaperAdaptationOutcome::Deferred`. Measured in
-  `STUDIES/paper_adaptation_robust_v1`; kernel fingerprints unchanged.
-- **Opt-in Stan-parity warmup controls** on `walnutpie::WarmupConfig`:
-  `DualAveragingAcceptance::MeanTrajectoryAcceptance` (Stan's
-  `accept_stat__`), `InitialStepSearchConfig::stan()` (Stan's
-  `init_stepsize`, at the start and after every metric update),
-  `DiagonalMetricRegularization::{TowardUnit, Stan}`,
-  `with_stan_restart_reference` (`mu = ln(10 h)` on restart),
-  `with_initial_phase_max_error` (a different `delta` for the initial fast
-  phase), and the preset `WarmupConfig::stan_style(target)`.
-  `sampler::Adaptation::Custom(WarmupConfig)` passes any of them through the
-  builder. Evidence in `STUDIES/adaptation_parity_v1`: alone, none of the
-  four Stan warmup differences helps (Stan's metric prior freezes chains
-  started in a tail under `delta = 1`); with the initial-phase `delta` the
-  full preset at depth 10 is 2.0x the default's ESS per gradient (0.68x
-  CmdStan) but loses 12-16 % on `kidiq`, `mesquite`, `garch11` and fails
-  R-hat on `kidiq`, `earnings`, so it stays opt-in.
-
 - **`owalnuts::sampler`, the 0.2 public API.** One builder, `Sampler`
   (`warmup`, `draws`, `chains`, `seed`, `threads`, `metric`, `adaptation`,
-  `tuning`, `limits`, `run`), one result, `Posterior` (chains, flat and
-  per-draw access, telemetry, metadata, refresh records), and four small
-  option types: `Metric` (`Identity`, `Diagonal`, `Dense`, `Structured`,
-  `StructuredRefresh`), `Adaptation` (`None`, `DualAveraging` — the default —
-  and `Paper`), `Tuning`, and `Limits` (target-evaluation budget, worst-case
-  admission, deadline, timeout, cancellation, depth-stop limit). Twenty-one
-  public items including re-exports. Every `run` path is a thin wrapper over
-  one `walnutpie` entry point and produces bit-identical draws to calling it
-  directly (`tests/sampler_api.rs`); kernel behaviour is unchanged. The
-  README quick start and the `gaussian` and `funnel_paper_adaptation`
+  `tuning`, `limits`, `run`, `run_with_init`, `run_from_random_starts`), one
+  result, `Posterior` (chains, flat and per-draw access, telemetry, metadata,
+  refresh records), and five small option types: `Metric` (`Identity`,
+  `Diagonal`, `Dense`, `Structured`, `StructuredRefresh`), `Adaptation`
+  (`None`, `DualAveraging` — the default — `Paper`, and
+  `Custom(WarmupConfig)` for the opt-in Stan-parity controls below), `Tuning`,
+  `Limits` (target-evaluation budget, worst-case admission, deadline, timeout,
+  cancellation, depth-stop limit) and `Init`. Every `run` path is a thin
+  wrapper over one `walnutpie` entry point and produces bit-identical draws to
+  calling it directly (`tests/sampler_api.rs`); kernel behaviour is unchanged.
+  The README quick start and the `gaussian` and `funnel_paper_adaptation`
   examples use it.
+- **Uniform starts with retries.** `sampler::Init` (`Given`, `Uniform {
+  radius, max_attempts }`, default `Init::uniform()` = Stan's uniform(-2, 2)
+  with 100 attempts), `uniform_starts`, `Sampler::run_with_init` and
+  `Sampler::run_from_random_starts`: a start is redrawn until the log density
+  and gradient are finite, deterministically given the seed (start RNG
+  `splitmix64(seed ^ INIT_SEED_TAG)`, independent of the chain seeds).
+  `STUDIES/posteriordb_bench_v1` aborted two `lotka_volterra` seeds on an
+  unevaluable single draw; with this rule they proceed as CmdStan's do.
+  [WP22-POSTERIORDB-BENCH-V1 follow-up]
 - **`research` Cargo feature (off by default).** The research-only items
-  (`OuterOrbitSelection`, `ResearchTargetEvaluationLimit`,
-  `ResearchRestartReferenceMultiplier`,
-  `DualAveragingAcceptance::AcceptedTrajectory`,
-  `TargetEvaluationLimitProvenance::ExplicitResearchOptIn`, the
-  `direct_original_q` family, and the projected/pooled arrowhead warmup) are
-  exported from `walnutpie` only with the feature. They are still compiled
-  (`src/walnutpie/research.rs`), so no kernel path changed; the `STUDIES/`
-  crates and the Python integration enable the feature.
+  listed under Upgrading are exported from `walnutpie` only with the feature.
+  They are still compiled (`src/walnutpie/research.rs`), so no kernel path
+  changed; the `STUDIES/` crates and the Python integration enable the
+  feature.
 - **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
   rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
   the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views
@@ -84,18 +74,38 @@ architecture (see the `walnutpie` module documentation).
   Stan-style table for a `MultiChainOutput` with per-chain and pooled
   `SamplerHealth` (divergences, invalid-evaluation, depth-cap and
   refinement-exhaustion stops, mean tree depth, target calls, step size);
-  `Summary` implements `Display` as an aligned table. `owalnuts::export::
-  CmdStanCsv` writes one CmdStan-format CSV per chain (`lp__` recomputed
-  from the target when supplied, `stepsize__`, `treedepth__`,
-  `n_leapfrog__` as fused target calls, `divergent__`, `energy__` as the
-  transition's initial Hamiltonian, then the draws); `arviz.from_cmdstan`
-  loads the files and its `az.summary` agrees with the Rust `Summary`
-  (`tests/export_cmdstan.rs`, opt-in via `OWALNUTS_ARVIZ_PYTHON`).
-  `accept_stat__` is not emitted because the kernel captures acceptance only
-  during warmup. No new dependencies.
-
-- **FFI and autodiff backend support.** `RawTarget` wraps a C-ABI
-  fused log-density/gradient callback (`RawTargetFn`) so compiled gradients —
+  `Summary` implements `Display` as an aligned table.
+  `owalnuts::export::CmdStanCsv` writes one CmdStan-format CSV per chain
+  (`lp__` recomputed from the target when supplied, `stepsize__`,
+  `treedepth__`, `n_leapfrog__` as fused target calls, `divergent__`,
+  `energy__` as the transition's initial Hamiltonian, then the draws);
+  `arviz.from_cmdstan` loads the files and its `az.summary` agrees with the
+  Rust `Summary` (`tests/export_cmdstan.rs`, opt-in via
+  `OWALNUTS_ARVIZ_PYTHON`). `accept_stat__` is not emitted because the kernel
+  captures acceptance only during warmup. No new dependencies.
+- **Opt-in Stan-parity warmup controls** on `walnutpie::WarmupConfig`:
+  `DualAveragingAcceptance::MeanTrajectoryAcceptance` (Stan's
+  `accept_stat__`), `InitialStepSearchConfig::stan()` (Stan's
+  `init_stepsize`, at the start and after every metric update),
+  `DiagonalMetricRegularization::{TowardUnit, Stan}`,
+  `with_stan_restart_reference` (`mu = ln(10 h)` on restart),
+  `with_initial_phase_max_error` (a different `delta` for the initial fast
+  phase), and the preset `WarmupConfig::stan_style(target)`;
+  `sampler::Adaptation::Custom(WarmupConfig)` passes any of them through the
+  builder. Evidence in `STUDIES/adaptation_parity_v1`: alone, none of the
+  four Stan warmup differences helps (Stan's metric prior freezes chains
+  started in a tail under `delta = 1`); with the initial-phase `delta` the
+  full preset at depth 10 is 2.0x the default's ESS per gradient (0.68x
+  CmdStan) but loses 12-16 % on `kidiq`, `mesquite`, `garch11` and fails
+  R-hat on `kidiq`, `earnings`, so it stays opt-in.
+- **Additive, off-by-default Appendix C guards** on `PaperAdaptationConfig`:
+  `with_min_max_error`, `with_first_update_after`,
+  `with_metric_update_required`, `with_unhealthy_orbits_excluded`,
+  `with_trim_fraction`, `with_exhausted_transitions_as_zero` (a default since
+  v4, see Changed), plus `PaperAdaptationOutcome::Deferred`. Measured in
+  `STUDIES/paper_adaptation_robust_v1`; kernel fingerprints unchanged.
+- **FFI and autodiff backend support.** `RawTarget` wraps a C-ABI fused
+  log-density/gradient callback (`RawTargetFn`) so compiled gradients —
   numba/Cython `cfunc`s, BridgeStan-style entry points — run from parallel
   chains with no interpreter lock; `-inf` returns follow the v10 recoverable
   zero-density path and any other nonfinite output is fatal. References,
@@ -106,7 +116,22 @@ architecture (see the `walnutpie` module documentation).
   track's measurement that GIL-free callback transport, not sampler
   efficiency, was the remaining gap to nutpie on PyMC models.
   [WP15a-AUTODIFF-BRIDGESTAN-ENZYME-V1, WP15B-PYTHON-TARGETS-V1]
-
+- **`owalnuts-autodiff` (`integrations/autodiff`, unpublished).** Write a
+  log density once as `fn log_density<S: Scalar>(&self, q: &[S])`, evaluate
+  it with `f64` or with `Var` on a reusable thread-local arena tape, and get
+  an `AutodiffTarget<M>` implementing `walnutpie::Target`. Fused primitives
+  (`normal_lpdf`/`lupdf` with broadcasting, Student-t, Cauchy, lognormal,
+  exponential, gamma, half-normal, `bernoulli_logit`, `poisson_log`, `dot`,
+  `sum`, `log_sum_exp`, `cumsum`, `softplus`, and the exp/logistic/interval/
+  ordered constraints with log-Jacobians) with hand-gradient and
+  finite-difference oracles; numbers in `integrations/AUTODIFF-RESEARCH.md`.
+- **`owalnuts-bridgestan` (`integrations/bridgestan`, unpublished):**
+  `ReplicatedStanTarget` (one library copy per thread, `try_lock` dispatch)
+  and a per-library-file serialising mutex for `StanTarget`, after the
+  measurement that `STAN_THREADS` on mingw-w64 costs 9-16x per gradient
+  (emulated TLS); the non-threaded build matches CmdStan's per-gradient
+  cost (`arK` wall 10.5 s -> 1.5 s against CmdStan's 1.0 s, trajectories
+  bit-identical). [WP22-POSTERIORDB-BENCH-V1 follow-up]
 - **Boundary-refreshed structured metrics.** `sample_structured_refresh`,
   `sample_chains_structured_refresh`, and
   `preflight_chains_structured_refresh` run the fixed kernel directly in
@@ -122,9 +147,27 @@ architecture (see the `walnutpie` module documentation).
   unchanged. Motivated by the T=1000 state-space result that the posterior-
   precision path block depends on global parameters best estimated during
   warmup. [WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1]
+- **Python package `owalnuts` 0.2.0** (`integrations/python`, unpublished):
+  `init="uniform"` start rule, sampler-matching defaults (depth 10, `h = 0.5`),
+  `SampleResult.summary()` backed by `owalnuts::diagnostics`, plus the
+  `from_cfunc` / `from_pymc(gil_free=True)` GIL-free transport and the
+  structured-metric refresh callback. See its README.
+- `examples/kernel_bench.rs` (kernel hot-path microbenchmark) and
+  `tests/kernel_fingerprint.rs` (bit-exact run fingerprints in both build
+  profiles).
 
 ### Changed
 
+- **`sampler::Tuning::default()` max depth 8 -> 10** (Stan's default). Chosen
+  by the preregistered ablation `STUDIES/adaptation_parity_v1` (nine
+  posteriordb models, two seeds): 1.45x geometric-mean minimum bulk ESS per
+  gradient over the 0.1 defaults, 17/18 gate passes versus 12/18, no model
+  worse beyond seed noise; the correlated regressions `diamonds`, `earnings`
+  and `sblrc` capped 55-85 % of transitions at depth 8 and failed every gate.
+  Geomean versus CmdStan on the nine models: 0.34x -> 0.49x. Only the
+  `sampler` default changes; `walnutpie::KernelTuning::default()` and
+  `WarmupConfig::default()` are the frozen `v10` legacy, `ALGORITHM_REVISION`
+  is unchanged and the kernel fingerprints still hold.
 - **`PaperAdaptationConfig::default()` is `walnutpie-paper-adaptation-kquantile-gamma-v4`.**
   `with_exhausted_transitions_as_zero(true)` and
   `with_step_relative_bound(DEFAULT_PAPER_STEP_RELATIVE_BOUND = 1e6)` are
@@ -137,12 +180,58 @@ architecture (see the `walnutpie` module documentation).
   `.with_exhausted_transitions_as_zero(false).with_step_relative_bound(PAPER_STEP_RELATIVE_BOUND)`.
   Acceptance-driven warmup, `ALGORITHM_REVISION` and the kernel
   fingerprints are unchanged.
+- **Allocation-free kernel hot path, bit-identical.** Micro-steps write the
+  gradient into the state's own buffer (`FusedEval`), a per-transition
+  workspace replaces the clones in refinement and reverse coarsening, span
+  endpoints share `Rc` states, leaf states live in a per-thread ring, the
+  endpoint joint log density is reused for the reverse check, and the
+  per-call kinetic energy is skipped when no proposal observer is attached.
+  Kernel overhead per fused target call (single thread, best of 3,
+  `examples/kernel_bench.rs`): funnel 480 -> 255 ns, Gaussian-100D 2002 ->
+  936 ns, Eight Schools 889 -> 510 ns; allocations per call 8.5 -> 0.19,
+  14 -> 0.56 and 14.4 -> 1.27. Every fingerprint, oracle and facade test is
+  unchanged in both build profiles.
+- Crate description, README and module docs point first-time readers at
+  `owalnuts::sampler`; the `walnutpie` docs describe it as the complete
+  facade underneath.
 
 ### Fixed
 
+- **BridgeStan targets no longer abort on `NaN`/`+inf` log densities.**
+  `owalnuts-bridgestan` maps a `NaN`/`+inf` log density and a finite log
+  density with a nonfinite gradient to the recoverable zero-density path
+  (`map_evaluation`), as CmdStan and nutpie reject such proposals; only a
+  dimension mismatch stays fatal. [WP22-POSTERIORDB-BENCH-V1 follow-up]
 - `sample_chains_structured` and `sample_chains_structured_with_control`
   reject a target, mass, or initial position whose dimensions differ with a
   configuration error instead of panicking.
+
+### Validation (2026-09-01 program)
+
+- posteriordb benchmark against CmdStan and nutpie
+  (`STUDIES/posteriordb_bench_v1`, 17 posteriors x 4 arms x 3 seeds, 204
+  cells): with the 0.1 defaults the dual-averaging arm was 0.32x CmdStan and
+  0.25x nutpie on minimum bulk ESS per gradient over 14 models (gate passes
+  26/51 versus CmdStan 34/51, nutpie 29/51), refinement engaged on 1 % of
+  retained leaves, and the v3 paper arm froze on nine models. This study
+  motivated the depth-10 default, the start retries, the BridgeStan fixes and
+  the Appendix C v4 defaults above; the v2 re-run is pending.
+  [WP22-POSTERIORDB-BENCH-V1]
+- Adaptation ablation (`STUDIES/adaptation_parity_v1`, nine posteriordb
+  models, two seeds): depth 10 over depth 8 gives 1.45x geomean minimum bulk
+  ESS per gradient and 17/18 gate passes; geomean versus CmdStan 0.49x; the
+  full `stan_style` preset reaches 0.68x but regresses four models and fails
+  R-hat on two, so it is opt-in.
+- Appendix C robustness (`STUDIES/paper_adaptation_robust_v1`): the v4
+  default is robust on all 14 previously freezing posteriordb cells and
+  0.90-1.35x dual averaging's minimum bulk ESS per gradient (geomean 1.04).
+- Sampler API parity: every `Sampler::run` path is bit-identical to the
+  `walnutpie` entry point it wraps (`tests/sampler_api.rs`); the
+  allocation-free kernel reproduces the pinned run fingerprints in debug and
+  release (`tests/kernel_fingerprint.rs`).
+- Diagnostics: R-hat, ESS (bulk, tail, quantile, mean) and MCSE match ArviZ
+  to 1e-6 relative on `tests/data/arviz_fixture.json`; `az.summary` over the
+  exported CmdStan CSV agrees with the Rust `Summary`.
 
 ## [0.1.0-beta.2] - 2026-08-31
 
