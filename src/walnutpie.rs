@@ -1153,6 +1153,8 @@ pub struct WarmupConfig {
     initial_phase_max_error: Option<f64>,
     minimum_step: Option<f64>,
     warmup_exhaustion: Option<ExhaustionRule>,
+    step_floor_relative_to_search: Option<f64>,
+    max_window_shrink: Option<f64>,
 }
 
 impl Default for WarmupConfig {
@@ -1172,6 +1174,8 @@ impl Default for WarmupConfig {
             initial_phase_max_error: None,
             minimum_step: None,
             warmup_exhaustion: None,
+            step_floor_relative_to_search: None,
+            max_window_shrink: None,
         }
     }
 }
@@ -1340,11 +1344,79 @@ impl WarmupConfig {
         self.minimum_step
     }
 
-    fn floored_step(&self, step: f64) -> f64 {
-        match self.minimum_step {
+    /// Floor the adapted step at `fraction` times the most recent
+    /// initial-step search result (the search before warmup and, with a
+    /// search configured, the one after every metric update). Requires
+    /// [`Self::with_initial_step_search`]; a run without one is rejected.
+    /// Off by default. A candidate of `STUDIES/step_collapse_v1`: dual
+    /// averaging on the coarse-endpoint statistic can shrink `h` far below
+    /// the step the search found adequate.
+    pub fn with_step_floor_relative_to_search(mut self, fraction: f64) -> Result<Self, Error> {
+        if !fraction.is_finite() || fraction <= 0.0 || fraction > 1.0 {
+            return Err(Error::configuration(
+                "step floor fraction must be finite and in (0, 1]",
+            ));
+        }
+        self.step_floor_relative_to_search = Some(fraction);
+        Ok(self)
+    }
+
+    pub fn step_floor_relative_to_search(&self) -> Option<f64> {
+        self.step_floor_relative_to_search
+    }
+
+    /// Bound how far dual averaging can shrink the step within one of its
+    /// streams: after every update the installed step is at least the step
+    /// the stream started from (the initial step, or the step after a
+    /// metric update) divided by `factor` (`> 1`). Growth is unbounded. Off
+    /// by default. A candidate of `STUDIES/step_collapse_v1`.
+    pub fn with_max_window_shrink(mut self, factor: f64) -> Result<Self, Error> {
+        if !factor.is_finite() || factor <= 1.0 {
+            return Err(Error::configuration(
+                "maximum window shrink factor must be finite and greater than one",
+            ));
+        }
+        self.max_window_shrink = Some(factor);
+        Ok(self)
+    }
+
+    pub fn max_window_shrink(&self) -> Option<f64> {
+        self.max_window_shrink
+    }
+
+    /// The run-time floor on the adapted step from the relative options:
+    /// `search_step` is the latest initial-step search result (if any),
+    /// `stream_step` the step the current dual-averaging stream started from.
+    fn dynamic_floor(&self, search_step: Option<f64>, stream_step: f64) -> Option<f64> {
+        let from_search = self
+            .step_floor_relative_to_search
+            .zip(search_step)
+            .map(|(fraction, step)| fraction * step);
+        let from_window = self.max_window_shrink.map(|factor| stream_step / factor);
+        match (from_search, from_window) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        }
+    }
+
+    fn floored_step(&self, step: f64, dynamic_floor: Option<f64>) -> f64 {
+        let step = match self.minimum_step {
             Some(floor) => step.max(floor),
             None => step,
+        };
+        match dynamic_floor {
+            Some(floor) if floor.is_finite() && floor > 0.0 => step.max(floor),
+            _ => step,
         }
+    }
+
+    fn validate_relative_floor(&self) -> Result<(), Error> {
+        if self.step_floor_relative_to_search.is_some() && self.initial_step_search.is_none() {
+            return Err(Error::configuration(
+                "a step floor relative to the initial-step search requires an initial step search",
+            ));
+        }
+        Ok(())
     }
 
     /// Effective dual-averaging restart reference multiplier.
@@ -6066,6 +6138,15 @@ fn run_chain<T: Target>(
         .as_ref()
         .filter(|warmup| warmup.adapt_step_size)
         .map(|warmup| DualAveraging::new(active_tuning.step_size, step_adaptation_target(warmup)));
+    if let Some(warmup) = config.warmup.as_ref() {
+        warmup.validate_relative_floor()?;
+    }
+    // Inputs of the relative step floors: the latest initial-step search
+    // result and the step the current dual-averaging stream started from.
+    let mut search_step = initial_step_search
+        .as_ref()
+        .map(|search| search.selected_step);
+    let mut stream_step = active_tuning.step_size;
     let mut variance = DiagonalVariance::new(dimension);
     let mut paper_window = PaperWindow::new();
     let sample_len = config
@@ -6587,7 +6668,10 @@ fn run_chain<T: Target>(
             if warmup.adapt_step_size
                 && let (Some(dual), Some(statistic)) = (&mut dual_averaging, step_statistic)
             {
-                active_tuning.step_size = warmup.floored_step(dual.update(statistic));
+                active_tuning.step_size = warmup.floored_step(
+                    dual.update(statistic),
+                    warmup.dynamic_floor(search_step, stream_step),
+                );
                 if let Some(paper) = warmup.paper_adaptation.as_ref() {
                     active_tuning.step_size = clamp_paper_step_within(
                         active_tuning.step_size,
@@ -6649,6 +6733,7 @@ fn run_chain<T: Target>(
                             )
                             .map_err(|error| error.at_transition(transition_index))?;
                             active_tuning.step_size = step;
+                            search_step = Some(step);
                             update.step_after_search = Some(step);
                             telemetry.step_searches.push(StepSearchEvent {
                                 reason: StepSearchReason::MetricUpdate { window_index },
@@ -6660,6 +6745,7 @@ fn run_chain<T: Target>(
                             step_adaptation_target(warmup),
                             warmup.restart_reference_multiplier(),
                         ));
+                        stream_step = active_tuning.step_size;
                         update.step_after_restart = Some(active_tuning.step_size);
                         update.restart_reference_multiplier =
                             Some(warmup.restart_reference_multiplier());
@@ -6752,7 +6838,10 @@ fn run_chain<T: Target>(
             if transition_index + 1 == config.discarded
                 && let Some(dual) = &dual_averaging
             {
-                active_tuning.step_size = warmup.floored_step(dual.final_step());
+                active_tuning.step_size = warmup.floored_step(
+                    dual.final_step(),
+                    warmup.dynamic_floor(search_step, stream_step),
+                );
                 if let Some(paper) = warmup.paper_adaptation.as_ref() {
                     active_tuning.step_size = clamp_paper_step_within(
                         active_tuning.step_size,
@@ -7440,6 +7529,11 @@ pub fn sample_dense_with_control<T: Target>(
     let mut dual_averaging = warmup
         .adapt_step_size
         .then(|| DualAveraging::new(active_step, warmup.target_acceptance));
+    warmup.validate_relative_floor()?;
+    let mut search_step = restart_events
+        .first()
+        .map(|event| event.search.selected_step);
+    let mut stream_step = active_step;
 
     let mut run_segment = |start: usize,
                            end: usize,
@@ -7448,7 +7542,8 @@ pub fn sample_dense_with_control<T: Target>(
                            active_mass: &DenseMass,
                            position: &mut Vec<f64>,
                            active_step: &mut f64,
-                           dual_averaging: &mut Option<DualAveraging>|
+                           dual_averaging: &mut Option<DualAveraging>,
+                           floor: Option<f64>|
      -> Result<Option<DenseCovariance>, Error> {
         if start == end {
             return Ok(None);
@@ -7496,7 +7591,7 @@ pub fn sample_dense_with_control<T: Target>(
                 dual_averaging.as_mut(),
                 output.telemetry.acceptance_values[0],
             ) {
-                *active_step = warmup.floored_step(dual.update(acceptance));
+                *active_step = warmup.floored_step(dual.update(acceptance), floor);
             }
         }
         Ok(covariance)
@@ -7511,6 +7606,7 @@ pub fn sample_dense_with_control<T: Target>(
         &mut position,
         &mut active_step,
         &mut dual_averaging,
+        warmup.dynamic_floor(search_step, stream_step),
     )?;
     for (window_index, window) in schedule.windows.iter().enumerate() {
         let covariance = run_segment(
@@ -7522,6 +7618,7 @@ pub fn sample_dense_with_control<T: Target>(
             &mut position,
             &mut active_step,
             &mut dual_averaging,
+            warmup.dynamic_floor(search_step, stream_step),
         )?
         .expect("nonempty metric window");
         let (outcome, candidate, shrinkage, ridge, condition, failures) =
@@ -7568,6 +7665,7 @@ pub fn sample_dense_with_control<T: Target>(
                         &control,
                     )?;
                     active_step = step;
+                    search_step = Some(step);
                     step_after_search = Some(step);
                     restart_events.push(StepSearchEvent {
                         reason: StepSearchReason::MetricUpdate { window_index },
@@ -7579,6 +7677,7 @@ pub fn sample_dense_with_control<T: Target>(
                     warmup.target_acceptance,
                     warmup.restart_reference_multiplier(),
                 ));
+                stream_step = active_step;
                 dual_averaging_after_restart =
                     dual_averaging.as_ref().map(DualAveraging::telemetry);
                 restart_events.push(StepSearchEvent {
@@ -7621,9 +7720,13 @@ pub fn sample_dense_with_control<T: Target>(
         &mut position,
         &mut active_step,
         &mut dual_averaging,
+        warmup.dynamic_floor(search_step, stream_step),
     )?;
     if let Some(dual) = &dual_averaging {
-        active_step = warmup.floored_step(dual.final_step());
+        active_step = warmup.floored_step(
+            dual.final_step(),
+            warmup.dynamic_floor(search_step, stream_step),
+        );
     }
 
     let mut retained_config = config.clone();
@@ -8265,6 +8368,9 @@ fn run_structured_refresh_chain<T: Target>(
     let mut dual = warmup
         .adapt_step_size
         .then(|| DualAveraging::new(active_step, warmup.target_acceptance));
+    warmup.validate_relative_floor()?;
+    let mut search_step: Option<f64> = None;
+    let mut stream_step = active_step;
     let mut variance = DiagonalVariance::new(dimension);
     let mut updates = Vec::with_capacity(schedule.windows.len());
     let mut generation = 0usize;
@@ -8309,7 +8415,10 @@ fn run_structured_refresh_chain<T: Target>(
             variance.update(&position);
         }
         if let (Some(dual), Some(acceptance)) = (&mut dual, output.telemetry.acceptance_values[0]) {
-            active_step = warmup.floored_step(dual.update(acceptance));
+            active_step = warmup.floored_step(
+                dual.update(acceptance),
+                warmup.dynamic_floor(search_step, stream_step),
+            );
         }
         if transition == 0
             && config.discarded > 0
@@ -8349,6 +8458,8 @@ fn run_structured_refresh_chain<T: Target>(
             )
             .map_err(|error| error.at_transition(transition))?;
             active_step = step;
+            search_step = Some(step);
+            stream_step = step;
             if warmup.adapt_step_size {
                 dual = Some(DualAveraging::new(active_step, warmup.target_acceptance));
             }
@@ -8447,6 +8558,7 @@ fn run_structured_refresh_chain<T: Target>(
                                 )
                                 .map_err(|error| error.at_transition(transition))?;
                                 active_step = step;
+                                search_step = Some(step);
                                 update.step_after_search = Some(step);
                                 step_searches.push(StepSearchEvent {
                                     reason: StepSearchReason::MetricUpdate {
@@ -8463,6 +8575,7 @@ fn run_structured_refresh_chain<T: Target>(
                                     warmup.target_acceptance,
                                     warmup.restart_reference_multiplier(),
                                 ));
+                                stream_step = active_step;
                                 update.dual_averaging_restarted = true;
                             }
                             update.step_after_restart = Some(active_step);
@@ -8476,7 +8589,10 @@ fn run_structured_refresh_chain<T: Target>(
         if transition + 1 == config.discarded
             && let Some(value) = &dual
         {
-            active_step = warmup.floored_step(value.final_step());
+            active_step = warmup.floored_step(
+                value.final_step(),
+                warmup.dynamic_floor(search_step, stream_step),
+            );
         }
         append_projected_transition(
             &mut combined,
@@ -10785,6 +10901,106 @@ mod tests {
             exhausted(&b)
         );
         assert_ne!(a.samples(), b.samples());
+    }
+
+    #[test]
+    fn relative_step_floors_validate_and_bound_the_adapted_step() {
+        let base = WarmupConfig::new(0.8).unwrap();
+        assert!(
+            base.clone()
+                .with_step_floor_relative_to_search(0.0)
+                .is_err()
+        );
+        assert!(
+            base.clone()
+                .with_step_floor_relative_to_search(1.5)
+                .is_err()
+        );
+        assert!(base.clone().with_max_window_shrink(1.0).is_err());
+        assert!(base.clone().with_max_window_shrink(f64::NAN).is_err());
+        assert_eq!(base.step_floor_relative_to_search(), None);
+        assert_eq!(base.max_window_shrink(), None);
+        let target = Gaussian(2);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        // The search floor needs a search: rejected at run time.
+        let floor_without_search = RunConfig::new(60, NonZeroUsize::new(4).unwrap(), 7)
+            .with_warmup(
+                base.clone()
+                    .with_step_floor_relative_to_search(0.5)
+                    .unwrap(),
+            );
+        assert!(sample(&target, &[0.3, -0.2], &mass, &floor_without_search).is_err());
+        // From an oversized initial step dual averaging shrinks aggressively;
+        // the shrink bound keeps every warmup step within the bound of the
+        // step its stream started from (the initial step before the first
+        // metric update), while the unbounded run falls below it.
+        let tuning = KernelTuning::new(50.0, nz(4), nz(1), nz(2), 0.5).unwrap();
+        let bounded = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 11)
+            .with_tuning(tuning)
+            .with_warmup(base.clone().with_max_window_shrink(4.0).unwrap());
+        let free = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 11)
+            .with_tuning(tuning)
+            .with_warmup(base.clone());
+        let a = sample(&target, &[0.3, -0.2], &mass, &bounded).unwrap();
+        let b = sample(&target, &[0.3, -0.2], &mass, &free).unwrap();
+        let first_window_end = a.metadata().warmup_schedule().unwrap().windows()[0].end();
+        assert!(
+            a.diagnostics()[..first_window_end]
+                .iter()
+                .all(|d| d.step_size() >= 50.0 / 4.0 - 1e-12)
+        );
+        assert!(
+            b.diagnostics()[..first_window_end]
+                .iter()
+                .any(|d| d.step_size() < 50.0 / 4.0)
+        );
+        // Every stream after a metric update is bounded relative to its own
+        // restart step.
+        for update in a.telemetry().metric_updates() {
+            if let Some(restart) = update.step_after_restart() {
+                let next_end = a
+                    .telemetry()
+                    .metric_updates()
+                    .iter()
+                    .find(|u| u.transition() > update.transition())
+                    .map_or(200, |u| u.transition() + 1);
+                assert!(
+                    a.diagnostics()[update.transition() + 1..next_end]
+                        .iter()
+                        .all(|d| d.step_size() >= restart / 4.0 - 1e-12)
+                );
+            }
+        }
+        // The search floor: with Stan's search the adapted step never falls
+        // below the fraction of the latest search result.
+        let searched = RunConfig::new(200, NonZeroUsize::new(10).unwrap(), 11)
+            .with_tuning(tuning)
+            .with_warmup(
+                base.with_initial_step_search(InitialStepSearchConfig::stan())
+                    .with_step_floor_relative_to_search(0.5)
+                    .unwrap(),
+            );
+        let c = sample(&target, &[0.3, -0.2], &mass, &searched).unwrap();
+        let mut floor = c.telemetry().initial_step_search().unwrap().selected_step() * 0.5;
+        let mut next_search = c
+            .telemetry()
+            .metric_updates()
+            .iter()
+            .filter(|u| u.step_after_search().is_some())
+            .collect::<Vec<_>>()
+            .into_iter();
+        let mut boundary = next_search.next();
+        for (index, d) in c.diagnostics()[..200].iter().enumerate() {
+            if let Some(update) = boundary
+                && index == update.transition() + 1
+            {
+                floor = update.step_after_search().unwrap() * 0.5;
+                boundary = next_search.next();
+            }
+            if index > 0 {
+                assert!(d.step_size() >= floor - 1e-12, "transition {index}");
+            }
+        }
     }
 
     #[cfg(feature = "research")]

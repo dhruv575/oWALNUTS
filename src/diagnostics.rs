@@ -643,6 +643,78 @@ pub fn default_parameter_names(dimension: usize) -> Vec<String> {
     (1..=dimension).map(|i| format!("theta.{i}")).collect()
 }
 
+/// R-hat threshold above which [`ChainDisagreement`] names chains.
+pub const RHAT_DISAGREEMENT_THRESHOLD: f64 = 1.01;
+
+/// Which chain(s) a failed R-hat points at: the leave-one-chain-out
+/// diagnostic of a [`Summary`].
+///
+/// For every chain the maximum rank R-hat over all parameters is recomputed
+/// with that chain left out. A chain whose removal alone brings the maximum
+/// below [`RHAT_DISAGREEMENT_THRESHOLD`] is a *disagreeing* chain: the other
+/// chains agree with each other and this one does not (a chain stuck in a
+/// second mode, a chain that never left its start). Empty when no single
+/// chain explains the failure (two chains in a second mode, or every chain
+/// mixing poorly) — the field says which case a failed run is in.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct ChainDisagreement {
+    /// Maximum rank R-hat over parameters with every chain.
+    pub max_rhat: f64,
+    /// Maximum rank R-hat over parameters without chain `i`, per chain.
+    pub max_rhat_without: Vec<f64>,
+    /// Chains whose removal alone brings the maximum R-hat below the
+    /// threshold, in chain order.
+    pub chains: Vec<usize>,
+}
+
+impl ChainDisagreement {
+    /// Compute the diagnostic from per-parameter chain columns
+    /// (`parameters[p][chain]`). `None` with fewer than three chains, with no
+    /// parameter, or when the maximum R-hat is already below the threshold or
+    /// undefined.
+    pub fn compute(parameters: &[Vec<&[f64]>]) -> Option<Self> {
+        let chains = parameters.first()?.len();
+        if chains < 3 || parameters.iter().any(|columns| columns.len() != chains) {
+            return None;
+        }
+        let max_rhat = parameters
+            .iter()
+            .map(|columns| rhat(columns))
+            .fold(f64::NAN, f64::max);
+        if max_rhat.is_nan() || max_rhat <= RHAT_DISAGREEMENT_THRESHOLD {
+            return None;
+        }
+        let max_rhat_without: Vec<f64> = (0..chains)
+            .map(|left_out| {
+                parameters
+                    .iter()
+                    .map(|columns| {
+                        let subset: Vec<&[f64]> = columns
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| *index != left_out)
+                            .map(|(_, column)| *column)
+                            .collect();
+                        rhat(&subset)
+                    })
+                    .fold(f64::NAN, f64::max)
+            })
+            .collect();
+        let disagreeing = max_rhat_without
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| **value <= RHAT_DISAGREEMENT_THRESHOLD)
+            .map(|(index, _)| index)
+            .collect();
+        Some(Self {
+            max_rhat,
+            max_rhat_without,
+            chains: disagreeing,
+        })
+    }
+}
+
 /// A Stan/ArviZ-style run summary: one [`ParameterSummary`] row per
 /// parameter plus [`SamplerHealth`].
 #[derive(Clone, Debug, PartialEq)]
@@ -652,6 +724,10 @@ pub struct Summary {
     pub draws_per_chain: usize,
     pub parameters: Vec<ParameterSummary>,
     pub health: SamplerHealth,
+    /// Present when the maximum R-hat exceeds
+    /// [`RHAT_DISAGREEMENT_THRESHOLD`] and there are at least three chains;
+    /// see [`ChainDisagreement`].
+    pub chain_disagreement: Option<ChainDisagreement>,
 }
 
 impl Summary {
@@ -688,11 +764,9 @@ impl Summary {
             Some(names) => names.to_vec(),
             None => default_parameter_names(dimension),
         };
-        let parameters = names
-            .into_iter()
-            .enumerate()
-            .map(|(index, name)| {
-                let columns: Vec<Vec<f64>> = chains
+        let columns_by_parameter: Vec<Vec<Vec<f64>>> = (0..dimension)
+            .map(|index| {
+                chains
                     .iter()
                     .map(|chain| {
                         chain
@@ -703,15 +777,24 @@ impl Summary {
                             .copied()
                             .collect()
                     })
-                    .collect();
-                ParameterSummary::compute(name, &as_views(&columns))
+                    .collect()
             })
+            .collect();
+        let views: Vec<Vec<&[f64]>> = columns_by_parameter
+            .iter()
+            .map(|columns| as_views(columns))
+            .collect();
+        let parameters = names
+            .into_iter()
+            .zip(&views)
+            .map(|(name, columns)| ParameterSummary::compute(name, columns))
             .collect();
         Ok(Self {
             chains: chains.len(),
             draws_per_chain: draws,
             parameters,
             health: SamplerHealth::from_chains(chains),
+            chain_disagreement: ChainDisagreement::compute(&views),
         })
     }
 }
@@ -814,6 +897,28 @@ impl fmt::Display for Summary {
                 fmt_num(c.step_size),
             )?;
         }
+        if let Some(d) = &self.chain_disagreement {
+            let without: Vec<String> = d.max_rhat_without.iter().map(|v| fmt_num(*v)).collect();
+            if d.chains.is_empty() {
+                writeln!(
+                    f,
+                    "R-hat {} > {}: no single chain explains it (max R-hat without each chain: {})",
+                    fmt_num(d.max_rhat),
+                    RHAT_DISAGREEMENT_THRESHOLD,
+                    without.join(", ")
+                )?;
+            } else {
+                let names: Vec<String> = d.chains.iter().map(|c| c.to_string()).collect();
+                writeln!(
+                    f,
+                    "R-hat {} > {}: chain(s) {} disagree with the rest (max R-hat without each chain: {})",
+                    fmt_num(d.max_rhat),
+                    RHAT_DISAGREEMENT_THRESHOLD,
+                    names.join(", "),
+                    without.join(", ")
+                )?;
+            }
+        }
         Ok(())
     }
 }
@@ -869,6 +974,44 @@ mod tests {
         assert_eq!(quantile(&chains, 0.5), 2.5);
         assert_eq!(quantile(&chains, 0.25), 1.75);
         assert!(quantile(&chains, 1.5).is_nan());
+    }
+
+    #[test]
+    fn chain_disagreement_names_the_odd_chain_out() {
+        // Three chains around zero, one chain shifted: only its removal
+        // brings R-hat down.
+        let n = 200;
+        let wave = |phase: f64, offset: f64| -> Vec<f64> {
+            (0..n)
+                .map(|i| offset + ((i as f64) * 0.7 + phase).sin() + ((i as f64) * 1.3).cos() * 0.5)
+                .collect()
+        };
+        let chains = [
+            wave(0.0, 0.0),
+            wave(1.0, 0.0),
+            wave(2.0, 0.0),
+            wave(3.0, 5.0),
+        ];
+        let views = [vec![
+            chains[0].as_slice(),
+            chains[1].as_slice(),
+            chains[2].as_slice(),
+            chains[3].as_slice(),
+        ]];
+        let d = ChainDisagreement::compute(&views).expect("R-hat fails");
+        assert!(d.max_rhat > RHAT_DISAGREEMENT_THRESHOLD);
+        assert_eq!(d.chains, vec![3]);
+        assert!(d.max_rhat_without[3] <= RHAT_DISAGREEMENT_THRESHOLD);
+        // Agreeing chains: no diagnostic.
+        let agree = [vec![
+            chains[0].as_slice(),
+            chains[1].as_slice(),
+            chains[2].as_slice(),
+        ]];
+        assert!(ChainDisagreement::compute(&agree).is_none());
+        // Fewer than three chains: no diagnostic.
+        let two = [vec![chains[0].as_slice(), chains[3].as_slice()]];
+        assert!(ChainDisagreement::compute(&two).is_none());
     }
 
     #[test]
