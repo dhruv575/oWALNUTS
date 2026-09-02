@@ -9,7 +9,8 @@
 use crate::types::{State, ValidationError};
 use rand::RngCore;
 use rand_distr::{Distribution, StandardNormal};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,6 +99,7 @@ impl MassOperator for [f64] {
         }
     }
 
+    #[inline]
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         0.5 * momentum
             .iter()
@@ -165,6 +167,7 @@ impl MassOperator for Vec<f64> {
     }
 }
 
+#[inline]
 fn kinetic_energy<M: MassOperator + ?Sized>(momentum: &[f64], mass: &M) -> f64 {
     mass.kinetic_energy(momentum)
 }
@@ -218,6 +221,17 @@ struct Workspace {
     scaled_difference: Vec<f64>,
 }
 
+// Most recently released workspace and the freed leaf states of this
+// thread. Both are pure allocation caches: their contents are always
+// overwritten before use, so they cannot influence any numerical result.
+thread_local! {
+    static WORKSPACE_CACHE: RefCell<Option<Workspace>> = const { RefCell::new(None) };
+    static STATE_POOL: RefCell<Vec<State>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Upper bound on pooled leaf states per thread.
+const STATE_POOL_LIMIT: usize = 4096;
+
 impl Workspace {
     fn new(dimension: usize) -> Self {
         let blank = || State {
@@ -234,6 +248,18 @@ impl Workspace {
             scaled_difference: vec![0.0; dimension],
         }
     }
+
+    /// Reuse this thread's released workspace when its dimension matches.
+    fn acquire(dimension: usize) -> Self {
+        WORKSPACE_CACHE
+            .with(|cache| cache.borrow_mut().take())
+            .filter(|workspace| workspace.velocity.len() == dimension)
+            .unwrap_or_else(|| Self::new(dimension))
+    }
+
+    fn release(self) {
+        WORKSPACE_CACHE.with(|cache| *cache.borrow_mut() = Some(self));
+    }
 }
 
 #[inline]
@@ -244,6 +270,60 @@ fn copy_state(into: &mut State, from: &State) {
     into.log_prob = from.log_prob;
 }
 
+/// A copy of `from` in storage taken from this thread's pool when possible.
+fn pooled_copy(from: &State) -> State {
+    let recycled = STATE_POOL.with(|pool| pool.borrow_mut().pop());
+    match recycled {
+        Some(mut state) if state.theta.len() == from.theta.len() => {
+            copy_state(&mut state, from);
+            state
+        }
+        _ => from.clone(),
+    }
+}
+
+/// A leaf state whose storage returns to the thread pool when the last
+/// span referencing it is dropped.
+#[derive(Debug)]
+pub(crate) struct PooledState(Option<State>);
+
+impl PooledState {
+    fn new(state: State) -> Rc<Self> {
+        Rc::new(Self(Some(state)))
+    }
+
+    fn into_inner(mut self) -> State {
+        self.0
+            .take()
+            .expect("pooled state is present until dropped")
+    }
+}
+
+impl Deref for PooledState {
+    type Target = State;
+
+    #[inline]
+    fn deref(&self) -> &State {
+        self.0
+            .as_ref()
+            .expect("pooled state is present until dropped")
+    }
+}
+
+impl Drop for PooledState {
+    fn drop(&mut self) {
+        if let Some(state) = self.0.take() {
+            // Ignore a torn-down thread-local: the state is simply freed.
+            let _ = STATE_POOL.try_with(|pool| {
+                let mut pool = pool.borrow_mut();
+                if pool.len() < STATE_POOL_LIMIT {
+                    pool.push(state);
+                }
+            });
+        }
+    }
+}
+
 /// One physical endpoint of a span, including its cached joint log density.
 ///
 /// The state is shared: a fresh leaf span's two endpoints and its selected
@@ -251,7 +331,7 @@ fn copy_state(into: &mut State, from: &State) {
 /// endpoints without copying.
 #[derive(Clone, Debug)]
 pub struct Endpoint {
-    pub state: Rc<State>,
+    pub state: Rc<PooledState>,
     pub log_joint: f64,
 }
 
@@ -270,7 +350,7 @@ pub struct Span {
     pub forward: Endpoint,
     /// The position-valued candidate retained by progressive sampling; its
     /// `rho` is incidental and never read.
-    pub selected: Rc<State>,
+    pub selected: Rc<PooledState>,
     /// Log of the sum of the leaves' unnormalized joint densities.
     pub log_weight: f64,
 }
@@ -282,23 +362,38 @@ impl Span {
         mass: &M,
     ) -> Result<Self, ValidationError> {
         validate_state_and_mass(&state, mass)?;
-        Self::from_leaf_state(state, mass)
+        let log_joint = joint_log_density(&state, mass);
+        Self::from_leaf_state(state, log_joint, mass.dimension())
     }
 
     /// Build a one-state span from a leaf produced under an already validated
-    /// metric. The state itself is still checked for shape and finiteness.
-    fn from_leaf_state<M: MassOperator + ?Sized>(
+    /// metric, with the joint log density that was evaluated on that exact
+    /// state.
+    ///
+    /// An accepted endpoint's log density and momentum are finite because its
+    /// finite Hamiltonian error was tested, and its gradient because the
+    /// final fused call was checked; only the position can be nonfinite
+    /// (a callback that returns finite values at a nonfinite position), and
+    /// that is rejected exactly as [`Span::from_state`] rejects it.
+    fn from_leaf_state(
         state: State,
-        mass: &M,
+        log_joint: f64,
+        mass_dimension: usize,
     ) -> Result<Self, ValidationError> {
-        validate_state_shape_and_finiteness(&state, mass.dimension())?;
-        let log_joint = joint_log_density(&state, mass);
+        if state.theta.len() != mass_dimension {
+            return Err(ValidationError(
+                "state and diagonal inverse mass dimensions must match and be nonzero".into(),
+            ));
+        }
+        if state.theta.iter().any(|value| !value.is_finite()) {
+            return Err(ValidationError("state must be finite".into()));
+        }
         if !log_joint.is_finite() {
             return Err(ValidationError(
                 "state joint log density must be finite".into(),
             ));
         }
-        let state = Rc::new(state);
+        let state = PooledState::new(state);
         let endpoint = Endpoint { state, log_joint };
         Ok(Self {
             backward: endpoint.clone(),
@@ -308,7 +403,12 @@ impl Span {
         })
     }
 
-    fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
+    fn from_subspans(
+        earlier: Span,
+        later: Span,
+        selected: Rc<PooledState>,
+        log_weight: f64,
+    ) -> Self {
         Self {
             backward: earlier.backward,
             forward: later.forward,
@@ -419,6 +519,9 @@ pub struct MacroLeafResult {
     pub adaptation_value: f64,
     /// Metropolis acceptance probability at the accepted refined endpoint.
     pub accepted_trajectory_adaptation_value: Option<f64>,
+    /// Joint log density of the accepted endpoint, as evaluated by the final
+    /// micro-step; NaN when the leaf was rejected.
+    pub end_log_joint: f64,
     pub rejection: Option<Rejection>,
     pub selected_refinement_level: Option<usize>,
     pub refinement_attempts: usize,
@@ -593,6 +696,7 @@ where
     };
     increment(&mut work.leaves_attempted)?;
     let result = macro_leaf_in_workspace(start, mass, tuning, direction, eval, work, workspace)?;
+    let end_log_joint = result.end_log_joint;
     match (result.end_state, result.rejection) {
         (Some(state), None) => {
             increment(&mut work.leaves_built)?;
@@ -603,7 +707,7 @@ where
                 increment(&mut work.histograms.refinement_level_built[level])?;
             }
             Ok(BuildLeafResult::Built {
-                span: Span::from_leaf_state(state, mass)?,
+                span: Span::from_leaf_state(state, end_log_joint, mass.dimension())?,
                 micro_steps: result.micro_steps,
                 evaluations: result.evaluations,
                 adaptation_value: result.adaptation_value,
@@ -1112,16 +1216,19 @@ fn spans_make_u_turn_observed<M: MassOperator + ?Sized>(
     (earlier_dot < 0.0, later_dot, Some(earlier_dot))
 }
 
+#[inline]
 fn checked_add_evaluations(left: usize, right: usize) -> Result<usize, ValidationError> {
     left.checked_add(right)
         .ok_or_else(|| ValidationError("evaluation count overflowed usize".into()))
 }
 
+#[inline]
 fn checked_add_work(left: usize, right: usize) -> Result<usize, ValidationError> {
     left.checked_add(right)
         .ok_or_else(|| ValidationError("work telemetry count overflowed usize".into()))
 }
 
+#[inline]
 fn increment(value: &mut usize) -> Result<(), ValidationError> {
     *value = checked_add_work(*value, 1)?;
     Ok(())
@@ -1994,7 +2101,7 @@ where
 {
     validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
-    let mut workspace = Workspace::new(mass.dimension());
+    let mut workspace = Workspace::acquire(mass.dimension());
     let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
         (log_prob, grad, 0)
     } else {
@@ -2027,7 +2134,8 @@ where
         grad,
     };
     validate_state_and_mass(&state, mass)?;
-    let mut span_accum = Span::from_leaf_state(state, mass)?;
+    let initial_log_joint = joint_log_density(&state, mass);
+    let mut span_accum = Span::from_leaf_state(state, initial_log_joint, mass.dimension())?;
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
@@ -2120,6 +2228,7 @@ where
     work.direction_draws = counts.direction_draws;
     record_stop(&mut work, final_stop)?;
     work.validate_invariants()?;
+    workspace.release();
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
             selected: take_selected(span_accum),
@@ -2164,7 +2273,7 @@ where
 {
     validate_transition_input(&input, mass, tuning)?;
     let mut work = TransitionWorkTelemetry::for_tuning(tuning.leaf);
-    let mut workspace = Workspace::new(mass.dimension());
+    let mut workspace = Workspace::acquire(mass.dimension());
     let (log_prob, grad, initial_evaluations) = if let Some((log_prob, grad)) = cached {
         (log_prob, grad, 0)
     } else {
@@ -2197,7 +2306,8 @@ where
         grad,
     };
     validate_state_and_mass(&state, mass)?;
-    let mut span_accum = Span::from_leaf_state(state, mass)?;
+    let initial_log_joint = joint_log_density(&state, mass);
+    let mut span_accum = Span::from_leaf_state(state, initial_log_joint, mass.dimension())?;
     if initial_evaluations != 0 {
         trace(TransitionTraceEvent::basic(
             "initial_evaluation",
@@ -2419,6 +2529,7 @@ where
     work.direction_draws = counts.direction_draws;
     record_stop(&mut work, final_stop)?;
     work.validate_invariants()?;
+    workspace.release();
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
             selected: take_selected(span_accum),
@@ -2518,11 +2629,14 @@ fn take_selected(span: Span) -> SelectedState {
     drop(backward);
     drop(forward);
     match Rc::try_unwrap(selected) {
-        Ok(state) => SelectedState {
-            theta: state.theta,
-            grad: state.grad,
-            log_prob: state.log_prob,
-        },
+        Ok(pooled) => {
+            let state = pooled.into_inner();
+            SelectedState {
+                theta: state.theta,
+                grad: state.grad,
+                log_prob: state.log_prob,
+            }
+        }
         Err(shared) => SelectedState {
             theta: shared.theta.clone(),
             grad: shared.grad.clone(),
@@ -2650,6 +2764,7 @@ where
         last_integration = Some(integration);
         let attempted = integration.attempted;
         let valid = integration.valid;
+        let forward_log_joint = integration.endpoint_log_joint;
         work.zero_density_evaluations =
             checked_add_work(work.zero_density_evaluations, integration.zero_density)?;
         work.forward_micro_steps_executed =
@@ -2667,6 +2782,7 @@ where
                 reverse_evaluations: 0,
                 adaptation_value: 0.0,
                 accepted_trajectory_adaptation_value: None,
+                end_log_joint: f64::NAN,
                 rejection: Some(Rejection::InvalidEvaluation),
                 selected_refinement_level: None,
                 refinement_attempts: level + 1,
@@ -2698,7 +2814,7 @@ where
                 for momentum in &mut reversed.rho {
                     *momentum = -*momentum;
                 }
-                let reverse_initial_h = -joint_log_density(candidate, mass);
+                let reverse_initial_h = -forward_log_joint;
                 let integration = integrate(
                     reversed,
                     coarse_step,
@@ -2741,6 +2857,7 @@ where
                         reverse_evaluations,
                         adaptation_value: last_adaptation_value,
                         accepted_trajectory_adaptation_value: None,
+                        end_log_joint: f64::NAN,
                         rejection: Some(Rejection::InvalidEvaluation),
                         selected_refinement_level: None,
                         refinement_attempts: level + 1,
@@ -2764,6 +2881,7 @@ where
                         reverse_evaluations,
                         adaptation_value: last_adaptation_value,
                         accepted_trajectory_adaptation_value: None,
+                        end_log_joint: f64::NAN,
                         rejection: Some(Rejection::ReverseCoarserAccepted),
                         selected_refinement_level: None,
                         refinement_attempts: level + 1,
@@ -2779,18 +2897,17 @@ where
                     .map_or(level, |selected| selected.max(level)),
             );
             observe_energy_range(work, integration.minimum, integration.maximum, initial_h);
-            let accepted_trajectory_adaptation_value = (initial_h
-                + joint_log_density(candidate, mass))
-            .min(0.0)
-            .exp();
+            let accepted_trajectory_adaptation_value =
+                (initial_h + forward_log_joint).min(0.0).exp();
             return Ok(MacroLeafResult {
-                end_state: Some(candidate.clone()),
+                end_state: Some(pooled_copy(candidate)),
                 micro_steps,
                 evaluations: checked_add_evaluations(forward_evaluations, reverse_evaluations)?,
                 forward_evaluations,
                 reverse_evaluations,
                 adaptation_value: last_adaptation_value,
                 accepted_trajectory_adaptation_value: Some(accepted_trajectory_adaptation_value),
+                end_log_joint: forward_log_joint,
                 rejection: None,
                 selected_refinement_level: Some(level),
                 refinement_attempts: level + 1,
@@ -2814,6 +2931,7 @@ where
         reverse_evaluations: 0,
         adaptation_value: last_adaptation_value,
         accepted_trajectory_adaptation_value: None,
+        end_log_joint: f64::NAN,
         rejection: Some(Rejection::RefinementExhausted),
         selected_refinement_level: None,
         refinement_attempts: tuning.max_refinement_levels,
@@ -2945,6 +3063,9 @@ struct IntegrationObservation {
     /// Fused calls in this attempt that returned a zero-density point
     /// (log density exactly `-inf` with a finite gradient).
     zero_density: usize,
+    /// Joint log density of the state after the final micro-step, exactly
+    /// the negated `energy` tested there. NaN when the attempt is invalid.
+    endpoint_log_joint: f64,
 }
 
 fn integrate<E, M: MassOperator + ?Sized>(
@@ -2967,6 +3088,7 @@ where
     let mut maximum = initial_hamiltonian;
     let mut maximum_absolute_error = 0.0_f64;
     let mut endpoint_error = 0.0_f64;
+    let mut endpoint_log_joint = f64::NAN;
     let mut zero_density = 0usize;
     for evaluation in 0..count {
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
@@ -3006,6 +3128,7 @@ where
                 maximum_absolute_error: f64::INFINITY,
                 endpoint_error: f64::INFINITY,
                 zero_density,
+                endpoint_log_joint: f64::NAN,
             };
         } else {
             state.log_prob = log_prob;
@@ -3013,7 +3136,8 @@ where
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        let energy = -joint_log_density(state, mass);
+        let log_joint = joint_log_density(state, mass);
+        let energy = -log_joint;
         if energy.is_nan() {
             return IntegrationObservation {
                 attempted: evaluation + 1,
@@ -3023,6 +3147,7 @@ where
                 maximum_absolute_error: f64::INFINITY,
                 endpoint_error: f64::INFINITY,
                 zero_density,
+                endpoint_log_joint: f64::NAN,
             };
         }
         if energy.is_finite() {
@@ -3035,6 +3160,7 @@ where
                 maximum_absolute_error.max((energy - initial_hamiltonian).abs());
         }
         endpoint_error = (energy - initial_hamiltonian).abs();
+        endpoint_log_joint = log_joint;
     }
     IntegrationObservation {
         attempted: count,
@@ -3044,6 +3170,7 @@ where
         maximum_absolute_error,
         endpoint_error,
         zero_density,
+        endpoint_log_joint,
     }
 }
 
@@ -3067,6 +3194,7 @@ fn observe_energy_range(
     work.maximum_absolute_energy_error = work.maximum_absolute_energy_error.max(error);
 }
 
+#[inline]
 fn joint_log_density<M: MassOperator + ?Sized>(state: &State, mass: &M) -> f64 {
     state.log_prob - mass.kinetic_energy(&state.rho)
 }
