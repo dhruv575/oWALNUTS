@@ -1096,15 +1096,24 @@ impl WarmupConfig {
     /// doubling/halving initial-step heuristic at the start and after every
     /// metric update ([`InitialStepSearchConfig::stan`]), Stan's diagonal
     /// metric regularisation ([`DiagonalMetricRegularization::Stan`]) and
-    /// Stan's restart reference `mu = ln(10 h)`. The window schedule (75 /
-    /// 25, 50, 100, ... / 50) and the dual-averaging constants (`gamma =
-    /// 0.05`, `t_0 = 10`, `kappa = 0.75`) are already Stan's in the default.
+    /// Stan's restart reference `mu = ln(10 h)`, plus `delta =`
+    /// [`DEFAULT_DIVERGENCE_THRESHOLD`] during the initial fast phase
+    /// ([`Self::with_initial_phase_max_error`]) so the initial phase is
+    /// Stan's NUTS. The window schedule (75 / 25, 50, 100, ... / 50) and the
+    /// dual-averaging constants (`gamma = 0.05`, `t_0 = 10`, `kappa = 0.75`)
+    /// are already Stan's in the default.
+    ///
+    /// Without the initial-phase `delta` this preset freezes chains started
+    /// far in a tail (`STUDIES/adaptation_parity_v1`, round 1): Stan's
+    /// metric prior no longer floors the variance of a chain that could not
+    /// move under `delta = 1`.
     pub fn stan_style(target_acceptance: f64) -> Result<Self, Error> {
-        Ok(Self::new(target_acceptance)?
+        Self::new(target_acceptance)?
             .with_dual_averaging_acceptance(DualAveragingAcceptance::MeanTrajectoryAcceptance)
             .with_initial_step_search(InitialStepSearchConfig::stan())
             .with_metric_regularization(DiagonalMetricRegularization::Stan)
-            .with_stan_restart_reference(true))
+            .with_stan_restart_reference(true)
+            .with_initial_phase_max_error(DEFAULT_DIVERGENCE_THRESHOLD)
     }
 
     /// Replace acceptance-driven step adaptation by the JMLR Appendix C
@@ -10338,6 +10347,10 @@ mod tests {
             DiagonalMetricRegularization::Stan
         );
         assert!(warmup.stan_restart_reference());
+        assert_eq!(
+            warmup.initial_phase_max_error(),
+            Some(DEFAULT_DIVERGENCE_THRESHOLD)
+        );
         assert_eq!(
             warmup.initial_step_search().unwrap().strategy(),
             InitialStepSearchStrategy::StanDoubling
