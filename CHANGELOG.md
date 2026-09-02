@@ -9,6 +9,25 @@ architecture (see the `walnutpie` module documentation).
 
 ### Added
 
+- **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
+  rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
+  the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views
+  (Vehtari et al. 2021; every estimator matches `az.rhat`, `az.ess` and
+  `az.mcse` to 1e-6 relative on the committed
+  `tests/data/arviz_fixture.json`), and `Summary::from_output` builds a
+  Stan-style table for a `MultiChainOutput` with per-chain and pooled
+  `SamplerHealth` (divergences, invalid-evaluation, depth-cap and
+  refinement-exhaustion stops, mean tree depth, target calls, step size);
+  `Summary` implements `Display` as an aligned table. `owalnuts::export::
+  CmdStanCsv` writes one CmdStan-format CSV per chain (`lp__` recomputed
+  from the target when supplied, `stepsize__`, `treedepth__`,
+  `n_leapfrog__` as fused target calls, `divergent__`, `energy__` as the
+  transition's initial Hamiltonian, then the draws); `arviz.from_cmdstan`
+  loads the files and its `az.summary` agrees with the Rust `Summary`
+  (`tests/export_cmdstan.rs`, opt-in via `OWALNUTS_ARVIZ_PYTHON`).
+  `accept_stat__` is not emitted because the kernel captures acceptance only
+  during warmup. No new dependencies.
+
 - **FFI and autodiff backend support.** `RawTarget` wraps a C-ABI
   fused log-density/gradient callback (`RawTargetFn`) so compiled gradients —
   numba/Cython `cfunc`s, BridgeStan-style entry points — run from parallel
