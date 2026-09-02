@@ -115,3 +115,16 @@ machine-independent primary figure.
 ## Deviations
 
 (none at freeze)
+
+* 2026-09-02 15:26 local — nutpie `hudson_lynx_hare-lotka_volterra` seed 79101
+  panicked inside `nuts-rs` ("Error during point expansion: Failed to
+  constrain the parameters of the draw", poisoned sampler mutex) and the
+  child process exited 1 before seeds 79102 and 79103 were attempted; all
+  three cells are recorded as `timeout_or_crash` by the driver (v2: the same
+  panic on 78102). No rerun; no settings changed; no driver restart was
+  needed for any other cell (one continuous run, 14:41–15:34 local).
+* Setup, before freezing: the posteriordb checkout was first copied from the
+  `freeze_mode_v1` sparse checkout, which lacks `models/info`; it was
+  replaced by a fresh shallow clone of the same commit before the smoke test.
+  The `arma11` BridgeStan library compiled for the smoke test was kept and
+  reused by the run (compilation is not a measurement).
