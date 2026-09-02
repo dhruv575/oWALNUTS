@@ -64,7 +64,7 @@ fn starts(dimension: usize) -> Vec<Vec<f64>> {
 
 /// The same numbers as `Tuning::default()`.
 fn kernel_tuning() -> KernelTuning {
-    KernelTuning::new(0.5, nz(8), nz(1), nz(4), 1.0).unwrap()
+    KernelTuning::new(0.5, nz(10), nz(1), nz(4), 1.0).unwrap()
 }
 
 fn config(warmup: Option<WarmupConfig>) -> RunConfig {

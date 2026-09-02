@@ -64,11 +64,12 @@ use rand::{Rng, SeedableRng, rngs::SmallRng};
 pub use crate::walnutpie::{
     Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
     StructuredBlockMass, StructuredCovarianceBlock, StructuredMetricRefresh,
-    StructuredRefreshConfig, StructuredRefreshUpdate, Target, TargetError, WindowSummary,
+    StructuredRefreshConfig, StructuredRefreshUpdate, Target, TargetError, WarmupConfig,
+    WindowSummary,
 };
 use crate::walnutpie::{
     DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, KernelTuning, MultiChainOutput,
-    RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
+    RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget,
     sample_chains_dense_with_control, sample_chains_dense_with_target_budget_and_control,
     sample_chains_structured_refresh, sample_chains_structured_with_control,
     sample_chains_with_control, sample_chains_with_target_budget_and_control,
@@ -201,6 +202,14 @@ impl fmt::Debug for Metric {
 }
 
 /// Warmup rules applied during the discarded transitions.
+///
+/// The default stays the `v10` dual averaging (`WarmupConfig::new(target)`).
+/// The Stan-parity warmup (`WarmupConfig::stan_style`) is opt-in through
+/// [`Adaptation::Custom`]: in `STUDIES/adaptation_parity_v1` it reached a
+/// 2.0x geometric-mean ESS-per-gradient gain over the default on nine
+/// posteriordb models but lost 12-16 % on three of them and failed the
+/// R-hat gate on two, so it did not meet the preregistered rule for a
+/// default.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Adaptation {
@@ -219,6 +228,9 @@ pub enum Adaptation {
     /// fraction. Supported by the identity, diagonal, and structured (fixed)
     /// metrics.
     Paper(PaperAdaptationConfig),
+    /// Any `walnutpie::WarmupConfig`; its mass-adaptation flag is replaced by
+    /// what the metric requires.
+    Custom(WarmupConfig),
 }
 
 impl Default for Adaptation {
@@ -246,6 +258,7 @@ impl Adaptation {
                     .with_mass_adaptation(adapt_mass)
                     .with_paper_adaptation(*paper),
             ),
+            Self::Custom(warmup) => Some(warmup.clone().with_mass_adaptation(adapt_mass)),
         })
     }
 }
@@ -388,10 +401,14 @@ pub fn uniform_starts<T: Target + ?Sized>(
 /// Kernel tuning: the macro step, tree depth, refinement, and error
 /// threshold. Values are validated when the run starts.
 ///
-/// The default is the README quick-start tuning (`h = 0.5`, depth 8, one
-/// minimum micro-step, four refinement levels, `delta = 1.0`). It differs
-/// from `walnutpie::KernelTuning::default()`, which preserves the frozen
-/// replay tuning of `ALGORITHM_REVISION` (depth 3).
+/// The default is `h = 0.5`, depth 10, one minimum micro-step, four
+/// refinement levels, `delta = 1.0`. Depth 10 (Stan's default; the 0.1 API
+/// used 8) was chosen by the preregistered ablation in
+/// `STUDIES/adaptation_parity_v1`: on the posteriordb regressions with
+/// correlated coefficients (`diamonds`, `earnings`, `sblrc`) depth 8 capped
+/// 55-85 % of transitions and failed every gate, depth 10 passes them. It
+/// differs from `walnutpie::KernelTuning::default()`, which preserves the
+/// frozen replay tuning of `ALGORITHM_REVISION` (depth 3).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuning {
     step_size: f64,
@@ -406,7 +423,7 @@ impl Default for Tuning {
     fn default() -> Self {
         Self {
             step_size: 0.5,
-            max_depth: 8,
+            max_depth: 10,
             min_micro_steps: 1,
             max_refinement_levels: 4,
             max_error: 1.0,

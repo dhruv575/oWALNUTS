@@ -7,6 +7,19 @@ architecture (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
+### Changed
+
+- **`sampler::Tuning::default()` max depth 8 -> 10** (Stan's default). Chosen
+  by the preregistered ablation `STUDIES/adaptation_parity_v1` (nine
+  posteriordb models, two seeds): 1.45x geometric-mean minimum bulk ESS per
+  gradient over the 0.1 defaults, 17/18 gate passes versus 12/18, no model
+  worse beyond seed noise; the correlated regressions `diamonds`, `earnings`
+  and `sblrc` capped 55-85 % of transitions at depth 8 and failed every gate.
+  Geomean versus CmdStan on the nine models: 0.34x -> 0.49x. Only the
+  `sampler` default changes; `walnutpie::KernelTuning::default()` and
+  `WarmupConfig::default()` are the frozen `v10` legacy, `ALGORITHM_REVISION`
+  is unchanged and the kernel fingerprints still hold.
+
 ### Added
 
 - **Robustness after the posteriordb benchmark (WP22 follow-up).**
@@ -24,6 +37,22 @@ architecture (see the `walnutpie` module documentation).
   `with_exhausted_transitions_as_zero`, plus
   `PaperAdaptationOutcome::Deferred`. Measured in
   `STUDIES/paper_adaptation_robust_v1`; kernel fingerprints unchanged.
+- **Opt-in Stan-parity warmup controls** on `walnutpie::WarmupConfig`:
+  `DualAveragingAcceptance::MeanTrajectoryAcceptance` (Stan's
+  `accept_stat__`), `InitialStepSearchConfig::stan()` (Stan's
+  `init_stepsize`, at the start and after every metric update),
+  `DiagonalMetricRegularization::{TowardUnit, Stan}`,
+  `with_stan_restart_reference` (`mu = ln(10 h)` on restart),
+  `with_initial_phase_max_error` (a different `delta` for the initial fast
+  phase), and the preset `WarmupConfig::stan_style(target)`.
+  `sampler::Adaptation::Custom(WarmupConfig)` passes any of them through the
+  builder. Evidence in `STUDIES/adaptation_parity_v1`: alone, none of the
+  four Stan warmup differences helps (Stan's metric prior freezes chains
+  started in a tail under `delta = 1`); with the initial-phase `delta` the
+  full preset at depth 10 is 2.0x the default's ESS per gradient (0.68x
+  CmdStan) but loses 12-16 % on `kidiq`, `mesquite`, `garch11` and fails
+  R-hat on `kidiq`, `earnings`, so it stays opt-in.
+
 - **`owalnuts::sampler`, the 0.2 public API.** One builder, `Sampler`
   (`warmup`, `draws`, `chains`, `seed`, `threads`, `metric`, `adaptation`,
   `tuning`, `limits`, `run`), one result, `Posterior` (chains, flat and

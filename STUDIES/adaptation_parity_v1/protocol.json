@@ -1,0 +1,120 @@
+{
+  "schema": "adaptation-parity-v1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-01",
+  "purpose": "Ablation of Stan-parity warmup changes (acceptance statistic, initial-step heuristic, metric regularisation, restart reference, max depth) against the posteriordb benchmark v1 owalnuts-da arm, to choose the sampler::Sampler defaults.",
+  "v1_study_dir": "C:/dev/owalnuts-wt/posteriordb-bench/STUDIES/posteriordb_bench_v1",
+  "harness": "C:/dev/owalnuts-wt/adapt-parity/target/release/adaptation-parity-v1.exe",
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "nes2000-nes",
+    "sblrc-blr",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "arK-arK",
+    "garch-garch11"
+  ],
+  "configs": [
+    "base",
+    "traj",
+    "init",
+    "reg",
+    "mu10",
+    "depth10",
+    "warmup4",
+    "all",
+    "all+h1"
+  ],
+  "config_semantics": {
+    "base": "posteriordb v1 owalnuts-da arm: h0 = 0.1, depth 8, 1 min micro-step, 4 refinement levels, delta = 1, dual averaging at 0.8 on CurrentCoarseEndpoint, no initial-step search, diagonal metric shrunk toward unit variance, restart mu = ln(h)",
+    "traj": "base + DualAveragingAcceptance::MeanTrajectoryAcceptance (Stan accept_stat__: mean over attempted leaves of min(1, exp(H0 - H_leaf)); rejected leaves count zero)",
+    "init": "base + InitialStepSearchConfig::stan() (Stan init_stepsize doubling/halving at the start and after each metric update)",
+    "reg": "base + DiagonalMetricRegularization::Stan ((n/(n+5)) var + 1e-3 (5/(n+5)))",
+    "mu10": "base + restart reference mu = ln(10 h) after each metric update (Stan's set_mu(log(10 eps)))",
+    "depth10": "base + max tree depth 10",
+    "warmup4": "traj + init + reg + mu10 at depth 8",
+    "all": "warmup4 + depth10",
+    "all+h1": "all with the initial macro step h0 = 1 (Stan's default stepsize) as the seed of the heuristic"
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "seeds": [
+    81101,
+    81102
+  ],
+  "seeds_verified_unused": true,
+  "threads": 4,
+  "starts": "uniform(-2,2) unconstrained, SmallRng(seed ^ 0x5eed00000000), as in v1",
+  "cell_timeout_seconds": 2700,
+  "run_order": "models in listed order; configs in listed order; seeds ascending; strictly sequential",
+  "estimators": "posteriordb v1 driver: ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS on BridgeStan-constrained draws over the posteriordb reference parameter columns; owalnuts::diagnostics on unconstrained coordinates recorded as a secondary check",
+  "primary_metric": "seed median of min over reference parameters of bulk ESS / total gradients (warmup + sampling)",
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0
+  },
+  "cmdstan_reference_min_bulk_ess_per_gradient_x1e3": {
+    "eight_schools-eight_schools_noncentered": 32.473,
+    "mesquite-logmesquite_logvash": 3.841,
+    "kidiq-kidscore_momhsiq": 3.717,
+    "nes2000-nes": 4.812,
+    "sblrc-blr": 6.98,
+    "diamonds-diamonds": 0.215,
+    "earnings-logearn_interaction": 0.779,
+    "arK-arK": 10.607,
+    "garch-garch11": 20.259
+  },
+  "v1_owalnuts_da_min_bulk_ess_per_gradient_x1e3": {
+    "eight_schools-eight_schools_noncentered": 22.976,
+    "mesquite-logmesquite_logvash": 2.827,
+    "kidiq-kidscore_momhsiq": 2.668,
+    "nes2000-nes": 2.401,
+    "sblrc-blr": 0.295,
+    "diamonds-diamonds": 0.022,
+    "earnings-logearn_interaction": 0.015,
+    "arK-arK": 7.77,
+    "garch-garch11": 13.369
+  },
+  "cmdstan_reference_source": "STUDIES/posteriordb_bench_v1/artifacts/results-table.md (CmdStan 2.39.0, adapt_delta 0.8, depth 10, seeds 77101-77103, same estimators)",
+  "decision_rule": "Among the configurations, choose the one with the highest geometric mean over models of (config min-bulk-ESS/gradient) / (base min-bulk-ESS/gradient) subject to no model below 0.9x base; that configuration becomes the sampler::Sampler default. If none satisfies the constraint, the best geomean configuration is reported and the constraint violations named; the default flips only if the violations are on models where base fails the gates.",
+  "reporting": "All cells reported; failures are results; nothing re-run or tuned after seeing results.",
+  "predictions": {
+    "P1": "reg alone recovers diamonds and earnings (steps > 0.01, depth-cap rate < 0.5) because the unit-variance prior on the metric is the binding fault on regressions with small posterior scales",
+    "P2": "traj alone moves the adapted step on every model (the coarse-endpoint statistic is a different quantity) but is not sufficient on diamonds/earnings",
+    "P3": "all reaches >= 0.6x CmdStan geomean ESS per gradient on the nine models",
+    "P4": "refinement level > 0 is selected on < 5% of retained transitions in every configuration (WALNUTS runs as NUTS with delta = 1 on these posteriors)"
+  },
+  "round2": {
+    "status": "FROZEN_BEFORE_ROUND_2_EXECUTION",
+    "frozen_after": "round 1 complete (all 162 cells) and analysed",
+    "motivation": "Round 1: reg (Stan metric regularisation) freezes chains on kidiq, sblrc, earnings, diamonds (R-hat 1.5-3); the diagnostic run kidiq all+delta1000 (delta = 1000 throughout) had no freeze, and kidiq all+ramp (delta = 1000 only during the 75-transition initial fast phase) had R-hat 1.010 on both seeds. Mechanism: from uniform(-2,2) starts the chain sits in a tail where every coarse leaf exceeds delta = 1 at all four refinement levels, so transitions stop after one leaf, dual averaging drives h to ~1e-6, the first 25-draw metric window sees a frozen chain, and Stan's 1e-3 prior no longer floors the variance (the v10 unit prior did). depth10 alone was the only round-1 change that did not lose on any model beyond noise (1.45x base geomean, 17/18 gates).",
+    "configs": [
+      "depth10+ramp",
+      "all+ramp",
+      "all+h1+ramp",
+      "warmup4+ramp",
+      "traj+init+mu10+depth10+ramp"
+    ],
+    "config_semantics": {
+      "ramp": "WarmupConfig::with_initial_phase_max_error(1000.0): delta = 1000 (the divergence threshold) for transitions 0..75, the kernel's delta = 1 from the first slow window on; retained transitions unchanged"
+    },
+    "decision_rule": "Same as round 1, over the union of round-1 and round-2 configurations.",
+    "predictions": {
+      "R2-P1": "all+ramp and warmup4+ramp show no frozen chain (max R-hat < 1.1 on every model)",
+      "R2-P2": "depth10+ramp is within noise of depth10 on every model (ramp matters only when a start is in a tail)",
+      "R2-P3": "no configuration beats depth10 by more than 10% geomean"
+    }
+  },
+  "configs_round2": [
+    "depth10+ramp",
+    "all+ramp",
+    "all+h1+ramp",
+    "warmup4+ramp",
+    "traj+init+mu10+depth10+ramp"
+  ]
+}

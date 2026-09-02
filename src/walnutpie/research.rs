@@ -677,7 +677,7 @@ pub fn sample_projected_arrowhead<T: Target>(
                     dual = Some(DualAveraging::restart(
                         active_step,
                         warmup.target_acceptance,
-                        warmup.research_restart_reference_multiplier,
+                        warmup.restart_reference_multiplier(),
                     ));
                 }
             }
@@ -1005,7 +1005,7 @@ pub fn sample_chains_projected_arrowhead<T: Target>(
                         state.dual = Some(DualAveraging::restart(
                             state.active_step,
                             warmup.target_acceptance,
-                            warmup.research_restart_reference_multiplier,
+                            warmup.restart_reference_multiplier(),
                         ));
                     }
                 }

@@ -59,7 +59,23 @@ let chain = &posterior.chains()[0];              // draws, diagnostics, telemetr
 `Sampler` also takes `.chains(n)` (replicates a single start), `.threads(n)`
 (output is independent of the thread count), `.adaptation(..)`, `.tuning(..)`
 (step size, depth, refinement levels, `delta`), and `.limits(..)`
-(target-evaluation budget, deadline, cancellation). Every path is a thin
+(target-evaluation budget, deadline, cancellation).
+
+Sampler defaults: 1,000 warmup, 1,000 draws, adaptive diagonal metric, dual
+averaging toward acceptance 0.8 (the `v10` warmup: 75 / 25, 50, 100, ... / 50
+windows, `gamma = 0.05`, `t_0 = 10`, `kappa = 0.75`), `Tuning::default()` =
+`h = 0.5`, **max depth 10**, one micro-step, four refinement levels,
+`delta = 1`. Depth 10 (Stan's default; 8 before) comes from the preregistered
+ablation `STUDIES/adaptation_parity_v1`: over nine posteriordb models it is
+the only change that lost nowhere beyond seed noise (1.45x geomean min bulk
+ESS per gradient, 17/18 gate passes vs 12/18), because the correlated
+regressions (`diamonds`, `earnings`, `sblrc`) cap 55-85 % of transitions at
+depth 8. A Stan-parity warmup (`walnutpie::WarmupConfig::stan_style`: Stan's
+mean-trajectory acceptance statistic, `init_stepsize` heuristic, metric
+prior, restart reference, and NUTS during the initial fast phase) is opt-in
+via `Adaptation::Custom`: 2.0x geomean over the default on the same nine
+models but 12-16 % worse on three and R-hat > 1.01 on two, so not the
+default. Every path is a thin
 wrapper over one `walnutpie` entry point and produces bit-identical draws to
 calling it directly; `walnutpie` remains public for the full contract.
 
