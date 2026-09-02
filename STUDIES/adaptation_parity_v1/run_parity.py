@@ -35,7 +35,7 @@ CELLS = ART / "cells"
 DRAWS = ART / "draws"
 HARNESS = Path(PROTOCOL["harness"])
 MODELS = PROTOCOL["models"]
-CONFIGS = PROTOCOL["configs"]
+CONFIGS = PROTOCOL["configs"] + PROTOCOL.get("configs_round2", [])
 SEEDS = PROTOCOL["seeds"]
 TIMEOUT = PROTOCOL["cell_timeout_seconds"]
 

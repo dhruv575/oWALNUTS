@@ -74,6 +74,33 @@ is on a model where `base` fails the gates. `walnutpie::RunConfig` and
 All cells are reported; failures are results; no reruns, no tuning after
 seeing results. Any deviation is appended below.
 
+## Round 2 (frozen after round 1 was complete and analysed)
+
+Round 1 falsified P1: Stan's metric regularisation (`reg`) froze chains on
+`kidiq`, `sblrc`, `earnings` and `diamonds` (R-hat 1.5–3) alone and in every
+combination. Diagnosis (raw cells + two diagnostic runs on `kidiq`, seed
+81101, recorded in `artifacts/diagnostics/`): from uniform(-2, 2) starts the
+chain sits in a tail where every coarse leaf exceeds `delta = 1` at all four
+refinement levels, so transitions stop after one leaf, dual averaging drives
+`h` to ~1e-6, the first 25-draw metric window sees a frozen chain, and Stan's
+1e-3 prior no longer floors the variance the way the v10 unit prior did.
+`all+delta1000` (`delta = 1000` throughout, i.e. NUTS) did not freeze;
+`all+ramp` (`delta = 1000` only for the 75-transition initial fast phase,
+`WarmupConfig::with_initial_phase_max_error`) had R-hat 1.010 on both seeds.
+`depth10` alone was the only round-1 change that lost on no model beyond
+seed noise (1.45x base geomean, 17/18 gates).
+
+Round-2 configurations, same models, seeds and estimators:
+`depth10+ramp`, `all+ramp`, `all+h1+ramp`, `warmup4+ramp`,
+`traj+init+mu10+depth10+ramp` (everything except `reg`). Decision rule as in
+round 1 over the union of both rounds. Predictions: R2-P1 `all+ramp` and
+`warmup4+ramp` show no frozen chain (max R-hat < 1.1 everywhere); R2-P2
+`depth10+ramp` is within noise of `depth10` on every model; R2-P3 no
+configuration beats `depth10` by more than 10 % geomean.
+
 ## Deviations
 
-(none yet)
+* Round 1: `sblrc-blr` cells `mu10` 81101, `all` 81102 and `all+h1` 81102
+  ended with `stan gradient contains inf` (the BridgeStan fatal-on-inf
+  semantics noted in posteriordb benchmark v1, finding 3); recorded as
+  errors, not re-run.
