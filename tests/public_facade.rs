@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "research"), allow(dead_code, unused_imports))]
+
 use std::{
     num::NonZeroUsize,
     sync::{
@@ -10,20 +12,23 @@ use std::{
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, BlockDiagonalMass, CONSERVATIVE_MAX_TARGET_EVALUATIONS,
     DEFAULT_DIVERGENCE_THRESHOLD, DEFAULT_MAX_DEPTH, DEFAULT_MAX_ERROR,
-    DEFAULT_MAX_REFINEMENT_LEVELS, DEFAULT_MIN_MICRO_STEPS, DEFAULT_STEP_SIZE,
-    DIRECT_ORIGINAL_Q_REVISION, DenseMass, DiagonalMass, DirectOriginalQMass, ErrorKind,
-    InitialStepSearchConfig, KernelTuning, LowRankArrowheadMass, PROJECTED_ARROWHEAD_REVISION,
-    ProjectedArrowheadWarmup, ProjectedMetricOutcome, ProposalObservation,
-    ProposalObservationControl, ProposalObserver, ProposalPhase, ProposalTargetOutcome,
-    RESEARCH_MAX_TARGET_EVALUATIONS, RawTarget, ResearchRestartReferenceMultiplier,
-    ResearchTargetEvaluationLimit, RunConfig, RunControl, StopReason, StructuredBlockMass,
+    DEFAULT_MAX_REFINEMENT_LEVELS, DEFAULT_MIN_MICRO_STEPS, DEFAULT_STEP_SIZE, DenseMass,
+    DiagonalMass, ErrorKind, InitialStepSearchConfig, KernelTuning, LowRankArrowheadMass,
+    ProposalObservation, ProposalObservationControl, ProposalObserver, ProposalPhase,
+    ProposalTargetOutcome, RawTarget, RunConfig, RunControl, StopReason, StructuredBlockMass,
     StructuredCovarianceBlock, Target, TargetError, TargetErrorKind,
     TargetEvaluationAdmissionLimit, TargetEvaluationBudget, TargetEvaluationLimitProvenance,
     WarmupConfig, preflight_chains, preflight_chains_with_target_budget, sample,
     sample_block_dense, sample_chains, sample_chains_dense,
-    sample_chains_dense_with_target_budget_and_control, sample_chains_direct_original_q,
-    sample_chains_projected_arrowhead, sample_chains_structured, sample_chains_with_control,
-    sample_chains_with_target_budget, sample_dense, sample_direct_original_q,
+    sample_chains_dense_with_target_budget_and_control, sample_chains_structured,
+    sample_chains_with_control, sample_chains_with_target_budget, sample_dense,
+};
+#[cfg(feature = "research")]
+use owalnuts::walnutpie::{
+    DIRECT_ORIGINAL_Q_REVISION, DirectOriginalQMass, PROJECTED_ARROWHEAD_REVISION,
+    ProjectedArrowheadWarmup, ProjectedMetricOutcome, RESEARCH_MAX_TARGET_EVALUATIONS,
+    ResearchRestartReferenceMultiplier, ResearchTargetEvaluationLimit,
+    sample_chains_direct_original_q, sample_chains_projected_arrowhead, sample_direct_original_q,
     sample_projected_arrowhead,
 };
 
@@ -163,6 +168,7 @@ fn fixed_metric_architecture_goldens_cover_all_existing_paths() {
     );
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn direct_original_q_metrics_have_distinct_deterministic_goldens() {
     let config = RunConfig::new(2, NonZeroUsize::new(4).unwrap(), 0x00d1_2ec7);
@@ -211,6 +217,7 @@ fn direct_original_q_metrics_have_distinct_deterministic_goldens() {
     );
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn direct_original_q_multichain_is_parallel_identical() {
     let mass = DirectOriginalQMass::StructuredPath(
@@ -264,6 +271,7 @@ impl Target for TenDimensionalGaussian {
     }
 }
 
+#[cfg(feature = "research")]
 fn projected_fixture() -> (LowRankArrowheadMass, ProjectedArrowheadWarmup) {
     let basis = vec![
         vec![1.0, 0.0],
@@ -290,6 +298,7 @@ fn projected_fixture() -> (LowRankArrowheadMass, ProjectedArrowheadWarmup) {
     (mass, warmup)
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn projected_arrowhead_installs_only_at_window_boundaries_and_accounts_work() {
     let (mass, projected) = projected_fixture();
@@ -327,6 +336,7 @@ fn projected_arrowhead_installs_only_at_window_boundaries_and_accounts_work() {
     }));
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn projected_arrowhead_boundary_step_search_is_cached_and_deterministic() {
     let (mass, projected) = projected_fixture();
@@ -408,6 +418,7 @@ fn projected_arrowhead_boundary_step_search_is_cached_and_deterministic() {
     );
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn pooled_projected_barrier_is_parallel_identical_shared_and_cache_exact() {
     let (mass, projected) = projected_fixture();
@@ -575,6 +586,7 @@ fn checkpoint_telemetry_is_behavior_and_rng_identical() {
     }
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn research_restart_multiplier_is_exact_at_every_installed_restart() {
     let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
@@ -607,6 +619,7 @@ fn research_restart_multiplier_is_exact_at_every_installed_restart() {
     }
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn checkpointed_warmup_is_parallel_sequential_identical() {
     let positions = vec![vec![0.2, -0.1], vec![-0.4, 0.3], vec![0.1, 0.5]];
@@ -1211,6 +1224,7 @@ fn zero_density_boundary_keeps_truncated_target_stationary() {
     assert!((v1 - 1.0).abs() < 0.10, "Var[x1] {v1}");
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn research_target_evaluation_opt_in_is_bounded_and_has_provenance() {
     let search = InitialStepSearchConfig::new(
@@ -1296,6 +1310,7 @@ fn budgeted_admission_accepts_exact_legacy_multichain_bound_without_callbacks() 
     assert_eq!(budget.started(), 0);
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn legacy_bound_remains_rejected_by_every_unbudgeted_ceiling() {
     let config = legacy_bound_config();
@@ -1999,6 +2014,7 @@ fn paper_adaptation_is_parallel_sequential_identical_and_preflights_without_call
     }
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn paper_step_options_are_additive_and_continue_or_pool_as_configured() {
     let mass = DiagonalMass::identity(NonZeroUsize::new(10).unwrap());
@@ -2243,6 +2259,7 @@ fn paper_step_never_updates_from_transitions_without_built_leaves() {
     assert!(step > 1.0e-3);
 }
 
+#[cfg(feature = "research")]
 #[test]
 fn paper_adaptation_rules_hold_on_the_funnel() {
     // Conservative start: coarse local threshold and a small macro step.
