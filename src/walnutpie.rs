@@ -502,6 +502,28 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 /// target callbacks. Windows with fewer completed orbits than the minimum
 /// leave `delta` unchanged and report [`PaperAdaptationOutcome::InsufficientOrbits`].
 /// The installed step is always the dual-averaging averaged iterate.
+///
+/// # Robustness guards (additive; all off by default)
+///
+/// `STUDIES/posteriordb_bench_v1` showed the bare K-quantile rule freezing
+/// chains on 9 of 17 posteriors: from uniform(-2, 2) starts the first
+/// window's orbits fall into the typical set with energy ranges of
+/// 10^3–10^16, the rule installs `delta ~ 0` at the first boundary, every
+/// leaf then exhausts refinement, no orbit completes, and nothing can undo
+/// it. Four guards address this, each measured in
+/// `STUDIES/paper_adaptation_robust_v1`:
+///
+/// * [`Self::with_min_max_error`] — a floor on the installed `delta`;
+/// * [`Self::with_first_update_after`] — no installation at a boundary
+///   before that many discarded transitions have run (the window's statistics
+///   are still reported, with [`PaperAdaptationOutcome::Deferred`]);
+/// * [`Self::with_metric_update_required`] — with mass adaptation on, no
+///   installation before the diagonal metric has been installed at an
+///   earlier boundary (vacuous without mass adaptation);
+/// * [`Self::with_unhealthy_orbits_excluded`] and
+///   [`Self::with_trim_fraction`] — the quantile is taken over orbits that
+///   neither diverged nor stopped in refinement exhaustion, and/or with the
+///   largest fraction of energy ranges dropped first.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PaperAdaptationConfig {
     global_energy_bound: f64,
@@ -511,6 +533,11 @@ pub struct PaperAdaptationConfig {
     minimum_orbits: usize,
     step_statistic: PaperStepStatistic,
     restart_policy: PaperRestartPolicy,
+    min_max_error: f64,
+    first_update_after: usize,
+    require_metric_update: bool,
+    exclude_unhealthy_orbits: bool,
+    trim_fraction: f64,
 }
 
 /// Which unrefined-fraction statistic drives the paper `h` rule.
@@ -549,6 +576,11 @@ impl Default for PaperAdaptationConfig {
             minimum_orbits: DEFAULT_PAPER_MINIMUM_ORBITS,
             step_statistic: PaperStepStatistic::PerTransition,
             restart_policy: PaperRestartPolicy::ContinueThroughLocalErrorInstall,
+            min_max_error: PAPER_MAX_ERROR_BOUNDS.0,
+            first_update_after: 0,
+            require_metric_update: false,
+            exclude_unhealthy_orbits: false,
+            trim_fraction: 0.0,
         }
     }
 }
@@ -619,6 +651,73 @@ impl PaperAdaptationConfig {
         self.restart_policy
     }
 
+    /// Floor on the installed `delta`: a candidate below `floor` is raised
+    /// to it. Must be finite and within the internal `delta` bounds
+    /// `[1e-8, 1e4]`; the default is the lower bound (no floor in effect).
+    pub fn with_min_max_error(mut self, floor: f64) -> Result<Self, Error> {
+        if !floor.is_finite()
+            || floor < PAPER_MAX_ERROR_BOUNDS.0
+            || floor > PAPER_MAX_ERROR_BOUNDS.1
+        {
+            return Err(Error::configuration(
+                "paper adaptation delta floor must be finite and within [1e-8, 1e4]",
+            ));
+        }
+        self.min_max_error = floor;
+        Ok(self)
+    }
+
+    /// Defer `delta` installation at update points that fall before
+    /// `transitions` discarded transitions have completed (the default, zero,
+    /// installs at every boundary).
+    pub fn with_first_update_after(mut self, transitions: usize) -> Self {
+        self.first_update_after = transitions;
+        self
+    }
+
+    /// Defer `delta` installation until the diagonal metric has been
+    /// installed at an earlier boundary. Has no effect when the warmup does
+    /// not adapt the mass.
+    pub fn with_metric_update_required(mut self, required: bool) -> Self {
+        self.require_metric_update = required;
+        self
+    }
+
+    /// Take the K statistic only over orbits that neither diverged nor
+    /// stopped with refinement exhaustion.
+    pub fn with_unhealthy_orbits_excluded(mut self, excluded: bool) -> Self {
+        self.exclude_unhealthy_orbits = excluded;
+        self
+    }
+
+    /// Drop the largest `fraction` of a window's orbit energy ranges before
+    /// taking the quantile (`0 <= fraction < 1`; the default is zero).
+    pub fn with_trim_fraction(mut self, fraction: f64) -> Result<Self, Error> {
+        if !fraction.is_finite() || !(0.0..1.0).contains(&fraction) {
+            return Err(Error::configuration(
+                "paper adaptation trim fraction must be finite and in [0, 1)",
+            ));
+        }
+        self.trim_fraction = fraction;
+        Ok(self)
+    }
+
+    pub fn min_max_error(&self) -> f64 {
+        self.min_max_error
+    }
+    pub fn first_update_after(&self) -> usize {
+        self.first_update_after
+    }
+    pub fn requires_metric_update(&self) -> bool {
+        self.require_metric_update
+    }
+    pub fn excludes_unhealthy_orbits(&self) -> bool {
+        self.exclude_unhealthy_orbits
+    }
+    pub fn trim_fraction(&self) -> f64 {
+        self.trim_fraction
+    }
+
     pub fn global_energy_bound(&self) -> f64 {
         self.global_energy_bound
     }
@@ -648,6 +747,12 @@ pub enum PaperAdaptationOutcome {
     NonFinite,
     /// The `delta` rule is disabled; only the window summary is reported.
     Disabled,
+    /// A finite candidate was computed but not installed because the update
+    /// point falls before [`PaperAdaptationConfig::with_first_update_after`]
+    /// or before the first metric installation required by
+    /// [`PaperAdaptationConfig::with_metric_update_required`]; `delta` is
+    /// unchanged.
+    Deferred,
 }
 
 /// Typed record of one paper-rule update point.
@@ -792,8 +897,22 @@ impl PaperWindow {
         }
     }
 
+    #[cfg(test)]
     fn record(&mut self, energy_range: f64, unrefined_fraction: Option<f64>) {
-        if energy_range.is_finite() && energy_range >= 0.0 {
+        self.record_orbit(energy_range, unrefined_fraction, true, false);
+    }
+
+    /// Record one transition; `healthy` is false for a divergent orbit or one
+    /// that stopped in refinement exhaustion, whose energy range enters the
+    /// quantile only when `include_unhealthy` is set.
+    fn record_orbit(
+        &mut self,
+        energy_range: f64,
+        unrefined_fraction: Option<f64>,
+        healthy: bool,
+        exclude_unhealthy: bool,
+    ) {
+        if energy_range.is_finite() && energy_range >= 0.0 && (healthy || !exclude_unhealthy) {
             self.energy_ranges.push(energy_range);
         }
         match unrefined_fraction {
@@ -860,12 +979,21 @@ impl PaperWindow {
                 PaperAdaptationOutcome::InsufficientOrbits,
             );
         }
-        let range_quantile = sample_quantile(&mut self.energy_ranges, paper.quantile_probability);
+        let kept = if paper.trim_fraction > 0.0 {
+            self.energy_ranges.sort_by(f64::total_cmp);
+            let dropped = (paper.trim_fraction * orbits as f64).floor() as usize;
+            orbits - dropped.min(orbits - 1)
+        } else {
+            orbits
+        };
+        let range_quantile =
+            sample_quantile(&mut self.energy_ranges[..kept], paper.quantile_probability);
         let inflation_quantile = range_quantile.map(|q| q / max_error);
         let candidate = inflation_quantile
             .map(|q| paper.global_energy_bound / q.max(1.0))
             .filter(|delta| delta.is_finite() && *delta > 0.0)
-            .map(|delta| delta.clamp(PAPER_MAX_ERROR_BOUNDS.0, PAPER_MAX_ERROR_BOUNDS.1));
+            .map(|delta| delta.clamp(PAPER_MAX_ERROR_BOUNDS.0, PAPER_MAX_ERROR_BOUNDS.1))
+            .map(|delta| delta.max(paper.min_max_error));
         let outcome = if candidate.is_some() {
             PaperAdaptationOutcome::Installed
         } else {
@@ -5988,9 +6116,13 @@ fn run_chain<T: Target>(
                 variance = DiagonalVariance::new(dimension);
             }
             if let Some(paper) = warmup.paper_adaptation.as_ref() {
-                paper_window.record(
+                let healthy = !internal.divergent
+                    && map_stop(internal.stop) != StopReason::RefinementExhausted;
+                paper_window.record_orbit(
                     internal.maximum_hamiltonian - internal.minimum_hamiltonian,
                     unrefined_fraction,
+                    healthy,
+                    paper.exclude_unhealthy_orbits,
                 );
                 let schedule = schedule.as_ref().expect("warmup schedule");
                 let is_final = transition_index + 1 == config.discarded;
@@ -6008,6 +6140,19 @@ fn run_chain<T: Target>(
                     let max_error_before = active_tuning.max_error;
                     let (orbits, inflation_quantile, energy_range_quantile, candidate, outcome) =
                         paper_window.candidate(paper, max_error_before);
+                    let metric_pending = paper.require_metric_update
+                        && warmup.adapt_mass
+                        && !telemetry.metric_updates.iter().any(|update| {
+                            update.outcome == MetricUpdateOutcome::Installed
+                                && update.transition < transition_index
+                        });
+                    let deferred =
+                        transition_index + 1 < paper.first_update_after || metric_pending;
+                    let (candidate, outcome) = if deferred && candidate.is_some() {
+                        (None, PaperAdaptationOutcome::Deferred)
+                    } else {
+                        (candidate, outcome)
+                    };
                     let mut dual_averaging_restarted = false;
                     if let Some(max_error) = candidate {
                         active_tuning.max_error = max_error;
@@ -9942,6 +10087,78 @@ mod tests {
         nonfinite.record(f64::NAN, None);
         nonfinite.record(-1.0, None);
         assert_eq!(nonfinite.energy_ranges.len(), 0);
+    }
+
+    #[test]
+    fn paper_robustness_guards_floor_trim_and_exclude() {
+        let base = PaperAdaptationConfig::new(2.0, 0.95, 0.8)
+            .unwrap()
+            .with_minimum_orbits(NonZeroUsize::new(3).unwrap());
+        // Defaults leave every guard off so the rule is unchanged.
+        assert_eq!(base.min_max_error(), PAPER_MAX_ERROR_BOUNDS.0);
+        assert_eq!(base.first_update_after(), 0);
+        assert!(!base.requires_metric_update());
+        assert!(!base.excludes_unhealthy_orbits());
+        assert_eq!(base.trim_fraction(), 0.0);
+        assert!(base.with_min_max_error(0.0).is_err());
+        assert!(base.with_min_max_error(f64::NAN).is_err());
+        assert!(base.with_min_max_error(1e5).is_err());
+        assert!(base.with_trim_fraction(1.0).is_err());
+        assert!(base.with_trim_fraction(-0.1).is_err());
+
+        // Floor: the huge-range window that would install 2 / 1e6 installs
+        // the floor instead.
+        let floored = base.with_min_max_error(0.05).unwrap();
+        let mut window = PaperWindow::new();
+        for range in [1.0e6, 2.0e6, 3.0e6, 4.0e6] {
+            window.record(range, None);
+        }
+        let (_, _, _, candidate, outcome) = window.candidate(&floored, 1.0);
+        assert_eq!(candidate, Some(0.05));
+        assert_eq!(outcome, PaperAdaptationOutcome::Installed);
+        let mut window = PaperWindow::new();
+        for range in [1.0e6, 2.0e6, 3.0e6, 4.0e6] {
+            window.record(range, None);
+        }
+        let (_, _, _, candidate, _) = window.candidate(&base, 1.0);
+        assert!(candidate.unwrap() < 1e-5);
+
+        // Trim: dropping the top 25% of eight ranges removes the two
+        // outliers; the 0.95 quantile of the remaining six [1..6] is 5.75.
+        let trimmed = base.with_trim_fraction(0.25).unwrap();
+        let mut window = PaperWindow::new();
+        for range in [1e9, 3.0, 1.0, 6.0, 1e8, 2.0, 5.0, 4.0] {
+            window.record(range, None);
+        }
+        let (orbits, _, range_quantile, candidate, _) = window.candidate(&trimmed, 1.0);
+        assert_eq!(orbits, 8);
+        assert!((range_quantile.unwrap() - 5.75).abs() < 1e-12);
+        assert!((candidate.unwrap() - 2.0 / 5.75).abs() < 1e-12);
+        // Trimming never empties the window.
+        let mut single = PaperWindow::new();
+        single.record(7.0, None);
+        single.record(9.0, None);
+        single.record(11.0, None);
+        let heavy = base.with_trim_fraction(0.9).unwrap();
+        let (_, _, range_quantile, _, _) = single.candidate(&heavy, 1.0);
+        assert_eq!(range_quantile, Some(7.0));
+
+        // Excluding unhealthy orbits drops them from the count and quantile.
+        let excluding = base.with_unhealthy_orbits_excluded(true);
+        let mut window = PaperWindow::new();
+        window.record_orbit(1e12, None, false, true);
+        window.record_orbit(1.0, None, true, true);
+        window.record_orbit(2.0, None, true, true);
+        window.record_orbit(3.0, None, true, true);
+        let (orbits, _, range_quantile, _, outcome) = window.candidate(&excluding, 1.0);
+        assert_eq!(orbits, 3);
+        assert!((range_quantile.unwrap() - 2.9).abs() < 1e-12);
+        assert_eq!(outcome, PaperAdaptationOutcome::Installed);
+        let mut window = PaperWindow::new();
+        window.record_orbit(1e12, None, false, false);
+        window.record_orbit(1.0, None, true, false);
+        window.record_orbit(2.0, None, true, false);
+        assert_eq!(window.energy_ranges.len(), 3);
     }
 
     #[test]
