@@ -553,15 +553,43 @@ pub enum ExhaustionRule {
     /// and the orbit ends there.
     #[default]
     Stop,
-    /// Stan's rule: the finest attempt is accepted as long as its endpoint
-    /// error is at most `divergence_threshold`, subject to the same reverse
-    /// coarsening check as any accepted level (every coarser reverse level
-    /// must also fail `max_error`, which keeps the leaf reversible). Only an
-    /// error above the divergence threshold (or an invalid evaluation) ends
-    /// the orbit. With one refinement level this is NUTS with a per-leaf
-    /// divergence check.
+    /// The finest attempt is accepted as long as its absolute endpoint
+    /// error `|H_end - H_start|` is at most `divergence_threshold`, subject
+    /// to the same reverse coarsening check as any accepted level (every
+    /// coarser reverse level must also fail `max_error`, which keeps the
+    /// leaf reversible). Only an absolute error above the divergence
+    /// threshold (or an invalid evaluation) ends the orbit. With one
+    /// refinement level this is NUTS with a symmetric per-leaf divergence
+    /// check; Stan's own check is one-sided, see
+    /// [`ExhaustionRule::AcceptUnlessDivergent`].
     AcceptBelowDivergenceThreshold,
+    /// Stan's rule: the finest attempt is accepted unless it is divergent in
+    /// Stan's sense, `H_end - H_0 > divergence_threshold` with `H_0` the
+    /// Hamiltonian of the transition's initial state (or the attempt is
+    /// invalid). The test is one-sided and relative to the transition, not
+    /// the leaf: an energy *drop* of any size is accepted, and once the
+    /// trajectory sits below `H_0` a leaf's own error no longer ends the
+    /// orbit, exactly as in NUTS. The reverse coarsening check applies as
+    /// for any accepted level. A leaf accepted this way feeds
+    /// `exp(-max(H_end - H_0, 0))` (Stan's `accept_stat__` term) to the
+    /// coarse-endpoint step statistic instead of `exp(-|H_end - H_start|)`
+    /// of its coarsest attempt: a drop that survived every refinement level
+    /// cannot be reduced by a smaller step. This is the rule that lets a
+    /// chain slide out of a start where the leapfrog is unstable at every
+    /// step size, and through a target whose numerical noise exceeds
+    /// `max_error` (`STUDIES/freeze_mode_v1`). It differs from
+    /// [`ExhaustionRule::Stop`] only on leaves whose absolute error exceeds
+    /// `max_error` at every level.
+    AcceptUnlessDivergent,
 }
+
+/// Relative rounding noise of a Hamiltonian, `2^-40` (about 4,000 ulps):
+/// [`ExhaustionRule::AcceptUnlessDivergent`] treats an energy rise below
+/// `|H_0| * 2^-40` as zero, because a leaf's `H_end - H_0` cannot be
+/// resolved below the rounding error of `H_0`. It only matters when
+/// `|H_0| > divergence_threshold * 2^40` (about `1e15` at the default
+/// threshold), i.e. far outside any typical set.
+pub const HAMILTONIAN_NOISE_RELATIVE: f64 = 9.094_947_017_729_282e-13;
 
 /// Opt-in kernel rule variants. [`KernelOptions::default`] is the frozen
 /// `v10` behaviour.
@@ -3091,15 +3119,43 @@ where
             last_adaptation_value = (-integration.endpoint_error).exp();
         }
 
-        // Under `ExhaustionRule::AcceptBelowDivergenceThreshold` the finest
-        // level is also accepted when its endpoint error is merely below the
-        // divergence threshold; the reverse coarsening check below then
-        // guarantees that every coarser reverse level fails `max_error`, so
-        // the reverse leaf selects the same level by the same exhaustion.
-        let exhaustion_accept = tuning.options.exhaustion
-            == ExhaustionRule::AcceptBelowDivergenceThreshold
-            && level + 1 == tuning.max_refinement_levels
-            && integration.endpoint_error <= tuning.divergence_threshold;
+        // Under the accepting exhaustion rules the finest level is also
+        // accepted when its endpoint error is merely below the divergence
+        // threshold (absolute for `AcceptBelowDivergenceThreshold`, signed
+        // for `AcceptUnlessDivergent`); the reverse coarsening check below
+        // then guarantees that every coarser reverse level fails
+        // `max_error`, so the reverse leaf selects the same level by the
+        // same exhaustion.
+        let finest_level = level + 1 == tuning.max_refinement_levels;
+        // Energy of the attempt's endpoint above the transition's initial
+        // Hamiltonian (Stan's divergence statistic); `+inf` at a
+        // zero-density endpoint. Differences below the rounding noise of
+        // `H_0` itself are not resolvable and count as zero.
+        let energy_noise = work.initial_hamiltonian.abs() * HAMILTONIAN_NOISE_RELATIVE;
+        let rise_above_initial = -integration.endpoint_log_joint - work.initial_hamiltonian;
+        let resolved_rise = if rise_above_initial <= energy_noise {
+            0.0
+        } else {
+            rise_above_initial
+        };
+        let exhaustion_accept = finest_level
+            && match tuning.options.exhaustion {
+                ExhaustionRule::Stop => false,
+                ExhaustionRule::AcceptBelowDivergenceThreshold => {
+                    integration.endpoint_error <= tuning.divergence_threshold
+                }
+                ExhaustionRule::AcceptUnlessDivergent => {
+                    resolved_rise <= tuning.divergence_threshold
+                }
+            };
+        if integration.endpoint_error > tuning.max_error
+            && exhaustion_accept
+            && tuning.options.exhaustion == ExhaustionRule::AcceptUnlessDivergent
+        {
+            // Exhausted at every level and kept by Stan's rule: the step
+            // statistic is Stan's `min(1, exp(H_0 - H_end))`.
+            last_adaptation_value = (-resolved_rise).exp();
+        }
         if integration.endpoint_error <= tuning.max_error || exhaustion_accept {
             increment(&mut work.forward_refinement_accepted)?;
             work.accepted_forward_micro_steps =
@@ -5140,6 +5196,143 @@ mod tests {
         )
         .unwrap();
         assert_eq!(rejected.rejection, Some(Rejection::RefinementExhausted));
+    }
+
+    /// A target whose log density jumps by `jump` as soon as `theta` leaves
+    /// the unit interval to the right, with a zero gradient everywhere: every
+    /// refinement level lands on the same side of the jump, so the leaf
+    /// exhausts under `max_error` below `|jump|` and the exhaustion rules
+    /// decide it.
+    fn jump_eval(jump: f64) -> impl FnMut(&[f64]) -> (f64, Vec<f64>) {
+        move |theta: &[f64]| {
+            let value = if theta[0] > 1.0 { jump } else { 0.0 };
+            (value, vec![0.0; theta.len()])
+        }
+    }
+
+    #[test]
+    fn accept_unless_divergent_is_one_sided_and_relative_to_the_transition() {
+        let signed = KernelOptions {
+            exhaustion: ExhaustionRule::AcceptUnlessDivergent,
+            ..KernelOptions::default()
+        };
+        let absolute = KernelOptions {
+            exhaustion: ExhaustionRule::AcceptBelowDivergenceThreshold,
+            ..KernelOptions::default()
+        };
+        let start = State {
+            theta: vec![1.0],
+            rho: vec![1.0],
+            log_prob: 0.0,
+            grad: vec![0.0],
+        };
+        // An energy drop of 1001 (above the divergence threshold 1000 in
+        // absolute value) at every level: Stan's rule keeps the finest
+        // attempt with step statistic 1; the absolute rule and `Stop` do not.
+        let dropped = macro_leaf(
+            &start,
+            &[1.0],
+            tuning_with(signed, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut jump_eval(1001.0),
+        )
+        .unwrap();
+        assert!(dropped.accepted());
+        assert_eq!(dropped.selected_refinement_level, Some(2));
+        assert_eq!(dropped.adaptation_value, 1.0);
+        let absolute_rejects = macro_leaf(
+            &start,
+            &[1.0],
+            tuning_with(absolute, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut jump_eval(1001.0),
+        )
+        .unwrap();
+        assert_eq!(
+            absolute_rejects.rejection,
+            Some(Rejection::RefinementExhausted)
+        );
+        let stop_rejects = macro_leaf(
+            &start,
+            &[1.0],
+            tuning(0.5, 3, 1, 1.0),
+            Direction::Forward,
+            &mut jump_eval(1001.0),
+        )
+        .unwrap();
+        assert_eq!(stop_rejects.rejection, Some(Rejection::RefinementExhausted));
+
+        // A rise of 50 (below the threshold) is kept by both accepting rules;
+        // Stan's statistic for it is `exp(-50)`, the absolute rule keeps the
+        // coarse-endpoint statistic of the coarsest attempt.
+        let rose = macro_leaf(
+            &start,
+            &[1.0],
+            tuning_with(signed, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut jump_eval(-50.0),
+        )
+        .unwrap();
+        assert!(rose.accepted());
+        assert!((rose.adaptation_value - (-50.0_f64).exp()).abs() < 1e-30);
+        let rose_absolute = macro_leaf(
+            &start,
+            &[1.0],
+            tuning_with(absolute, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut jump_eval(-50.0),
+        )
+        .unwrap();
+        assert!(rose_absolute.accepted());
+        assert!((rose_absolute.adaptation_value - (-50.0_f64).exp()).abs() < 1e-30);
+
+        // A rise above the threshold is divergent under every rule.
+        let divergent = macro_leaf(
+            &start,
+            &[1.0],
+            tuning_with(signed, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut jump_eval(-1001.0),
+        )
+        .unwrap();
+        assert_eq!(divergent.rejection, Some(Rejection::RefinementExhausted));
+
+        // The rise is measured against the transition's initial Hamiltonian
+        // and resolved only above its rounding noise: from a start at
+        // `H_0 = 1e20`, a rise of `5e5` (above 1000, below
+        // `1e20 * HAMILTONIAN_NOISE_RELATIVE ~ 9e7`) counts as zero.
+        let deep = State {
+            theta: vec![1.0],
+            rho: vec![1.0],
+            log_prob: -1e20,
+            grad: vec![0.0],
+        };
+        let mut noisy_rise = move |theta: &[f64]| {
+            let value = if theta[0] > 1.0 { -1e20 - 5e5 } else { -1e20 };
+            (value, vec![0.0; theta.len()])
+        };
+        let within_noise = macro_leaf(
+            &deep,
+            &[1.0],
+            tuning_with(signed, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut noisy_rise,
+        )
+        .unwrap();
+        assert!(within_noise.accepted());
+        assert_eq!(within_noise.adaptation_value, 1.0);
+        let within_noise_absolute = macro_leaf(
+            &deep,
+            &[1.0],
+            tuning_with(absolute, 0.5, 3, 1.0),
+            Direction::Forward,
+            &mut noisy_rise,
+        )
+        .unwrap();
+        assert_eq!(
+            within_noise_absolute.rejection,
+            Some(Rejection::RefinementExhausted)
+        );
     }
 
     #[test]

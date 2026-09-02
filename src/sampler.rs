@@ -68,8 +68,8 @@ pub use crate::walnutpie::{
     WindowSummary,
 };
 use crate::walnutpie::{
-    DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, KernelOptions, KernelTuning,
-    MultiChainOutput, RunConfig, RunControl, TargetEvaluationAdmissionLimit,
+    DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, ExhaustionRule, KernelOptions,
+    KernelTuning, MultiChainOutput, RunConfig, RunControl, TargetEvaluationAdmissionLimit,
     TargetEvaluationBudget, sample_chains_dense_with_control,
     sample_chains_dense_with_target_budget_and_control, sample_chains_structured_refresh,
     sample_chains_structured_with_control, sample_chains_with_control,
@@ -240,6 +240,16 @@ impl Default for Adaptation {
     }
 }
 
+/// The exhaustion rule the sampler's own adaptation modes
+/// ([`Adaptation::DualAveraging`], [`Adaptation::Paper`]) apply to the
+/// discarded transitions: Stan's one-sided divergence test, so that a chain
+/// started where every leaf exhausts slides out instead of freezing
+/// (`STUDIES/freeze_mode_v1`). Retained transitions keep
+/// [`Tuning::kernel_options`] (the frozen two-sided rule by default), whose
+/// funnel tail mass is validated; [`Adaptation::Custom`] configurations are
+/// used as given.
+pub const DEFAULT_WARMUP_EXHAUSTION: ExhaustionRule = ExhaustionRule::AcceptUnlessDivergent;
+
 impl Adaptation {
     fn warmup_config(&self, adapt_mass: bool) -> Result<Option<WarmupConfig>, Error> {
         Ok(match self {
@@ -251,13 +261,16 @@ impl Adaptation {
                 }
                 None
             }
-            Self::DualAveraging { target_accept } => {
-                Some(WarmupConfig::new(*target_accept)?.with_mass_adaptation(adapt_mass))
-            }
+            Self::DualAveraging { target_accept } => Some(
+                WarmupConfig::new(*target_accept)?
+                    .with_mass_adaptation(adapt_mass)
+                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+            ),
             Self::Paper(paper) => Some(
                 WarmupConfig::default()
                     .with_mass_adaptation(adapt_mass)
-                    .with_paper_adaptation(*paper),
+                    .with_paper_adaptation(*paper)
+                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
             ),
             Self::Custom(warmup) => Some(warmup.clone().with_mass_adaptation(adapt_mass)),
         })
