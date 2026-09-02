@@ -85,6 +85,8 @@ fn sampler() -> Sampler {
         .seed(SEED)
         .threads(1)
         .tuning(Tuning::default())
+        // Compare against the plain facades, which admit conservatively.
+        .limits(Limits::new().admit_conservative())
 }
 
 /// Equal draws, diagnostics, and telemetry; metadata records the thread count.
@@ -444,7 +446,7 @@ fn cancellation_and_timeout_match_run_control() {
     // A flag that is never raised changes nothing.
     flag.0.store(false, Ordering::Relaxed);
     let controlled = sampler()
-        .limits(Limits::new().cancellation(flag))
+        .limits(Limits::new().admit_conservative().cancellation(flag))
         .run(&target, &starts(3))
         .unwrap();
     let free = sampler().run(&target, &starts(3)).unwrap();

@@ -181,6 +181,12 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Changed
 
+- **`sampler::Limits` admits the exact worst case by default.** The sampler's
+  own defaults (depth 10, four refinement levels) exceed the conservative
+  `walnutpie` admission ceiling for ordinary 4 x 1,000/2,000 runs, which made
+  `Sampler::run` fail with a resource-limit error. The worst case is an exact
+  bound the run cannot exceed, so admitting against it costs nothing; draws are
+  unchanged. `Limits::admit_conservative` restores the 0.1.x check.
 - **`sampler::Tuning::default()` max depth 8 -> 10** (Stan's default). Chosen
   by the preregistered ablation `STUDIES/adaptation_parity_v1` (nine
   posteriordb models, two seeds): 1.45x geometric-mean minimum bulk ESS per

@@ -503,7 +503,7 @@ impl Tuning {
 /// All limits are optional. Cancellation and deadlines are checked between
 /// bounded kernel operations and around target callbacks; a callback that
 /// never returns cannot be interrupted.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Limits {
     max_target_evaluations: Option<NonZeroUsize>,
     admit_worst_case: bool,
@@ -511,6 +511,21 @@ pub struct Limits {
     timeout: Option<Duration>,
     cancellation: Option<Arc<dyn Cancellation>>,
     max_depth_stops: Option<usize>,
+}
+
+impl Default for Limits {
+    /// No limits; the run is admitted with its exact worst-case evaluation
+    /// count (see [`Limits::admit_worst_case`]).
+    fn default() -> Self {
+        Self {
+            max_target_evaluations: None,
+            admit_worst_case: true,
+            deadline: None,
+            timeout: None,
+            cancellation: None,
+            max_depth_stops: None,
+        }
+    }
 }
 
 impl Limits {
@@ -526,11 +541,21 @@ impl Limits {
         self
     }
     /// Admit the run with its exact worst-case evaluation count as the
-    /// ceiling. Needed when deep refinement and deep trees exceed the
-    /// conservative default admission ceiling (for example the paper's
-    /// funnel warmup). Ignored when `max_target_evaluations` is set.
+    /// ceiling. This is the default since 0.2.0: the sampler's own defaults
+    /// (depth 10, four refinement levels) exceed the conservative
+    /// `walnutpie` admission ceiling for ordinary 4 x 1,000/2,000 runs, and
+    /// the worst case is an exact bound the run can never exceed, so it costs
+    /// nothing. Ignored when `max_target_evaluations` is set.
     pub fn admit_worst_case(mut self) -> Self {
         self.admit_worst_case = true;
+        self
+    }
+    /// Admit the run against the conservative `walnutpie` preflight ceiling
+    /// instead of the exact worst case (the 0.1.x behaviour). Configurations
+    /// whose worst case exceeds that ceiling are then rejected with a
+    /// resource-limit error before any target call.
+    pub fn admit_conservative(mut self) -> Self {
+        self.admit_worst_case = false;
         self
     }
     /// Cooperative wall-clock deadline.
