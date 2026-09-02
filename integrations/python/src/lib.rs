@@ -423,7 +423,7 @@ fn parse_run(
     let step_size: f64 = get(cfg, "step_size")?.unwrap_or(0.5);
     let max_depth: usize = get(cfg, "max_depth")?.unwrap_or(10);
     let min_micro_steps: usize = get(cfg, "min_micro_steps")?.unwrap_or(1);
-    let max_refinement_levels: usize = get(cfg, "max_refinement_levels")?.unwrap_or(4);
+    let max_refinement_levels: usize = get(cfg, "max_refinement_levels")?.unwrap_or(8);
     let max_error: f64 = get(cfg, "max_error")?.unwrap_or(1.0);
     let divergence_threshold: f64 = get(cfg, "divergence_threshold")?.unwrap_or(1000.0);
     let max_depth_stop_limit: Option<usize> = get(cfg, "max_depth_stop_limit")?;
@@ -452,7 +452,7 @@ fn parse_run(
     // `admit_worst_case` (default) mirrors `sampler::Limits::admit_worst_case`:
     // when the conservative default admission ceiling would reject the run,
     // admit it with its exact worst-case evaluation count instead. Needed
-    // at the sampler defaults (depth 10, four refinement levels) for four
+    // at the sampler defaults (depth 10, eight refinement levels) for four
     // chains of a few thousand transitions.
     let admit_worst_case: bool = get(cfg, "admit_worst_case")?.unwrap_or(true);
     let chains = nonzero(chains, "chains")?;

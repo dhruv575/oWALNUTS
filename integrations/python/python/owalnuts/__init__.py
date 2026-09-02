@@ -62,7 +62,7 @@ class Tuning:
     step_size: float = 0.5
     max_depth: int = 10
     min_micro_steps: int = 1
-    max_refinement_levels: int = 4
+    max_refinement_levels: int = 8
     max_error: float = 1.0
     divergence_threshold: float = 1000.0
 
@@ -338,7 +338,7 @@ def sample(
     Without one, ``admit_worst_case=True`` (the default, mirroring the Rust
     ``Limits::admit_worst_case``) admits a run whose exact worst-case
     evaluation count exceeds the conservative default preflight ceiling —
-    which the sampler defaults (depth 10, four refinement levels) do at four
+    which the sampler defaults (depth 10, eight refinement levels) do at four
     chains of a few thousand transitions; ``admit_worst_case=False`` keeps
     the conservative ceiling and fails such runs at admission.
     """

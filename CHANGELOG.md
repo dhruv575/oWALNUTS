@@ -27,7 +27,7 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   `features = ["research"]`.
 - `sampler::Tuning::default()` is **not** `walnutpie::KernelTuning::default()`,
   and `RunConfig` keeps the frozen legacy defaults: the sampler defaults are
-  max depth 10, macro step `h = 0.5` and `delta = 1`, with four refinement
+  max depth 10, macro step `h = 0.5` and `delta = 1`, with eight refinement
   levels; `KernelTuning::default()` remains the frozen replay tuning of
   `ALGORITHM_REVISION` (depth 3). Runs configured through `RunConfig` are
   unaffected; runs configured through `Sampler` without an explicit
@@ -214,6 +214,29 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Changed
 
+- **`sampler::Tuning::default()` refinement levels 4 -> 8**
+  (`STUDIES/funnel_defaults_v1`, [WP28-FUNNEL-DEFAULTS-V1]). At four
+  levels the sampler defaults (adapted diagonal metric, dual averaging,
+  `h0 = 0.5`) put half the exact mass below `omega = -5` on Neal's funnel
+  (0.0203 / 0.0242 / 0.0625 on three fresh seeds against 0.0478, z -3.5 /
+  -3.8 / +0.3, ~1,000 retained refinement exhaustions per cell): the
+  adapted step cannot enter the neck with micro-steps no finer than
+  `h / 16`. At eight levels (`h / 256`) the tail mass is 0.0412 / 0.0346 /
+  0.0897 (|z| <= 1.43), exhaustions fall 26x and divergences 7x, at 1.08x
+  the funnel's target calls, 1.05x the ESS per call on the noncentered
+  Eight Schools and 1.00x on a 100-D Gaussian (two of three seeds
+  call-for-call identical: the cap never engages there). The preregistered
+  grid also rejected `delta` 0.5 / 0.25 alone (more exhaustions, worse
+  bias), `Adaptation::Paper` from `h0 = 0.5` (one seed at z -2.7; 0.4x on
+  the Gaussian) and the `stan_style` preset (biased; one cell errored on a
+  nonfinite density). Eight levels remove the bias, not the funnel's poor
+  mixing under dual averaging (one chain per seed at `h ~ 0.01`, `omega`
+  R-hat 1.01-1.04); `max_error(0.5)` with eight levels mixes better there
+  at 0.79x on the Gaussian and stays opt-in. `tests/sampler_api.rs` and the
+  Python package default follow; `walnutpie::KernelTuning::default()`,
+  `RunConfig`, `ALGORITHM_REVISION` and the kernel fingerprints are
+  unchanged.
+
 - **`sampler` default warmup exhaustion rule.** `Adaptation::DualAveraging`
   and `Adaptation::Paper` now apply `sampler::DEFAULT_WARMUP_EXHAUSTION`
   (`ExhaustionRule::AcceptUnlessDivergent`, below) to the discarded
@@ -229,7 +252,7 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   the kernel fingerprints are unchanged.
 
 - **`sampler::Limits` admits the exact worst case by default.** The sampler's
-  own defaults (depth 10, four refinement levels) exceed the conservative
+  own defaults (depth 10, eight refinement levels) exceed the conservative
   `walnutpie` admission ceiling for ordinary 4 x 1,000/2,000 runs, which made
   `Sampler::run` fail with a resource-limit error. The worst case is an exact
   bound the run cannot exceed, so admitting against it costs nothing; draws are

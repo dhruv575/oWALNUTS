@@ -65,7 +65,7 @@ fn starts(dimension: usize) -> Vec<Vec<f64>> {
 
 /// The same numbers as `Tuning::default()`.
 fn kernel_tuning() -> KernelTuning {
-    KernelTuning::new(0.5, nz(10), nz(1), nz(4), 1.0).unwrap()
+    KernelTuning::new(0.5, nz(10), nz(1), nz(8), 1.0).unwrap()
 }
 
 fn config(warmup: Option<WarmupConfig>) -> RunConfig {
@@ -324,26 +324,34 @@ fn structured_refresh_matches_the_refresh_facade() {
 fn paper_adaptation_matches_the_paper_warmup_configuration() {
     let target = Gaussian(3);
     let paper = PaperAdaptationConfig::default();
+    // At the sampler defaults (depth 10, eight refinement levels) 150 warmup
+    // transitions exceed the conservative facade ceiling, so both sides admit
+    // the exact worst case, as `Sampler` does by default.
+    let base = RunConfig::new(150, nz(DRAWS), SEED)
+        .with_tuning(kernel_tuning())
+        .with_cached_initial_evaluation(true)
+        .with_warmup(
+            WarmupConfig::default()
+                .with_mass_adaptation(false)
+                .with_paper_adaptation(paper)
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+        );
+    let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
     let posterior = sampler()
         .warmup(150)
         .metric(Metric::Identity)
         .adaptation(Adaptation::Paper(paper))
+        .limits(Limits::new().admit_worst_case())
         .run(&target, &starts(3))
         .unwrap();
-    let direct = sample_chains(
+    let direct = sample_chains_with_target_budget(
         &target,
         &starts(3),
         &DiagonalMass::identity(nz(3)),
-        &RunConfig::new(150, nz(DRAWS), SEED)
-            .with_tuning(kernel_tuning())
-            .with_cached_initial_evaluation(true)
-            .with_warmup(
-                WarmupConfig::default()
-                    .with_mass_adaptation(false)
-                    .with_paper_adaptation(paper)
-                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
-            ),
+        &base,
         nz(1),
+        TargetEvaluationAdmissionLimit::new(nz(worst)),
+        &TargetEvaluationBudget::new(nz(worst)),
     )
     .unwrap();
     assert_eq!(posterior.chains(), direct.chains());
