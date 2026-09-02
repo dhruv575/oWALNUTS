@@ -125,8 +125,8 @@ zero divergences. [E4]
   above zero is selected on 1–3 % of retained transitions, so on ordinary
   models the kernel runs as NUTS, and its endpoint U-turn rule then costs
   0.75–0.9x per gradient against Stan's momentum-sum rule; the opt-in
-  `UTurnRule::MomentumSum` reaches reference-NUTS parity on the targets
-  measured. [E5, E6]
+  `UTurnRule::MomentumSum` reaches reference-NUTS parity on the Gaussian
+  targets measured and is within seed noise on Eight Schools. [E5, E6]
 
 The wins measured so far come from funnel-type targets and from structured
 metrics, not from throughput on the posteriordb set. If your model is an
