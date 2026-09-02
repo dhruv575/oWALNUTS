@@ -1,0 +1,68 @@
+{
+  "schema": "posteriordb-bench-v2",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-02",
+  "purpose": "Preregistered rerun of posteriordb_bench_v1 on the current main sampler with fresh seeds: default-settings comparison of oWALNUTS (dual averaging, JMLR Appendix C v4, opt-in Stan-style warmup) with CmdStan NUTS and nutpie on the same 17 posteriordb posteriors; measures whether the post-v1 fixes (non-STAN_THREADS BridgeStan build + ReplicatedStanTarget, recoverable NaN/inf evaluations, Stan-style start retries, depth 10 default, v4 robust paper rule) close the gaps recorded in v1.",
+  "predecessor": {"study": "STUDIES/posteriordb_bench_v1", "seeds": [77101, 77102, 77103], "artifacts_reused": "none (summary.json read only for the v1-vs-v2 comparison table)"},
+  "kernel_under_test": {
+    "algorithm_revision_required": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+    "paper_adaptation_revision_required": "walnutpie-paper-adaptation-kquantile-gamma-v4",
+    "api": "owalnuts::sampler (Sampler, Init::uniform(), Tuning::default(), Metric::diagonal(), Adaptation)",
+    "paper_adaptation_defaults": {"global_energy_bound": 2.0, "quantile_probability": 0.95, "unrefined_fraction_target": 0.8, "minimum_orbits": 10, "step_statistic": "per_transition", "restart_policy": "continue_through_local_error_install", "exhausted_transitions_as_zero": true, "step_relative_bound": 1000000.0}
+  },
+  "posteriordb": {"repository": "https://github.com/stan-dev/posteriordb", "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "posteriordb/posterior_database"},
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "arms": {
+    "owalnuts-da": {"target": "owalnuts-bridgestan ReplicatedStanTarget, 4 replicas (BridgeStan 2.9.0, Stan 2.39.0, built WITHOUT STAN_THREADS, fresh compile for this study)", "tuning": {"source": "sampler::Tuning::default()", "step_size": 0.5, "max_depth": 10, "min_micro_steps": 1, "max_refinement_levels": 4, "max_error": 1.0, "divergence_threshold": 1000.0}, "warmup": {"mode": "Adaptation::DualAveraging (default)", "target_accept": 0.8, "metric": "Metric::diagonal() (adapted from identity)"}, "threads": 4, "starts": "sampler::Init::uniform(): uniform(-2,2) unconstrained, redrawn up to 100 times until finite density and gradient; SmallRng(splitmix64(seed ^ INIT_SEED_TAG))", "limits": "Limits::admit_worst_case()"},
+    "owalnuts-paper": {"same_as": "owalnuts-da", "warmup": {"mode": "Adaptation::Paper(PaperAdaptationConfig::default())", "revision": "v4 robust rule"}},
+    "owalnuts-stan-style": {"same_as": "owalnuts-da", "warmup": {"mode": "Adaptation::Custom(WarmupConfig::stan_style(0.8))", "contents": "mean-trajectory acceptance statistic, Stan initial step search, Stan metric regularisation, Stan restart reference mu = ln(10 h), delta = divergence threshold during the initial 75-transition phase"}},
+    "cmdstan": {"version": "2.39.0", "driver": "cmdstanpy 1.3.0 CmdStanModel.sample defaults", "settings": {"adapt_delta": 0.8, "max_treedepth": 10, "metric": "diag_e", "inits": "random uniform(-2,2)", "chains": 4, "parallel_chains": 4, "threads_per_chain": 1}},
+    "nutpie": {"version": "0.16.8", "backend": "bridgestan (nutpie.compile_stan_model; nutpie builds its own STAN_THREADS library)", "settings": {"target_accept": 0.8, "maxdepth": 10, "chains": 4, "cores": "default (all)", "init": "nutpie default"}}
+  },
+  "chains": 4, "warmup": 1000, "retained": 1000,
+  "seeds": [78101, 78102, 78103],
+  "seeds_verified_unused": true,
+  "run_order": "models in listed order; arms owalnuts-da, owalnuts-paper, owalnuts-stan-style, cmdstan, nutpie; seeds ascending; strictly sequential",
+  "cell_timeout_seconds": 2700,
+  "parameter_set": "columns of the posteriordb reference draws; oWALNUTS draws constrained by BridgeStan param_constrain(include_tp=True)",
+  "estimators": "arviz 0.23.4: rank rhat; bulk ESS; tail ESS prob (0.05, 0.95); mcse method mean",
+  "metrics": {
+    "gradients_total": "owalnuts target calls (start search + warmup + sampling, all chains); cmdstan sum n_leapfrog__ (warmup+sampling); nutpie sum n_steps (warmup+sampling)",
+    "wall": "seconds around the single sampler call (Sampler::run, CmdStanModel.sample, nutpie.sample), warmup included, compile excluded; the oWALNUTS start search (a handful of evaluations) is outside the wall",
+    "wall_per_gradient_us": "1e6 * wall / gradients_total",
+    "wall_sampling_estimated": "wall * gradients_sampling / gradients_total (all arms); cmdstan CSV elapsed times also recorded",
+    "ess_per_second": "min over parameters of bulk (tail) ESS / wall",
+    "ess_per_gradient": "min over parameters of bulk (tail) ESS / gradients_total; sampling-only variant also reported",
+    "agreement": "z = (mean - mean_ref)/sqrt(mcse^2 + mcse_ref^2) with arviz mean MCSE on both sides; max |z| over parameters; flag if > 4",
+    "frozen_chain": "an oWALNUTS chain with more than 500 of its 1,000 retained transitions ending in refinement exhaustion; a cell is frozen if any chain is"
+  },
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "head_to_head": "per (owalnuts arm, competitor): geometric mean over models with all seeds ok on both sides of the seed-median ratios of min bulk ESS/gradient, min bulk ESS/s and wall per gradient; wins counted per model; 'outright win' = gates passed >= competitor and higher seed-median ESS/gradient and ESS/s",
+  "versus_v1": "per model and arm (owalnuts-da, owalnuts-paper, cmdstan, nutpie): seed-median v2 / v1 ratios of min bulk ESS/gradient and ESS/s from v1 summary.json; geomean over models",
+  "predictions": {
+    "P1": "owalnuts-da passes all gates on >= 33 of 51 cells (v1: 26)",
+    "P2": "owalnuts-da geometric-mean min-bulk-ESS/gradient vs CmdStan >= 0.45 (v1: 0.32)",
+    "P3": "owalnuts-da geometric-mean wall per gradient <= 1.5x CmdStan's (v1: ~3x per gradient at equal counts before the STAN_THREADS fix)",
+    "P4": "owalnuts-paper has no frozen cell on any model (v1: 9 models with frozen chains)",
+    "P5": "zero oWALNUTS cells (any arm) lost to a fatal NaN/inf evaluation or an unevaluable start (v1: 12 cells)"
+  },
+  "decision_rules": "Report all cells; no reruns; failures are results; nothing tuned after seeing results. A driver crash is relaunched and the interrupted cell re-run from scratch (seeded), recorded as a deviation."
+}
