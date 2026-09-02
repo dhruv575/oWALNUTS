@@ -449,10 +449,23 @@ pub enum DualAveragingAcceptance {
 ///
 /// `v3` makes [`PaperRestartPolicy::ContinueThroughLocalErrorInstall`] the
 /// default: dual averaging is no longer restarted at `delta` installations.
-pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v3";
-/// Paper-mode step bound relative to the initial step: dual averaging never
-/// installs `h` outside `[h_0 / bound, h_0 * bound]`.
+///
+/// `v4` (after `STUDIES/posteriordb_bench_v1` and
+/// `STUDIES/paper_adaptation_robust_v1`) makes two robustness guards the
+/// default: a transition that built no leaf feeds unrefined fraction zero
+/// to the `h` rule ([`PaperAdaptationConfig::with_exhausted_transitions_as_zero`])
+/// and the paper-mode step band is [`DEFAULT_PAPER_STEP_RELATIVE_BOUND`]
+/// (`1e6`) instead of [`PAPER_STEP_RELATIVE_BOUND`] (`1e3`). The `v3`
+/// behaviour is `PaperAdaptationConfig::default()
+/// .with_exhausted_transitions_as_zero(false)
+/// .with_step_relative_bound(PAPER_STEP_RELATIVE_BOUND)`.
+pub const PAPER_ADAPTATION_REVISION: &str = "walnutpie-paper-adaptation-kquantile-gamma-v4";
+/// The `v2`/`v3` paper-mode step bound relative to the initial step:
+/// dual averaging never installs `h` outside `[h_0 / bound, h_0 * bound]`.
+/// Selectable with [`PaperAdaptationConfig::with_step_relative_bound`].
 pub const PAPER_STEP_RELATIVE_BOUND: f64 = 1.0e3;
+/// Default paper-mode step bound since `v4`.
+pub const DEFAULT_PAPER_STEP_RELATIVE_BOUND: f64 = 1.0e6;
 /// Default global orbit energy-error bound `Delta` (Appendix C.1).
 pub const DEFAULT_PAPER_GLOBAL_ENERGY_BOUND: f64 = 2.0;
 /// Default quantile level `p_a` for the inflation factor `K` (Appendix C.1).
@@ -503,7 +516,7 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 /// leave `delta` unchanged and report [`PaperAdaptationOutcome::InsufficientOrbits`].
 /// The installed step is always the dual-averaging averaged iterate.
 ///
-/// # Robustness guards (additive; all off by default)
+/// # Robustness guards (additive; two on by default since `v4`)
 ///
 /// `STUDIES/posteriordb_bench_v1` showed the bare K-quantile rule freezing
 /// chains on 9 of 17 posteriors: from uniform(-2, 2) starts the first
@@ -524,11 +537,18 @@ const PAPER_MAX_ERROR_BOUNDS: (f64, f64) = (1.0e-8, 1.0e4);
 ///   [`Self::with_trim_fraction`] — the quantile is taken over orbits that
 ///   neither diverged nor stopped in refinement exhaustion, and/or with the
 ///   largest fraction of energy ranges dropped first;
-/// * [`Self::with_exhausted_transitions_as_zero`] — a transition that built
-///   no leaf feeds unrefined fraction zero to the `h` rule instead of nothing,
-///   so `h` can shrink out of a start where every leaf exhausts refinement;
-/// * [`Self::with_step_relative_bound`] — widen the `[h0 / 1e3, h0 * 1e3]`
-///   band the paper-mode step is confined to.
+/// * [`Self::with_exhausted_transitions_as_zero`] (**default `true`**) — a
+///   transition that built no leaf feeds unrefined fraction zero to the `h`
+///   rule instead of nothing, so `h` can shrink out of a start where every
+///   leaf exhausts refinement;
+/// * [`Self::with_step_relative_bound`] (**default `1e6`**) — the band
+///   `[h0 / bound, h0 * bound]` the paper-mode step is confined to.
+///
+/// The study found the freeze to be caused by those last two (no statistic
+/// from leaf-less transitions, then the `1e3` band floor), not by the `delta`
+/// rule; with both on, the default reached 0.90–1.35x dual averaging's
+/// min bulk ESS per gradient on every freeze model with no frozen chain.
+/// The `delta` guards remain opt-in.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PaperAdaptationConfig {
     global_energy_bound: f64,
@@ -588,8 +608,8 @@ impl Default for PaperAdaptationConfig {
             require_metric_update: false,
             exclude_unhealthy_orbits: false,
             trim_fraction: 0.0,
-            exhausted_as_zero: false,
-            step_relative_bound: PAPER_STEP_RELATIVE_BOUND,
+            exhausted_as_zero: true,
+            step_relative_bound: DEFAULT_PAPER_STEP_RELATIVE_BOUND,
         }
     }
 }
@@ -713,7 +733,8 @@ impl PaperAdaptationConfig {
 
     /// Feed the `h` rule an unrefined fraction of zero for a transition that
     /// built no macro leaf (every attempted leaf exhausted refinement) instead
-    /// of skipping the step update. Without this, a start whose leaves all
+    /// of skipping the step update (the default since `v4`). Without this, a
+    /// start whose leaves all
     /// exhaust at the initial step leaves `h` frozen for the whole warmup
     /// because no statistic is ever produced (`STUDIES/paper_adaptation_robust_v1`,
     /// `sblrc`), whereas acceptance-driven dual averaging sees acceptance zero
@@ -729,10 +750,11 @@ impl PaperAdaptationConfig {
 
     /// Bound the paper-mode step to `[h0 / bound, h0 * bound]` around the
     /// configured initial step instead of the default
-    /// [`PAPER_STEP_RELATIVE_BOUND`]. Must be finite and at least one. From
-    /// uniform(-2, 2) starts on badly scaled regressions the default bound
-    /// (`1e3`) is reached while every leaf still exhausts refinement, which
-    /// freezes the chain; acceptance-driven dual averaging has no such bound
+    /// [`DEFAULT_PAPER_STEP_RELATIVE_BOUND`]. Must be finite and at least
+    /// one. From uniform(-2, 2) starts on badly scaled regressions the `v3`
+    /// bound [`PAPER_STEP_RELATIVE_BOUND`] (`1e3`) is reached while every
+    /// leaf still exhausts refinement, which freezes the chain;
+    /// acceptance-driven dual averaging has no such bound
     /// (`STUDIES/paper_adaptation_robust_v1`, round 3).
     pub fn with_step_relative_bound(mut self, bound: f64) -> Result<Self, Error> {
         if !bound.is_finite() || bound < 1.0 {

@@ -1821,9 +1821,9 @@ fn conservative_bound_overflow_fails_before_target_callbacks() {
 // ── JMLR Appendix C paper adaptation ─────────────────────────────────────────
 
 use owalnuts::walnutpie::{
-    MetricUpdateOutcome, PAPER_ADAPTATION_REVISION, PAPER_STEP_RELATIVE_BOUND,
-    PaperAdaptationConfig, PaperAdaptationOutcome, PaperAdaptationUpdate, PaperRestartPolicy,
-    PaperStepStatistic,
+    DEFAULT_PAPER_STEP_RELATIVE_BOUND, MetricUpdateOutcome, PAPER_ADAPTATION_REVISION,
+    PAPER_STEP_RELATIVE_BOUND, PaperAdaptationConfig, PaperAdaptationOutcome,
+    PaperAdaptationUpdate, PaperRestartPolicy, PaperStepStatistic,
 };
 
 /// Ten-dimensional Neal funnel: `omega ~ N(0, 3^2)`, `x_i | omega ~ N(0, e^omega)`.
@@ -2208,12 +2208,17 @@ fn paper_step_never_updates_from_transitions_without_built_leaves() {
     }
     let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
     let discarded = 200;
+    // The `v3` semantics: since `v4` leaf-less transitions feed zero by
+    // default, which is covered by
+    // `paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start`.
     let config = RunConfig::new(discarded, NonZeroUsize::new(5).unwrap(), 0x5eed_9003)
         .with_tuning(paper_tuning(0.1, 1.0, 3, 3))
         .with_warmup(
             WarmupConfig::default()
                 .with_mass_adaptation(false)
-                .with_paper_adaptation(PaperAdaptationConfig::default()),
+                .with_paper_adaptation(
+                    PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(false),
+                ),
         );
     let output = sample(&Wall, &[0.0, 0.0], &mass, &config).unwrap();
     // The averaged iterate of a never-updated stream is the initial step
@@ -2250,7 +2255,10 @@ fn paper_step_never_updates_from_transitions_without_built_leaves() {
                 WarmupConfig::default()
                     .with_mass_adaptation(false)
                     .with_paper_adaptation(
-                        PaperAdaptationConfig::default().with_local_error_adaptation(false),
+                        PaperAdaptationConfig::default()
+                            .with_local_error_adaptation(false)
+                            .with_step_relative_bound(PAPER_STEP_RELATIVE_BOUND)
+                            .unwrap(),
                     ),
             ),
     )
@@ -2645,12 +2653,12 @@ fn paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start() {
         )
         .unwrap()
     };
-    let stuck = run(PaperAdaptationConfig::default());
+    let stuck = run(PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(false));
     assert!((stuck.metadata().tuning().step_size() - 400.0).abs() < 1e-9);
-    assert!(!PaperAdaptationConfig::default().exhausted_transitions_as_zero());
-    let freed = run(PaperAdaptationConfig::default().with_exhausted_transitions_as_zero(true));
+    assert!(PaperAdaptationConfig::default().exhausted_transitions_as_zero());
+    let freed = run(PaperAdaptationConfig::default());
     assert!(freed.metadata().tuning().step_size() < 200.0);
-    assert!(freed.metadata().tuning().step_size() >= 400.0 / PAPER_STEP_RELATIVE_BOUND);
+    assert!(freed.metadata().tuning().step_size() >= 400.0 / DEFAULT_PAPER_STEP_RELATIVE_BOUND);
 }
 
 #[test]
@@ -2667,7 +2675,7 @@ fn paper_step_relative_bound_is_configurable() {
     );
     assert_eq!(
         PaperAdaptationConfig::default().step_relative_bound(),
-        PAPER_STEP_RELATIVE_BOUND
+        DEFAULT_PAPER_STEP_RELATIVE_BOUND
     );
     let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
     let run = |paper: PaperAdaptationConfig| {

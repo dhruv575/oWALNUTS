@@ -94,6 +94,21 @@ architecture (see the `walnutpie` module documentation).
   precision path block depends on global parameters best estimated during
   warmup. [WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1]
 
+### Changed
+
+- **`PaperAdaptationConfig::default()` is `walnutpie-paper-adaptation-kquantile-gamma-v4`.**
+  `with_exhausted_transitions_as_zero(true)` and
+  `with_step_relative_bound(DEFAULT_PAPER_STEP_RELATIVE_BOUND = 1e6)` are
+  now the defaults. `STUDIES/paper_adaptation_robust_v1` traced the
+  posteriordb freezes to leaf-less transitions producing no `h` statistic
+  and then to the `1e3` step band, not to the `delta` rule; with both
+  guards the default is robust on all 14 freeze-model cells and
+  0.90-1.35x dual averaging's min bulk ESS per gradient (geomean 1.04).
+  The `v3` behaviour is
+  `.with_exhausted_transitions_as_zero(false).with_step_relative_bound(PAPER_STEP_RELATIVE_BOUND)`.
+  Acceptance-driven warmup, `ALGORITHM_REVISION` and the kernel
+  fingerprints are unchanged.
+
 ### Fixed
 
 - `sample_chains_structured` and `sample_chains_structured_with_control`
