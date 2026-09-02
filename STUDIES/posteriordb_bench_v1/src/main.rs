@@ -16,7 +16,7 @@ use owalnuts::walnutpie::{
     TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
     preflight_chains_with_target_budget, sample_chains_with_target_budget,
 };
-use owalnuts_bridgestan::{StanTarget, default_preload};
+use owalnuts_bridgestan::{ReplicatedStanTarget, default_preload};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use serde_json::json;
 use std::{env, error::Error, fs, num::NonZeroUsize, path::Path, time::Instant};
@@ -74,7 +74,10 @@ fn run(
         return Err(format!("output already exists: {}", out.display()).into());
     }
     let data_json = fs::read_to_string(data)?;
-    let target = StanTarget::load(model, &default_preload(), Some(&data_json), 1)?;
+    // One library copy per chain thread: the recommended (non-STAN_THREADS)
+    // BridgeStan build has a single global autodiff stack per loaded module.
+    // See artifacts/wall-gap/README.md (deviation from the v1 build).
+    let target = ReplicatedStanTarget::load(model, &default_preload(), Some(&data_json), 1, threads)?;
     let dimension = target.dimension();
     let starts = starts(dimension, seed);
     let config = config(arm, seed)?;
@@ -172,7 +175,7 @@ fn run(
         "seed": seed,
         "model_library": model.display().to_string(),
         "model_info": target.info(),
-        "threading": format!("{:?}", target.threading()),
+        "threading": format!("{:?}", target.threading()), "replicas": target.replicas(),
         "dimension": dimension,
         "chains": CHAINS, "warmup": WARMUP, "retained": RETAINED, "threads": threads,
         "starts": starts,

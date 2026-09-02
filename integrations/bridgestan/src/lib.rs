@@ -26,18 +26,32 @@
 //!   thread-local and one model instance may be evaluated from many threads
 //!   concurrently, which is what the parallel facade entry points do. The
 //!   constructor reads `bs_model_info` and, if the library was not built with
-//!   `STAN_THREADS=true`, serialises every evaluation through a mutex and
-//!   reports [`StanTarget::threading`] as [`Threading::Serialised`].
+//!   `STAN_THREADS=true`, serialises every evaluation through a mutex shared
+//!   by all `StanTarget`s loaded from that file (same path, same module, same
+//!   global autodiff stack) and reports [`StanTarget::threading`] as
+//!   [`Threading::Serialised`].
+//! * **Do not build with `STAN_THREADS=true` on Windows/mingw-w64.** GCC on
+//!   mingw-w64 implements `__thread` with emulated TLS (`__emutls_get_address`
+//!   on every access), and Stan Math touches its thread-local autodiff stack
+//!   for every node it records. Measured on the posteriordb models
+//!   (`STUDIES/posteriordb_bench_v1/artifacts/wall-gap/`): a threaded build
+//!   costs 9–16x more per gradient than the default build (arK 120 vs 12.8 µs,
+//!   hmm_example 445 vs 28 µs, eight schools 6.2 vs 0.59 µs); the default
+//!   build matches CmdStan's per-gradient cost. Build without `STAN_THREADS`
+//!   and use [`ReplicatedStanTarget`], which loads one copy of the library per
+//!   concurrent thread (distinct file paths are distinct modules with their
+//!   own global autodiff stack) and dispatches each call to a free replica.
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use libloading::{Library, Symbol};
 use owalnuts::walnutpie::{Target, TargetError};
 use std::{
+    cell::Cell,
     ffi::{CStr, CString, c_char, c_int, c_uint},
     fmt,
     path::{Path, PathBuf},
-    sync::Mutex,
     sync::atomic::{AtomicUsize, Ordering},
+    sync::{Arc, Mutex, OnceLock, TryLockError, Weak},
 };
 
 #[repr(C)]
@@ -106,7 +120,10 @@ pub struct StanTarget {
     dimension: usize,
     info: String,
     threading: Threading,
-    serial: Mutex<()>,
+    /// Shared by every `StanTarget` loaded from the same file: without
+    /// `STAN_THREADS` the autodiff stack is a global of the *module*, and
+    /// Windows/POSIX return the same module for the same path.
+    serial: Arc<Mutex<()>>,
     calls: AtomicUsize,
     recoverable: AtomicUsize,
 }
@@ -204,7 +221,7 @@ impl StanTarget {
             dimension: dimension as usize,
             info,
             threading,
-            serial: Mutex::new(()),
+            serial: module_lock(model_so),
             calls: AtomicUsize::new(0),
             recoverable: AtomicUsize::new(0),
         })
@@ -265,6 +282,24 @@ impl StanTarget {
     }
 }
 
+/// One evaluation lock per loaded library file (keyed by canonical path).
+fn module_lock(model_so: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<std::collections::HashMap<PathBuf, Weak<Mutex<()>>>>> =
+        OnceLock::new();
+    let key = std::fs::canonicalize(model_so).unwrap_or_else(|_| model_so.to_path_buf());
+    let mut map = LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if let Some(existing) = map.get(&key).and_then(Weak::upgrade) {
+        return existing;
+    }
+    let fresh = Arc::new(Mutex::new(()));
+    map.retain(|_, w| w.strong_count() > 0);
+    map.insert(key, Arc::downgrade(&fresh));
+    fresh
+}
+
 fn take_error(err: *mut c_char, free: FreeErrorFn) -> String {
     if err.is_null() {
         return String::from("(no message)");
@@ -299,6 +334,157 @@ impl Target for StanTarget {
                 self.evaluate(position, gradient)
             }
         }
+    }
+}
+
+/// A pool of independently loaded copies of one model library, for
+/// libraries built *without* `STAN_THREADS` (the fast build on Windows, see
+/// the module docs).
+///
+/// Each replica is the same `*_model.so` copied to a distinct file name in a
+/// private temporary directory and loaded separately, so each has its own
+/// global Stan autodiff stack and may be evaluated by one thread at a time.
+/// A call takes the first free replica (trying the one this thread used last
+/// first, so steady-state dispatch is one uncontended `try_lock`); with at
+/// least as many replicas as calling threads, evaluations never wait. The
+/// per-call dispatch cost is ~50 ns against a >=0.5 µs Stan gradient.
+///
+/// With a `STAN_THREADS=true` library the replicas are still correct but
+/// pointless; use [`StanTarget`] directly.
+pub struct ReplicatedStanTarget {
+    replicas: Vec<StanTarget>,
+    // Dropped after the replicas (field order): removes the copied libraries.
+    _copies: TempCopies,
+    dimension: usize,
+}
+
+struct TempCopies {
+    dir: PathBuf,
+    files: Vec<PathBuf>,
+}
+
+impl Drop for TempCopies {
+    fn drop(&mut self) {
+        for f in &self.files {
+            let _ = std::fs::remove_file(f);
+        }
+        let _ = std::fs::remove_dir(&self.dir);
+    }
+}
+
+thread_local! {
+    static PREFERRED_REPLICA: Cell<usize> = const { Cell::new(0) };
+}
+
+impl ReplicatedStanTarget {
+    /// Load `replicas` independent copies of `model_so` (see
+    /// [`StanTarget::load`] for the other arguments). `replicas` should be at
+    /// least the number of threads that will call the target concurrently.
+    /// Replica 0 is the original file; replicas 1.. are copies made under a
+    /// process-private temporary directory and deleted on drop.
+    pub fn load(
+        model_so: &Path,
+        preload: &[PathBuf],
+        data: Option<&str>,
+        seed: u32,
+        replicas: usize,
+    ) -> Result<Self, LoadError> {
+        let replicas = replicas.max(1);
+        let dir = std::env::temp_dir().join(format!(
+            "owalnuts-bridgestan-{}-{}",
+            std::process::id(),
+            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut copies = TempCopies {
+            dir: dir.clone(),
+            files: Vec::new(),
+        };
+        let mut loaded = Vec::with_capacity(replicas);
+        loaded.push(StanTarget::load(model_so, preload, data, seed)?);
+        if replicas > 1 {
+            std::fs::create_dir_all(&dir).map_err(|e| LoadError::Invalid(e.to_string()))?;
+            let stem = model_so
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "model.so".into());
+            for i in 1..replicas {
+                let copy = dir.join(format!("replica{i}-{stem}"));
+                std::fs::copy(model_so, &copy).map_err(|e| LoadError::Invalid(e.to_string()))?;
+                copies.files.push(copy.clone());
+                loaded.push(StanTarget::load(&copy, preload, data, seed)?);
+            }
+        }
+        let dimension = loaded[0].dimension();
+        Ok(Self {
+            replicas: loaded,
+            _copies: copies,
+            dimension,
+        })
+    }
+
+    pub fn replicas(&self) -> usize {
+        self.replicas.len()
+    }
+
+    /// The `bs_model_info` string of the library.
+    pub fn info(&self) -> &str {
+        self.replicas[0].info()
+    }
+
+    pub fn threading(&self) -> Threading {
+        self.replicas[0].threading()
+    }
+
+    /// Fused evaluations started so far, summed over replicas.
+    pub fn calls(&self) -> usize {
+        self.replicas.iter().map(StanTarget::calls).sum()
+    }
+
+    /// Evaluations that raised a Stan exception or returned `-inf`, summed.
+    pub fn recoverable_failures(&self) -> usize {
+        self.replicas
+            .iter()
+            .map(StanTarget::recoverable_failures)
+            .sum()
+    }
+}
+
+static NEXT_POOL_ID: AtomicUsize = AtomicUsize::new(0);
+
+impl Target for ReplicatedStanTarget {
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        if position.len() != self.dimension || gradient.len() != self.dimension {
+            return Err(TargetError::new("position/gradient dimension mismatch"));
+        }
+        let n = self.replicas.len();
+        let start = PREFERRED_REPLICA.with(Cell::get) % n;
+        for k in 0..n {
+            let i = (start + k) % n;
+            let r = &self.replicas[i];
+            let guard = match r.serial.try_lock() {
+                Ok(g) => g,
+                Err(TryLockError::Poisoned(p)) => p.into_inner(),
+                Err(TryLockError::WouldBlock) => continue,
+            };
+            PREFERRED_REPLICA.with(|p| p.set(i));
+            r.calls.fetch_add(1, Ordering::Relaxed);
+            let out = r.evaluate(position, gradient);
+            drop(guard);
+            return out;
+        }
+        // Every replica is busy (more callers than replicas): wait for ours.
+        let r = &self.replicas[start];
+        let _guard = r.serial.lock().unwrap_or_else(|p| p.into_inner());
+        r.calls.fetch_add(1, Ordering::Relaxed);
+        r.evaluate(position, gradient)
     }
 }
 

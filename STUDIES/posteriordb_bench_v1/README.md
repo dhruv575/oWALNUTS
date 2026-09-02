@@ -157,3 +157,28 @@ PYTHONIOENCODING=utf-8 .venv/Scripts/python run_posteriordb.py analyze
 ```
 
 CmdStan 2.39.0 is expected at the path in `run_posteriordb.py` (`CMDSTAN_HOME`).
+
+## Deviation note (post-v1, 2026-09-02): BridgeStan build flags
+
+The v1 oWALNUTS arms (and nutpie) ran on BridgeStan libraries built with
+`STAN_THREADS=true`. On this toolchain (mingw-w64 GCC) that flag makes
+Stan's thread-local autodiff stack go through emulated TLS on every node and
+costs **9-16x per gradient** (arK 120 vs 12.8 us, hmm_example 445 vs 28 us,
+eight schools 6.2 vs 0.59 us); CmdStan's default build has no
+`STAN_THREADS` and never pays it. This is the whole of the ~10x wall gap at
+equal gradient counts in `artifacts/results-table.md`; the Rust wrapper,
+call path, threading contention and the other compile flags contribute
+nothing measurable. Full measurements, the fix and the projected walls:
+`artifacts/wall-gap/README.md`.
+
+The v1 artifacts are unchanged. **ESS per gradient, gate outcomes and the
+preregistered verdict are unaffected** (the trajectory is bit-identical:
+the same 241,119 arK target calls in every rerun); only the
+**ESS per second** columns for the two oWALNUTS arms and for nutpie are
+depressed by this build flag. Going forward `run_posteriordb.py` compiles
+with `BRIDGESTAN_MAKE_ARGS = []` and the harness loads one library copy per
+chain thread (`ReplicatedStanTarget`); a rerun under this configuration is
+a new study version, not an edit of v1. With the fixed build the arK wall
+is 1.53 s (was 10.54 s; CmdStan 1.03 s), hmm_example 2.66 s (was 33.0 s;
+CmdStan 1.52 s at half the gradients), eight schools 0.038 s (was 0.178 s;
+CmdStan 0.17 s).

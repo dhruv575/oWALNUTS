@@ -99,3 +99,57 @@ fn concurrent_evaluations_agree_with_serial() {
         eprintln!("note: model built without STAN_THREADS; evaluations were serialised");
     }
 }
+
+#[test]
+fn replicated_target_agrees_with_serial_and_counts_calls() {
+    use owalnuts_bridgestan::ReplicatedStanTarget;
+    let Some(m) = model() else { return };
+    let so = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models/eight_schools_model.so");
+    let pool = ReplicatedStanTarget::load(&so, &default_preload(), Some(DATA), 7, 4).expect("pool");
+    assert_eq!(pool.replicas(), 4);
+    assert_eq!(pool.dimension(), m.dimension());
+    let points: Vec<Vec<f64>> = (0..64)
+        .map(|i| {
+            (0..10)
+                .map(|j| ((i * 5 + j * 3) % 11) as f64 * 0.1 - 0.5)
+                .collect()
+        })
+        .collect();
+    let serial: Vec<(f64, Vec<f64>)> = points
+        .iter()
+        .map(|p| {
+            let mut g = vec![0.0; 10];
+            (m.log_density_gradient(p, &mut g).unwrap(), g)
+        })
+        .collect();
+    let parallel: Vec<(f64, Vec<f64>)> = std::thread::scope(|s| {
+        let handles: Vec<_> = points
+            .chunks(16)
+            .map(|chunk| {
+                let pool = &pool;
+                s.spawn(move || {
+                    chunk
+                        .iter()
+                        .map(|p| {
+                            let mut g = vec![0.0; 10];
+                            (pool.log_density_gradient(p, &mut g).unwrap(), g)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap())
+            .collect()
+    });
+    assert_eq!(serial, parallel);
+    assert_eq!(pool.calls(), 64);
+    let mut g = vec![0.0; 10];
+    assert!(matches!(
+        pool.log_density_gradient(&[0.0; 9], &mut g)
+            .unwrap_err()
+            .kind(),
+        TargetErrorKind::Fatal
+    ));
+}
