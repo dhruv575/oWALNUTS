@@ -77,6 +77,7 @@ fn funnel_macro_leaves_match_upstream_reference() {
             grad,
         };
         let tuning = FixedTuning {
+            options: crate::kernel::KernelOptions::default(),
             step_size: input["macro_step"].as_f64().expect("macro_step"),
             max_refinement_levels: input["max_step_halvings"].as_u64().expect("halvings") as usize,
             min_micro_steps: input["min_micro_steps"].as_u64().expect("min_micro_steps") as usize,
