@@ -9,6 +9,14 @@ architecture (see the `walnutpie` module documentation).
 
 ### Changed
 
+- **`sampler::Sampler` caches the initial evaluation by default.** Draws are
+  bit-identical to the uncached run; one target call per transition is saved
+  (`STUDIES/kernel_efficiency_v1`). `walnutpie::RunConfig` keeps the cache off
+  so the frozen target-call fingerprints hold; `Sampler::cache_initial_evaluation(false)`
+  restores the old accounting.
+
+### Changed
+
 - **`sampler::Tuning::default()` max depth 8 -> 10** (Stan's default). Chosen
   by the preregistered ablation `STUDIES/adaptation_parity_v1` (nine
   posteriordb models, two seeds): 1.45x geometric-mean minimum bulk ESS per

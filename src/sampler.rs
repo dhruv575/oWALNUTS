@@ -604,7 +604,7 @@ impl Default for Sampler {
             adaptation: Adaptation::default(),
             tuning: Tuning::default(),
             limits: Limits::default(),
-            cache_initial_evaluation: false,
+            cache_initial_evaluation: true,
         }
     }
 }
@@ -663,8 +663,9 @@ impl Sampler {
     }
     /// Reuse each transition's selected log density and gradient as the
     /// next transition's initial evaluation (one target call per transition
-    /// saved; draws bit-identical). Off by default to preserve the frozen
-    /// target-call fingerprints; see `STUDIES/kernel_efficiency_v1`.
+    /// saved; draws bit-identical). On by default in `Sampler` since 0.2.0;
+    /// `walnutpie::RunConfig` keeps it off to preserve the frozen
+    /// target-call fingerprints. See `STUDIES/kernel_efficiency_v1`.
     pub fn cache_initial_evaluation(mut self, enabled: bool) -> Self {
         self.cache_initial_evaluation = enabled;
         self

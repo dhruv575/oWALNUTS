@@ -68,7 +68,10 @@ fn kernel_tuning() -> KernelTuning {
 }
 
 fn config(warmup: Option<WarmupConfig>) -> RunConfig {
-    let config = RunConfig::new(WARMUP, nz(DRAWS), SEED).with_tuning(kernel_tuning());
+    // `Sampler` caches the initial evaluation by default (0.2.0); mirror it.
+    let config = RunConfig::new(WARMUP, nz(DRAWS), SEED)
+        .with_tuning(kernel_tuning())
+        .with_cached_initial_evaluation(true);
     match warmup {
         Some(warmup) => config.with_warmup(warmup),
         None => config,
@@ -305,6 +308,7 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
         &DiagonalMass::identity(nz(3)),
         &RunConfig::new(150, nz(DRAWS), SEED)
             .with_tuning(kernel_tuning())
+            .with_cached_initial_evaluation(true)
             .with_warmup(
                 WarmupConfig::default()
                     .with_mass_adaptation(false)
