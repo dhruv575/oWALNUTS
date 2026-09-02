@@ -47,7 +47,8 @@ starts without sampling).
 
 Defaults follow `owalnuts::sampler::Tuning::default()`: macro step
 `h = 0.5`, maximum tree depth 10 (Stan's default; the 0.1 package used 8,
-chosen by `STUDIES/adaptation_parity_v1`), four refinement levels,
+chosen by `STUDIES/adaptation_parity_v1`), eight refinement levels
+(`STUDIES/funnel_defaults_v1`: four halve the funnel's tail mass),
 `delta = 1`; dual-averaging warmup at target acceptance 0.8 with a diagonal
 metric. Pass `tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the
 0.1 package's behaviour. At depth 10 the exact worst-case evaluation count

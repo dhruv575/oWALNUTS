@@ -50,6 +50,9 @@ let summary = Summary::from_output(posterior.inner(), None)?;
 println!("{summary}");                     // mean, sd, MCSE, quantiles, ESS, R-hat, health
 ```
 
+The defaults are tuned for funnel-shaped posteriors as well as ordinary
+ones: eight refinement levels, which is what keeps the quick-start
+configuration unbiased on Neal's funnel (see "Where it shines").
 `Summary` prints a Stan-style table (rank-normalised split R-hat, bulk and
 tail ESS, MCSE, 5/50/95 % quantiles; each estimator matches ArviZ to 1e-6)
 followed by the sampler health per chain and pooled: divergences, invalid
@@ -83,7 +86,15 @@ Every number below is from a preregistered, checksummed study in
   4 x 50,000 draws give tail mass `P(omega < -5)` = **0.0474** against the
   exact 0.0478 (the reference implementation at identical tuning: 0.0477),
   with zero divergences; fixed-step NUTS is biased on this target, and so
-  was the pre-`v9` kernel (0.0971). [E1]
+  was the pre-`v9` kernel (0.0971). [E1] At the **sampler defaults**
+  (adapted diagonal metric, dual averaging, `h0 = 0.5`) the tail mass is
+  within `|z| <= 2` of exact on three fresh seeds (0.0412, 0.0346, 0.0897)
+  because the default is eight refinement levels; at four levels it was
+  half the exact value, and a one-level NUTS-like control never draws
+  below `omega = -5` on two seeds. The pooled estimate is right but the
+  funnel does not mix *well* at the defaults (one chain per seed adapts
+  to `h ~ 0.01`, `omega` R-hat 1.01-1.04); `Tuning::new().max_error(0.5)`
+  mixes better there at a 21 % cost on a 100-D Gaussian. [E11]
 - **Long state-space paths mix at depth 3–4.** On an exact Gaussian
   state-space model at `T = 1000`, supplying the posterior-precision
   tridiagonal metric (`Metric::Structured`) gives ESS per target call
@@ -143,7 +154,7 @@ will use fewer gradients.
 | warmup / draws / chains | 1,000 / 1,000 / one per start | Stan's shape |
 | `Tuning::max_depth` | 10 | ablation over nine posteriordb models: 1.45x ESS per gradient and 17/18 gates against depth 8 [E7] |
 | `Tuning::step_size` (`h`) | 0.5 | initial macro step; dual averaging adapts it |
-| `Tuning::max_refinement_levels` | 4 | micro-steps down to `h / 16` |
+| `Tuning::max_refinement_levels` | 8 | micro-steps down to `h / 256`; four levels halve the funnel's tail mass at the adapted step, eight are exact and never engage on Eight Schools or a 100-D Gaussian [E11] |
 | `Tuning::max_error` (`delta`) | 1 | energy-error threshold per macro step |
 | `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75) |
 | `Metric` | adapted diagonal | Welford, regularised |
@@ -304,3 +315,9 @@ provenance.
 - [E9] Appendix C v4 robust on the 14 freeze cells, geomean 1.04 vs dual
   averaging:
   [`STUDIES/paper_adaptation_robust_v1`](STUDIES/paper_adaptation_robust_v1/README.md).
+- [E11] The sampler defaults on the funnel: four levels 0.0203 / 0.0242 /
+  0.0625 (z -3.5 / -3.8 / +0.3), eight levels 0.0412 / 0.0346 / 0.0897
+  (|z| <= 1.43) at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D
+  Gaussian; lower `delta` alone makes the four-level bias worse:
+  [`STUDIES/funnel_defaults_v1`](STUDIES/funnel_defaults_v1/README.md)
+  (`WP28-FUNNEL-DEFAULTS-V1`).

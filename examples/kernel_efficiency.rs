@@ -1,8 +1,8 @@
 //! Kernel efficiency harness: oWALNUTS kernel variants against a reference
 //! NUTS at the same adapted step and metric (`STUDIES/kernel_efficiency_v1`).
 //!
-//! For every target and seed the default oWALNUTS warmup (`h0 = 0.1`, depth
-//! 10, four refinement levels, `delta = 1`, dual averaging at 0.8, adapted
+//! For every target and seed the study's warmup (`h0 = 0.1`, depth 10, four
+//! refinement levels, `delta = 1`, dual averaging at 0.8, adapted
 //! diagonal) runs once per chain; its final step, metric and last state are
 //! then handed to every arm, which samples `draws` transitions per chain
 //! with a fixed kernel. Arms are the oWALNUTS kernel under opt-in

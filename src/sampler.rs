@@ -415,8 +415,13 @@ pub fn uniform_starts<T: Target + ?Sized>(
 /// Kernel tuning: the macro step, tree depth, refinement, and error
 /// threshold. Values are validated when the run starts.
 ///
-/// The default is `h = 0.5`, depth 10, one minimum micro-step, four
-/// refinement levels, `delta = 1.0`. Depth 10 (Stan's default; the 0.1 API
+/// The default is `h = 0.5`, depth 10, one minimum micro-step, eight
+/// refinement levels, `delta = 1.0`. Eight levels (micro-steps down to
+/// `h / 256`) are what make the default unbiased on Neal's funnel: at four
+/// levels the adapted step cannot enter the neck and the tail mass
+/// `P(omega < -5)` comes out at half the exact value, while on the
+/// noncentered Eight Schools and a 100-D Gaussian the extra levels never
+/// engage (`STUDIES/funnel_defaults_v1`, 1.05x / 1.00x ESS per call). Depth 10 (Stan's default; the 0.1 API
 /// used 8) was chosen by the preregistered ablation in
 /// `STUDIES/adaptation_parity_v1`: on the posteriordb regressions with
 /// correlated coefficients (`diamonds`, `earnings`, `sblrc`) depth 8 capped
@@ -440,7 +445,7 @@ impl Default for Tuning {
             step_size: 0.5,
             max_depth: 10,
             min_micro_steps: 1,
-            max_refinement_levels: 4,
+            max_refinement_levels: 8,
             max_error: 1.0,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
             kernel_options: KernelOptions::default(),
@@ -555,7 +560,7 @@ impl Limits {
     }
     /// Admit the run with its exact worst-case evaluation count as the
     /// ceiling. This is the default since 0.2.0: the sampler's own defaults
-    /// (depth 10, four refinement levels) exceed the conservative
+    /// (depth 10, eight refinement levels) exceed the conservative
     /// `walnutpie` admission ceiling for ordinary 4 x 1,000/2,000 runs, and
     /// the worst case is an exact bound the run can never exceed, so it costs
     /// nothing. Ignored when `max_target_evaluations` is set.

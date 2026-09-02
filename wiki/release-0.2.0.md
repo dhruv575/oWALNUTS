@@ -19,10 +19,11 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `5417e0c` | `sampler::Init` uniform starts with retries; Appendix C v4 defaults and guards | `STUDIES/paper_adaptation_robust_v1` |
 | `80403fc` | `sampler::Tuning` default depth 10; opt-in Stan-style warmup controls | `STUDIES/adaptation_parity_v1` |
 | `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
+| this release | `sampler::Tuning` default refinement levels 4 -> 8: the four-level default halved the funnel's tail mass; eight levels are exact on three seeds at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D Gaussian | `STUDIES/funnel_defaults_v1` (WP28) |
 | this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
 
 The upgrade notes (facade unchanged, research items behind the feature,
-sampler defaults `h = 0.5`, depth 10, `delta = 1` versus the frozen
+sampler defaults `h = 0.5`, depth 10, eight levels, `delta = 1` versus the frozen
 `RunConfig`/`KernelTuning` defaults) are in `CHANGELOG.md`.
 
 ## Validation evidence
@@ -101,6 +102,28 @@ Zero frozen chains; `arma11` 0/3 -> 2/3 and `lotka_volterra` 1/3 -> 3/3.
 The remaining misses are single stalled chains: an `arma11` seed that
 escapes the pin and then crawls at `h ~ 1e-8`, `sblrc`'s step collapse
 under dual averaging, and a `hmm_drive_0` chain in a second mode.
+
+### The sampler defaults on Neal's funnel (WP28)
+
+`STUDIES/funnel_defaults_v1`, preregistered, seeds 82101-82103, 10-D funnel
+4 x 2,000 / 20,000 at the sampler defaults plus one override per arm, with
+the noncentered Eight Schools and a 100-D Gaussian as cost cells:
+
+| arm | P(omega<-5) per seed (z), exact 0.0478 | retained div / exhaust | funnel calls | Eight Schools ESS/call | Gaussian ESS/call |
+|---|---|---|---|---|---|
+| four levels (0.2.0 before this change) | 0.0203 (-3.5), 0.0242 (-3.8), 0.0625 (+0.3) | 54 / 2,933 | 1.00x | 1.00x | 1.00x |
+| **eight levels (the default)** | 0.0412 (-0.3), 0.0346 (-1.4), 0.0897 (+1.0) | 8 / 113 | 1.08x | 1.05x | 1.00x |
+| eight levels + `delta = 0.5` | 0.0376 (-1.9), 0.0397 (-0.8), 0.0413 (-0.7) | 0 / 157 | 0.74x | 0.91x | 0.79x |
+| `delta = 0.5` alone | 0.0403, 0.0126 (-6.0), 0.0206 (-3.5) | 268 / 11,416 | 0.61x | 0.91x | 0.78x |
+| `Adaptation::Paper`, eight levels, from `h0 = 0.5` | 0.0432, 0.0459, 0.0293 (-2.7) | 0 / 4 | 0.68x | 1.09x | 0.39x |
+| `stan_style(0.8)` | 0.0255 (-3.7), 0.0182 (-7.4), cell errored | 2,134 / 9,039 | 0.55x | 0.94x | 0.62x |
+| one level (NUTS-like control) | 0.0058 (-11.8), 0, 0 | 5 / 78,469 | 0.41x | 1.15x | 1.05x |
+
+The preregistered rule (cheapest arm within |z| <= 2 on every seed and
+>= 0.9x on both cost targets) selects eight levels. What it does not fix:
+one chain per seed still adapts to `h ~ 0.01` on the funnel and the `omega`
+R-hat is 1.01-1.04 at 80,000 draws, so the default is unbiased there, not
+efficient; the same step-collapse mode as `sblrc` / `earnings` in WP25.
 
 ### Adaptation ablation (`STUDIES/adaptation_parity_v1`)
 
