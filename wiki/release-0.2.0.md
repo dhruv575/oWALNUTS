@@ -53,11 +53,34 @@ trajectories. The per-gradient gap motivated the three follow-up studies
 below; the study also rejected the v3 paper adaptation as a default (froze
 on nine models).
 
-<!-- WP23 v2 numbers -->
-<!-- Placeholder for the posteriordb v2 headline (0.2.0 defaults: depth 10,
-     start retries, non-threaded BridgeStan, Appendix C v4). Fill in the
-     geomean ESS-per-gradient and per-second ratios versus CmdStan and
-     nutpie, the gate counts, and the ledger entry id when WP23 lands. -->
+### posteriordb v2 on the 0.2.0 defaults (WP23)
+
+`STUDIES/posteriordb_bench_v2`: the v1 protocol rerun with depth 10, `h0 =
+0.5`, `Init::uniform()` start retries, the non-`STAN_THREADS` BridgeStan
+build and Appendix C v4, plus a `WarmupConfig::stan_style(0.8)` arm; 17
+posteriors x 5 arms x 3 fresh seeds, all 255 cells present. Ledger entry
+`WP23-POSTERIORDB-BENCH-V2`.
+
+| arm | cells passing | ESS/grad vs CmdStan | ESS/s vs CmdStan | wall/grad vs CmdStan | ESS/grad vs nutpie | ESS/s vs nutpie |
+|---|---:|---:|---:|---:|---:|---:|
+| owalnuts-da | **32**/51 | 0.233 (17 models) | 0.307 | **0.771** | 0.230 | **1.108** |
+| owalnuts-paper (v4) | 29/51 | 0.232 | 0.305 | 0.771 | 0.229 | 1.104 |
+| owalnuts-stan-style | 32/51 | 0.319 | 0.450 | 0.767 | 0.238 | 1.125 |
+| cmdstan | 35/51 | 1 | 1 | 1 | — | — |
+| nutpie | 27/51 | — | — | — | 1 | 1 |
+
+Zero oWALNUTS cells were lost to a fatal NaN/inf evaluation or an
+unevaluable start (v1: 12); the paper arm no longer freezes on the
+regressions and is at parity with dual averaging (geomean 0.995); depth 10
+takes `diamonds` from 0/3 to 3/3 and `earnings` from 0/3 to 2/3. The
+per-gradient gap to CmdStan did not move: 0.233x over 17 models, 0.447x
+over the 15 models where no oWALNUTS chain freezes (`arma11` 0/3 and
+`lotka_volterra` 1/3 freeze from uniform starts where every leaf fails at
+every refinement level, which NUTS's reject-and-shrink survives); on the
+healthy models 0.4–0.9x. Predictions P3 (wall per gradient) and P5 (no
+fatal losses) held; P1 missed by one cell (32 vs >= 33), P2 (>= 0.45x) and
+P4 (no frozen paper cell) did not hold, so the breadth-throughput release
+gate is not met.
 
 ### Adaptation ablation (`STUDIES/adaptation_parity_v1`)
 
@@ -181,4 +204,4 @@ on Eight Schools at four threads, parity with nutpie.
 - [x] Python package rebuilt and its pytest suite green
 - [x] `cargo package --allow-dirty` verify build
 - [ ] `git tag v0.2.0` and `cargo publish` â€” left to the maintainer
-- [ ] WP23 posteriordb v2 numbers above
+- [x] WP23 posteriordb v2 numbers above

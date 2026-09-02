@@ -250,8 +250,20 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   26/51 versus CmdStan 34/51, nutpie 29/51), refinement engaged on 1 % of
   retained leaves, and the v3 paper arm froze on nine models. This study
   motivated the depth-10 default, the start retries, the BridgeStan fixes and
-  the Appendix C v4 defaults above; the v2 re-run is pending.
+  the Appendix C v4 defaults above.
   [WP22-POSTERIORDB-BENCH-V1]
+- posteriordb v2 on the 0.2.0 defaults (`STUDIES/posteriordb_bench_v2`, the
+  same 17 posteriors, five arms, three fresh seeds, all 255 cells present):
+  the dual-averaging arm passes 32/51 cells (CmdStan 35, nutpie 27; the
+  `stan_style` arm 32, the Appendix C v4 arm 29 versus 8 in v1) with zero
+  cells lost to a fatal evaluation or start failure; geomean 0.233x CmdStan
+  bulk ESS per gradient over 17 models (0.447x over the 15 models without a
+  frozen chain), 0.771x CmdStan wall per gradient and 1.108x nutpie ESS per
+  second. `arma11` and `lotka_volterra` chains freeze from uniform starts
+  where every leaf fails at every refinement level; the Appendix C v4 arm is
+  at parity with dual averaging (geomean 0.995), so it stays opt-in. The
+  breadth-throughput release gate (P1–P3, P5) is not met.
+  [WP23-POSTERIORDB-BENCH-V2]
 - Adaptation ablation (`STUDIES/adaptation_parity_v1`, nine posteriordb
   models, two seeds): depth 10 over depth 8 gives 1.45x geomean minimum bulk
   ESS per gradient and 17/18 gate passes; geomean versus CmdStan 0.49x; the
