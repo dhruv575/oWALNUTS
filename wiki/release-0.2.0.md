@@ -13,13 +13,13 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `0eafc49` | `owalnuts::diagnostics` (rank-normalised R-hat, bulk/tail/quantile ESS, MCSE, Stan-style `Summary`) and `owalnuts::export::CmdStanCsv` | ArviZ fixture `tests/data/arviz_fixture.json` (1e-6 relative); `tests/export_cmdstan.rs` |
 | `00e55a7` | `owalnuts::sampler` builder API; `research` Cargo feature gate | `tests/sampler_api.rs` (bit-identical to the `walnutpie` entry points) |
 | `97c593b` | Allocation-free kernel hot path, bit-identical | `tests/kernel_fingerprint.rs`; `examples/kernel_bench.rs` |
-| `e79cb0f` | `owalnuts-autodiff` fused-primitive tape crate (`integrations/autodiff`) | `integrations/AUTODIFF-RESEARCH.md` §Route (e) |
+| `e79cb0f` | `owalnuts-autodiff` fused-primitive tape crate (`integrations/autodiff`) | `integrations/AUTODIFF-RESEARCH.md` Â§Route (e) |
 | `52be19e` | posteriordb benchmark against CmdStan and nutpie | WP22-POSTERIORDB-BENCH-V1 |
 | `be2325c` | BridgeStan: non-threaded build, `ReplicatedStanTarget`, NaN/inf mapped to the recoverable path | `STUDIES/posteriordb_bench_v1/artifacts/wall-gap` |
 | `5417e0c` | `sampler::Init` uniform starts with retries; Appendix C v4 defaults and guards | `STUDIES/paper_adaptation_robust_v1` |
 | `80403fc` | `sampler::Tuning` default depth 10; opt-in Stan-style warmup controls | `STUDIES/adaptation_parity_v1` |
 | `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
-| this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | — |
+| this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
 
 The upgrade notes (facade unchanged, research items behind the feature,
 sampler defaults `h = 0.5`, depth 10, `delta = 1` versus the frozen
@@ -66,8 +66,8 @@ posteriors x 5 arms x 3 fresh seeds, all 255 cells present. Ledger entry
 | owalnuts-da | **32**/51 | 0.233 (17 models) | 0.307 | **0.771** | 0.230 | **1.108** |
 | owalnuts-paper (v4) | 29/51 | 0.232 | 0.305 | 0.771 | 0.229 | 1.104 |
 | owalnuts-stan-style | 32/51 | 0.319 | 0.450 | 0.767 | 0.238 | 1.125 |
-| cmdstan | 35/51 | 1 | 1 | 1 | � | � |
-| nutpie | 27/51 | � | � | � | 1 | 1 |
+| cmdstan | 35/51 | 1 | 1 | 1 | — | — |
+| nutpie | 27/51 | — | — | — | 1 | 1 |
 
 Zero oWALNUTS cells were lost to a fatal NaN/inf evaluation or an
 unevaluable start (v1: 12); the paper arm no longer freezes on the
@@ -77,10 +77,30 @@ per-gradient gap to CmdStan did not move: 0.233x over 17 models, 0.447x
 over the 15 models where no oWALNUTS chain freezes (`arma11` 0/3 and
 `lotka_volterra` 1/3 freeze from uniform starts where every leaf fails at
 every refinement level, which NUTS's reject-and-shrink survives); on the
-healthy models 0.4�0.9x. Predictions P3 (wall per gradient) and P5 (no
+healthy models 0.4–0.9x. Predictions P3 (wall per gradient) and P5 (no
 fatal losses) held; P1 missed by one cell (32 vs >= 33), P2 (>= 0.45x) and
 P4 (no frozen paper cell) did not hold, so the breadth-throughput release
 gate is not met.
+
+
+### posteriordb v3: the WP24 warmup rule validated (WP25)
+
+`STUDIES/posteriordb_bench_v3`: v2's protocol on fresh seeds 79101–79103
+after `ExhaustionRule::AcceptUnlessDivergent` became the sampler's warmup
+default (`STUDIES/freeze_mode_v1`, `WP24-FREEZE-MODE-V1`); 17 posteriors x
+4 arms x 3 seeds, 204 cells. Ledger entry `WP25-POSTERIORDB-BENCH-V3`.
+
+| arm | cells passing | ESS/grad vs CmdStan | ESS/s vs CmdStan | wall/grad vs CmdStan | ESS/grad vs nutpie | ESS/s vs nutpie |
+|---|---:|---:|---:|---:|---:|---:|
+| owalnuts-da | **35**/51 | 0.344 | 0.492 | **0.751** | 0.296 | **1.350** |
+| owalnuts-stan-style | 29/51 | 0.346 | 0.462 | 0.792 | 0.308 | 1.309 |
+| cmdstan | 37/51 | 1 | 1 | 1 | — | — |
+| nutpie | 31/51 | — | — | — | 1 | 1 |
+
+Zero frozen chains; `arma11` 0/3 -> 2/3 and `lotka_volterra` 1/3 -> 3/3.
+The remaining misses are single stalled chains: an `arma11` seed that
+escapes the pin and then crawls at `h ~ 1e-8`, `sblrc`'s step collapse
+under dual averaging, and a `hmm_drive_0` chain in a second mode.
 
 ### Adaptation ablation (`STUDIES/adaptation_parity_v1`)
 
@@ -152,10 +172,10 @@ opt-in until the posteriordb re-run gates it.
 gradient cost relative to the hand-written gradient is 7.6x / 4.1x on the
 fused Eight Schools form (206 ns), 13.7x on Neal's 10-D funnel (104 ns),
 3.0x / 2.8x on the local level `lupdf` at T = 100 / 1,000 (435 ns /
-3.93 µs) and 4.6-4.8x on the noncentered local level; gradients agree with
+3.93 Âµs) and 4.6-4.8x on the noncentered local level; gradients agree with
 the hand oracles to 1e-14 or better. For comparison, BridgeStan's Stan Math
-gradient is 6.7 µs on Eight Schools with `STAN_THREADS` (0.59 µs without)
-and 38 µs at T = 1,000; the Enzyme route needs a from-source rustc and is
+gradient is 6.7 Âµs on Eight Schools with `STAN_THREADS` (0.59 Âµs without)
+and 38 Âµs at T = 1,000; the Enzyme route needs a from-source rustc and is
 parked (`integrations/enzyme`). The Python GIL-free transport
 (`from_cfunc`, `from_pymc(gil_free=True)`) reaches ~31,000 min-bulk ESS/s
 on Eight Schools at four threads, parity with nutpie.
@@ -185,7 +205,7 @@ on Eight Schools at four threads, parity with nutpie.
 - The `stan_style` warmup preset is opt-in because it regresses four models
   and fails R-hat on two.
 - Paper adaptation is supported by the diagonal and fixed-operator facades
-  only; the σ_x -> 0 state-space funnel (`sspd-10`) is not sampled by any
+  only; the Ïƒ_x -> 0 state-space funnel (`sspd-10`) is not sampled by any
   Euclidean sampler tested; there is no step-jitter option; seeds are not
   portable across kernel revisions; cancellation and deadlines are
   cooperative (all carried from 0.1.0-beta.2).
@@ -203,5 +223,5 @@ on Eight Schools at four threads, parity with nutpie.
       model tests run locally) green, fmt and clippy clean
 - [x] Python package rebuilt and its pytest suite green
 - [x] `cargo package --allow-dirty` verify build
-- [ ] `git tag v0.2.0` and `cargo publish` — left to the maintainer
+- [ ] `git tag v0.2.0` and `cargo publish` â€” left to the maintainer
 - [x] WP23 posteriordb v2 numbers above

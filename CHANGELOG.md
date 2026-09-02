@@ -290,6 +290,11 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Validation (2026-09-01 program)
 
+- **posteriordb v3 (WP25-POSTERIORDB-BENCH-V3).** With the WP24 warmup rule, the
+  dual-averaging arm passes 35/51 cells (CmdStan 37, nutpie 31), zero frozen
+  chains, geomean 0.34x CmdStan ESS per gradient, 0.75x wall per gradient,
+  1.35x nutpie ESS per second. `STUDIES/posteriordb_bench_v3`.
+
 - posteriordb benchmark against CmdStan and nutpie
   (`STUDIES/posteriordb_bench_v1`, 17 posteriors x 4 arms x 3 seeds, 204
   cells): with the 0.1 defaults the dual-averaging arm was 0.32x CmdStan and

@@ -108,19 +108,20 @@ ordinary Stan models: [`STUDIES/posteriordb_bench_v2`](STUDIES/posteriordb_bench
 1,000/1,000, three seeds, gates rank R-hat <= 1.01, bulk and tail ESS >= 400,
 zero divergences. [E4]
 
-- **Fewer cells pass than CmdStan.** oWALNUTS passes **32/51** cells;
-  CmdStan 35, nutpie 27.
-- **ESS per gradient is well below CmdStan.** Geometric mean **0.23x**
-  CmdStan over all 17 models; **0.45x** over the 15 models where every
-  oWALNUTS chain moves. On the healthy models it is 0.4–0.9x with no
-  exception.
+- **Fewer cells pass than CmdStan.** oWALNUTS passes **35/51** cells;
+  CmdStan 37, nutpie 31.
+- **ESS per gradient is well below CmdStan.** Geometric mean **0.34x**
+  CmdStan over all 17 models (0.52x without the two models where a start
+  draw lands one chain in a second mode or collapses the step). On the
+  healthy models it is 0.4–0.95x with no exception.
 - **Wall time is competitive, per gradient and against nutpie.** Wall per
-  gradient is **0.77x** CmdStan's and ESS per second **1.1x** nutpie's
-  (9 of 16 models won); ESS per second against CmdStan is 0.31x.
-- **Two models freeze from uniform starts.** On `arma11` (0/3) and
-  `lotka_volterra` (1/3) chains adapt `h -> 0` because every leaf from the
-  start fails at every refinement level; NUTS's reject-and-shrink moves from
-  the same starts. Fixing this needs a kernel rule, not a setting.
+  gradient is **0.75x** CmdStan's and ESS per second **1.35x** nutpie's;
+  ESS per second against CmdStan is 0.49x.
+- **Bad starts can still stall a chain.** The frozen-chain mode of the v2
+  run (`arma11` 0/3, `lotka_volterra` 1/3) is fixed by the one-sided warmup
+  exhaustion rule [E10] (now 2/3 and 3/3), but one `arma11` seed escapes
+  the pin and then crawls at `h ~ 1e-8`, `sblrc` collapses its step under
+  dual averaging, and `hmm_drive_0` can put one chain in a second mode.
 - **Refinement rarely engages on these posteriors.** A refinement level
   above zero is selected on 1–3 % of retained transitions, so on ordinary
   models the kernel runs as NUTS, and its endpoint U-turn rule then costs
@@ -208,8 +209,9 @@ wraps (`tests/sampler_api.rs`).
 
 ## Known limitations
 
-- The posteriordb gaps above: 0.23x CmdStan per gradient, two models frozen
-  from uniform starts, no throughput win on ordinary regressions [E4].
+- The posteriordb gaps above: 0.34x CmdStan per gradient, no throughput win
+  on ordinary regressions, single chains stalled by bad starts on three
+  models [E4, E10].
 - Paper adaptation runs on the diagonal and fixed-operator facades only; the
   dense-adaptive, projected and pooled facades reject it.
 - The `sigma_x -> 0` state-space funnel (`sspd-10`) is not sampled by any
@@ -276,12 +278,19 @@ provenance.
   BlackJAX, NumPyro (walls on a loaded machine):
   [`STUDIES/eight_schools_v9_rebench_v1`](STUDIES/eight_schools_v9_rebench_v1/README.md)
   (`WP8-EIGHT-SCHOOLS-V9-REBENCH-V1`).
-- [E4] posteriordb v2, 32/51 vs 35 and 27, 0.23x / 0.45x per gradient,
-  0.77x wall per gradient, 1.1x nutpie ESS/s, `arma11` and `lotka_volterra`
-  freezes, gate wins on noncentered eight schools and `gp_pois_regr`, paper
-  arm geomean 0.995:
+- [E4] posteriordb v3 (fresh seeds, WP24 default), 35/51 vs 37 and 31,
+  0.34x per gradient, 0.75x wall per gradient, 1.35x nutpie ESS/s, gate wins
+  on noncentered eight schools and `gp_pois_regr`:
+  [`STUDIES/posteriordb_bench_v3`](STUDIES/posteriordb_bench_v3/README.md)
+  (`WP25-POSTERIORDB-BENCH-V3`); v2 before the rule, with the frozen
+  chains and the paper arm at 0.995x dual averaging:
   [`STUDIES/posteriordb_bench_v2`](STUDIES/posteriordb_bench_v2/README.md)
   (`WP23-POSTERIORDB-BENCH-V2`).
+- [E10] the freeze mechanism (two-sided energy check at the initial leaf
+  from overflow starts) and the `AcceptUnlessDivergent` warmup rule that
+  unfroze 12/12 `arma11` chains:
+  [`STUDIES/freeze_mode_v1`](STUDIES/freeze_mode_v1/README.md)
+  (`WP24-FREEZE-MODE-V1`).
 - [E5] Refinement on 1–3 % of retained transitions; kernel-side 0.7–0.8x:
   [`STUDIES/adaptation_parity_v1`](STUDIES/adaptation_parity_v1/README.md).
 - [E6] U-turn rule 0.75x on the isotropic Gaussian, 1.0x correlated;
