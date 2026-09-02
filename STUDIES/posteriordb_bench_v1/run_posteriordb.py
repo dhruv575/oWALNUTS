@@ -581,7 +581,7 @@ def analyze() -> None:
     lines += ["", f"Geometric mean over {len(usable)} models: bulk ESS/grad **{f(o['geomean_r_grad_bulk'], '.3f')}**, "
               f"tail ESS/grad {f(o['geomean_r_grad_tail'], '.3f')}, bulk ESS/s {f(o['geomean_r_wall_bulk'], '.3f')}, "
               f"total gradients {f(o['geomean_r_gradients_total'], '.3f')}. Losing models: {o['models_losing'] or 'none'}. "
-              f"Preregistered decision rule → recommend Appendix C as default: **{o['recommend_default']}**.", "",
+              f"Preregistered decision rule -> recommend Appendix C as default: **{o['recommend_default']}**.", "",
               "## Head-to-head (geometric mean of seed-median ratios over models complete on both sides)", "",
               "| comparison | models | bulk ESS/grad ratio | bulk ESS/s ratio | wins ESS/s | wins ESS/grad |", "|---|---:|---:|---:|---:|---:|"]
     for k, h in head.items():

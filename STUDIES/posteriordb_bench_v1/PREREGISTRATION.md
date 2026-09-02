@@ -152,3 +152,10 @@ decision, and ESS/s is reported with that caveat.
 ## Deviations
 
 (none at freeze)
+
+* 2026-09-01 21:5x UTC-7 — the driver process was stopped externally (the
+  background-job harness killed it) while the `hudson_lynx_hare-lotka_volterra`
+  `owalnuts-da` seed-77101 cell was in progress; no cell file had been written
+  for that cell. The driver was relaunched detached; because cells are
+  resumable and seeded, the interrupted cell was simply re-run from scratch and
+  all completed cells were left untouched. No settings changed.
