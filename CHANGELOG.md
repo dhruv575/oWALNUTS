@@ -5,59 +5,6 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, and target
 architecture (see the `walnutpie` module documentation).
 
-## [Unreleased]
-
-### Changed
-
-- **`sampler` default warmup exhaustion rule.** `Adaptation::DualAveraging`
-  and `Adaptation::Paper` now apply `sampler::DEFAULT_WARMUP_EXHAUSTION`
-  (`ExhaustionRule::AcceptUnlessDivergent`, below) to the discarded
-  transitions; retained transitions keep `Tuning::kernel_options` (the
-  frozen two-sided rule), so no retained draw of the frozen kernel changes
-  and warmup differs only where a leaf exhausts at every level.
-  `Adaptation::Custom` configurations are used as given. On the
-  `posteriordb_bench_v2` starts this turns `arma11` from 7 frozen chains of
-  12 into 0 (min bulk ESS 1,290-1,460 against 4-7) and passes two of three
-  `lotka_volterra` seeds against one, with the funnel tail mass and the
-  centered Eight Schools unchanged or better (`STUDIES/freeze_mode_v1`).
-  `tests/sampler_api.rs` mirrors the new default; `ALGORITHM_REVISION` and
-  the kernel fingerprints are unchanged.
-
-### Added
-
-- **The frozen-chain escape rule** (`STUDIES/freeze_mode_v1`,
-  [WP24-FREEZE-MODE-V1]). `walnutpie::ExhaustionRule::AcceptUnlessDivergent`
-  keeps the finest attempt of a leaf that failed `delta` at every refinement
-  level unless it is divergent in Stan's sense, `H_end - H_0 >
-  divergence_threshold` with `H_0` the transition's initial Hamiltonian:
-  one-sided and relative to the transition, so an energy drop of any size is
-  accepted and, once the trajectory sits below `H_0`, a leaf's own error no
-  longer ends the orbit. Rises below the rounding noise of `H_0`
-  (`|H_0| * 2^-40`, `walnutpie::HAMILTONIAN_NOISE_RELATIVE`) count as zero,
-  and such a leaf feeds Stan's `min(1, exp(H_0 - H_end))` to the step
-  statistic. `WarmupConfig::with_warmup_exhaustion_rule` applies a rule to
-  the discarded transitions only. This is what lets a chain slide out of a
-  start where the leapfrog is unstable at every step size: the `arma11`
-  starts of `posteriordb_bench_v2` (log density -4.5e19 to -1.8e115) froze
-  every oWALNUTS arm because WALNUTS' two-sided `|H_end - H_start| <= delta`
-  turns every downhill step into an exhaustion and the coarse-endpoint
-  statistic then drives dual averaging into a floating-point no-op
-  equilibrium (`q + h v == q`); CmdStan escapes the same starts through its
-  one-sided test. The one-sided rule is *not* reversible beyond the
-  threshold (the funnel tail mass at the sampler defaults drops from 0.024
-  to 0.014 when it is applied to retained draws — as does the existing
-  two-sided `AcceptBelowDivergenceThreshold`, 0.013), hence the warmup-only
-  option.
-- `WarmupConfig::with_minimum_step`: a floor on the adapted step (a
-  negative control of the study; a chain whose every leaf fails at every
-  step size is not helped by it).
-- `walnutpie::TransitionDiagnostics::{step_size, position_changed,
-  acceptance_statistic}`: the macro step the transition ran with, whether
-  the selected position differs from the initial one, and the statistic
-  fed to dual averaging.
-- `tests/freeze_mode.rs`: the pin and the escape on a synthetic Gaussian
-  with an exponential wall, without BridgeStan.
-
 ## [0.2.0] - 2026-09-02
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`
@@ -94,6 +41,39 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   accounting, and `RunConfig` keeps the cache off.
 
 ### Added
+
+- **The frozen-chain escape rule** (`STUDIES/freeze_mode_v1`,
+  [WP24-FREEZE-MODE-V1]). `walnutpie::ExhaustionRule::AcceptUnlessDivergent`
+  keeps the finest attempt of a leaf that failed `delta` at every refinement
+  level unless it is divergent in Stan's sense, `H_end - H_0 >
+  divergence_threshold` with `H_0` the transition's initial Hamiltonian:
+  one-sided and relative to the transition, so an energy drop of any size is
+  accepted and, once the trajectory sits below `H_0`, a leaf's own error no
+  longer ends the orbit. Rises below the rounding noise of `H_0`
+  (`|H_0| * 2^-40`, `walnutpie::HAMILTONIAN_NOISE_RELATIVE`) count as zero,
+  and such a leaf feeds Stan's `min(1, exp(H_0 - H_end))` to the step
+  statistic. `WarmupConfig::with_warmup_exhaustion_rule` applies a rule to
+  the discarded transitions only. This is what lets a chain slide out of a
+  start where the leapfrog is unstable at every step size: the `arma11`
+  starts of `posteriordb_bench_v2` (log density -4.5e19 to -1.8e115) froze
+  every oWALNUTS arm because WALNUTS' two-sided `|H_end - H_start| <= delta`
+  turns every downhill step into an exhaustion and the coarse-endpoint
+  statistic then drives dual averaging into a floating-point no-op
+  equilibrium (`q + h v == q`); CmdStan escapes the same starts through its
+  one-sided test. The one-sided rule is *not* reversible beyond the
+  threshold (the funnel tail mass at the sampler defaults drops from 0.024
+  to 0.014 when it is applied to retained draws — as does the existing
+  two-sided `AcceptBelowDivergenceThreshold`, 0.013), hence the warmup-only
+  option.
+- `WarmupConfig::with_minimum_step`: a floor on the adapted step (a
+  negative control of the study; a chain whose every leaf fails at every
+  step size is not helped by it).
+- `walnutpie::TransitionDiagnostics::{step_size, position_changed,
+  acceptance_statistic}`: the macro step the transition ran with, whether
+  the selected position differs from the initial one, and the statistic
+  fed to dual averaging.
+- `tests/freeze_mode.rs`: the pin and the escape on a synthetic Gaussian
+  with an exponential wall, without BridgeStan.
 
 - **`owalnuts::sampler`, the 0.2 public API.** One builder, `Sampler`
   (`warmup`, `draws`, `chains`, `seed`, `threads`, `metric`, `adaptation`,
@@ -234,6 +214,20 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Changed
 
+- **`sampler` default warmup exhaustion rule.** `Adaptation::DualAveraging`
+  and `Adaptation::Paper` now apply `sampler::DEFAULT_WARMUP_EXHAUSTION`
+  (`ExhaustionRule::AcceptUnlessDivergent`, below) to the discarded
+  transitions; retained transitions keep `Tuning::kernel_options` (the
+  frozen two-sided rule), so no retained draw of the frozen kernel changes
+  and warmup differs only where a leaf exhausts at every level.
+  `Adaptation::Custom` configurations are used as given. On the
+  `posteriordb_bench_v2` starts this turns `arma11` from 7 frozen chains of
+  12 into 0 (min bulk ESS 1,290-1,460 against 4-7) and passes two of three
+  `lotka_volterra` seeds against one, with the funnel tail mass and the
+  centered Eight Schools unchanged or better (`STUDIES/freeze_mode_v1`).
+  `tests/sampler_api.rs` mirrors the new default; `ALGORITHM_REVISION` and
+  the kernel fingerprints are unchanged.
+
 - **`sampler::Limits` admits the exact worst case by default.** The sampler's
   own defaults (depth 10, four refinement levels) exceed the conservative
   `walnutpie` admission ceiling for ordinary 4 x 1,000/2,000 runs, which made
@@ -315,7 +309,7 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   second. `arma11` and `lotka_volterra` chains freeze from uniform starts
   where every leaf fails at every refinement level; the Appendix C v4 arm is
   at parity with dual averaging (geomean 0.995), so it stays opt-in. The
-  breadth-throughput release gate (P1�P3, P5) is not met.
+  breadth-throughput release gate (P1–P3, P5) is not met.
   [WP23-POSTERIORDB-BENCH-V2]
 - Adaptation ablation (`STUDIES/adaptation_parity_v1`, nine posteriordb
   models, two seeds): depth 10 over depth 8 gives 1.45x geomean minimum bulk
