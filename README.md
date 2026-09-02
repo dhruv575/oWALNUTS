@@ -106,6 +106,39 @@ change the position or its cached evaluation, failed candidates keep the
 previous metric, and every boundary emits a typed `StructuredRefreshUpdate`
 (`STRUCTURED_REFRESH_REVISION`).
 
+## Diagnostics
+
+`owalnuts::diagnostics` gives Stan/ArviZ-style summaries without Python:
+rank-normalised folded split R-hat, bulk and tail ESS, MCSE of the mean, and
+5/50/95% quantiles per parameter (Vehtari et al. 2021, validated against
+`az.rhat`/`az.ess`/`az.mcse` to 1e-6 from a committed fixture), plus
+sampler-health counts read from the telemetry (divergences, invalid
+evaluations, depth-cap and refinement-level exhaustions, mean tree depth,
+step size) per chain and pooled. `owalnuts::export` writes CmdStan-format
+CSVs that `arviz.from_cmdstan` loads directly.
+
+```rust,ignore
+use owalnuts::{diagnostics::Summary, export::CmdStanCsv};
+
+let names = target.parameter_names();
+let summary = Summary::from_output(&output, names.as_deref())?;
+println!("{summary}");                       // aligned table + health block
+let worst_rhat = summary.parameters.iter().map(|p| p.rhat).fold(f64::NAN, f64::max);
+
+// One CSV per chain: lp__ (recomputed from the target), stepsize__,
+// treedepth__, n_leapfrog__ (fused target calls), divergent__, energy__, draws.
+let paths = CmdStanCsv::new()
+    .with_parameter_names(names.as_deref().unwrap_or(&[]))
+    .with_log_density(&target)
+    .write_dir(&output, "out", "chain")?;   // out/chain-1.csv ... out/chain-K.csv
+// Python: az.from_cmdstan(posterior=["out/chain-1.csv", ...])
+```
+
+The per-parameter estimators also accept plain `&[&[f64]]` chain views
+(`diagnostics::rhat`, `ess_bulk`, `ess_tail`, `ess_quantile`, `mcse_mean`),
+so draws from any sampler can be summarised. `accept_stat__` is not exported:
+the kernel records its acceptance statistic only during warmup.
+
 ## Validated results (2026-08-31)
 
 | Target | Result | Ledger entry |
