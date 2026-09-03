@@ -1,0 +1,99 @@
+{
+  "schema": "refinement-role-v1",
+  "status": "FROZEN_BEFORE_PHASE_2",
+  "frozen_utc": "2026-09-03",
+  "arms": {
+    "da": {"rule": "Adaptation::default() (dual averaging 0.8, CurrentCoarseEndpoint)", "delta": 1.0, "task": "a"},
+    "da06": {"rule": "Adaptation::DualAveraging { target_accept: 0.6 }", "delta": 1.0, "task": "b"},
+    "da06-d05": {"rule": "Adaptation::DualAveraging { target_accept: 0.6 }", "delta": 0.5, "task": "c"},
+    "paper08": {"rule": "Adaptation::Paper(PaperAdaptationConfig::default()) (Delta 2, p 0.95, Gamma 0.8, v4 robust rule)", "delta": "adapted from 1", "task": "d"},
+    "paper06": {"rule": "Adaptation::Paper(PaperAdaptationConfig::new(2.0, 0.95, 0.6))", "delta": "adapted from 1", "task": "d"},
+    "stanacc": {"rule": "Adaptation::Custom(WarmupConfig::new(0.8).with_dual_averaging_acceptance(MeanTrajectoryAcceptance).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION))", "delta": 1.0, "task": "e"},
+    "da-d2": {"rule": "Adaptation::default()", "delta": 2.0, "task": "f"},
+    "da06-d2": {"rule": "Adaptation::DualAveraging { target_accept: 0.6 }", "delta": 2.0, "task": "f"}
+  },
+  "common": "Tuning::default() (h0 0.5, depth 10, min_micro_steps 1, eight refinement levels, MomentumSum, divergence threshold 1000) with Tuning::max_error(delta) for the non-default arms; Metric::diagonal() with the Stan regularisation; DEFAULT_WARMUP_EXHAUSTION; Init::uniform(); Limits::admit_worst_case(); four threads; cached initial evaluation; leaf-error trace after the run (excluded from the wall and gradients_total)",
+  "cmdstan_reference": "posteriordb_bench_v5 artifacts (CmdStan 2.39.0 defaults, seeds 87101-87103), cited not rerun; reference step per model = median of the twelve chain steps",
+  "run_order": "models in listed order; arms in arms_order; seeds ascending; strictly sequential; then the funnel and Eight Schools rows for every arm",
+  "side_checks": {
+    "funnel": "Neal's 10-D funnel at the sampler defaults plus the arm's rule and delta: 4 x 2,000 / 20,000, starts omega in {-3, -1, 1, 3}, per-seed MCSE z of P(omega < -5) (exact 0.0478), gate |z| <= 2 on every seed; src/bin/funnel.rs",
+    "eight_schools": "eight_schools_v9_rebench_v1 strict track (h 0.3, depth 8, eight levels, 4 x 1,000/1,000, threads 1, walnutpie facade, three bit-identical repetitions) with the arm's rule replacing WarmupConfig::new(0.95) where it changes it and the arm's delta replacing 1; statistic min over the six v38 functionals of arviz bulk ESS / callbacks, geomean over seeds, ratio to da; src/bin/eight_schools.rs"
+  },
+  "predictions": {
+    "P1": "da06 installs h 1.3-1.6x CmdStan's, refines 10-25 % of leaves, geomean vs da 0.6-0.9; da06-d05 refines 25-45 % and is lower; neither meets C1",
+    "P2": "stanacc installs h within 0.9-1.1x CmdStan's and is within 0.9-1.1x da per gradient",
+    "P3": "paper08/paper06 install h 1.2-1.8x CmdStan's, delta adapted to 1-3, 15-35 % of leaves refined, geomean vs da 0.7-1.1 with at least one model below 0.85; paper06 below paper08",
+    "P4": "da-d2 keeps h within 0.95-1.05x da, halves the reverse-coarser stop fraction on the noncentered/centered eight schools, gp_pois_regr and accel_gp, geomean 1.0-1.1x da with 1.1-1.3x on those four, below C1; funnel |z| <= 2 on at least two of three seeds; da06-d2 behaves like da06",
+    "P5": "no arm meets the rule; the promise is not realisable on these posteriors (single smooth leaf-error population, refinement demand ~1 % -> ~50 % within 2x of h)"
+  },
+  "decision_rules_text": "flip the sampler default to an arm iff C1 geomean >= 1.15 over 17, C2 no model < 0.85, C3 gates >= da, C4 funnel |z| <= 2 every seed, C5 Eight Schools >= 0.9x da; highest C1 among qualifying arms; labelled final commit with tests/sampler_api.rs updates; otherwise no default change. Report all cells; no reruns; failures are results; nothing tuned after seeing results.",
+  "purpose": "WP34. On ordinary posteriors oWALNUTS runs as NUTS with a slightly worse per-gradient efficiency (posteriordb_bench_v5: 0.67-0.95x CmdStan per healthy model). The JMLR paper's promise is the opposite: with refinement doing the local work, the macro step h should be LARGER than NUTS's step and the fixed cost of the rare refined leaf repaid by fewer leaves per orbit elsewhere. Phase 1 instruments the shipped defaults (h vs CmdStan's adapted step, refined-leaf fraction and level, a level-0 leaf-error trace at multiples of h); phase 2 preregisters and runs arms that try to realise the promise.",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "cmdstan_healthy_models": [
+    "eight_schools-eight_schools_noncentered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra"
+  ],
+  "instrumentation": {
+    "seed": 87101,
+    "arm": "da",
+    "what": "the shipped defaults on the v5 seed 87101 (expected to reproduce the v5 owalnuts-da cell bit-for-bit: same gradients, same min ESS), with the refinement accounting and the leaf-error trace; CmdStan's adapted step per model is the median of the twelve v5 CmdStan chain steps (three seeds x four chains) and is passed to the harness as the trace's reference step"
+  },
+  "arms_order": ["da", "da06", "da06-d05", "paper08", "paper06", "stanacc", "da-d2", "da06-d2"],
+  "seeds": [89101, 89102, 89103],
+  "v5_seeds": [87101, 87102, 87103],
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "cell_timeout_seconds": 2700,
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "decision_rule": {
+    "geomean_min": 1.15,
+    "per_model_min": 0.85,
+    "eight_schools_min_ratio": 0.9
+  },
+  "eight_schools": {
+    "repetitions": 3
+  }
+}
