@@ -9,7 +9,11 @@ marshals arrays and configuration.
 
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
@@ -20,6 +24,8 @@ from . import _owalnuts
 ALGORITHM_REVISION: str = _owalnuts.ALGORITHM_REVISION
 PAPER_ADAPTATION_REVISION: str = _owalnuts.PAPER_ADAPTATION_REVISION
 STOP_CODES: tuple[str, ...] = tuple(_owalnuts.STOP_CODES)
+#: Whether the extension was built with BridgeStan support (``from_stan``).
+HAS_STAN: bool = bool(getattr(_owalnuts, "HAS_STAN", False))
 
 #: The ``owalnuts::sampler`` defaults this package inherits, read from the
 #: Rust constants at import time (read-only): ``step_size``, ``max_depth``,
@@ -122,6 +128,10 @@ class SampleResult:
     target_attached_seconds: float
     config: dict[str, Any] = field(default_factory=dict)
     refresh_updates: list[dict[str, Any]] | None = None
+    #: Unconstrained parameter names when the target provides them (Stan,
+    #: ``from_cfunc(parameter_names=...)``); the default labels for
+    #: ``summary`` and ``to_inferencedata``.
+    parameter_names: list[str] | None = None
 
     # convenience --------------------------------------------------------
     @property
@@ -156,7 +166,7 @@ class SampleResult:
         et al. 2021, matching ``az.rhat``/``az.ess``/``az.mcse``). Pure
         Python objects; no pandas.
         """
-        return summary(self.samples, var_names)
+        return summary(self.samples, self.parameter_names if var_names is None else var_names)
 
     def health(self) -> dict[str, Any]:
         """Pooled sampler-health counts over the retained transitions:
@@ -314,6 +324,137 @@ def from_cfunc(
     )
 
 
+# ── Stan models (BridgeStan) ─────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class StanTarget:
+    """A BridgeStan-compiled Stan model as a GIL-free oWALNUTS target.
+
+    ``sample`` loads ``model_so`` through the Rust
+    ``owalnuts_bridgestan::ReplicatedStanTarget`` — one copy of the library
+    per thread, so a library built *without* ``STAN_THREADS`` (the
+    recommended build; see ``integrations/bridgestan/README.md``) still gives
+    real parallel chains — and evaluates it with the interpreter detached.
+    Positions are Stan's unconstrained parameters (``bs_param_unc_names``);
+    the log density is ``propto=False, jacobian=True``; a Stan exception or a
+    nonfinite value is a zero-density (refined, then rejected) proposal.
+
+    The object is also a plain ``logp_and_grad`` callable (through the
+    ``bridgestan`` Python package), so it can be inspected or passed to any
+    code expecting the callable transport. ``constrain`` maps draws back to
+    the constrained parameters.
+    """
+
+    model_so: str
+    data: str | None
+    dim: int
+    parameter_names: tuple[str, ...] | None
+    seed: int = 1
+    preload: tuple[str, ...] = ()
+    info: str = ""
+    _cache: dict = field(default_factory=dict, repr=False, compare=False)
+
+    def model(self):
+        """The ``bridgestan.StanModel`` for this library and data (lazy)."""
+        if "model" not in self._cache:
+            import bridgestan as bs
+
+            self._cache["model"] = bs.StanModel(self.model_so, data=self.data, seed=int(self.seed))
+        return self._cache["model"]
+
+    def __call__(self, q: np.ndarray) -> tuple[float, np.ndarray]:
+        value, grad = self.model().log_density_gradient(np.ascontiguousarray(q, dtype=np.float64),
+                                                        propto=False, jacobian=True)
+        return float(value), np.asarray(grad, dtype=np.float64)
+
+    def constrained_names(self, *, include_tp: bool = False, include_gq: bool = False) -> list[str]:
+        """Names of the constrained parameters (``bs_param_names``)."""
+        return list(self.model().param_names(include_tp=include_tp, include_gq=include_gq))
+
+    def constrain(self, draws: "np.ndarray | SampleResult", *, include_tp: bool = False,
+                  include_gq: bool = False) -> np.ndarray:
+        """Map unconstrained draws ``(..., dim)`` (or a ``SampleResult``) to the
+        constrained parameters with ``bs_param_constrain``; returns
+        ``(..., n_constrained)``. Generated quantities use the model's RNG."""
+        samples = draws.samples if isinstance(draws, SampleResult) else np.asarray(draws, dtype=np.float64)
+        model = self.model()
+        flat = samples.reshape(-1, self.dim)
+        out = np.empty((flat.shape[0], model.param_num(include_tp=include_tp, include_gq=include_gq)))
+        rng = model.new_rng(int(self.seed)) if include_gq else None
+        for i, q in enumerate(flat):
+            out[i] = model.param_constrain(np.ascontiguousarray(q), include_tp=include_tp,
+                                           include_gq=include_gq, rng=rng)
+        return out.reshape(samples.shape[:-1] + (out.shape[1],))
+
+
+def _stan_data_json(data: Any) -> str | None:
+    """CmdStan-JSON text from a dict (numpy arrays allowed), a ``.json`` path or a JSON string."""
+    import json
+
+    if data is None:
+        return None
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data).decode("utf-8")
+    if isinstance(data, os.PathLike) or (isinstance(data, str) and data.strip().endswith(".json")):
+        return Path(data).read_text(encoding="utf-8")
+    if isinstance(data, str):
+        return data
+
+    def default(value: Any):
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, np.generic):
+            return value.item()
+        raise TypeError(f"cannot encode {type(value).__name__} as Stan data")
+
+    return json.dumps(dict(data), default=default)
+
+
+def from_stan(stan_file: "str | os.PathLike[str]", data: Any = None, *, seed: int = 1,
+              make_args: Sequence[str] = (), stanc_args: Sequence[str] = (),
+              preload: Sequence[str] = ()) -> StanTarget:
+    """Compile a Stan program with the ``bridgestan`` package and wrap it.
+
+    ``pip install owalnuts[stan]``; BridgeStan downloads its own Stan sources
+    on first use and needs a C++17 toolchain and GNU make (on Windows the
+    mingw-w64 ``mingw32-make``/``g++``; ``MAKE`` is set to ``mingw32-make``
+    here when ``make`` is not on ``PATH``). ``stan_file`` may also be an
+    already built ``*_model.so``/``.dll``/``.dylib``. ``data`` is a dict
+    (numpy arrays allowed), a ``.json`` path, JSON text, or ``None``.
+
+    The library is built **without** ``STAN_THREADS`` unless ``make_args``
+    says otherwise: that is the fast build on Windows/mingw-w64 (emulated TLS
+    makes a threaded build 9-16x slower per gradient) and ``sample`` gets
+    parallel chains from one library copy per thread regardless.
+    ``seed`` is the Stan model seed (construction and generated quantities);
+    the sampling seed is ``sample(seed=...)``.
+    """
+    if not _owalnuts.HAS_STAN:
+        raise RuntimeError("this owalnuts build was compiled without the `stan` feature")
+    path = Path(stan_file)
+    if path.suffix.lower() in {".so", ".dll", ".dylib"}:
+        model_so = path
+    else:
+        if sys.platform == "win32" and "MAKE" not in os.environ and shutil.which("make") is None \
+                and shutil.which("mingw32-make") is not None:
+            os.environ["MAKE"] = "mingw32-make"
+        import bridgestan as bs
+        import bridgestan.compile as bs_compile
+
+        # bridgestan reads MAKE once at import; honour a value set afterwards.
+        bs_compile.MAKE = os.environ.get("MAKE", bs_compile.MAKE)
+        model_so = Path(bs.compile_model(path, stanc_args=list(stanc_args), make_args=list(make_args)))
+    data_json = _stan_data_json(data)
+    info = _owalnuts.stan_model_info(str(model_so), data_json, int(seed), list(preload) or None)
+    names = info["parameter_names"]
+    return StanTarget(
+        model_so=str(model_so), data=data_json, dim=int(info["dimension"]),
+        parameter_names=tuple(names) if names else None, seed=int(seed),
+        preload=tuple(preload), info=str(info["info"]),
+    )
+
+
 def wrap_callable(fn: LogpGrad) -> LogpGrad:
     """Coerce a target's outputs to ``(float, contiguous float64 array)``."""
 
@@ -325,8 +466,8 @@ def wrap_callable(fn: LogpGrad) -> LogpGrad:
 
 
 def sample(
-    logp_and_grad: LogpGrad,
-    dim: int,
+    logp_and_grad: "LogpGrad | CFuncTarget | StanTarget",
+    dim: int | None = None,
     *,
     init: Any = None,
     chains: int = 4,
@@ -356,6 +497,9 @@ def sample(
     keeps the sampler default (``DEFAULTS``), including the cached initial
     evaluation (``cache_initial_evaluation=None``; pass ``False`` for the
     0.1 target-call accounting).
+
+    ``logp_and_grad`` is a callable, a ``CFuncTarget`` (``from_cfunc``) or a
+    ``StanTarget`` (``from_stan``); ``dim`` may be omitted for the latter two.
 
     ``init`` is ``None`` (independent uniform(-``init_jitter``, ``init_jitter``)
     starts drawn in numpy without evaluating the target), a ``(dim,)`` point
@@ -394,6 +538,27 @@ def sample(
         max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,
         cache_initial_evaluation=cache_initial_evaluation,
     )
+    if isinstance(logp_and_grad, (CFuncTarget, StanTarget)):
+        dim = logp_and_grad.dim if dim is None else int(dim)
+    elif dim is None:
+        raise ValueError("dim is required for a callable target")
+    if isinstance(logp_and_grad, StanTarget):
+        if refresh is not None:
+            raise ValueError("refresh requires the callable transport; pass the StanTarget as a callable")
+        st = logp_and_grad
+        if st.dim != dim:
+            raise ValueError(f"StanTarget dim {st.dim} != sample dim {dim}")
+        preload = list(st.preload) or None
+        if isinstance(init, str) and init == "uniform":
+            starts = _owalnuts.uniform_starts_stan(
+                st.model_so, st.data, chains, seed, init_radius, init_max_attempts, st.seed, preload,
+            )
+        else:
+            starts = _starts(init, dim, chains, seed, init_jitter)
+        raw = _owalnuts.sample_stan(st.model_so, st.data, starts, cfg, st.seed, preload)
+        result = _result(raw, cfg)
+        result.parameter_names = list(st.parameter_names) if st.parameter_names else None
+        return result
     if isinstance(logp_and_grad, CFuncTarget):
         if refresh is not None:
             raise ValueError(
@@ -413,7 +578,9 @@ def sample(
             cft.address, cft.dim, starts, cfg, cft.user_data,
             list(cft.parameter_names) if cft.parameter_names else None,
         )
-        return _result(raw, cfg)
+        result = _result(raw, cfg)
+        result.parameter_names = list(cft.parameter_names) if cft.parameter_names else None
+        return result
     target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
     if isinstance(init, str) and init == "uniform":
         starts = _owalnuts.uniform_starts_callable(
@@ -482,6 +649,10 @@ def uniform_starts(logp_and_grad: LogpGrad, dim: int, *, chains: int = 4, seed: 
                    nonfinite: str = "zero_density",
                    coerce: bool = True) -> np.ndarray:
     """Draw ``(chains, dim)`` starts by the ``init="uniform"`` rule without sampling."""
+    if isinstance(logp_and_grad, StanTarget):
+        st = logp_and_grad
+        return np.asarray(_owalnuts.uniform_starts_stan(
+            st.model_so, st.data, chains, seed, radius, max_attempts, st.seed, list(st.preload) or None))
     if isinstance(logp_and_grad, CFuncTarget):
         return np.asarray(_owalnuts.uniform_starts_cfunc(
             logp_and_grad.address, logp_and_grad.dim, chains, seed, radius, max_attempts,
@@ -738,7 +909,7 @@ def to_inferencedata(result: SampleResult, var_names: Sequence[str] | None = Non
 
     chains, draws, dim = result.samples.shape
     if var_names is None:
-        var_names = [f"q{i}" for i in range(dim)]
+        var_names = result.parameter_names or [f"q{i}" for i in range(dim)]
     posterior = {name: result.samples[:, :, i] for i, name in enumerate(var_names)} if len(var_names) == dim else {
         "q": result.samples
     }
@@ -801,9 +972,10 @@ def eight_schools_logp_grad(y: np.ndarray, se: np.ndarray, q: np.ndarray) -> tup
 
 
 __all__ = [
-    "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "ZeroDensityError",
+    "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "HAS_STAN", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
     "summary", "uniform_starts", "CFuncTarget", "from_cfunc", "numba_raw_signature",
+    "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",
     "sample_native_eight_schools", "sample_native_local_level", "eight_schools_logp_grad",

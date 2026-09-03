@@ -5,22 +5,61 @@ build-backend = "maturin"
 [project]
 name = "owalnuts"
 version = "0.2.0"
-description = "oWALNUTS (within-orbit adaptive leapfrog NUTS) for Python callables, JAX, PyTorch and PyMC models"
+description = "oWALNUTS (within-orbit adaptive leapfrog NUTS) for Python callables, JAX, PyTorch, PyMC and Stan models"
+readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE.txt"]  # copy of the repository LICENSE (the sdist root already carries LICENSE)
+authors = [{ name = "oWALNUTS contributors" }]
+keywords = ["mcmc", "nuts", "hmc", "bayesian", "sampling", "stan", "pymc", "jax"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Operating System :: OS Independent",
+]
 dependencies = ["numpy>=1.24"]
+
+[project.urls]
+Homepage = "https://github.com/dhruv575/oWALNUTS"
+Repository = "https://github.com/dhruv575/oWALNUTS"
+Changelog = "https://github.com/dhruv575/oWALNUTS/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/dhruv575/oWALNUTS/blob/main/integrations/python/README.md"
 
 [project.optional-dependencies]
 arviz = ["arviz>=0.17"]
 jax = ["jax>=0.4"]
 torch = ["torch>=2.0"]
 pymc = ["pymc>=5.10"]
-test = ["pytest>=7", "arviz>=0.17", "jax>=0.4", "torch>=2.0", "pymc>=5.10"]
+numba = ["numba>=0.59"]
+# `from_stan`: compiles Stan programs with the bridgestan package (needs a
+# C++17 toolchain and GNU make; BridgeStan fetches its own Stan sources).
+stan = ["bridgestan>=2.5"]
+test = ["pytest>=7", "arviz>=0.17", "jax>=0.4", "torch>=2.0", "pymc>=5.10", "numba>=0.59", "bridgestan>=2.5"]
 
 [tool.maturin]
 python-source = "python"
 module-name = "owalnuts._owalnuts"
-features = []
+# The extension depends on the root `owalnuts` crate by path (`../..`) and on
+# `../bridgestan` (feature `stan`). maturin rebases the sdist at the
+# repository root, rewrites `manifest-path`, and vendors each path dependency
+# exactly as `cargo package --list` reports it (the root crate's `include`
+# list: sources, oracle fixtures, tests, examples), so `pip install` of the
+# sdist builds the same crate tree as this checkout. `exclude` applies to the
+# extension's own files only.
+exclude = [
+    "bench/**",
+    "examples/**",
+    "BENCH.md",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

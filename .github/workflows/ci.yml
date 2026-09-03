@@ -97,8 +97,17 @@ jobs:
         working-directory: integrations/bridgestan
         run: |
           cargo fmt --all -- --check
-          cargo check --locked --all-targets
+          cargo check --locked --all-targets --all-features
+          cargo clippy --locked --all-targets --all-features -- -D warnings
           cargo clippy --locked --all-targets -- -D warnings
       - name: bridgestan — tests (model-dependent tests skip without BridgeStan)
         working-directory: integrations/bridgestan
-        run: cargo test --locked --release
+        run: cargo test --locked --release --all-features
+      # owalnuts-python: the PyO3 extension (wheels are built and tested
+      # against a fresh interpreter in wheels.yml; this checks the crate).
+      - name: python — format, clippy (with and without the `stan` feature)
+        working-directory: integrations/python
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo clippy --locked --all-targets --no-default-features -- -D warnings

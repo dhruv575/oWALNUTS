@@ -68,6 +68,7 @@ type DestructFn = unsafe extern "C" fn(*mut BsModel);
 type FreeErrorFn = unsafe extern "C" fn(*mut c_char);
 type InfoFn = unsafe extern "C" fn(*const BsModel) -> *const c_char;
 type UncNumFn = unsafe extern "C" fn(*const BsModel) -> c_int;
+type UncNamesFn = unsafe extern "C" fn(*const BsModel) -> *const c_char;
 type LogDensityGradientFn = unsafe extern "C" fn(
     *const BsModel,
     bool,
@@ -123,6 +124,7 @@ pub struct StanTarget {
     _preloaded: Vec<Library>,
     dimension: usize,
     info: String,
+    unc_names: Option<Vec<String>>,
     threading: Threading,
     /// Shared by every `StanTarget` loaded from the same file: without
     /// `STAN_THREADS` the autodiff stack is a global of the *module*, and
@@ -184,6 +186,12 @@ impl StanTarget {
             let ldg: Symbol<LogDensityGradientFn> = library.get(b"bs_log_density_gradient\0")?;
             (*construct, *destruct, *free_error, *info_fn, *unc_num, *ldg)
         };
+        // Optional: older BridgeStan libraries may lack it; names are then `None`.
+        // SAFETY: symbol type matches bridgestan.h 2.x.
+        let unc_names_fn: Option<UncNamesFn> =
+            unsafe { library.get::<UncNamesFn>(b"bs_param_unc_names\0") }
+                .ok()
+                .map(|s| *s);
         let data_c = match data {
             Some(d) => Some(CString::new(d).map_err(|e| LoadError::Invalid(e.to_string()))?),
             None => None,
@@ -218,12 +226,28 @@ impl StanTarget {
         } else {
             Threading::Serialised
         };
+        let unc_names = unc_names_fn.and_then(|f| {
+            // SAFETY: model pointer is valid; the string is owned by the model.
+            let raw = unsafe { f(ptr) };
+            if raw.is_null() {
+                return None;
+            }
+            // SAFETY: BridgeStan returns a NUL-terminated string.
+            let joined = unsafe { CStr::from_ptr(raw) }.to_string_lossy();
+            let names: Vec<String> = joined
+                .split(',')
+                .filter(|n| !n.is_empty())
+                .map(str::to_owned)
+                .collect();
+            (names.len() == dimension as usize).then_some(names)
+        });
         Ok(Self {
             model,
             _library: library,
             _preloaded: preloaded,
             dimension: dimension as usize,
             info,
+            unc_names,
             threading,
             serial: module_lock(model_so),
             calls: AtomicUsize::new(0),
@@ -238,6 +262,12 @@ impl StanTarget {
 
     pub fn threading(&self) -> Threading {
         self.threading
+    }
+
+    /// Stan's unconstrained parameter names (`bs_param_unc_names`, one per
+    /// coordinate), or `None` when the library does not export them.
+    pub fn param_unc_names(&self) -> Option<&[String]> {
+        self.unc_names.as_deref()
     }
 
     /// Fused evaluations started so far.
@@ -345,6 +375,10 @@ fn take_error(err: *mut c_char, free: FreeErrorFn) -> String {
 impl Target for StanTarget {
     fn dimension(&self) -> usize {
         self.dimension
+    }
+
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        self.unc_names.clone()
     }
 
     fn log_density_gradient(
@@ -464,6 +498,11 @@ impl ReplicatedStanTarget {
         self.replicas[0].threading()
     }
 
+    /// Stan's unconstrained parameter names (see [`StanTarget::param_unc_names`]).
+    pub fn param_unc_names(&self) -> Option<&[String]> {
+        self.replicas[0].param_unc_names()
+    }
+
     /// Fused evaluations started so far, summed over replicas.
     pub fn calls(&self) -> usize {
         self.replicas.iter().map(StanTarget::calls).sum()
@@ -483,6 +522,10 @@ static NEXT_POOL_ID: AtomicUsize = AtomicUsize::new(0);
 impl Target for ReplicatedStanTarget {
     fn dimension(&self) -> usize {
         self.dimension
+    }
+
+    fn parameter_names(&self) -> Option<Vec<String>> {
+        self.replicas[0].parameter_names()
     }
 
     fn log_density_gradient(
