@@ -1155,6 +1155,7 @@ pub struct WarmupConfig {
     warmup_exhaustion: Option<ExhaustionRule>,
     step_floor_relative_to_search: Option<f64>,
     max_window_shrink: Option<f64>,
+    chain_rescue: Option<ChainRescueConfig>,
 }
 
 impl Default for WarmupConfig {
@@ -1176,6 +1177,7 @@ impl Default for WarmupConfig {
             warmup_exhaustion: None,
             step_floor_relative_to_search: None,
             max_window_shrink: None,
+            chain_rescue: None,
         }
     }
 }
@@ -1462,6 +1464,266 @@ impl WarmupConfig {
     }
     pub fn paper_adaptation(&self) -> Option<&PaperAdaptationConfig> {
         self.paper_adaptation.as_ref()
+    }
+
+    /// Synchronise multi-chain warmup at slow-window boundaries and rescue
+    /// outlier chains; see [`ChainRescueConfig`]. Off by default. Acts only
+    /// through the multi-chain diagonal facade with at least two chains.
+    pub fn with_chain_rescue(mut self, rescue: ChainRescueConfig) -> Self {
+        self.chain_rescue = Some(rescue);
+        self
+    }
+
+    pub fn chain_rescue(&self) -> Option<&ChainRescueConfig> {
+        self.chain_rescue.as_ref()
+    }
+}
+
+fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.chain_rescue.is_some())
+    {
+        return Err(Error::configuration(format!(
+            "chain rescue is not supported by the {facade} facade"
+        )));
+    }
+    Ok(())
+}
+
+/// Which warmup-time chain rescue the multi-chain diagonal driver performs
+/// at slow-window boundaries; see [`ChainRescueConfig`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ChainRescueMode {
+    /// Re-seed outlier chains from the best chain's window
+    /// (`STUDIES/chain_rescue_v1` candidate A).
+    RestartFromBest,
+    /// Pool the chains' window statistics into one metric and one step
+    /// (candidate B); no chain is moved.
+    PoolAtBoundaries,
+}
+
+/// Opt-in warmup-time chain rescue for multi-chain runs
+/// (`STUDIES/chain_rescue_v1`, WP33).
+///
+/// Stan, nutpie and the plain oWALNUTS driver run their chains
+/// independently, so one chain that drew a bad start (a second mode, the
+/// funnel neck, an overflow pin) fails the run's gates on its own. With a
+/// rescue configured, [`sample_chains_with_control`] and its wrappers (the
+/// `sampler` diagonal and identity paths) synchronise the chains at the end
+/// of every slow metric window and act on them:
+///
+/// * [`ChainRescueMode::RestartFromBest`]: every chain is scored on the
+///   window just completed (its step after the boundary restart, the median
+///   and interquartile range of its selected states' log density). A chain
+///   is an outlier when its step is below `step_ratio` times the median
+///   step over chains, or when the median over chains of the median log
+///   density exceeds its own by more than `log_density_iqr_factor` times
+///   the median over chains of the within-chain IQR. Each outlier is
+///   re-seeded from the source (the non-outlier chain with the largest
+///   step): one of the source's window positions, drawn uniformly with the
+///   outlier's own RNG stream, plus the source's installed metric, step and
+///   dual-averaging state. Its cached evaluation is cleared, so the next
+///   transition evaluates the new position once. Nothing else changes: the
+///   chain keeps its RNG stream and its telemetry, and a boundary with no
+///   outlier does nothing, so a run in which the rescue never fires
+///   produces the draws of the run without it.
+/// * [`ChainRescueMode::PoolAtBoundaries`]: the chains' window variance
+///   statistics are merged exactly and regularised at the pooled count,
+///   the result is installed on every chain, the step becomes the median
+///   over chains of the post-boundary steps and dual averaging restarts
+///   from it on every chain. Positions are untouched.
+///
+/// Both act only on discarded transitions: retained draws come from the
+/// unchanged per-chain kernel started from whatever state warmup leaves, so
+/// the retained-phase kernel, its fingerprints and its reversibility are
+/// unaffected. A rescue is an initialisation choice made with information
+/// from the other chains, which is why the density rule is deliberately
+/// one-sided and why every decision is recorded: the R-hat of a run whose
+/// chains were merged by the density rule no longer sees the mode that
+/// chain had found, so read [`RunTelemetry::chain_rescues`] before
+/// trusting the gates of a multimodal target. Single-chain runs ignore the
+/// configuration; the dense and structured-refresh facades reject it and
+/// the fixed-operator facades never adapt, so they never reach a boundary.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChainRescueConfig {
+    mode: ChainRescueMode,
+    step_ratio: f64,
+    log_density_iqr_factor: f64,
+    minimum_window_transitions: usize,
+}
+
+impl ChainRescueConfig {
+    /// Candidate A of `STUDIES/chain_rescue_v1`: restart outliers from the
+    /// best chain, step ratio 0.1, density factor 3 IQRs, windows of at
+    /// least 10 transitions.
+    pub fn restart_from_best() -> Self {
+        Self {
+            mode: ChainRescueMode::RestartFromBest,
+            step_ratio: 0.1,
+            log_density_iqr_factor: 3.0,
+            minimum_window_transitions: 10,
+        }
+    }
+
+    /// Candidate B of `STUDIES/chain_rescue_v1`: pool the metric and the
+    /// step across chains at every slow-window boundary.
+    pub fn pool_at_boundaries() -> Self {
+        Self {
+            mode: ChainRescueMode::PoolAtBoundaries,
+            ..Self::restart_from_best()
+        }
+    }
+
+    /// A chain whose post-boundary step is below `ratio` times the median
+    /// step over chains is an outlier (restart mode). Finite, in `(0, 1)`.
+    pub fn with_step_ratio(mut self, ratio: f64) -> Result<Self, Error> {
+        if !ratio.is_finite() || ratio <= 0.0 || ratio >= 1.0 {
+            return Err(Error::configuration(
+                "chain rescue step ratio must be finite and strictly between zero and one",
+            ));
+        }
+        self.step_ratio = ratio;
+        Ok(self)
+    }
+
+    /// A chain whose median window log density is more than `factor`
+    /// within-chain IQRs below the chains' median is an outlier (restart
+    /// mode). Finite and positive.
+    pub fn with_log_density_iqr_factor(mut self, factor: f64) -> Result<Self, Error> {
+        if !factor.is_finite() || factor <= 0.0 {
+            return Err(Error::configuration(
+                "chain rescue log-density factor must be finite and positive",
+            ));
+        }
+        self.log_density_iqr_factor = factor;
+        Ok(self)
+    }
+
+    /// Boundaries whose window has fewer transitions than this are skipped
+    /// (both modes). At least two.
+    pub fn with_minimum_window_transitions(mut self, transitions: usize) -> Result<Self, Error> {
+        if transitions < 2 {
+            return Err(Error::configuration(
+                "chain rescue needs windows of at least two transitions",
+            ));
+        }
+        self.minimum_window_transitions = transitions;
+        Ok(self)
+    }
+
+    pub fn mode(&self) -> ChainRescueMode {
+        self.mode
+    }
+    pub fn step_ratio(&self) -> f64 {
+        self.step_ratio
+    }
+    pub fn log_density_iqr_factor(&self) -> f64 {
+        self.log_density_iqr_factor
+    }
+    pub fn minimum_window_transitions(&self) -> usize {
+        self.minimum_window_transitions
+    }
+}
+
+/// Which rule marked a chain as an outlier at a rescue boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ChainRescueCriterion {
+    /// Step below the configured fraction of the chains' median step.
+    Step,
+    /// Median window log density too far below the chains' median.
+    LogDensity,
+}
+
+/// Why a rescue boundary took no action on a chain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ChainRescueSkip {
+    /// The window had fewer transitions than the configured minimum.
+    ShortWindow,
+    /// No chain qualified as a source (restart mode).
+    NoSource,
+    /// Fewer than two chains had window statistics to pool.
+    NothingToPool,
+}
+
+/// What a rescue boundary did to one chain.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum ChainRescueOutcome {
+    /// Scored, not an outlier, unchanged.
+    Kept,
+    /// The boundary was skipped for every chain.
+    Skipped(ChainRescueSkip),
+    /// Re-seeded from `source` (restart mode).
+    Restarted {
+        /// Chain index the state was copied from.
+        source: usize,
+        /// The rule that fired.
+        criterion: ChainRescueCriterion,
+        /// Index within the source's window of the adopted position.
+        source_position: usize,
+        /// Step installed on the rescued chain (the source's).
+        step_after: f64,
+    },
+    /// The pooled metric and step were installed (pool mode).
+    Pooled {
+        /// Step installed on every chain (the median over chains).
+        step_after: f64,
+        /// Positions merged into the pooled metric; zero when the metric
+        /// was not adapted and only the step was pooled.
+        pooled_sample_count: usize,
+    },
+}
+
+/// One chain's record of one rescue boundary; see [`ChainRescueConfig`].
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct ChainRescueUpdate {
+    window_index: usize,
+    transition: usize,
+    chain: usize,
+    window_transitions: usize,
+    step_before: f64,
+    median_log_density: Option<f64>,
+    log_density_iqr: Option<f64>,
+    outcome: ChainRescueOutcome,
+}
+
+impl ChainRescueUpdate {
+    /// Zero-based slow-window index of the boundary.
+    pub fn window_index(&self) -> usize {
+        self.window_index
+    }
+    /// Index of the last transition of the window.
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    /// The chain this record belongs to.
+    pub fn chain(&self) -> usize {
+        self.chain
+    }
+    /// Transitions scored in the window.
+    pub fn window_transitions(&self) -> usize {
+        self.window_transitions
+    }
+    /// The chain's step after its own boundary restart, before any rescue.
+    pub fn step_before(&self) -> f64 {
+        self.step_before
+    }
+    /// Median selected-state log density over the window.
+    pub fn median_log_density(&self) -> Option<f64> {
+        self.median_log_density
+    }
+    /// Interquartile range of the selected-state log density over the window.
+    pub fn log_density_iqr(&self) -> Option<f64> {
+        self.log_density_iqr
+    }
+    pub fn outcome(&self) -> &ChainRescueOutcome {
+        &self.outcome
     }
 }
 
@@ -4287,9 +4549,15 @@ pub struct RunTelemetry {
     acceptance_values: Vec<Option<f64>>,
     warmup_checkpoints: Vec<WarmupCheckpointTelemetry>,
     paper_adaptation_updates: Vec<PaperAdaptationUpdate>,
+    chain_rescues: Vec<ChainRescueUpdate>,
 }
 
 impl RunTelemetry {
+    /// Chain-rescue boundary records, in transition order; empty unless
+    /// [`WarmupConfig::with_chain_rescue`] was used on a multi-chain run.
+    pub fn chain_rescues(&self) -> &[ChainRescueUpdate] {
+        &self.chain_rescues
+    }
     /// Paper-rule update points, in transition order; empty unless
     /// [`WarmupConfig::with_paper_adaptation`] was used.
     pub fn paper_adaptation_updates(&self) -> &[PaperAdaptationUpdate] {
@@ -4787,6 +5055,7 @@ fn tuning() -> TransitionTuning {
     KernelTuning::default().transition_tuning()
 }
 
+#[derive(Clone)]
 struct DualAveraging {
     target: f64,
     mu: f64,
@@ -4874,6 +5143,7 @@ impl DualAveraging {
     }
 }
 
+#[derive(Clone)]
 struct DiagonalVariance {
     count: usize,
     mean: Vec<f64>,
@@ -6118,13 +6388,1041 @@ impl PersistentChainContext {
     }
 }
 
+/// Per-window bookkeeping the chain-rescue driver reads at slow-window
+/// boundaries. Only allocated when [`WarmupConfig::with_chain_rescue`] is
+/// configured; the plain path never touches it.
+#[derive(Default)]
+struct RescueWindowRecord {
+    /// Selected-state log density of every warmup transition inside the
+    /// current slow window.
+    log_densities: Vec<f64>,
+    /// Selected position of every warmup transition inside the current slow
+    /// window (the pool a rescued chain is re-seeded from).
+    positions: Vec<Vec<f64>>,
+    /// Welford statistics of the window that just ended, taken before the
+    /// per-chain metric update reset them.
+    last_variance: Option<DiagonalVariance>,
+}
+
+/// The chain's RNG and cached evaluation: owned by the run, or borrowed
+/// from a [`PersistentChainContext`] by the segmented drivers.
+enum ChainRngSlot<'a> {
+    Local {
+        rng: SmallRng,
+        cached_state: Option<SelectedState>,
+    },
+    Persistent(&'a mut PersistentChainContext),
+}
+
+impl ChainRngSlot<'_> {
+    fn parts(&mut self) -> (&mut SmallRng, &mut Option<SelectedState>) {
+        match self {
+            Self::Local { rng, cached_state } => (rng, cached_state),
+            Self::Persistent(context) => (&mut context.rng, &mut context.cached_state),
+        }
+    }
+}
+
+/// One chain's complete execution state between transitions.
+///
+/// [`ChainRun::start`] performs everything `run_chain` did before its first
+/// transition, [`ChainRun::advance`] runs transitions up to (excluding) an
+/// index, and [`ChainRun::finish`] assembles the [`ChainOutput`]. Running
+/// `start`, one `advance` to the end and `finish` on one thread is exactly
+/// the historical single-pass driver; the chain-rescue driver interleaves
+/// `advance` calls of several chains with boundary actions.
+struct ChainRun<'a, T: Target> {
+    target: &'a T,
+    dimension: usize,
+    initial_position: &'a [f64],
+    fixed_mass: Option<&'a (dyn MassOperator + Sync)>,
+    direct_boundary_hook: bool,
+    config: &'a RunConfig,
+    seed: u64,
+    thread_count: usize,
+    control: &'a ExecutionControl<'a>,
+    transitions: usize,
+    initial_mass: Vec<f64>,
+    active_mass: DiagonalMass,
+    inverse_mass: Vec<f64>,
+    active_tuning: KernelTuning,
+    schedule: Option<WarmupScheduleMetadata>,
+    initial_step_search: Option<InitialStepSearchTelemetry>,
+    dual_averaging: Option<DualAveraging>,
+    search_step: Option<f64>,
+    stream_step: f64,
+    variance: DiagonalVariance,
+    paper_window: PaperWindow,
+    samples: Vec<f64>,
+    diagnostics: Vec<TransitionDiagnostics>,
+    rng_slot: ChainRngSlot<'a>,
+    use_persistent_cache: bool,
+    position: Vec<f64>,
+    previous_position: Vec<f64>,
+    telemetry: RunTelemetry,
+    next_transition: usize,
+    rescue_record: Option<RescueWindowRecord>,
+}
+
+impl<'a, T: Target> ChainRun<'a, T> {
+    #[allow(clippy::too_many_arguments)]
+    fn start(
+        target: &'a T,
+        dimension: usize,
+        initial_position: &'a [f64],
+        mass: &DiagonalMass,
+        fixed_mass: Option<&'a (dyn MassOperator + Sync)>,
+        direct_boundary_hook: bool,
+        config: &'a RunConfig,
+        seed: u64,
+        thread_count: usize,
+        control: &'a ExecutionControl<'a>,
+        shared_initial_step_search: Option<&(f64, InitialStepSearchTelemetry)>,
+        persistent: Option<&'a mut PersistentChainContext>,
+    ) -> Result<Self, Error> {
+        let transitions = config
+            .discarded
+            .checked_add(config.retained)
+            .ok_or_else(Error::overflow)?;
+        let initial_mass = mass.diagonal.clone();
+        let active_mass = mass.clone();
+        let inverse_mass = inverse_mass(&active_mass)?;
+        let mut active_tuning = config.tuning;
+        let schedule = config
+            .warmup
+            .as_ref()
+            .map(|warmup| warmup_schedule(config.discarded, &warmup.windows))
+            .transpose()?;
+        let initial_step_search = if let Some((step, telemetry)) = shared_initial_step_search {
+            active_tuning.step_size = *step;
+            Some(telemetry.clone())
+        } else if let Some((warmup, search)) = config.warmup.as_ref().and_then(|warmup| {
+            warmup
+                .initial_step_search
+                .as_ref()
+                .map(|search| (warmup, search))
+        }) {
+            let (step, telemetry) = search_initial_step(
+                target,
+                initial_position,
+                &active_mass,
+                &inverse_mass,
+                active_tuning,
+                warmup.target_acceptance,
+                search,
+                seed,
+                control,
+            )?;
+            active_tuning.step_size = step;
+            Some(telemetry)
+        } else {
+            None
+        };
+        let dual_averaging = config
+            .warmup
+            .as_ref()
+            .filter(|warmup| warmup.adapt_step_size)
+            .map(|warmup| {
+                DualAveraging::new(active_tuning.step_size, step_adaptation_target(warmup))
+            });
+        if let Some(warmup) = config.warmup.as_ref() {
+            warmup.validate_relative_floor()?;
+        }
+        // Inputs of the relative step floors: the latest initial-step search
+        // result and the step the current dual-averaging stream started from.
+        let search_step = initial_step_search
+            .as_ref()
+            .map(|search| search.selected_step);
+        let stream_step = active_tuning.step_size;
+        let variance = DiagonalVariance::new(dimension);
+        let paper_window = PaperWindow::new();
+        let sample_len = config
+            .retained
+            .checked_mul(dimension)
+            .ok_or_else(Error::overflow)?;
+        let mut samples = Vec::new();
+        samples
+            .try_reserve_exact(sample_len)
+            .map_err(|_| Error::resource("sample allocation failed"))?;
+        let mut diagnostics = Vec::new();
+        diagnostics
+            .try_reserve_exact(transitions)
+            .map_err(|_| Error::resource("diagnostics allocation failed"))?;
+
+        let use_persistent_cache = persistent.is_some() || config.cache_initial_evaluation;
+        let rng_slot = match persistent {
+            Some(context) => ChainRngSlot::Persistent(context),
+            None => ChainRngSlot::Local {
+                rng: SmallRng::seed_from_u64(seed),
+                cached_state: None,
+            },
+        };
+        let position = match &rng_slot {
+            ChainRngSlot::Persistent(context) => context
+                .cached_state
+                .as_ref()
+                .map_or_else(|| initial_position.to_vec(), |state| state.theta.clone()),
+            ChainRngSlot::Local { .. } => initial_position.to_vec(),
+        };
+        // Copy of the position before each transition, kept only to report
+        // `TransitionDiagnostics::position_changed`.
+        let previous_position = vec![0.0; dimension];
+        let telemetry = RunTelemetry {
+            initial_step_search: initial_step_search.clone(),
+            step_searches: initial_step_search
+                .clone()
+                .map(|search| {
+                    vec![StepSearchEvent {
+                        reason: StepSearchReason::Initial,
+                        search,
+                    }]
+                })
+                .unwrap_or_default(),
+            warmup_checkpoints: Vec::with_capacity(
+                config
+                    .warmup
+                    .as_ref()
+                    .map_or(0, |warmup| warmup.warmup_telemetry_checkpoints.len()),
+            ),
+            ..RunTelemetry::default()
+        };
+        let rescue_record = config
+            .warmup
+            .as_ref()
+            .filter(|warmup| warmup.chain_rescue.is_some())
+            .map(|_| RescueWindowRecord::default());
+        Ok(Self {
+            target,
+            dimension,
+            initial_position,
+            fixed_mass,
+            direct_boundary_hook,
+            config,
+            seed,
+            thread_count,
+            control,
+            transitions,
+            initial_mass,
+            active_mass,
+            inverse_mass,
+            active_tuning,
+            schedule,
+            initial_step_search,
+            dual_averaging,
+            search_step,
+            stream_step,
+            variance,
+            paper_window,
+            samples,
+            diagnostics,
+            rng_slot,
+            use_persistent_cache,
+            position,
+            previous_position,
+            telemetry,
+            next_transition: 0,
+            rescue_record,
+        })
+    }
+
+    /// Run transitions `next_transition..end.min(transitions)`.
+    fn advance(&mut self, end: usize) -> Result<(), Error> {
+        let end = end.min(self.transitions);
+        let Self {
+            target,
+            dimension,
+            fixed_mass,
+            direct_boundary_hook,
+            config,
+            seed,
+            control,
+            use_persistent_cache,
+            ref mut active_mass,
+            ref mut inverse_mass,
+            ref mut active_tuning,
+            ref schedule,
+            ref mut dual_averaging,
+            ref mut search_step,
+            ref mut stream_step,
+            ref mut variance,
+            ref mut paper_window,
+            ref mut samples,
+            ref mut diagnostics,
+            ref mut rng_slot,
+            ref mut position,
+            ref mut previous_position,
+            ref mut telemetry,
+            ref mut next_transition,
+            ref mut rescue_record,
+            ..
+        } = *self;
+        let (rng, cached_state) = rng_slot.parts();
+        while *next_transition < end {
+            let transition_index = *next_transition;
+            if let (Some(warmup), Some(schedule)) = (config.warmup.as_ref(), schedule.as_ref())
+                && let Some(initial_max_error) = warmup.initial_phase_max_error
+                && warmup.paper_adaptation.is_none()
+            {
+                active_tuning.max_error =
+                    if transition_index < schedule.initial_fast_end.min(config.discarded) {
+                        initial_max_error
+                    } else {
+                        config.tuning.max_error
+                    };
+            }
+            if let Some(warmup) = config.warmup.as_ref()
+                && let Some(rule) = warmup.warmup_exhaustion
+            {
+                active_tuning.options.exhaustion = if transition_index < config.discarded {
+                    rule
+                } else {
+                    config.tuning.options.exhaustion
+                };
+            }
+            let step_before_transition = active_tuning.step_size;
+            previous_position.copy_from_slice(position);
+            control
+                .check()
+                .map_err(control_error)
+                .map_err(|error| error.at_transition(transition_index))?;
+            let momentum = if let Some(operator) = fixed_mass {
+                operator
+                    .sample_momentum(&mut *rng)
+                    .map_err(Error::internal)
+                    .map_err(|error| error.at_transition(transition_index))?
+            } else {
+                let mut momentum = Vec::new();
+                momentum
+                    .try_reserve_exact(dimension)
+                    .map_err(|_| Error::resource("momentum allocation failed"))?;
+                for (mass_value, inverse_mass_value) in
+                    active_mass.diagonal().iter().zip(inverse_mass.iter())
+                {
+                    let normal: f64 = StandardNormal.sample(&mut *rng);
+                    let mass_scale = mass_value.sqrt();
+                    if !normal.is_finite()
+                        || normal.abs() > f64::MAX / mass_scale
+                        || normal.abs() * mass_scale > f64::MAX.sqrt()
+                    {
+                        return Err(Error::new(
+                            ErrorKind::Numerical,
+                            "momentum refresh is not safely representable",
+                        )
+                        .at_transition(transition_index));
+                    }
+                    let value = normal * mass_scale;
+                    let square = value * value;
+                    if square > f64::MAX / inverse_mass_value {
+                        return Err(Error::new(
+                            ErrorKind::Numerical,
+                            "momentum kinetic energy is not safely representable",
+                        )
+                        .at_transition(transition_index));
+                    }
+                    momentum.push(value);
+                }
+                momentum
+            };
+            let transition_mass: &dyn MassOperator = match fixed_mass {
+                Some(operator) => operator,
+                None => &*inverse_mass,
+            };
+
+            let mut target_failure = None;
+            let mut numerical_failure = false;
+            let mut control_failure = None;
+            let mut target_panic = false;
+            let mut observer_panic = false;
+            let mut recoverable_target_failure = None;
+            let mut recoverable_target_failures = 0usize;
+            let mut observed_target_calls = 0usize;
+            let mut observed_phase_calls = [0usize; 3];
+            let mut eval = InPlaceEval(|theta: &[f64], gradient: &mut [f64]| {
+                let context = take_evaluation_context();
+                observed_target_calls = observed_target_calls.saturating_add(1);
+                let phase_index = match context.map(|x| x.phase).unwrap_or(EvaluationPhase::Initial)
+                {
+                    EvaluationPhase::Initial => 0,
+                    EvaluationPhase::Forward => 1,
+                    EvaluationPhase::Reverse => 2,
+                };
+                observed_phase_calls[phase_index] =
+                    observed_phase_calls[phase_index].saturating_add(1);
+                macro_rules! observe {
+                    ($outcome:expr,$log:expr,$gradient:ident) => {
+                        if emit_proposal_observation(
+                            control,
+                            ObservationInput {
+                                transition: transition_index,
+                                discarded: transition_index < config.discarded,
+                                context,
+                                theta,
+                                log_density: $log,
+                                outcome: $outcome,
+                                target_call: observed_target_calls,
+                                phase_target_call: observed_phase_calls[phase_index],
+                            },
+                        )
+                        .is_err()
+                        {
+                            observer_panic = true;
+                            $gradient.fill(f64::NAN);
+                        }
+                    };
+                }
+                // The kernel hands over the state's own gradient buffer; start
+                // from NaN so an implementation that leaves a component
+                // unwritten is rejected as nonfinite, exactly as before.
+                gradient.fill(f64::NAN);
+                if observer_panic {
+                    return f64::NAN;
+                }
+                if let Err(stop) = control.check() {
+                    control_failure = Some(stop);
+                    return f64::NAN;
+                }
+                if theta.len() != dimension || theta.iter().any(|value| !value.is_finite()) {
+                    numerical_failure = true;
+                    observe!(ProposalTargetOutcome::KernelNonfinite, None, gradient);
+                    return f64::NAN;
+                }
+                let evaluated = catch_unwind(AssertUnwindSafe(|| {
+                    target.log_density_gradient(theta, gradient)
+                }));
+                if let Err(stop) = control.check() {
+                    control_failure = Some(stop);
+                    return f64::NAN;
+                }
+                let evaluated = match evaluated {
+                    Ok(value) => value,
+                    Err(_) => {
+                        target_panic = true;
+                        observe!(ProposalTargetOutcome::Panicked, None, gradient);
+                        return f64::NAN;
+                    }
+                };
+                match evaluated {
+                    Ok(log_density)
+                        if log_density.is_finite()
+                            && gradient.iter().all(|value| value.is_finite()) =>
+                    {
+                        observe!(ProposalTargetOutcome::Finite, Some(log_density), gradient);
+                        log_density
+                    }
+                    Ok(_) => {
+                        target_failure =
+                            Some(TargetError::new("target returned a nonfinite value"));
+                        observe!(ProposalTargetOutcome::Nonfinite, None, gradient);
+                        f64::NAN
+                    }
+                    Err(error) if error.kind == TargetErrorKind::Recoverable => {
+                        recoverable_target_failures += 1;
+                        recoverable_target_failure = Some(error);
+                        observe!(ProposalTargetOutcome::Recoverable, None, gradient);
+                        // Upstream semantics (`walnutpie/util.hpp`): a failed
+                        // evaluation is a zero-density point with a zero
+                        // gradient. The kernel refines through it instead of
+                        // stopping the transition.
+                        gradient.fill(0.0);
+                        f64::NEG_INFINITY
+                    }
+                    Err(error) => {
+                        target_failure = Some(error);
+                        observe!(ProposalTargetOutcome::Fatal, None, gradient);
+                        f64::NAN
+                    }
+                }
+            });
+            let mut rng_stop = None;
+            let (result, work, acceptance, current_summary, accepted_summary, final_uturn) =
+                {
+                    let mut kernel_rng = KernelRng {
+                        rng,
+                        control,
+                        stopped: &mut rng_stop,
+                    };
+                    let cached_input = use_persistent_cache
+                        .then_some(cached_state.as_ref())
+                        .flatten()
+                        .map(|state| EvaluatedTransitionInput {
+                            theta: position.clone(),
+                            rho: momentum.clone(),
+                            log_prob: state.log_prob,
+                            grad: state.grad.clone(),
+                        });
+                    let input = TransitionInput {
+                        theta: std::mem::take(position),
+                        rho: momentum,
+                    };
+                    if (config.warmup.is_some() && transition_index < config.discarded)
+                        || config.capture_acceptance
+                    {
+                        let traced = if let Some(cached) = cached_input {
+                            transition_w_from_evaluated_traced_with_telemetry_and_outer_policy(
+                                &mut kernel_rng,
+                                cached,
+                                transition_mass,
+                                active_tuning.transition_tuning(),
+                                &mut eval,
+                                config.outer_orbit_selection.into(),
+                            )
+                        } else {
+                            transition_w_traced_with_telemetry_and_outer_policy(
+                                &mut kernel_rng,
+                                input,
+                                transition_mass,
+                                active_tuning.transition_tuning(),
+                                &mut eval,
+                                config.outer_orbit_selection.into(),
+                            )
+                        };
+                        match traced {
+                            Ok(output) => {
+                                let current_summary = acceptance_summary(
+                                    output
+                                        .events
+                                        .iter()
+                                        .filter_map(|event| event.adaptation_value),
+                                );
+                                let accepted_summary =
+                                    acceptance_summary(output.events.iter().filter_map(|event| {
+                                        event.accepted_trajectory_adaptation_value
+                                    }));
+                                let statistic = config
+                                    .warmup
+                                    .as_ref()
+                                    .map_or(config.acceptance_statistic, |warmup| {
+                                        warmup.dual_averaging_acceptance
+                                    });
+                                let adaptation =
+                                    match statistic {
+                                        DualAveragingAcceptance::CurrentCoarseEndpoint => {
+                                            current_summary.mean
+                                        }
+                                        DualAveragingAcceptance::MeanTrajectoryAcceptance => {
+                                            acceptance_summary(output.events.iter().filter_map(
+                                                |event| event.trajectory_acceptance_value,
+                                            ))
+                                            .mean
+                                        }
+                                        #[cfg(feature = "research")]
+                                        DualAveragingAcceptance::AcceptedTrajectory => {
+                                            accepted_summary.mean
+                                        }
+                                    };
+                                let final_uturn = output
+                                    .events
+                                    .iter()
+                                    .rev()
+                                    .find(|event| event.event == "outer_uturn_predicate")
+                                    .map(|event| (event.forward_dot, event.backward_dot));
+                                (
+                                    Ok(output.result),
+                                    Some(output.work),
+                                    adaptation,
+                                    current_summary,
+                                    accepted_summary,
+                                    final_uturn,
+                                )
+                            }
+                            Err(error) => (
+                                Err(error),
+                                None,
+                                None,
+                                AcceptanceStatisticSummary::default(),
+                                AcceptanceStatisticSummary::default(),
+                                None,
+                            ),
+                        }
+                    } else {
+                        let transitioned = if let Some(cached) = cached_input {
+                            transition_w_from_evaluated_with_telemetry_and_outer_policy(
+                                &mut kernel_rng,
+                                cached,
+                                transition_mass,
+                                active_tuning.transition_tuning(),
+                                &mut eval,
+                                config.outer_orbit_selection.into(),
+                            )
+                        } else {
+                            transition_w_with_telemetry_and_outer_policy(
+                                &mut kernel_rng,
+                                input,
+                                transition_mass,
+                                active_tuning.transition_tuning(),
+                                &mut eval,
+                                config.outer_orbit_selection.into(),
+                            )
+                        };
+                        match transitioned {
+                            Ok(output) => (
+                                Ok(output.result),
+                                Some(output.work),
+                                None,
+                                AcceptanceStatisticSummary::default(),
+                                AcceptanceStatisticSummary::default(),
+                                None,
+                            ),
+                            Err(error) => (
+                                Err(error),
+                                None,
+                                None,
+                                AcceptanceStatisticSummary::default(),
+                                AcceptanceStatisticSummary::default(),
+                                None,
+                            ),
+                        }
+                    }
+                };
+            if control_failure.is_none()
+                && rng_stop.is_none()
+                && let Err(stop) = control.check()
+            {
+                control_failure = Some(stop);
+            }
+            if let Some(stop) = control_failure.or(rng_stop) {
+                return Err(control_error(stop).at_transition(transition_index));
+            }
+            if observer_panic {
+                return Err(Error::new(ErrorKind::Panic, "proposal observer panicked")
+                    .at_transition(transition_index));
+            }
+            if target_panic {
+                return Err(Error::new(ErrorKind::Panic, "target callback panicked")
+                    .at_transition(transition_index));
+            }
+            if let Some(source) = target_failure {
+                return Err(Error {
+                    kind: ErrorKind::Target,
+                    message: "target evaluation failed".into(),
+                    chain: None,
+                    transition: Some(transition_index),
+                    target_source: Some(source),
+                });
+            }
+            if numerical_failure {
+                return Err(Error::new(
+                    ErrorKind::Numerical,
+                    "kernel attempted a nonfinite target position",
+                )
+                .at_transition(transition_index));
+            }
+            if result.is_err() && recoverable_target_failures != 0 {
+                return Err(Error {
+                    kind: ErrorKind::Target,
+                    message: "current position is not evaluable".into(),
+                    chain: None,
+                    transition: Some(transition_index),
+                    target_source: recoverable_target_failure,
+                });
+            }
+            let result = result
+                .map_err(Error::internal)
+                .map_err(|error| error.at_transition(transition_index))?;
+            let work =
+                work.ok_or_else(|| Error::new(ErrorKind::Internal, "missing transition work"))?;
+            let unrefined_fraction = unrefined_leaf_fraction(&work);
+            if use_persistent_cache {
+                *cached_state = Some(result.selected.clone());
+            }
+            let selected_log_density = result.selected.log_prob;
+            *position = result.selected.theta;
+            let internal = result.diagnostics;
+            let public = TransitionDiagnostics {
+                depth: internal.depth,
+                stop: map_stop(internal.stop),
+                target_evaluations: internal.target_evaluations,
+                direction_draws: internal.direction_draws,
+                uniform_draws: internal.uniform_draws,
+                leaves_attempted: internal.leaves_attempted,
+                leaves_built: internal.leaves_built,
+                recoverable_target_failures,
+                zero_density_evaluations: internal.zero_density_evaluations,
+                initial_hamiltonian: internal.initial_hamiltonian,
+                minimum_hamiltonian: internal.minimum_hamiltonian,
+                maximum_hamiltonian: internal.maximum_hamiltonian,
+                maximum_absolute_energy_error: internal.maximum_absolute_energy_error,
+                divergent: internal.divergent,
+                selected_refinement_level: internal.selected_refinement_level,
+                refinement_attempts: internal.refinement_attempts,
+                reverse_coarser_rejections: internal.reverse_coarser_rejections,
+                final_uturn_forward_dot: final_uturn.and_then(|value| value.0),
+                final_uturn_backward_dot: final_uturn.and_then(|value| value.1),
+                trajectory_macro_length: internal.leaves_built as f64 * step_before_transition,
+                step_size: step_before_transition,
+                position_changed: *position != *previous_position,
+                acceptance_statistic: acceptance,
+                orbit_states: internal.orbit_states,
+                selected_index: internal.selected_index,
+                initial_index: internal.initial_index,
+            };
+            let partition = if transition_index < config.discarded {
+                &mut telemetry.discarded
+            } else {
+                samples.extend_from_slice(position);
+                &mut telemetry.retained
+            };
+            partition.add_transition(
+                dimension,
+                &work,
+                internal.uniform_draws,
+                recoverable_target_failures,
+                &internal,
+            )?;
+            telemetry.total.add_transition(
+                dimension,
+                &work,
+                internal.uniform_draws,
+                recoverable_target_failures,
+                &internal,
+            )?;
+            if transition_index < config.discarded
+                && let Some(schedule) = schedule
+            {
+                let phase = schedule
+                    .phase_at(transition_index)
+                    .expect("discarded transition has a warmup phase");
+                let phase_work = match phase {
+                    WarmupPhase::InitialFast => &mut telemetry.initial_fast,
+                    WarmupPhase::SlowWindow => &mut telemetry.slow,
+                    WarmupPhase::TerminalFast => &mut telemetry.terminal_fast,
+                };
+                phase_work.add_transition(
+                    dimension,
+                    &work,
+                    internal.uniform_draws,
+                    recoverable_target_failures,
+                    &internal,
+                )?;
+            }
+            if telemetry.total.maximum_depth_stops > config.max_maximum_depth_stops {
+                return Err(Error::new(
+                    ErrorKind::Unhealthy,
+                    "maximum-depth stop limit was exceeded",
+                )
+                .at_transition(transition_index));
+            }
+            diagnostics.push(public);
+            if direct_boundary_hook
+                && transition_index < config.discarded
+                && (transition_index + 1 == config.discarded
+                    || schedule.as_ref().is_some_and(|schedule| {
+                        schedule
+                            .windows
+                            .iter()
+                            .any(|window| window.end == transition_index + 1)
+                    }))
+            {
+                // Version-one installation seam: retaining the same immutable
+                // operator is deliberately a no-op and consumes no RNG/work.
+                debug_assert!(fixed_mass.is_some());
+            }
+            if config.capture_acceptance {
+                telemetry.acceptance_values.push(acceptance);
+            }
+
+            if transition_index < config.discarded
+                && let Some(warmup) = &config.warmup
+            {
+                let window_index = schedule.as_ref().and_then(|schedule| {
+                    schedule.windows.iter().position(|window| {
+                        transition_index >= window.start && transition_index < window.end
+                    })
+                });
+                if warmup.adapt_mass && window_index.is_some() {
+                    variance.update(position);
+                }
+                if let Some(record) = rescue_record.as_mut()
+                    && window_index.is_some()
+                {
+                    record.log_densities.push(selected_log_density);
+                    record.positions.push(position.clone());
+                }
+                let unrefined_fraction = match warmup.paper_adaptation.as_ref() {
+                    Some(paper) if paper.exhausted_as_zero => unrefined_fraction.or(Some(0.0)),
+                    _ => unrefined_fraction,
+                };
+                let step_statistic = if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                    paper_window.step_statistic(paper.step_statistic, unrefined_fraction)
+                } else {
+                    acceptance
+                };
+                if warmup.adapt_step_size
+                    && let (Some(dual), Some(statistic)) = (dual_averaging.as_mut(), step_statistic)
+                {
+                    active_tuning.step_size = warmup.floored_step(
+                        dual.update(statistic),
+                        warmup.dynamic_floor(*search_step, *stream_step),
+                    );
+                    if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                        active_tuning.step_size = clamp_paper_step_within(
+                            active_tuning.step_size,
+                            config.tuning.step_size,
+                            paper.step_relative_bound,
+                        );
+                    }
+                }
+                if warmup.adapt_mass
+                    && let Some(window_index) = window_index
+                    && schedule.as_ref().expect("warmup schedule").windows[window_index].end
+                        == transition_index + 1
+                {
+                    let sample_count = variance.count;
+                    let step_before = active_tuning.step_size;
+                    let mut update = MetricUpdateTelemetry {
+                        window_index,
+                        transition: transition_index,
+                        sample_count,
+                        outcome: MetricUpdateOutcome::InsufficientSamples,
+                        mass_diagonal: None,
+                        mass_dense: None,
+                        shrinkage: 0.0,
+                        ridge: 0.0,
+                        condition_estimate: None,
+                        cholesky_failures: 0,
+                        step_before,
+                        step_after_search: None,
+                        mass_diagonal_before: Some(active_mass.diagonal.clone()),
+                        mass_dense_before: None,
+                        step_after_restart: None,
+                        restart_reference_multiplier: None,
+                        dual_averaging_after_restart: None,
+                    };
+                    if let Some(diagonal) = variance.regularized_mass(warmup.metric_regularization)
+                    {
+                        // Build and validate both candidates before changing either
+                        // half of the active metric pair.
+                        let candidate_mass = DiagonalMass::from_diagonal(diagonal)?;
+                        let candidate_inverse = self::inverse_mass(&candidate_mass)?;
+                        *active_mass = candidate_mass;
+                        *inverse_mass = candidate_inverse;
+                        update.outcome = MetricUpdateOutcome::Installed;
+                        update.mass_diagonal = Some(active_mass.diagonal.clone());
+
+                        let is_final = transition_index + 1 == config.discarded;
+                        if warmup.adapt_step_size && !is_final {
+                            if let Some(search) = &warmup.initial_step_search {
+                                let event_index = telemetry.step_searches.len();
+                                let (step, search_telemetry) = search_initial_step(
+                                    target,
+                                    position,
+                                    active_mass,
+                                    inverse_mass,
+                                    *active_tuning,
+                                    warmup.target_acceptance,
+                                    search,
+                                    search_event_seed(seed, event_index),
+                                    control,
+                                )
+                                .map_err(|error| error.at_transition(transition_index))?;
+                                active_tuning.step_size = step;
+                                *search_step = Some(step);
+                                update.step_after_search = Some(step);
+                                telemetry.step_searches.push(StepSearchEvent {
+                                    reason: StepSearchReason::MetricUpdate { window_index },
+                                    search: search_telemetry,
+                                });
+                            }
+                            *dual_averaging = Some(DualAveraging::restart(
+                                active_tuning.step_size,
+                                step_adaptation_target(warmup),
+                                warmup.restart_reference_multiplier(),
+                            ));
+                            *stream_step = active_tuning.step_size;
+                            update.step_after_restart = Some(active_tuning.step_size);
+                            update.restart_reference_multiplier =
+                                Some(warmup.restart_reference_multiplier());
+                            update.dual_averaging_after_restart =
+                                dual_averaging.as_ref().map(DualAveraging::telemetry);
+                        }
+                    }
+                    telemetry.metric_updates.push(update);
+                    if let Some(record) = rescue_record.as_mut() {
+                        record.last_variance = Some(variance.clone());
+                    }
+                    *variance = DiagonalVariance::new(dimension);
+                }
+                if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                    let healthy = !internal.divergent
+                        && map_stop(internal.stop) != StopReason::RefinementExhausted;
+                    paper_window.record_orbit(
+                        internal.maximum_hamiltonian - internal.minimum_hamiltonian,
+                        unrefined_fraction,
+                        healthy,
+                        paper.exclude_unhealthy_orbits,
+                    );
+                    let schedule = schedule.as_ref().expect("warmup schedule");
+                    let is_final = transition_index + 1 == config.discarded;
+                    let boundary = if transition_index + 1 == schedule.initial_fast_end {
+                        Some(None)
+                    } else {
+                        window_index
+                            .filter(|index| schedule.windows[*index].end == transition_index + 1)
+                            .map(Some)
+                    };
+                    if let Some(window_index) = boundary
+                        && !is_final
+                    {
+                        let step_before = active_tuning.step_size;
+                        let max_error_before = active_tuning.max_error;
+                        let (orbits, inflation_quantile, energy_range_quantile, candidate, outcome) =
+                            paper_window.candidate(paper, max_error_before);
+                        let metric_pending = paper.require_metric_update
+                            && warmup.adapt_mass
+                            && !telemetry.metric_updates.iter().any(|update| {
+                                update.outcome == MetricUpdateOutcome::Installed
+                                    && update.transition < transition_index
+                            });
+                        let deferred =
+                            transition_index + 1 < paper.first_update_after || metric_pending;
+                        let (candidate, outcome) = if deferred && candidate.is_some() {
+                            (None, PaperAdaptationOutcome::Deferred)
+                        } else {
+                            (candidate, outcome)
+                        };
+                        let mut dual_averaging_restarted = false;
+                        if let Some(max_error) = candidate {
+                            active_tuning.max_error = max_error;
+                            if warmup.adapt_step_size
+                                && paper.restart_policy
+                                    == PaperRestartPolicy::RestartOnLocalErrorInstall
+                            {
+                                *dual_averaging = Some(DualAveraging::restart(
+                                    active_tuning.step_size,
+                                    paper.unrefined_fraction_target,
+                                    warmup.restart_reference_multiplier(),
+                                ));
+                                dual_averaging_restarted = true;
+                            }
+                        }
+                        telemetry
+                            .paper_adaptation_updates
+                            .push(PaperAdaptationUpdate {
+                                transition: transition_index,
+                                window_index,
+                                orbits,
+                                inflation_quantile,
+                                energy_range_quantile,
+                                max_error_before,
+                                max_error_after: active_tuning.max_error,
+                                unrefined_fraction_mean: paper_window.unrefined_mean(),
+                                step_before,
+                                step_after: active_tuning.step_size,
+                                outcome,
+                                step_statistic,
+                                dual_averaging_restarted,
+                                transitions_without_statistic: paper_window.without_statistic,
+                            });
+                        paper_window.reset();
+                        if window_index.is_none() {
+                            // End of the initial fast phase: the cumulative
+                            // statistic starts afresh from the first slow window.
+                            paper_window.reset_cumulative();
+                        }
+                    }
+                }
+                if transition_index + 1 == config.discarded
+                    && let Some(dual) = dual_averaging.as_ref()
+                {
+                    active_tuning.step_size = warmup.floored_step(
+                        dual.final_step(),
+                        warmup.dynamic_floor(*search_step, *stream_step),
+                    );
+                    if let Some(paper) = warmup.paper_adaptation.as_ref() {
+                        active_tuning.step_size = clamp_paper_step_within(
+                            active_tuning.step_size,
+                            config.tuning.step_size,
+                            paper.step_relative_bound,
+                        );
+                    }
+                }
+                if warmup
+                    .warmup_telemetry_checkpoints
+                    .binary_search(&transition_index)
+                    .is_ok()
+                {
+                    let schedule = schedule.as_ref().expect("warmup schedule");
+                    telemetry
+                        .warmup_checkpoints
+                        .push(WarmupCheckpointTelemetry {
+                            transition: transition_index,
+                            phase: schedule
+                                .phase_at(transition_index)
+                                .expect("warmup transition has phase"),
+                            window_index,
+                            step_before: step_before_transition,
+                            step_after: active_tuning.step_size,
+                            current_coarse_endpoint: current_summary,
+                            accepted_trajectory: accepted_summary,
+                            dual_averaging: dual_averaging.as_ref().map(DualAveraging::telemetry),
+                            target_calls: internal.target_evaluations,
+                            divergent: internal.divergent,
+                            refinement_attempts: internal.refinement_attempts,
+                            reverse_coarser_rejections: internal.reverse_coarser_rejections,
+                            unrefined_fraction,
+                            max_error_after: active_tuning.max_error,
+                        });
+                }
+            }
+            *next_transition += 1;
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> Result<ChainOutput, Error> {
+        self.control.check().map_err(control_error)?;
+        let config = self.config;
+        Ok(ChainOutput {
+            samples: self.samples,
+            retained: config.retained,
+            dimension: self.dimension,
+            diagnostics: self.diagnostics,
+            telemetry: self.telemetry,
+            metadata: RunMetadata {
+                algorithm_revision: ALGORITHM_REVISION,
+                crate_version: env!("CARGO_PKG_VERSION"),
+                rng_implementation: "rand::rngs::SmallRng + rand_distr::StandardNormal (Cargo.lock)",
+                seed_derivation: "splitmix64(base_seed + chain_index)",
+                base_seed: config.seed,
+                effective_seed: self.seed,
+                dimension: self.dimension,
+                discarded: config.discarded,
+                retained: config.retained,
+                maximum_depth_stop_limit: config.max_maximum_depth_stops,
+                step_size: self.active_tuning.step_size,
+                min_micro_steps: self.active_tuning.min_micro_steps,
+                max_refinement_levels: self.active_tuning.max_refinement_levels,
+                max_error: self.active_tuning.max_error,
+                divergence_threshold: self.active_tuning.divergence_threshold,
+                max_depth: self.active_tuning.max_depth,
+                initial_position: self.initial_position.to_vec(),
+                thread_count: self.thread_count,
+                mass_diagonal: self.active_mass.diagonal.clone(),
+                initial_mass_diagonal: self.initial_mass,
+                warmup: config.warmup.clone(),
+                warmup_schedule: self.schedule,
+                initial_step_search: self.initial_step_search,
+                tuning: self.active_tuning,
+                initial_tuning: config.tuning,
+                limits: config.limits.clone(),
+                effective_max_target_evaluations: config
+                    .research_target_evaluation_limit
+                    .map_or(config.limits.max_target_evaluations, |limit| {
+                        limit.max_target_evaluations
+                    }),
+                target_evaluation_limit_provenance: target_evaluation_limit_provenance(config),
+            },
+        })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_chain<T: Target>(
     target: &T,
     dimension: usize,
     initial_position: &[f64],
     mass: &DiagonalMass,
-    fixed_mass: Option<&dyn MassOperator>,
+    fixed_mass: Option<&(dyn MassOperator + Sync)>,
     direct_boundary_hook: bool,
     config: &RunConfig,
     seed: u64,
@@ -6133,839 +7431,25 @@ fn run_chain<T: Target>(
     shared_initial_step_search: Option<&(f64, InitialStepSearchTelemetry)>,
     persistent: Option<&mut PersistentChainContext>,
 ) -> Result<ChainOutput, Error> {
-    let transitions = config
-        .discarded
-        .checked_add(config.retained)
-        .ok_or_else(Error::overflow)?;
     // Only proposal observers read the per-call kinetic energy the kernel
     // attaches to each evaluation; skip it when none is attached.
     let _context_kinetic = ContextKineticScope::new(control.public.proposal_observations.is_some());
-    let initial_mass = mass.diagonal.clone();
-    let mut active_mass = mass.clone();
-    let mut inverse_mass = inverse_mass(&active_mass)?;
-    let mut active_tuning = config.tuning;
-    let schedule = config
-        .warmup
-        .as_ref()
-        .map(|warmup| warmup_schedule(config.discarded, &warmup.windows))
-        .transpose()?;
-    let initial_step_search = if let Some((step, telemetry)) = shared_initial_step_search {
-        active_tuning.step_size = *step;
-        Some(telemetry.clone())
-    } else if let Some((warmup, search)) = config.warmup.as_ref().and_then(|warmup| {
-        warmup
-            .initial_step_search
-            .as_ref()
-            .map(|search| (warmup, search))
-    }) {
-        let (step, telemetry) = search_initial_step(
-            target,
-            initial_position,
-            &active_mass,
-            &inverse_mass,
-            active_tuning,
-            warmup.target_acceptance,
-            search,
-            seed,
-            control,
-        )?;
-        active_tuning.step_size = step;
-        Some(telemetry)
-    } else {
-        None
-    };
-    let mut dual_averaging = config
-        .warmup
-        .as_ref()
-        .filter(|warmup| warmup.adapt_step_size)
-        .map(|warmup| DualAveraging::new(active_tuning.step_size, step_adaptation_target(warmup)));
-    if let Some(warmup) = config.warmup.as_ref() {
-        warmup.validate_relative_floor()?;
-    }
-    // Inputs of the relative step floors: the latest initial-step search
-    // result and the step the current dual-averaging stream started from.
-    let mut search_step = initial_step_search
-        .as_ref()
-        .map(|search| search.selected_step);
-    let mut stream_step = active_tuning.step_size;
-    let mut variance = DiagonalVariance::new(dimension);
-    let mut paper_window = PaperWindow::new();
-    let sample_len = config
-        .retained
-        .checked_mul(dimension)
-        .ok_or_else(Error::overflow)?;
-    let mut samples = Vec::new();
-    samples
-        .try_reserve_exact(sample_len)
-        .map_err(|_| Error::resource("sample allocation failed"))?;
-    let mut diagnostics = Vec::new();
-    diagnostics
-        .try_reserve_exact(transitions)
-        .map_err(|_| Error::resource("diagnostics allocation failed"))?;
-
-    let mut local_rng = SmallRng::seed_from_u64(seed);
-    let mut local_cache = None;
-    let use_persistent_cache = persistent.is_some() || config.cache_initial_evaluation;
-    let (rng, cached_state) = match persistent {
-        Some(context) => (&mut context.rng, &mut context.cached_state),
-        None => (&mut local_rng, &mut local_cache),
-    };
-    let mut position = cached_state
-        .as_ref()
-        .map_or_else(|| initial_position.to_vec(), |state| state.theta.clone());
-    // Copy of the position before each transition, kept only to report
-    // `TransitionDiagnostics::position_changed`.
-    let mut previous_position = vec![0.0; dimension];
-    let mut telemetry = RunTelemetry {
-        initial_step_search: initial_step_search.clone(),
-        step_searches: initial_step_search
-            .clone()
-            .map(|search| {
-                vec![StepSearchEvent {
-                    reason: StepSearchReason::Initial,
-                    search,
-                }]
-            })
-            .unwrap_or_default(),
-        warmup_checkpoints: Vec::with_capacity(
-            config
-                .warmup
-                .as_ref()
-                .map_or(0, |warmup| warmup.warmup_telemetry_checkpoints.len()),
-        ),
-        ..RunTelemetry::default()
-    };
-    for transition_index in 0..transitions {
-        if let (Some(warmup), Some(schedule)) = (config.warmup.as_ref(), schedule.as_ref())
-            && let Some(initial_max_error) = warmup.initial_phase_max_error
-            && warmup.paper_adaptation.is_none()
-        {
-            active_tuning.max_error =
-                if transition_index < schedule.initial_fast_end.min(config.discarded) {
-                    initial_max_error
-                } else {
-                    config.tuning.max_error
-                };
-        }
-        if let Some(warmup) = config.warmup.as_ref()
-            && let Some(rule) = warmup.warmup_exhaustion
-        {
-            active_tuning.options.exhaustion = if transition_index < config.discarded {
-                rule
-            } else {
-                config.tuning.options.exhaustion
-            };
-        }
-        let step_before_transition = active_tuning.step_size;
-        previous_position.copy_from_slice(&position);
-        control
-            .check()
-            .map_err(control_error)
-            .map_err(|error| error.at_transition(transition_index))?;
-        let momentum = if let Some(operator) = fixed_mass {
-            operator
-                .sample_momentum(&mut *rng)
-                .map_err(Error::internal)
-                .map_err(|error| error.at_transition(transition_index))?
-        } else {
-            let mut momentum = Vec::new();
-            momentum
-                .try_reserve_exact(dimension)
-                .map_err(|_| Error::resource("momentum allocation failed"))?;
-            for (mass_value, inverse_mass_value) in active_mass.diagonal().iter().zip(&inverse_mass)
-            {
-                let normal: f64 = StandardNormal.sample(&mut *rng);
-                let mass_scale = mass_value.sqrt();
-                if !normal.is_finite()
-                    || normal.abs() > f64::MAX / mass_scale
-                    || normal.abs() * mass_scale > f64::MAX.sqrt()
-                {
-                    return Err(Error::new(
-                        ErrorKind::Numerical,
-                        "momentum refresh is not safely representable",
-                    )
-                    .at_transition(transition_index));
-                }
-                let value = normal * mass_scale;
-                let square = value * value;
-                if square > f64::MAX / inverse_mass_value {
-                    return Err(Error::new(
-                        ErrorKind::Numerical,
-                        "momentum kinetic energy is not safely representable",
-                    )
-                    .at_transition(transition_index));
-                }
-                momentum.push(value);
-            }
-            momentum
-        };
-        let transition_mass: &dyn MassOperator = fixed_mass.unwrap_or(&inverse_mass);
-
-        let mut target_failure = None;
-        let mut numerical_failure = false;
-        let mut control_failure = None;
-        let mut target_panic = false;
-        let mut observer_panic = false;
-        let mut recoverable_target_failure = None;
-        let mut recoverable_target_failures = 0usize;
-        let mut observed_target_calls = 0usize;
-        let mut observed_phase_calls = [0usize; 3];
-        let mut eval = InPlaceEval(|theta: &[f64], gradient: &mut [f64]| {
-            let context = take_evaluation_context();
-            observed_target_calls = observed_target_calls.saturating_add(1);
-            let phase_index = match context.map(|x| x.phase).unwrap_or(EvaluationPhase::Initial) {
-                EvaluationPhase::Initial => 0,
-                EvaluationPhase::Forward => 1,
-                EvaluationPhase::Reverse => 2,
-            };
-            observed_phase_calls[phase_index] = observed_phase_calls[phase_index].saturating_add(1);
-            macro_rules! observe {
-                ($outcome:expr,$log:expr,$gradient:ident) => {
-                    if emit_proposal_observation(
-                        control,
-                        ObservationInput {
-                            transition: transition_index,
-                            discarded: transition_index < config.discarded,
-                            context,
-                            theta,
-                            log_density: $log,
-                            outcome: $outcome,
-                            target_call: observed_target_calls,
-                            phase_target_call: observed_phase_calls[phase_index],
-                        },
-                    )
-                    .is_err()
-                    {
-                        observer_panic = true;
-                        $gradient.fill(f64::NAN);
-                    }
-                };
-            }
-            // The kernel hands over the state's own gradient buffer; start
-            // from NaN so an implementation that leaves a component
-            // unwritten is rejected as nonfinite, exactly as before.
-            gradient.fill(f64::NAN);
-            if observer_panic {
-                return f64::NAN;
-            }
-            if let Err(stop) = control.check() {
-                control_failure = Some(stop);
-                return f64::NAN;
-            }
-            if theta.len() != dimension || theta.iter().any(|value| !value.is_finite()) {
-                numerical_failure = true;
-                observe!(ProposalTargetOutcome::KernelNonfinite, None, gradient);
-                return f64::NAN;
-            }
-            let evaluated = catch_unwind(AssertUnwindSafe(|| {
-                target.log_density_gradient(theta, gradient)
-            }));
-            if let Err(stop) = control.check() {
-                control_failure = Some(stop);
-                return f64::NAN;
-            }
-            let evaluated = match evaluated {
-                Ok(value) => value,
-                Err(_) => {
-                    target_panic = true;
-                    observe!(ProposalTargetOutcome::Panicked, None, gradient);
-                    return f64::NAN;
-                }
-            };
-            match evaluated {
-                Ok(log_density)
-                    if log_density.is_finite()
-                        && gradient.iter().all(|value| value.is_finite()) =>
-                {
-                    observe!(ProposalTargetOutcome::Finite, Some(log_density), gradient);
-                    log_density
-                }
-                Ok(_) => {
-                    target_failure = Some(TargetError::new("target returned a nonfinite value"));
-                    observe!(ProposalTargetOutcome::Nonfinite, None, gradient);
-                    f64::NAN
-                }
-                Err(error) if error.kind == TargetErrorKind::Recoverable => {
-                    recoverable_target_failures += 1;
-                    recoverable_target_failure = Some(error);
-                    observe!(ProposalTargetOutcome::Recoverable, None, gradient);
-                    // Upstream semantics (`walnutpie/util.hpp`): a failed
-                    // evaluation is a zero-density point with a zero
-                    // gradient. The kernel refines through it instead of
-                    // stopping the transition.
-                    gradient.fill(0.0);
-                    f64::NEG_INFINITY
-                }
-                Err(error) => {
-                    target_failure = Some(error);
-                    observe!(ProposalTargetOutcome::Fatal, None, gradient);
-                    f64::NAN
-                }
-            }
-        });
-        let mut rng_stop = None;
-        let (result, work, acceptance, current_summary, accepted_summary, final_uturn) = {
-            let mut kernel_rng = KernelRng {
-                rng,
-                control,
-                stopped: &mut rng_stop,
-            };
-            let cached_input = use_persistent_cache
-                .then_some(cached_state.as_ref())
-                .flatten()
-                .map(|state| EvaluatedTransitionInput {
-                    theta: position.clone(),
-                    rho: momentum.clone(),
-                    log_prob: state.log_prob,
-                    grad: state.grad.clone(),
-                });
-            let input = TransitionInput {
-                theta: position,
-                rho: momentum,
-            };
-            if (config.warmup.is_some() && transition_index < config.discarded)
-                || config.capture_acceptance
-            {
-                let traced = if let Some(cached) = cached_input {
-                    transition_w_from_evaluated_traced_with_telemetry_and_outer_policy(
-                        &mut kernel_rng,
-                        cached,
-                        transition_mass,
-                        active_tuning.transition_tuning(),
-                        &mut eval,
-                        config.outer_orbit_selection.into(),
-                    )
-                } else {
-                    transition_w_traced_with_telemetry_and_outer_policy(
-                        &mut kernel_rng,
-                        input,
-                        transition_mass,
-                        active_tuning.transition_tuning(),
-                        &mut eval,
-                        config.outer_orbit_selection.into(),
-                    )
-                };
-                match traced {
-                    Ok(output) => {
-                        let current_summary = acceptance_summary(
-                            output
-                                .events
-                                .iter()
-                                .filter_map(|event| event.adaptation_value),
-                        );
-                        let accepted_summary = acceptance_summary(
-                            output
-                                .events
-                                .iter()
-                                .filter_map(|event| event.accepted_trajectory_adaptation_value),
-                        );
-                        let statistic = config
-                            .warmup
-                            .as_ref()
-                            .map_or(config.acceptance_statistic, |warmup| {
-                                warmup.dual_averaging_acceptance
-                            });
-                        let adaptation = match statistic {
-                            DualAveragingAcceptance::CurrentCoarseEndpoint => current_summary.mean,
-                            DualAveragingAcceptance::MeanTrajectoryAcceptance => {
-                                acceptance_summary(
-                                    output
-                                        .events
-                                        .iter()
-                                        .filter_map(|event| event.trajectory_acceptance_value),
-                                )
-                                .mean
-                            }
-                            #[cfg(feature = "research")]
-                            DualAveragingAcceptance::AcceptedTrajectory => accepted_summary.mean,
-                        };
-                        let final_uturn = output
-                            .events
-                            .iter()
-                            .rev()
-                            .find(|event| event.event == "outer_uturn_predicate")
-                            .map(|event| (event.forward_dot, event.backward_dot));
-                        (
-                            Ok(output.result),
-                            Some(output.work),
-                            adaptation,
-                            current_summary,
-                            accepted_summary,
-                            final_uturn,
-                        )
-                    }
-                    Err(error) => (
-                        Err(error),
-                        None,
-                        None,
-                        AcceptanceStatisticSummary::default(),
-                        AcceptanceStatisticSummary::default(),
-                        None,
-                    ),
-                }
-            } else {
-                let transitioned = if let Some(cached) = cached_input {
-                    transition_w_from_evaluated_with_telemetry_and_outer_policy(
-                        &mut kernel_rng,
-                        cached,
-                        transition_mass,
-                        active_tuning.transition_tuning(),
-                        &mut eval,
-                        config.outer_orbit_selection.into(),
-                    )
-                } else {
-                    transition_w_with_telemetry_and_outer_policy(
-                        &mut kernel_rng,
-                        input,
-                        transition_mass,
-                        active_tuning.transition_tuning(),
-                        &mut eval,
-                        config.outer_orbit_selection.into(),
-                    )
-                };
-                match transitioned {
-                    Ok(output) => (
-                        Ok(output.result),
-                        Some(output.work),
-                        None,
-                        AcceptanceStatisticSummary::default(),
-                        AcceptanceStatisticSummary::default(),
-                        None,
-                    ),
-                    Err(error) => (
-                        Err(error),
-                        None,
-                        None,
-                        AcceptanceStatisticSummary::default(),
-                        AcceptanceStatisticSummary::default(),
-                        None,
-                    ),
-                }
-            }
-        };
-        if control_failure.is_none()
-            && rng_stop.is_none()
-            && let Err(stop) = control.check()
-        {
-            control_failure = Some(stop);
-        }
-        if let Some(stop) = control_failure.or(rng_stop) {
-            return Err(control_error(stop).at_transition(transition_index));
-        }
-        if observer_panic {
-            return Err(Error::new(ErrorKind::Panic, "proposal observer panicked")
-                .at_transition(transition_index));
-        }
-        if target_panic {
-            return Err(Error::new(ErrorKind::Panic, "target callback panicked")
-                .at_transition(transition_index));
-        }
-        if let Some(source) = target_failure {
-            return Err(Error {
-                kind: ErrorKind::Target,
-                message: "target evaluation failed".into(),
-                chain: None,
-                transition: Some(transition_index),
-                target_source: Some(source),
-            });
-        }
-        if numerical_failure {
-            return Err(Error::new(
-                ErrorKind::Numerical,
-                "kernel attempted a nonfinite target position",
-            )
-            .at_transition(transition_index));
-        }
-        if result.is_err() && recoverable_target_failures != 0 {
-            return Err(Error {
-                kind: ErrorKind::Target,
-                message: "current position is not evaluable".into(),
-                chain: None,
-                transition: Some(transition_index),
-                target_source: recoverable_target_failure,
-            });
-        }
-        let result = result
-            .map_err(Error::internal)
-            .map_err(|error| error.at_transition(transition_index))?;
-        let work =
-            work.ok_or_else(|| Error::new(ErrorKind::Internal, "missing transition work"))?;
-        let unrefined_fraction = unrefined_leaf_fraction(&work);
-        if use_persistent_cache {
-            *cached_state = Some(result.selected.clone());
-        }
-        position = result.selected.theta;
-        let internal = result.diagnostics;
-        let public = TransitionDiagnostics {
-            depth: internal.depth,
-            stop: map_stop(internal.stop),
-            target_evaluations: internal.target_evaluations,
-            direction_draws: internal.direction_draws,
-            uniform_draws: internal.uniform_draws,
-            leaves_attempted: internal.leaves_attempted,
-            leaves_built: internal.leaves_built,
-            recoverable_target_failures,
-            zero_density_evaluations: internal.zero_density_evaluations,
-            initial_hamiltonian: internal.initial_hamiltonian,
-            minimum_hamiltonian: internal.minimum_hamiltonian,
-            maximum_hamiltonian: internal.maximum_hamiltonian,
-            maximum_absolute_energy_error: internal.maximum_absolute_energy_error,
-            divergent: internal.divergent,
-            selected_refinement_level: internal.selected_refinement_level,
-            refinement_attempts: internal.refinement_attempts,
-            reverse_coarser_rejections: internal.reverse_coarser_rejections,
-            final_uturn_forward_dot: final_uturn.and_then(|value| value.0),
-            final_uturn_backward_dot: final_uturn.and_then(|value| value.1),
-            trajectory_macro_length: internal.leaves_built as f64 * step_before_transition,
-            step_size: step_before_transition,
-            position_changed: position != previous_position,
-            acceptance_statistic: acceptance,
-            orbit_states: internal.orbit_states,
-            selected_index: internal.selected_index,
-            initial_index: internal.initial_index,
-        };
-        let partition = if transition_index < config.discarded {
-            &mut telemetry.discarded
-        } else {
-            samples.extend_from_slice(&position);
-            &mut telemetry.retained
-        };
-        partition.add_transition(
-            dimension,
-            &work,
-            internal.uniform_draws,
-            recoverable_target_failures,
-            &internal,
-        )?;
-        telemetry.total.add_transition(
-            dimension,
-            &work,
-            internal.uniform_draws,
-            recoverable_target_failures,
-            &internal,
-        )?;
-        if transition_index < config.discarded
-            && let Some(schedule) = &schedule
-        {
-            let phase = schedule
-                .phase_at(transition_index)
-                .expect("discarded transition has a warmup phase");
-            let phase_work = match phase {
-                WarmupPhase::InitialFast => &mut telemetry.initial_fast,
-                WarmupPhase::SlowWindow => &mut telemetry.slow,
-                WarmupPhase::TerminalFast => &mut telemetry.terminal_fast,
-            };
-            phase_work.add_transition(
-                dimension,
-                &work,
-                internal.uniform_draws,
-                recoverable_target_failures,
-                &internal,
-            )?;
-        }
-        if telemetry.total.maximum_depth_stops > config.max_maximum_depth_stops {
-            return Err(Error::new(
-                ErrorKind::Unhealthy,
-                "maximum-depth stop limit was exceeded",
-            )
-            .at_transition(transition_index));
-        }
-        diagnostics.push(public);
-        if direct_boundary_hook
-            && transition_index < config.discarded
-            && (transition_index + 1 == config.discarded
-                || schedule.as_ref().is_some_and(|schedule| {
-                    schedule
-                        .windows
-                        .iter()
-                        .any(|window| window.end == transition_index + 1)
-                }))
-        {
-            // Version-one installation seam: retaining the same immutable
-            // operator is deliberately a no-op and consumes no RNG/work.
-            debug_assert!(fixed_mass.is_some());
-        }
-        if config.capture_acceptance {
-            telemetry.acceptance_values.push(acceptance);
-        }
-
-        if transition_index < config.discarded
-            && let Some(warmup) = &config.warmup
-        {
-            let window_index = schedule.as_ref().and_then(|schedule| {
-                schedule.windows.iter().position(|window| {
-                    transition_index >= window.start && transition_index < window.end
-                })
-            });
-            if warmup.adapt_mass && window_index.is_some() {
-                variance.update(&position);
-            }
-            let unrefined_fraction = match warmup.paper_adaptation.as_ref() {
-                Some(paper) if paper.exhausted_as_zero => unrefined_fraction.or(Some(0.0)),
-                _ => unrefined_fraction,
-            };
-            let step_statistic = if let Some(paper) = warmup.paper_adaptation.as_ref() {
-                paper_window.step_statistic(paper.step_statistic, unrefined_fraction)
-            } else {
-                acceptance
-            };
-            if warmup.adapt_step_size
-                && let (Some(dual), Some(statistic)) = (&mut dual_averaging, step_statistic)
-            {
-                active_tuning.step_size = warmup.floored_step(
-                    dual.update(statistic),
-                    warmup.dynamic_floor(search_step, stream_step),
-                );
-                if let Some(paper) = warmup.paper_adaptation.as_ref() {
-                    active_tuning.step_size = clamp_paper_step_within(
-                        active_tuning.step_size,
-                        config.tuning.step_size,
-                        paper.step_relative_bound,
-                    );
-                }
-            }
-            if warmup.adapt_mass
-                && let Some(window_index) = window_index
-                && schedule.as_ref().expect("warmup schedule").windows[window_index].end
-                    == transition_index + 1
-            {
-                let sample_count = variance.count;
-                let step_before = active_tuning.step_size;
-                let mut update = MetricUpdateTelemetry {
-                    window_index,
-                    transition: transition_index,
-                    sample_count,
-                    outcome: MetricUpdateOutcome::InsufficientSamples,
-                    mass_diagonal: None,
-                    mass_dense: None,
-                    shrinkage: 0.0,
-                    ridge: 0.0,
-                    condition_estimate: None,
-                    cholesky_failures: 0,
-                    step_before,
-                    step_after_search: None,
-                    mass_diagonal_before: Some(active_mass.diagonal.clone()),
-                    mass_dense_before: None,
-                    step_after_restart: None,
-                    restart_reference_multiplier: None,
-                    dual_averaging_after_restart: None,
-                };
-                if let Some(diagonal) = variance.regularized_mass(warmup.metric_regularization) {
-                    // Build and validate both candidates before changing either
-                    // half of the active metric pair.
-                    let candidate_mass = DiagonalMass::from_diagonal(diagonal)?;
-                    let candidate_inverse = self::inverse_mass(&candidate_mass)?;
-                    active_mass = candidate_mass;
-                    inverse_mass = candidate_inverse;
-                    update.outcome = MetricUpdateOutcome::Installed;
-                    update.mass_diagonal = Some(active_mass.diagonal.clone());
-
-                    let is_final = transition_index + 1 == config.discarded;
-                    if warmup.adapt_step_size && !is_final {
-                        if let Some(search) = &warmup.initial_step_search {
-                            let event_index = telemetry.step_searches.len();
-                            let (step, search_telemetry) = search_initial_step(
-                                target,
-                                &position,
-                                &active_mass,
-                                &inverse_mass,
-                                active_tuning,
-                                warmup.target_acceptance,
-                                search,
-                                search_event_seed(seed, event_index),
-                                control,
-                            )
-                            .map_err(|error| error.at_transition(transition_index))?;
-                            active_tuning.step_size = step;
-                            search_step = Some(step);
-                            update.step_after_search = Some(step);
-                            telemetry.step_searches.push(StepSearchEvent {
-                                reason: StepSearchReason::MetricUpdate { window_index },
-                                search: search_telemetry,
-                            });
-                        }
-                        dual_averaging = Some(DualAveraging::restart(
-                            active_tuning.step_size,
-                            step_adaptation_target(warmup),
-                            warmup.restart_reference_multiplier(),
-                        ));
-                        stream_step = active_tuning.step_size;
-                        update.step_after_restart = Some(active_tuning.step_size);
-                        update.restart_reference_multiplier =
-                            Some(warmup.restart_reference_multiplier());
-                        update.dual_averaging_after_restart =
-                            dual_averaging.as_ref().map(DualAveraging::telemetry);
-                    }
-                }
-                telemetry.metric_updates.push(update);
-                variance = DiagonalVariance::new(dimension);
-            }
-            if let Some(paper) = warmup.paper_adaptation.as_ref() {
-                let healthy = !internal.divergent
-                    && map_stop(internal.stop) != StopReason::RefinementExhausted;
-                paper_window.record_orbit(
-                    internal.maximum_hamiltonian - internal.minimum_hamiltonian,
-                    unrefined_fraction,
-                    healthy,
-                    paper.exclude_unhealthy_orbits,
-                );
-                let schedule = schedule.as_ref().expect("warmup schedule");
-                let is_final = transition_index + 1 == config.discarded;
-                let boundary = if transition_index + 1 == schedule.initial_fast_end {
-                    Some(None)
-                } else {
-                    window_index
-                        .filter(|index| schedule.windows[*index].end == transition_index + 1)
-                        .map(Some)
-                };
-                if let Some(window_index) = boundary
-                    && !is_final
-                {
-                    let step_before = active_tuning.step_size;
-                    let max_error_before = active_tuning.max_error;
-                    let (orbits, inflation_quantile, energy_range_quantile, candidate, outcome) =
-                        paper_window.candidate(paper, max_error_before);
-                    let metric_pending = paper.require_metric_update
-                        && warmup.adapt_mass
-                        && !telemetry.metric_updates.iter().any(|update| {
-                            update.outcome == MetricUpdateOutcome::Installed
-                                && update.transition < transition_index
-                        });
-                    let deferred =
-                        transition_index + 1 < paper.first_update_after || metric_pending;
-                    let (candidate, outcome) = if deferred && candidate.is_some() {
-                        (None, PaperAdaptationOutcome::Deferred)
-                    } else {
-                        (candidate, outcome)
-                    };
-                    let mut dual_averaging_restarted = false;
-                    if let Some(max_error) = candidate {
-                        active_tuning.max_error = max_error;
-                        if warmup.adapt_step_size
-                            && paper.restart_policy
-                                == PaperRestartPolicy::RestartOnLocalErrorInstall
-                        {
-                            dual_averaging = Some(DualAveraging::restart(
-                                active_tuning.step_size,
-                                paper.unrefined_fraction_target,
-                                warmup.restart_reference_multiplier(),
-                            ));
-                            dual_averaging_restarted = true;
-                        }
-                    }
-                    telemetry
-                        .paper_adaptation_updates
-                        .push(PaperAdaptationUpdate {
-                            transition: transition_index,
-                            window_index,
-                            orbits,
-                            inflation_quantile,
-                            energy_range_quantile,
-                            max_error_before,
-                            max_error_after: active_tuning.max_error,
-                            unrefined_fraction_mean: paper_window.unrefined_mean(),
-                            step_before,
-                            step_after: active_tuning.step_size,
-                            outcome,
-                            step_statistic,
-                            dual_averaging_restarted,
-                            transitions_without_statistic: paper_window.without_statistic,
-                        });
-                    paper_window.reset();
-                    if window_index.is_none() {
-                        // End of the initial fast phase: the cumulative
-                        // statistic starts afresh from the first slow window.
-                        paper_window.reset_cumulative();
-                    }
-                }
-            }
-            if transition_index + 1 == config.discarded
-                && let Some(dual) = &dual_averaging
-            {
-                active_tuning.step_size = warmup.floored_step(
-                    dual.final_step(),
-                    warmup.dynamic_floor(search_step, stream_step),
-                );
-                if let Some(paper) = warmup.paper_adaptation.as_ref() {
-                    active_tuning.step_size = clamp_paper_step_within(
-                        active_tuning.step_size,
-                        config.tuning.step_size,
-                        paper.step_relative_bound,
-                    );
-                }
-            }
-            if warmup
-                .warmup_telemetry_checkpoints
-                .binary_search(&transition_index)
-                .is_ok()
-            {
-                let schedule = schedule.as_ref().expect("warmup schedule");
-                telemetry
-                    .warmup_checkpoints
-                    .push(WarmupCheckpointTelemetry {
-                        transition: transition_index,
-                        phase: schedule
-                            .phase_at(transition_index)
-                            .expect("warmup transition has phase"),
-                        window_index,
-                        step_before: step_before_transition,
-                        step_after: active_tuning.step_size,
-                        current_coarse_endpoint: current_summary,
-                        accepted_trajectory: accepted_summary,
-                        dual_averaging: dual_averaging.as_ref().map(DualAveraging::telemetry),
-                        target_calls: internal.target_evaluations,
-                        divergent: internal.divergent,
-                        refinement_attempts: internal.refinement_attempts,
-                        reverse_coarser_rejections: internal.reverse_coarser_rejections,
-                        unrefined_fraction,
-                        max_error_after: active_tuning.max_error,
-                    });
-            }
-        }
-    }
-    control.check().map_err(control_error)?;
-
-    Ok(ChainOutput {
-        samples,
-        retained: config.retained,
+    let mut run = ChainRun::start(
+        target,
         dimension,
-        diagnostics,
-        telemetry,
-        metadata: RunMetadata {
-            algorithm_revision: ALGORITHM_REVISION,
-            crate_version: env!("CARGO_PKG_VERSION"),
-            rng_implementation: "rand::rngs::SmallRng + rand_distr::StandardNormal (Cargo.lock)",
-            seed_derivation: "splitmix64(base_seed + chain_index)",
-            base_seed: config.seed,
-            effective_seed: seed,
-            dimension,
-            discarded: config.discarded,
-            retained: config.retained,
-            maximum_depth_stop_limit: config.max_maximum_depth_stops,
-            step_size: active_tuning.step_size,
-            min_micro_steps: active_tuning.min_micro_steps,
-            max_refinement_levels: active_tuning.max_refinement_levels,
-            max_error: active_tuning.max_error,
-            divergence_threshold: active_tuning.divergence_threshold,
-            max_depth: active_tuning.max_depth,
-            initial_position: initial_position.to_vec(),
-            thread_count,
-            mass_diagonal: active_mass.diagonal.clone(),
-            initial_mass_diagonal: initial_mass,
-            warmup: config.warmup.clone(),
-            warmup_schedule: schedule,
-            initial_step_search,
-            tuning: active_tuning,
-            initial_tuning: config.tuning,
-            limits: config.limits.clone(),
-            effective_max_target_evaluations: config
-                .research_target_evaluation_limit
-                .map_or(config.limits.max_target_evaluations, |limit| {
-                    limit.max_target_evaluations
-                }),
-            target_evaluation_limit_provenance: target_evaluation_limit_provenance(config),
-        },
-    })
+        initial_position,
+        mass,
+        fixed_mass,
+        direct_boundary_hook,
+        config,
+        seed,
+        thread_count,
+        control,
+        shared_initial_step_search,
+        persistent,
+    )?;
+    run.advance(run.transitions)?;
+    run.finish()
 }
 
 fn target_evaluation_limit_provenance(config: &RunConfig) -> TargetEvaluationLimitProvenance {
@@ -7512,6 +7996,7 @@ pub fn sample_dense_with_control<T: Target>(
         return sample_dense_fixed(target, initial_position, mass, config, run_control);
     };
     reject_paper_adaptation(config, "dense adaptive")?;
+    reject_chain_rescue(config, "dense adaptive")?;
     if config.discarded == 0 {
         return Err(Error::configuration(
             "dense warmup requires at least one discarded transition",
@@ -7844,6 +8329,7 @@ pub fn sample_chains_dense_with_control<T: Target>(
         .is_some_and(|warmup| warmup.adapt_mass)
     {
         reject_paper_adaptation(config, "dense adaptive")?;
+        reject_chain_rescue(config, "dense adaptive")?;
     }
     if initial_positions.is_empty() || initial_positions.len() > config.limits.max_chains {
         return Err(Error::resource("chain count exceeds its resource limit"));
@@ -7952,7 +8438,7 @@ pub fn sample_with_control<T: Target>(
     .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "sampling worker panicked")))
 }
 
-fn sample_operator_fixed_with_control<T: Target, M: MassOperator>(
+fn sample_operator_fixed_with_control<T: Target, M: MassOperator + Sync>(
     target: &T,
     initial_position: &[f64],
     mass: &M,
@@ -8328,6 +8814,7 @@ fn validate_structured_refresh<T: Target>(
         .as_ref()
         .ok_or_else(|| Error::configuration("structured metric refresh requires warmup"))?;
     reject_paper_adaptation(config, "structured metric refresh")?;
+    reject_chain_rescue(config, "structured metric refresh")?;
     if !warmup.adapt_mass {
         return Err(Error::configuration(
             "structured metric refresh requires mass adaptation to be enabled",
@@ -8953,6 +9440,7 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
         .is_some_and(|warmup| warmup.adapt_mass)
     {
         reject_paper_adaptation(config, "dense adaptive")?;
+        reject_chain_rescue(config, "dense adaptive")?;
     }
     if budget.started() != 0 {
         return Err(Error::configuration(
@@ -9107,6 +9595,31 @@ fn sample_chains_validated<T: Target>(
     } else {
         None
     };
+    if let Some(rescue) = config
+        .warmup
+        .as_ref()
+        .and_then(|warmup| warmup.chain_rescue.as_ref())
+        && initial_positions.len() >= 2
+    {
+        let controls: Vec<ExecutionControl<'_>> = (0..initial_positions.len())
+            .map(|chain| ExecutionControl {
+                public: run_control,
+                failed_chain: Some(&failed_chain),
+                chain,
+            })
+            .collect();
+        return sample_chains_rescued(
+            target,
+            initial_positions,
+            mass,
+            config,
+            threads,
+            &controls,
+            dimension,
+            shared_initial_step_search.as_ref(),
+            rescue,
+        );
+    }
     let execute = |chain: usize, position: &Vec<f64>| {
         let control = ExecutionControl {
             public: run_control,
@@ -9163,6 +9676,399 @@ fn sample_chains_validated<T: Target>(
     }
     Ok(MultiChainOutput {
         chains,
+        base_seed: config.seed,
+        algorithm_revision: ALGORITHM_REVISION,
+    })
+}
+
+/// One chain of the chain-rescue driver between segments.
+struct RescueSlot<'a, T: Target> {
+    run: Option<ChainRun<'a, T>>,
+    error: Option<Error>,
+}
+
+/// Sorted-sample quantile with linear interpolation; `sorted` is nonempty.
+fn sorted_quantile(sorted: &[f64], probability: f64) -> f64 {
+    let n = sorted.len();
+    if n == 1 {
+        return sorted[0];
+    }
+    let rank = probability * (n - 1) as f64;
+    let low = rank.floor() as usize;
+    let high = rank.ceil() as usize;
+    let weight = rank - low as f64;
+    sorted[low] + weight * (sorted[high] - sorted[low])
+}
+
+/// Median and interquartile range of `values` (`None` when empty).
+fn median_and_iqr(values: &[f64]) -> Option<(f64, f64)> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    Some((
+        sorted_quantile(&sorted, 0.5),
+        sorted_quantile(&sorted, 0.75) - sorted_quantile(&sorted, 0.25),
+    ))
+}
+
+fn median_of(values: &[f64]) -> f64 {
+    median_and_iqr(values).map_or(f64::NAN, |(median, _)| median)
+}
+
+/// State copied from the source chain to a rescued chain.
+struct RescueSourceState {
+    positions: Vec<Vec<f64>>,
+    active_mass: DiagonalMass,
+    inverse_mass: Vec<f64>,
+    active_tuning: KernelTuning,
+    dual_averaging: Option<DualAveraging>,
+    stream_step: f64,
+    search_step: Option<f64>,
+}
+
+/// The boundary action of [`ChainRescueConfig`] on every started chain.
+fn rescue_boundary<T: Target>(
+    slots: &mut [RescueSlot<'_, T>],
+    window_index: usize,
+    transition: usize,
+    warmup: &WarmupConfig,
+    rescue: &ChainRescueConfig,
+) -> Result<(), Error> {
+    let chains = slots.len();
+    // Take every chain's window record; the buffers restart empty.
+    let mut log_densities = Vec::with_capacity(chains);
+    let mut positions = Vec::with_capacity(chains);
+    let mut variances = Vec::with_capacity(chains);
+    for slot in slots.iter_mut() {
+        let run = slot
+            .run
+            .as_mut()
+            .ok_or_else(|| Error::new(ErrorKind::Internal, "rescue boundary before start"))?;
+        let record = run
+            .rescue_record
+            .as_mut()
+            .ok_or_else(|| Error::new(ErrorKind::Internal, "rescue record missing"))?;
+        log_densities.push(std::mem::take(&mut record.log_densities));
+        positions.push(std::mem::take(&mut record.positions));
+        variances.push(record.last_variance.take());
+    }
+    let steps: Vec<f64> = slots
+        .iter()
+        .map(|slot| slot.run.as_ref().expect("started").active_tuning.step_size)
+        .collect();
+    let scores: Vec<Option<(f64, f64)>> = log_densities
+        .iter()
+        .map(|values| median_and_iqr(values))
+        .collect();
+    let record_all = |slots: &mut [RescueSlot<'_, T>],
+                      outcome: &dyn Fn(usize) -> ChainRescueOutcome| {
+        for (chain, slot) in slots.iter_mut().enumerate() {
+            let run = slot.run.as_mut().expect("started");
+            run.telemetry.chain_rescues.push(ChainRescueUpdate {
+                window_index,
+                transition,
+                chain,
+                window_transitions: log_densities[chain].len(),
+                step_before: steps[chain],
+                median_log_density: scores[chain].map(|score| score.0),
+                log_density_iqr: scores[chain].map(|score| score.1),
+                outcome: outcome(chain),
+            });
+        }
+    };
+    if log_densities
+        .iter()
+        .any(|values| values.len() < rescue.minimum_window_transitions)
+    {
+        record_all(slots, &|_| {
+            ChainRescueOutcome::Skipped(ChainRescueSkip::ShortWindow)
+        });
+        return Ok(());
+    }
+    match rescue.mode {
+        ChainRescueMode::RestartFromBest => {
+            let step_median = median_of(&steps);
+            let medians: Vec<f64> = scores
+                .iter()
+                .map(|score| score.expect("scored").0)
+                .collect();
+            let iqrs: Vec<f64> = scores
+                .iter()
+                .map(|score| score.expect("scored").1)
+                .collect();
+            let reference = median_of(&medians);
+            let spread = median_of(&iqrs);
+            let criteria: Vec<Option<ChainRescueCriterion>> = (0..chains)
+                .map(|chain| {
+                    if steps[chain] < rescue.step_ratio * step_median {
+                        Some(ChainRescueCriterion::Step)
+                    } else if reference - medians[chain] > rescue.log_density_iqr_factor * spread {
+                        Some(ChainRescueCriterion::LogDensity)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let source = (0..chains)
+                .filter(|chain| criteria[*chain].is_none())
+                .max_by(|a, b| {
+                    steps[*a]
+                        .total_cmp(&steps[*b])
+                        .then(medians[*a].total_cmp(&medians[*b]))
+                });
+            let Some(source) = source else {
+                record_all(slots, &|_| {
+                    ChainRescueOutcome::Skipped(ChainRescueSkip::NoSource)
+                });
+                return Ok(());
+            };
+            if criteria.iter().all(Option::is_none) {
+                record_all(slots, &|_| ChainRescueOutcome::Kept);
+                return Ok(());
+            }
+            let source_state = {
+                let run = slots[source].run.as_ref().expect("started");
+                RescueSourceState {
+                    positions: std::mem::take(&mut positions[source]),
+                    active_mass: run.active_mass.clone(),
+                    inverse_mass: run.inverse_mass.clone(),
+                    active_tuning: run.active_tuning,
+                    dual_averaging: run.dual_averaging.clone(),
+                    stream_step: run.stream_step,
+                    search_step: run.search_step,
+                }
+            };
+            let mut outcomes = Vec::with_capacity(chains);
+            for (chain, slot) in slots.iter_mut().enumerate() {
+                let Some(criterion) = criteria[chain] else {
+                    outcomes.push(ChainRescueOutcome::Kept);
+                    continue;
+                };
+                let run = slot.run.as_mut().expect("started");
+                let (rng, cached_state) = run.rng_slot.parts();
+                let source_position = rng.random_range(0..source_state.positions.len());
+                run.position
+                    .copy_from_slice(&source_state.positions[source_position]);
+                *cached_state = None;
+                run.active_mass = source_state.active_mass.clone();
+                run.inverse_mass = source_state.inverse_mass.clone();
+                run.active_tuning = source_state.active_tuning;
+                run.dual_averaging = source_state.dual_averaging.clone();
+                run.stream_step = source_state.stream_step;
+                run.search_step = source_state.search_step;
+                outcomes.push(ChainRescueOutcome::Restarted {
+                    source,
+                    criterion,
+                    source_position,
+                    step_after: source_state.active_tuning.step_size,
+                });
+            }
+            record_all(slots, &|chain| outcomes[chain].clone());
+        }
+        ChainRescueMode::PoolAtBoundaries => {
+            let mut pooled: Option<DiagonalVariance> = None;
+            let mut pooled_chains = 0usize;
+            if warmup.adapt_mass {
+                for variance in variances.iter().flatten().filter(|v| v.count > 0) {
+                    pooled_chains += 1;
+                    pooled = Some(match pooled {
+                        None => variance.clone(),
+                        Some(left) => merge_variance(&left, variance),
+                    });
+                }
+                if pooled_chains < 2 {
+                    record_all(slots, &|_| {
+                        ChainRescueOutcome::Skipped(ChainRescueSkip::NothingToPool)
+                    });
+                    return Ok(());
+                }
+            }
+            let pooled_mass = match pooled
+                .as_ref()
+                .and_then(|variance| variance.regularized_mass(warmup.metric_regularization))
+            {
+                Some(diagonal) => {
+                    let mass = DiagonalMass::from_diagonal(diagonal)?;
+                    let inverse = inverse_mass(&mass)?;
+                    Some((mass, inverse))
+                }
+                None => None,
+            };
+            let pooled_sample_count = pooled.as_ref().map_or(0, |variance| variance.count);
+            let step = median_of(&steps);
+            let is_final = transition + 1 == warmup_discarded(slots);
+            for slot in slots.iter_mut() {
+                let run = slot.run.as_mut().expect("started");
+                if let Some((mass, inverse)) = &pooled_mass {
+                    run.active_mass = mass.clone();
+                    run.inverse_mass = inverse.clone();
+                }
+                run.active_tuning.step_size = step;
+                if warmup.adapt_step_size && !is_final {
+                    run.dual_averaging = Some(DualAveraging::restart(
+                        step,
+                        step_adaptation_target(warmup),
+                        warmup.restart_reference_multiplier(),
+                    ));
+                    run.stream_step = step;
+                }
+            }
+            record_all(slots, &|_| ChainRescueOutcome::Pooled {
+                step_after: step,
+                pooled_sample_count,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn warmup_discarded<T: Target>(slots: &[RescueSlot<'_, T>]) -> usize {
+    slots
+        .first()
+        .and_then(|slot| slot.run.as_ref())
+        .map_or(0, |run| run.config.discarded)
+}
+
+/// Exact merge of two Welford accumulators (Chan, Golub and LeVeque).
+fn merge_variance(left: &DiagonalVariance, right: &DiagonalVariance) -> DiagonalVariance {
+    if left.count == 0 {
+        return right.clone();
+    }
+    if right.count == 0 {
+        return left.clone();
+    }
+    let na = left.count as f64;
+    let nb = right.count as f64;
+    let n = na + nb;
+    let mut merged = DiagonalVariance::new(left.mean.len());
+    merged.count = left.count + right.count;
+    for i in 0..left.mean.len() {
+        let delta = right.mean[i] - left.mean[i];
+        merged.mean[i] = left.mean[i] + delta * nb / n;
+        merged.m2[i] = left.m2[i] + right.m2[i] + delta * delta * na * nb / n;
+    }
+    merged
+}
+
+/// The multi-chain diagonal driver with [`ChainRescueConfig`]: the chains
+/// advance window by window on the pool, meet at every slow-window
+/// boundary, and finish together.
+#[allow(clippy::too_many_arguments)]
+fn sample_chains_rescued<'a, T: Target>(
+    target: &'a T,
+    initial_positions: &'a [Vec<f64>],
+    mass: &DiagonalMass,
+    config: &'a RunConfig,
+    threads: usize,
+    controls: &'a [ExecutionControl<'a>],
+    dimension: usize,
+    shared_initial_step_search: Option<&(f64, InitialStepSearchTelemetry)>,
+    rescue: &ChainRescueConfig,
+) -> Result<MultiChainOutput, Error> {
+    let warmup = config
+        .warmup
+        .as_ref()
+        .ok_or_else(|| Error::configuration("chain rescue requires warmup"))?;
+    let schedule = warmup_schedule(config.discarded, &warmup.windows)?;
+    let transitions = config
+        .discarded
+        .checked_add(config.retained)
+        .ok_or_else(Error::overflow)?;
+    let chains = initial_positions.len();
+    let mut slots: Vec<RescueSlot<'a, T>> = (0..chains)
+        .map(|_| RescueSlot {
+            run: None,
+            error: None,
+        })
+        .collect();
+    let pool = if threads == 1 {
+        None
+    } else {
+        Some(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .map_err(|_| Error::resource("could not create bounded Rayon pool"))?,
+        )
+    };
+    let segment = |slot: &mut RescueSlot<'a, T>, chain: usize, end: usize| {
+        if slot.error.is_some() {
+            return;
+        }
+        let control = &controls[chain];
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _context_kinetic =
+                ContextKineticScope::new(control.public.proposal_observations.is_some());
+            if slot.run.is_none() {
+                control.check().map_err(control_error)?;
+                slot.run = Some(ChainRun::start(
+                    target,
+                    dimension,
+                    &initial_positions[chain],
+                    mass,
+                    None,
+                    false,
+                    config,
+                    chain_seed(config.seed, chain),
+                    threads,
+                    control,
+                    shared_initial_step_search,
+                    None,
+                )?);
+            }
+            slot.run.as_mut().expect("started").advance(end)
+        }))
+        .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "Rayon worker panicked")))
+        .map_err(|error| error.at_chain(chain));
+        if let Err(error) = result {
+            if let Some(failed) = control.failed_chain {
+                failed.fetch_min(chain, Ordering::AcqRel);
+            }
+            slot.error = Some(error);
+        }
+    };
+    let run_segment = |slots: &mut Vec<RescueSlot<'a, T>>, end: usize| -> Result<(), Error> {
+        match &pool {
+            None => slots
+                .iter_mut()
+                .enumerate()
+                .for_each(|(chain, slot)| segment(slot, chain, end)),
+            Some(pool) => catch_unwind(AssertUnwindSafe(|| {
+                pool.install(|| {
+                    slots
+                        .par_iter_mut()
+                        .enumerate()
+                        .for_each(|(chain, slot)| segment(slot, chain, end));
+                })
+            }))
+            .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?,
+        }
+        for slot in slots.iter_mut() {
+            if let Some(error) = slot.error.take() {
+                return Err(error);
+            }
+        }
+        Ok(())
+    };
+    for (window_index, window) in schedule.windows.iter().enumerate() {
+        if window.is_empty() || window.end > config.discarded {
+            continue;
+        }
+        run_segment(&mut slots, window.end)?;
+        rescue_boundary(&mut slots, window_index, window.end - 1, warmup, rescue)?;
+    }
+    run_segment(&mut slots, transitions)?;
+    let mut outputs = Vec::with_capacity(chains);
+    for (chain, slot) in slots.into_iter().enumerate() {
+        let run = slot
+            .run
+            .ok_or_else(|| Error::new(ErrorKind::Internal, "chain never started"))?;
+        outputs.push(run.finish().map_err(|error| error.at_chain(chain))?);
+    }
+    Ok(MultiChainOutput {
+        chains: outputs,
         base_seed: config.seed,
         algorithm_revision: ALGORITHM_REVISION,
     })
