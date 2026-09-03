@@ -244,10 +244,14 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   precision path block depends on global parameters best estimated during
   warmup. [WP4B-REAL-TARGET-PATH-METRIC-V1, WP12-SSPD11-CONFIRMATION-V1]
 - **Python package `owalnuts` 0.2.0** (`integrations/python`, unpublished):
-  `init="uniform"` start rule, sampler-matching defaults (depth 10, `h = 0.5`),
-  `SampleResult.summary()` backed by `owalnuts::diagnostics`, plus the
-  `from_cfunc` / `from_pymc(gil_free=True)` GIL-free transport and the
-  structured-metric refresh callback. See its README.
+  every run builds an `owalnuts::sampler::Sampler`, so the package inherits
+  the sampler defaults (see Fixed); `owalnuts.DEFAULTS` reports them
+  read-only from the Rust constants; `init="uniform"` start rule
+  (`Init::uniform`), `Tuning(u_turn_rule=, exhaustion_rule=)` and
+  `Adaptation(metric_regularization=)` overrides, `SampleResult.summary()`
+  backed by `owalnuts::diagnostics`, plus the `from_cfunc` /
+  `from_pymc(gil_free=True)` GIL-free transport and the structured-metric
+  refresh callback. See its README.
 - `examples/kernel_bench.rs` (kernel hot-path microbenchmark) and
   `tests/kernel_fingerprint.rs` (bit-exact run fingerprints in both build
   profiles).
@@ -280,9 +284,8 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   and the kernel fingerprints are unchanged, and the old behaviour is
   `Tuning::new().kernel_options(KernelOptions::default())` with
   `Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DiagonalMetricRegularization::TowardUnit))`.
-  `tests/sampler_api.rs` mirrors the new defaults. The Python package
-  configures the `walnutpie` facade directly and keeps the frozen
-  `Endpoints` / `TowardUnit` rules in 0.2.0 (documented there).
+  `tests/sampler_api.rs` mirrors the new defaults, and the Python package
+  inherits them through `Sampler` (see Fixed).
 - **`sampler::Tuning::default()` refinement levels 4 -> 8**
   (`STUDIES/funnel_defaults_v1`, [WP28-FUNNEL-DEFAULTS-V1]). At four
   levels the sampler defaults (adapted diagonal metric, dual averaging,
@@ -371,6 +374,34 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Fixed
 
+- **The Python package goes through `owalnuts::sampler` and inherits its
+  defaults.** `integrations/python` built `KernelTuning` / `WarmupConfig` on
+  the `walnutpie` facade directly and restated the sampler defaults, so it
+  silently missed the ones changed during 0.2.0 (depth 10 and eight
+  refinement levels were copied by hand; `DEFAULT_U_TURN_RULE`,
+  `DEFAULT_METRIC_REGULARIZATION`, `DEFAULT_WARMUP_EXHAUSTION`, the cached
+  initial evaluation and the worst-case admission were not). The PyO3
+  `sample` / `preflight` paths now construct `Sampler` with `Tuning`,
+  `Adaptation`, `Metric`, `Limits` and `Init` from the Python arguments and
+  send only what the caller set, `owalnuts.DEFAULTS` reads the defaults
+  from the Rust values, and a test checks that `owalnuts.sample` with
+  explicit arguments equal to `DEFAULTS` reproduces a Rust `Sampler` run bit
+  for bit on a 3-D Gaussian. Two consequences on the Python surface: an
+  explicit `max_target_evaluations` is also the admission ceiling (the
+  package used to admit budgeted runs against a 2^50 dummy ceiling), and a
+  structured-metric run at the defaults must keep its worst case under the
+  hard 1e9 research ceiling, as it always had to.
+- **`Sampler` admits structured metrics with their worst case under the
+  `research` feature.** The structured facade paths have no budgeted
+  admission variant, so `Limits::admit_worst_case` (the default) left them
+  rejected at the conservative 113M ceiling whenever the sampler defaults
+  exceeded it. With `features = ["research"]` the sampler now raises the
+  `RunConfig` admission ceiling to the budget (capped at the research
+  maximum) when, and only when, the worst case exceeds the conservative
+  ceiling; runs it already admitted are configured exactly as before, and
+  without the feature the facade's conservative admission still applies.
+  `tests/sampler_api.rs` covers the admission and the rejection under
+  `Limits::admit_conservative`.
 - **BridgeStan targets no longer abort on `NaN`/`+inf` log densities.**
   `owalnuts-bridgestan` maps a `NaN`/`+inf` log density and a finite log
   density with a nonfinite gradient to the recoverable zero-density path

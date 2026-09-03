@@ -2,7 +2,7 @@
 
 oWALNUTS — the within-orbit adaptive leapfrog No-U-Turn sampler — for Python
 callables, JAX, PyTorch and PyMC models. The extension is a thin PyO3 wrapper
-over the public Rust `walnutpie` facade (kernel revision is exposed as
+over the public Rust `owalnuts::sampler` API (kernel revision is exposed as
 `owalnuts.ALGORITHM_REVISION`); autodiff comes from the framework you already
 use.
 
@@ -45,25 +45,38 @@ log density and gradient are finite, deterministic given `seed`
 (`owalnuts.uniform_starts(target, dim, chains=4, seed=1)` returns the
 starts without sampling).
 
-Defaults follow `owalnuts::sampler::Tuning::default()`: macro step
-`h = 0.5`, maximum tree depth 10 (Stan's default; the 0.1 package used 8,
-chosen by `STUDIES/adaptation_parity_v1`), eight refinement levels
-(`STUDIES/funnel_defaults_v1`: four halve the funnel's tail mass),
-`delta = 1`; dual-averaging warmup at target acceptance 0.8 with a diagonal
-metric. Pass `tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the
-0.1 package's behaviour. One documented divergence: the package configures
-the `walnutpie` facade directly, so it keeps the frozen kernel rules
-(`UTurnRule::Endpoints`, `DiagonalMetricRegularization::TowardUnit`, the
-two-sided warmup exhaustion rule) where the Rust `sampler` defaults since
-the post-WP31 default change are `MomentumSum`, Stan's metric prior and
-`AcceptUnlessDivergent` in warmup (`STUDIES/joint_default_v1`,
-`STUDIES/posteriordb_bench_v5`); the next extension build follows them. At depth 10 the exact worst-case evaluation count
-of four chains x a few thousand transitions exceeds the facade's
-conservative 113M preflight ceiling, so `sample` admits such runs with
-their exact worst case by default (`admit_worst_case=True`, the Rust
-`Limits::admit_worst_case`); `max_target_evaluations=N` is an exact runtime
-ceiling instead, and `admit_worst_case=False` restores the conservative
-admission.
+Defaults mirror `owalnuts::sampler`: every `sample` call builds a Rust
+`Sampler` (`Tuning`, `Adaptation`, `Metric`, `Limits`, `Init`) from its
+arguments and sends only what you set, so anything you leave alone is the
+sampler default — macro step `h = 0.5`, maximum tree depth 10 (Stan's
+default; the 0.1 package used 8, chosen by `STUDIES/adaptation_parity_v1`),
+eight refinement levels (`STUDIES/funnel_defaults_v1`: four halve the
+funnel's tail mass), `delta = 1`, the momentum-sum no-U-turn rule, Stan's
+diagonal-metric prior and the one-sided warmup exhaustion rule of the
+post-WP31 default change (`STUDIES/joint_default_v1`,
+`STUDIES/posteriordb_bench_v5`), the cached initial evaluation, dual
+averaging toward acceptance 0.8 with an adapted diagonal metric, and
+worst-case admission. `owalnuts.DEFAULTS` is that set, read from the Rust
+constants at import (read-only); `Tuning()` and `Adaptation()` default from
+it, and the test suite checks that `sample` with explicit arguments equal to
+`DEFAULTS` reproduces a Rust `Sampler` run bit for bit. Pass
+`tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the 0.1 package's
+tuning, `Tuning(u_turn_rule="endpoints")` with
+`Adaptation(metric_regularization="toward_unit")` for the frozen `v10`
+kernel rules, and `cache_initial_evaluation=False` for the 0.1 target-call
+accounting.
+
+At depth 10 the exact worst-case evaluation count of four chains x a few
+thousand transitions exceeds the facade's conservative 113M preflight
+ceiling, so `sample` admits such runs with their exact worst case by
+default (`admit_worst_case=True`, the Rust `Limits::admit_worst_case`);
+`max_target_evaluations=N` is an exact runtime ceiling and the admission
+ceiling, and `admit_worst_case=False` restores the conservative admission.
+Structured metrics have no budgeted facade path: their ceiling is raised
+through the crate's `research` feature (which the extension enables) up to
+the hard 1e9 research maximum, so at the defaults a structured-metric run
+must keep its worst case under 1e9 (about 2,500 transitions in total; check
+with `owalnuts.preflight(dim, mass=...)`) or lower `max_depth`.
 
 Adapters produce that callable from autodiff frameworks:
 

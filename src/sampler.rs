@@ -777,6 +777,49 @@ impl Sampler {
         Ok(config)
     }
 
+    /// The structured paths have no budgeted admission variant: they are
+    /// admitted against the `RunConfig` ceiling, which is the conservative
+    /// `walnutpie` default unless the crate's `research` feature raises it.
+    /// With that feature, when the exact worst case exceeds the conservative
+    /// ceiling and a budget is set (an explicit
+    /// [`Limits::max_target_evaluations`] or the worst case itself under
+    /// [`Limits::admit_worst_case`]), that budget, capped at the research
+    /// maximum, becomes the admission ceiling, so the sampler defaults
+    /// (depth 10, eight refinement levels) are admitted on a structured
+    /// metric as they are on the diagonal and dense paths. Runs the
+    /// conservative ceiling already admits are configured exactly as before,
+    /// and without the feature the facade's conservative admission applies
+    /// unchanged.
+    fn admit_structured(
+        &self,
+        config: RunConfig,
+        budget: Option<NonZeroUsize>,
+        chains: NonZeroUsize,
+    ) -> Result<RunConfig, Error> {
+        #[cfg(feature = "research")]
+        {
+            use crate::walnutpie::{
+                CONSERVATIVE_MAX_TARGET_EVALUATIONS, RESEARCH_MAX_TARGET_EVALUATIONS,
+                ResearchTargetEvaluationLimit,
+            };
+            if let (Metric::Structured(_) | Metric::StructuredRefresh { .. }, Some(budget)) =
+                (&self.metric, budget)
+            {
+                let worst = config.worst_case_target_evaluations(chains)?;
+                let ceiling = budget.get().min(RESEARCH_MAX_TARGET_EVALUATIONS);
+                if worst > CONSERVATIVE_MAX_TARGET_EVALUATIONS && worst <= ceiling {
+                    let limit = ResearchTargetEvaluationLimit::new(
+                        NonZeroUsize::new(ceiling).expect("ceiling above the conservative limit"),
+                    )?;
+                    return Ok(config.with_research_target_evaluation_limit(limit));
+                }
+            }
+        }
+        #[cfg(not(feature = "research"))]
+        let _ = (budget, chains);
+        Ok(config)
+    }
+
     fn starts(&self, starts: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Error> {
         match self.chains {
             None => Ok(starts.to_vec()),
@@ -852,6 +895,7 @@ impl Sampler {
             (None, false) => None,
         };
         let budget = budget_size.map(TargetEvaluationBudget::new);
+        let config = self.admit_structured(config, budget_size, chains)?;
 
         let output = match &self.metric {
             Metric::Identity => {

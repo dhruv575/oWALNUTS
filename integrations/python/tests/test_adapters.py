@@ -158,7 +158,16 @@ def test_structured_mass_matches_diagonal_for_zero_offdiagonal():
     diag = np.array([4.0, 2.0, 1.0])
     target = lambda q: (-0.5 * float(q @ (diag * q)), -diag * q)
     mass = owalnuts.tridiagonal_precision_mass(diag, np.zeros(2))
-    r = owalnuts.sample(target, 3, mass=mass, warmup=200, draws=800, seed=93_002,
+    # Structured metrics are admitted against the RunConfig ceiling (no
+    # budgeted facade variant): at the sampler defaults the exact worst case
+    # of 2 x 1,000 transitions (0.78e9) is above the conservative 113M
+    # ceiling, which `Limits::admit_worst_case` raises under the `research`
+    # feature, and below the hard 1e9 research maximum, which nothing can
+    # raise (4 x 1,000 transitions, 1.56e9, cannot be admitted at depth 10).
+    report = owalnuts.preflight(3, chains=2, warmup=200, draws=800, mass=mass,
+                                adaptation=owalnuts.Adaptation(adapt_mass=False))
+    assert 113_000_000 < report["worst_case_target_evaluations"] <= 10**9
+    r = owalnuts.sample(target, 3, mass=mass, chains=2, warmup=200, draws=800, seed=93_002,
                         adaptation=owalnuts.Adaptation(adapt_mass=False))
     np.testing.assert_allclose(r.samples.var((0, 1)), 1 / diag, rtol=0.2)
     retained_depth = r.depth[:, 200:]
@@ -172,7 +181,7 @@ def test_preflight_reports_zero_callbacks():
 
 
 def test_defaults_admit_worst_case_above_conservative_ceiling():
-    # Four chains x 3,000 transitions at the sampler defaults (depth 10, four
+    # Four chains x 3,000 transitions at the sampler defaults (depth 10, eight
     # refinement levels) exceed the conservative 113M preflight ceiling; the
     # default admit_worst_case=True admits the run with its exact worst case,
     # as Rust's Limits::admit_worst_case does, and an explicit budget works
@@ -182,10 +191,16 @@ def test_defaults_admit_worst_case_above_conservative_ceiling():
     assert report["admission_ceiling"] >= report["worst_case_target_evaluations"]
     with pytest.raises(RuntimeError, match="resource limit"):
         owalnuts.preflight(10, chains=4, warmup=1000, draws=2000, admit_worst_case=False)
-    budgeted = owalnuts.preflight(10, chains=4, warmup=1000, draws=2000, max_target_evaluations=10**9)
+    # An explicit budget is also the admission ceiling (Limits::max_target_evaluations).
+    budgeted = owalnuts.preflight(10, chains=4, warmup=1000, draws=2000, max_target_evaluations=5 * 10**9)
     assert budgeted["worst_case_target_evaluations"] == report["worst_case_target_evaluations"]
-    small = owalnuts.preflight(3, chains=4, warmup=100, draws=100, tuning=owalnuts.Tuning(step_size=0.1, max_depth=8))
+    assert budgeted["admission_ceiling"] == 5 * 10**9
+    with pytest.raises(RuntimeError, match="resource limit"):
+        owalnuts.preflight(10, chains=4, warmup=1000, draws=2000, max_target_evaluations=10**9)
+    small = owalnuts.preflight(3, chains=4, warmup=100, draws=100, tuning=owalnuts.Tuning(step_size=0.1, max_depth=8),
+                               admit_worst_case=False)
     assert small["admission_ceiling"] == 113_000_000
+    assert small["worst_case_target_evaluations"] <= 113_000_000
 
 
 def test_from_cfunc_numba_gaussian_parallel_chains():
@@ -371,10 +386,72 @@ def test_uniform_init_fails_closed_when_no_start_is_evaluable():
 
 
 def test_default_tuning_matches_rust_sampler_defaults():
+    d = owalnuts.DEFAULTS
     t = owalnuts.Tuning()
-    assert (t.step_size, t.max_depth, t.max_refinement_levels, t.max_error) == (0.5, 10, 4, 1.0)
+    assert (t.step_size, t.max_depth, t.min_micro_steps, t.max_refinement_levels, t.max_error,
+            t.divergence_threshold) == (d["step_size"], d["max_depth"], d["min_micro_steps"],
+                                        d["max_refinement_levels"], d["max_error"], d["divergence_threshold"])
+    assert (t.u_turn_rule, t.exhaustion_rule) == (None, None)
+    a = owalnuts.Adaptation()
+    assert (a.target_accept, a.adapt_mass, a.metric_regularization) == (d["target_accept"], d["adapt_mass"], None)
+    # The post-WP31 sampler defaults, as documented in CHANGELOG 0.2.0.
+    assert d["u_turn_rule"] == "momentum_sum"
+    assert d["metric_regularization"] == "stan"
+    assert d["warmup_exhaustion_rule"] == "accept_unless_divergent"
+    assert d["cache_initial_evaluation"] is True and d["admit_worst_case"] is True
+    assert d["algorithm_revision"] == owalnuts.ALGORITHM_REVISION
+    assert (d["init_radius"], d["init_max_attempts"]) == (2.0, 100)
+    with pytest.raises(TypeError):
+        owalnuts.DEFAULTS["max_depth"] = 3  # read-only
     r = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), 2, warmup=50, draws=20, seed=3, chains=1)
-    assert r.chains[0]["metadata"]["max_depth"] == 10
+    assert r.chains[0]["metadata"]["max_depth"] == d["max_depth"]
+    assert r.chains[0]["metadata"]["max_refinement_levels"] == d["max_refinement_levels"]
+
+
+def _sequential_gaussian(q: np.ndarray) -> tuple[float, np.ndarray]:
+    # Same operation order as the Rust `StandardGaussian` reference target
+    # (index-order `s += x * x`, then `-0.5 * s`), so values agree bitwise.
+    s = 0.0
+    for x in q:
+        s += x * x
+    return -0.5 * s, -q
+
+
+def test_sample_with_explicit_defaults_is_bit_identical_to_rust_sampler():
+    d = owalnuts.DEFAULTS
+    dim, chains, warmup, draws, seed = 3, 4, 200, 300, 0x5EED
+    starts = np.random.default_rng(1).uniform(-2.0, 2.0, size=(chains, dim))
+    reference = np.asarray(owalnuts._owalnuts.reference_gaussian_sampler_run(starts, warmup, draws, seed))
+    assert reference.shape == (chains, draws, dim)
+    explicit = owalnuts.sample(
+        _sequential_gaussian, dim, init=starts, chains=chains, warmup=warmup, draws=draws, seed=seed,
+        threads=1,
+        tuning=owalnuts.Tuning(
+            step_size=d["step_size"], max_depth=d["max_depth"], min_micro_steps=d["min_micro_steps"],
+            max_refinement_levels=d["max_refinement_levels"], max_error=d["max_error"],
+            divergence_threshold=d["divergence_threshold"], u_turn_rule=d["u_turn_rule"],
+            exhaustion_rule=d["exhaustion_rule"],
+        ),
+        adaptation=owalnuts.Adaptation(
+            target_accept=d["target_accept"], adapt_step_size=True, adapt_mass=d["adapt_mass"],
+            metric_regularization=d["metric_regularization"],
+        ),
+        mass=None, admit_worst_case=d["admit_worst_case"],
+        cache_initial_evaluation=d["cache_initial_evaluation"],
+    )
+    np.testing.assert_array_equal(explicit.samples, reference)
+    implicit = owalnuts.sample(_sequential_gaussian, dim, init=starts, chains=chains, warmup=warmup, draws=draws,
+                               seed=seed)
+    np.testing.assert_array_equal(implicit.samples, reference)
+    # The frozen v10 kernel rules are a different sampler.
+    frozen = owalnuts.sample(
+        _sequential_gaussian, dim, init=starts, chains=chains, warmup=warmup, draws=draws, seed=seed,
+        tuning=owalnuts.Tuning(u_turn_rule="endpoints"),
+        adaptation=owalnuts.Adaptation(metric_regularization="toward_unit"),
+    )
+    assert not np.array_equal(frozen.samples, reference)
+    with pytest.raises(ValueError, match="u_turn_rule"):
+        owalnuts.sample(_sequential_gaussian, dim, warmup=10, draws=10, tuning=owalnuts.Tuning(u_turn_rule="stan"))
 
 
 def test_summary_rows_match_arviz():
