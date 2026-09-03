@@ -272,7 +272,9 @@ def trace_summary(chains: list[dict]) -> dict:
                       "mean_exp_neg_abs", "mean_stan_accept"):
                 agg[k] = sum(r[k] * r["n"] for r in rows) / n if n else float("nan")
             for k in ("abs_q50", "abs_q90", "abs_q95", "abs_q99"):
-                agg[k] = float(statistics.median(r[k] for r in rows if math.isfinite(r[k]))) if rows else float("nan")
+                # serde writes NaN quantiles (a chain whose traced leaves were all nonfinite) as null
+                finite = [r[k] for r in rows if isinstance(r[k], (int, float)) and math.isfinite(r[k])]
+                agg[k] = float(statistics.median(finite)) if finite else float("nan")
             levels.append(agg)
         steps = [c["leaf_error_trace"]["steps"][label]["step"] for c in chains if label in c["leaf_error_trace"]["steps"]]
         out[label] = {"step_median": float(statistics.median(steps)), "step_per_chain": steps, "levels": levels}

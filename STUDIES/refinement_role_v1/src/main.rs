@@ -5,21 +5,22 @@
 //! `arms.rs`), plus two instruments that the question of this study needs:
 //!
 //! 1. **Per-chain refinement accounting** from the retained telemetry: built
-//!   leaves by refinement level, reverse-coarser stops and rejections,
-//!   forward refinement attempts, the stop-cause histogram, the per-transition
-//!   acceptance statistic and a histogram of the per-transition maximum
-//!   absolute energy error.
+//!    leaves by refinement level, reverse-coarser stops and rejections,
+//!    forward refinement attempts, the stop-cause histogram, the
+//!    per-transition acceptance statistic and a histogram of the
+//!    per-transition maximum absolute energy error.
 //! 2. **A level-0 leaf-error trace** taken after the run, outside the wall
-//!   and outside `gradients_total`: for every second retained draw of every
-//!   chain a fresh momentum `p ~ N(0, M)` is drawn from the chain's installed
-//!   diagonal mass and one macro step of size `m * h` (the chain's adapted
-//!   `h`, multipliers 0.5, 1, 1.5, 2, 3) and of the reference step `h_ref`
-//!   (CmdStan's adapted step for the model, passed on the command line) is
-//!   integrated at refinement levels 0, 1 and 2 (1, 2, 4 micro-steps). The
-//!   endpoint energy error `H_end - H_start` is the statistic the kernel
-//!   tests against `delta` at each level, so its distribution says what
-//!   fraction of leaves would be refined, and to which level, at any step
-//!   in that range — including the step Stan runs at.
+//!    and outside `gradients_total`: for every second retained draw of every
+//!    chain a fresh momentum `p ~ N(0, M)` is drawn from the chain's
+//!    installed diagonal mass and one macro step of size `m * h` (the
+//!    chain's adapted `h`, multipliers 0.5, 1, 1.5, 2, 3) and of the
+//!    reference step `h_ref` (CmdStan's adapted step for the model, passed
+//!    on the command line) is integrated at refinement levels 0, 1 and 2
+//!    (1, 2, 4 micro-steps). The endpoint energy error `H_end - H_start` is
+//!    the statistic the kernel tests against `delta` at each level, so its
+//!    distribution says what fraction of leaves would be refined, and to
+//!    which level, at any step in that range — including the step Stan
+//!    runs at.
 //!
 //! Usage: `posteriordb-cell <model.so> <data.json> <arm> <seed> <out.json> [threads] [h_ref]`
 //!
@@ -82,7 +83,11 @@ fn macro_step(
             *pj += half * gj;
         }
     }
-    let kinetic: f64 = p.iter().zip(mass).map(|(pj, mj)| pj * pj / (2.0 * mj)).sum();
+    let kinetic: f64 = p
+        .iter()
+        .zip(mass)
+        .map(|(pj, mj)| pj * pj / (2.0 * mj))
+        .sum();
     Some(-log_prob + kinetic)
 }
 
@@ -138,8 +143,7 @@ fn leaf_error_trace(
     if let Some(r) = h_ref {
         steps.push(("h_ref".to_string(), r));
     }
-    let mut errors: Vec<Vec<Vec<Option<f64>>>> =
-        vec![vec![Vec::new(); TRACE_LEVELS]; steps.len()];
+    let mut errors: Vec<Vec<Vec<Option<f64>>>> = vec![vec![Vec::new(); TRACE_LEVELS]; steps.len()];
     let mut rng = SmallRng::seed_from_u64(seed ^ 0x5eaf_e880_0000_0000);
     let mut calls = 0usize;
     let mut grad0 = vec![0.0; dim];
@@ -155,7 +159,11 @@ fn leaf_error_trace(
             .iter()
             .map(|m| m.sqrt() * rng.sample::<f64, _>(StandardNormal))
             .collect();
-        let k0: f64 = p0.iter().zip(mass).map(|(pj, mj)| pj * pj / (2.0 * mj)).sum();
+        let k0: f64 = p0
+            .iter()
+            .zip(mass)
+            .map(|(pj, mj)| pj * pj / (2.0 * mj))
+            .sum();
         let h0 = -lp0 + k0;
         for (s, (_, step)) in steps.iter().enumerate() {
             for level in 0..TRACE_LEVELS {
@@ -449,12 +457,24 @@ fn main() {
             let threads = rest.first().map_or(Ok(CHAINS), |t| t.parse::<usize>());
             let h_ref = rest.get(1).map(|h| h.parse::<f64>());
             match (seed.parse::<u64>(), threads, h_ref) {
-                (Ok(s), Ok(t), None) => {
-                    run(Path::new(model), Path::new(data), arm, s, Path::new(out), t, None)
-                }
-                (Ok(s), Ok(t), Some(Ok(h))) => {
-                    run(Path::new(model), Path::new(data), arm, s, Path::new(out), t, Some(h))
-                }
+                (Ok(s), Ok(t), None) => run(
+                    Path::new(model),
+                    Path::new(data),
+                    arm,
+                    s,
+                    Path::new(out),
+                    t,
+                    None,
+                ),
+                (Ok(s), Ok(t), Some(Ok(h))) => run(
+                    Path::new(model),
+                    Path::new(data),
+                    arm,
+                    s,
+                    Path::new(out),
+                    t,
+                    Some(h),
+                ),
                 _ => Err("seed and threads must be integers, h_ref a number".into()),
             }
         }

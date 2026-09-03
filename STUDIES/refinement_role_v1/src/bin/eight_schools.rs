@@ -19,8 +19,8 @@ mod arms;
 use arms::Arm;
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, DiagonalMass, KernelTuning, RunConfig, Target, TargetError,
-    TargetEvaluationAdmissionLimit, TargetEvaluationBudget,
-    preflight_chains_with_target_budget, sample_chains_with_target_budget,
+    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, preflight_chains_with_target_budget,
+    sample_chains_with_target_budget,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};

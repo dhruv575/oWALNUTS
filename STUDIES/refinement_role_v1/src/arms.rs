@@ -29,21 +29,14 @@ use owalnuts::sampler::{
     PaperAdaptationConfig, Tuning, WarmupConfig,
 };
 use owalnuts::walnutpie::{
-    DEFAULT_PAPER_GLOBAL_ENERGY_BOUND, DEFAULT_PAPER_QUANTILE_PROBABILITY,
-    DualAveragingAcceptance, KernelOptions,
+    DEFAULT_PAPER_GLOBAL_ENERGY_BOUND, DEFAULT_PAPER_QUANTILE_PROBABILITY, DualAveragingAcceptance,
+    KernelOptions,
 };
 use serde_json::json;
 use std::error::Error;
 
 pub const ARMS: [&str; 8] = [
-    "da",
-    "da06",
-    "da06-d05",
-    "paper08",
-    "paper06",
-    "stanacc",
-    "da-d2",
-    "da06-d2",
+    "da", "da06", "da06-d05", "paper08", "paper06", "stanacc", "da-d2", "da06-d2",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -152,9 +145,12 @@ impl Arm {
         }
     }
 
+    /// `PaperAdaptationConfig::new(Delta, p, Gamma)` with the default
+    /// `Delta = 2` and `p = 0.95`; for `Gamma = 0.8` this is field-for-field
+    /// `PaperAdaptationConfig::default()` (`new` fills the rest from the
+    /// default), i.e. the v4 robust rule.
     pub fn paper_config(&self) -> Result<Option<PaperAdaptationConfig>, Box<dyn Error>> {
         Ok(match self.rule {
-            StepRule::Paper { gamma } if gamma == 0.8 => Some(PaperAdaptationConfig::default()),
             StepRule::Paper { gamma } => Some(PaperAdaptationConfig::new(
                 DEFAULT_PAPER_GLOBAL_ENERGY_BOUND,
                 DEFAULT_PAPER_QUANTILE_PROBABILITY,
@@ -189,9 +185,7 @@ impl Arm {
                     .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
                     .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
             ),
-            StepRule::Paper { .. } => {
-                Adaptation::Paper(self.paper_config()?.expect("paper arm"))
-            }
+            StepRule::Paper { .. } => Adaptation::Paper(self.paper_config()?.expect("paper arm")),
         })
     }
 
