@@ -114,25 +114,33 @@ Every number below is from a preregistered, checksummed study in
 ## Where it does not (yet)
 
 The breadth benchmark is the honest picture of the crate at its defaults on
-ordinary Stan models: [`STUDIES/posteriordb_bench_v2`](STUDIES/posteriordb_bench_v2/README.md),
+ordinary Stan models: [`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md),
 17 posteriordb posteriors, every sampler at its defaults, 4 chains,
-1,000/1,000, three seeds, gates rank R-hat <= 1.01, bulk and tail ESS >= 400,
-zero divergences. [E4]
+1,000/1,000, three fresh seeds, gates rank R-hat <= 1.01, bulk and tail
+ESS >= 400, zero divergences, CmdStan 2.39.0 and nutpie 0.16.8 rerun on the
+same seeds. [E15] (v3 on the pre-WP31 defaults, kept as history: 35/51,
+0.34x CmdStan per gradient [E4].)
 
-- **Fewer cells pass than CmdStan.** oWALNUTS passes **35/51** cells;
-  CmdStan 37, nutpie 31.
-- **ESS per gradient is well below CmdStan.** Geometric mean **0.34x**
-  CmdStan over all 17 models (0.52x without the two models where a start
-  draw lands one chain in a second mode or collapses the step). On the
-  healthy models it is 0.4–0.95x with no exception.
-- **Wall time is competitive, per gradient and against nutpie.** Wall per
-  gradient is **0.75x** CmdStan's and ESS per second **1.35x** nutpie's;
-  ESS per second against CmdStan is 0.49x.
-- **Bad starts can still stall a chain.** The frozen-chain mode of the v2
-  run (`arma11` 0/3, `lotka_volterra` 1/3) is fixed by the one-sided warmup
-  exhaustion rule [E10] (now 2/3 and 3/3), but one `arma11` seed escapes
-  the pin and then crawls at `h ~ 1e-8`, `sblrc` collapses its step under
-  dual averaging, and `hmm_drive_0` can put one chain in a second mode.
+- **More cells pass than CmdStan or nutpie.** oWALNUTS passes **42/51**
+  cells; CmdStan 36, nutpie 28. Twelve models at 3/3 against ten and eight.
+- **ESS per gradient is still below CmdStan on ordinary posteriors.**
+  Geometric mean **0.82x** CmdStan over the 16 models where CmdStan is
+  healthy, 0.67–0.95x per model with no exception; 1.07x over all 17 only
+  because CmdStan and nutpie each lose two `arma11` seeds to a chain that
+  never leaves its start (oWALNUTS 3/3 there). Against nutpie 0.84x per
+  gradient. The residual is the kernel (reverse-coarser stops on refined
+  leaves and orbit length, [E13]), not warmup.
+- **Wall time and ESS per second are ahead.** Wall per gradient **0.80x**
+  CmdStan's; ESS per second **1.40x** CmdStan's and **3.09x** nutpie's
+  (above CmdStan on 8 of 17 models, above nutpie on 14 of 16).
+- **What still fails.** The centered eight schools fails every sampler on
+  every seed; `accel_gp` (66-d GP) fails every sampler at 0.47x CmdStan per
+  gradient; `hmm_drive_0` can put one chain in a second mode from a uniform
+  start (one seed each for oWALNUTS and CmdStan here); `one_comp` is 1/3
+  for oWALNUTS and CmdStan; `diamonds` still hits the depth-10 cap on
+  250–540 transitions per seed. Bad starts no longer stall a chain: no
+  frozen chain, no step collapse (`sblrc` 0/3 -> 3/3), zero retained
+  divergences on every oWALNUTS cell.
 - **Refinement rarely engages on these posteriors.** A refinement level
   above zero is selected on 1–3 % of retained transitions, so on ordinary
   models the kernel runs as NUTS, and its endpoint U-turn rule then costs
@@ -149,10 +157,11 @@ zero divergences. [E4]
   validated on fresh seeds in `STUDIES/posteriordb_bench_v5` [E15].
   [E5, E6, E12, E13, E14]
 
-The wins measured so far come from funnel-type targets and from structured
-metrics, not from throughput on the posteriordb set. If your model is an
-ordinary regression that CmdStan already samples cleanly, CmdStan or nutpie
-will use fewer gradients.
+The wins measured so far come from funnel-type targets, from structured
+metrics, from gates (fewer failed cells than either NUTS implementation on
+the posteriordb set) and from wall time; per gradient, an ordinary
+regression that CmdStan already samples cleanly still costs oWALNUTS
+1.05–1.5x the gradients.
 
 ## Defaults and opt-ins
 
@@ -206,6 +215,12 @@ Opt-ins, each one builder call:
   the Stan prior under the endpoint rule is unstable on `earnings` (0.08x,
   R-hat up to 1.6: the short endpoint-rule orbits leave the window variance
   at the prior's floor) [E14].
+- **The v5 breadth benchmark** is the honest figure for the 0.2.0 defaults
+  as shipped: CmdStan and nutpie rerun on fresh seeds 87101–87103 with
+  preregistered predictions, all five held; 42/51 vs 36 and 28; 0.82x
+  CmdStan per gradient on the healthy models (1.07x over 17 with `arma11`),
+  0.80x wall per gradient, 1.40x / 3.09x ESS per second; funnel exact at
+  the defaults on every seed [E15].
 - `Init::uniform()` (`run_from_random_starts`, `run_with_init`): Stan's
   uniform(-2, 2) starts redrawn until the log density and gradient are
   finite; `.run(&target, &starts)` uses your own.
@@ -357,9 +372,17 @@ provenance.
 - [E14] `MomentumSum` + Stan's regularisation together on the 17
   posteriordb models, fresh seeds, funnel at both tunings, Eight Schools
   strict track; preregistered joint default decision (1.51x, 41 vs 35
-  cells, funnel and Eight Schools safe; not flipped on the per-model floor):
+  cells, funnel and Eight Schools safe; not flipped on the per-model floor;
+  flipped afterwards as a post-hoc decision):
   [`STUDIES/joint_default_v1`](STUDIES/joint_default_v1/README.md)
   (`WP31-JOINT-DEFAULT-V1`).
+- [E15] posteriordb v5: the post-hoc default change validated on fresh
+  seeds against rerun CmdStan and nutpie, five preregistered predictions
+  held; 42/51 vs 36 and 28, 0.82x CmdStan per gradient on the healthy
+  models (1.07x over 17), 0.80x wall per gradient, 1.40x / 3.09x ESS per
+  second, funnel exact at the defaults:
+  [`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md)
+  (`WP32-POSTERIORDB-BENCH-V5`).
 - [E11] The sampler defaults on the funnel: four levels 0.0203 / 0.0242 /
   0.0625 (z -3.5 / -3.8 / +0.3), eight levels 0.0412 / 0.0346 / 0.0897
   (|z| <= 1.43) at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D
