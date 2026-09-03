@@ -254,6 +254,35 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Changed
 
+- **DEFAULT CHANGE (post-hoc after WP31): `sampler::Tuning::default()`
+  U-turn rule `Endpoints` -> `MomentumSum`, and the sampler's own
+  adaptation modes regularise the diagonal metric with Stan's prior**
+  (`STUDIES/joint_default_v1`, [WP31-JOINT-DEFAULT-V1]; validated by
+  `STUDIES/posteriordb_bench_v5`, [WP32-POSTERIORDB-BENCH-V5]). New
+  constants `sampler::DEFAULT_U_TURN_RULE = UTurnRule::MomentumSum` and
+  `sampler::DEFAULT_METRIC_REGULARIZATION = DiagonalMetricRegularization::Stan`;
+  `Adaptation::DualAveraging` and `Adaptation::Paper` apply the latter to
+  the `WarmupConfig` they build (as they apply `DEFAULT_WARMUP_EXHAUSTION`);
+  `Adaptation::Custom` is used as given. This is a **post-hoc decision**:
+  WP31 preregistered a flip rule (geomean >= 1.15x, no model < 0.85x, gates
+  >= the default's, funnel |z| <= 2 at both tunings, Eight Schools >= 0.9x)
+  and the pair met four of five — 1.51x geomean over the 17 posteriordb
+  models, 41 vs 35 cells, funnel exact with zero divergences, Eight Schools
+  1.29x — but failed the per-model floor on the two cells no option passes
+  (`hmm_drive_0`'s arm-dependent second-mode draw at 0.005x, the centered
+  eight schools at 0.79x and 0/3 everywhere), so the study did not flip.
+  The flip was decided afterwards on that evidence and validated on fresh
+  seeds 87101–87103 against CmdStan 2.39.0 and nutpie 0.16.8 with
+  preregistered predictions (WP32; numbers in `wiki/release-0.2.0.md`).
+  Draws of every `Sampler` run that adapts a diagonal metric or uses
+  `Tuning::default()` change; `walnutpie::KernelOptions::default()`,
+  `walnutpie::WarmupConfig::default()`, `RunConfig`, `ALGORITHM_REVISION`
+  and the kernel fingerprints are unchanged, and the old behaviour is
+  `Tuning::new().kernel_options(KernelOptions::default())` with
+  `Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DiagonalMetricRegularization::TowardUnit))`.
+  `tests/sampler_api.rs` mirrors the new defaults. The Python package
+  configures the `walnutpie` facade directly and keeps the frozen
+  `Endpoints` / `TowardUnit` rules in 0.2.0 (documented there).
 - **`sampler::Tuning::default()` refinement levels 4 -> 8**
   (`STUDIES/funnel_defaults_v1`, [WP28-FUNNEL-DEFAULTS-V1]). At four
   levels the sampler defaults (adapted diagonal metric, dual averaging,

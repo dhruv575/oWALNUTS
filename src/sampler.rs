@@ -49,7 +49,10 @@
 //! [`Adaptation`] selects the warmup rules: acceptance-driven dual averaging
 //! (`WarmupConfig::new(target_accept)`, the default), the JMLR Appendix C
 //! rules (`WarmupConfig::default().with_paper_adaptation(..)`), or none. The
-//! metric decides `WarmupConfig::with_mass_adaptation`.
+//! metric decides `WarmupConfig::with_mass_adaptation`. The sampler's own
+//! modes apply [`DEFAULT_WARMUP_EXHAUSTION`] and
+//! [`DEFAULT_METRIC_REGULARIZATION`] to the configuration they build;
+//! [`Adaptation::Custom`] is used as given.
 //!
 //! [`TargetEvaluationBudget`]: crate::walnutpie::TargetEvaluationBudget
 
@@ -68,12 +71,12 @@ pub use crate::walnutpie::{
     WindowSummary,
 };
 use crate::walnutpie::{
-    DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, ExhaustionRule, KernelOptions,
-    KernelTuning, MultiChainOutput, RunConfig, RunControl, TargetEvaluationAdmissionLimit,
-    TargetEvaluationBudget, sample_chains_dense_with_control,
-    sample_chains_dense_with_target_budget_and_control, sample_chains_structured_refresh,
-    sample_chains_structured_with_control, sample_chains_with_control,
-    sample_chains_with_target_budget_and_control,
+    DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass, DiagonalMetricRegularization,
+    ExhaustionRule, KernelOptions, KernelTuning, MultiChainOutput, RunConfig, RunControl,
+    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, UTurnRule,
+    sample_chains_dense_with_control, sample_chains_dense_with_target_budget_and_control,
+    sample_chains_structured_refresh, sample_chains_structured_with_control,
+    sample_chains_with_control, sample_chains_with_target_budget_and_control,
 };
 
 /// Momentum covariance `M` and whether warmup adapts it.
@@ -204,8 +207,10 @@ impl fmt::Debug for Metric {
 
 /// Warmup rules applied during the discarded transitions.
 ///
-/// The default stays the `v10` dual averaging (`WarmupConfig::new(target)`).
-/// The Stan-parity warmup (`WarmupConfig::stan_style`) is opt-in through
+/// The default is dual averaging (`WarmupConfig::new(target)`) with the
+/// sampler's warmup exhaustion rule ([`DEFAULT_WARMUP_EXHAUSTION`]) and
+/// diagonal-metric regularisation ([`DEFAULT_METRIC_REGULARIZATION`], Stan's
+/// prior since the post-WP31 default change). The Stan-parity warmup (`WarmupConfig::stan_style`) is opt-in through
 /// [`Adaptation::Custom`]: in `STUDIES/adaptation_parity_v1` it reached a
 /// 2.0x geometric-mean ESS-per-gradient gain over the default on nine
 /// posteriordb models but lost 12-16 % on three of them and failed the
@@ -245,10 +250,35 @@ impl Default for Adaptation {
 /// discarded transitions: Stan's one-sided divergence test, so that a chain
 /// started where every leaf exhausts slides out instead of freezing
 /// (`STUDIES/freeze_mode_v1`). Retained transitions keep
-/// [`Tuning::kernel_options`] (the frozen two-sided rule by default), whose
+/// [`Tuning::kernel_options`] (the frozen two-sided exhaustion rule by default), whose
 /// funnel tail mass is validated; [`Adaptation::Custom`] configurations are
 /// used as given.
 pub const DEFAULT_WARMUP_EXHAUSTION: ExhaustionRule = ExhaustionRule::AcceptUnlessDivergent;
+
+/// The diagonal-metric regularisation the sampler's own adaptation modes
+/// ([`Adaptation::DualAveraging`], [`Adaptation::Paper`]) apply when the
+/// metric adapts: Stan's prior, `(n / (n + 5)) * var + 1e-3 * (5 / (n + 5))`.
+/// **Default change, post hoc after WP31** (`STUDIES/joint_default_v1`; the
+/// preregistered rule there was not met on two cells no option passes, and
+/// the flip was decided afterwards and validated on fresh seeds in
+/// `STUDIES/posteriordb_bench_v5`, WP32). The `v10` facade default,
+/// [`DiagonalMetricRegularization::TowardUnit`], floors small posterior
+/// variances at 0.01 and collapses the step on `sblrc` / `arma11`
+/// (`STUDIES/step_collapse_v1`); it stays the `walnutpie::WarmupConfig`
+/// default and is the opt-in here through [`Adaptation::Custom`]. Use it
+/// together with [`DEFAULT_U_TURN_RULE`]: under the endpoint U-turn rule
+/// Stan's prior alone is unstable on `earnings` (WP31).
+pub const DEFAULT_METRIC_REGULARIZATION: DiagonalMetricRegularization =
+    DiagonalMetricRegularization::Stan;
+
+/// The no-U-turn rule of [`Tuning::default`]: Stan's generalised criterion
+/// on the momentum sum ([`UTurnRule::MomentumSum`]). **Default change, post
+/// hoc after WP31** (see [`DEFAULT_METRIC_REGULARIZATION`]); the frozen
+/// `v10` endpoint rule ([`UTurnRule::Endpoints`]) remains the
+/// `walnutpie::KernelOptions` default and is one [`Tuning::kernel_options`]
+/// call away. Kernel fingerprints, `ALGORITHM_REVISION` and `RunConfig` runs
+/// are unchanged.
+pub const DEFAULT_U_TURN_RULE: UTurnRule = UTurnRule::MomentumSum;
 
 impl Adaptation {
     fn warmup_config(&self, adapt_mass: bool) -> Result<Option<WarmupConfig>, Error> {
@@ -264,13 +294,15 @@ impl Adaptation {
             Self::DualAveraging { target_accept } => Some(
                 WarmupConfig::new(*target_accept)?
                     .with_mass_adaptation(adapt_mass)
-                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                    .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
             ),
             Self::Paper(paper) => Some(
                 WarmupConfig::default()
                     .with_mass_adaptation(adapt_mass)
                     .with_paper_adaptation(*paper)
-                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                    .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                    .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
             ),
             Self::Custom(warmup) => Some(warmup.clone().with_mass_adaptation(adapt_mass)),
         })
@@ -416,7 +448,9 @@ pub fn uniform_starts<T: Target + ?Sized>(
 /// threshold. Values are validated when the run starts.
 ///
 /// The default is `h = 0.5`, depth 10, one minimum micro-step, eight
-/// refinement levels, `delta = 1.0`. Eight levels (micro-steps down to
+/// refinement levels, `delta = 1.0`, and the momentum-sum no-U-turn rule
+/// ([`DEFAULT_U_TURN_RULE`]; the frozen `v10` endpoint rule is
+/// `.kernel_options(KernelOptions::default())`). Eight levels (micro-steps down to
 /// `h / 256`) are what make the default unbiased on Neal's funnel: at four
 /// levels the adapted step cannot enter the neck and the tail mass
 /// `P(omega < -5)` comes out at half the exact value, while on the
@@ -448,7 +482,10 @@ impl Default for Tuning {
             max_refinement_levels: 8,
             max_error: 1.0,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
-            kernel_options: KernelOptions::default(),
+            kernel_options: KernelOptions {
+                u_turn: DEFAULT_U_TURN_RULE,
+                ..KernelOptions::default()
+            },
         }
     }
 }
@@ -489,10 +526,13 @@ impl Tuning {
         self.divergence_threshold = threshold;
         self
     }
-    /// Opt-in kernel rule variants (`walnutpie::KernelOptions`): the
-    /// no-U-turn predicate and the treatment of refinement exhaustion. The
-    /// default is the frozen `v10` kernel; see
-    /// `STUDIES/kernel_efficiency_v1` for the measured alternatives.
+    /// Kernel rule variants (`walnutpie::KernelOptions`): the no-U-turn
+    /// predicate and the treatment of refinement exhaustion. The sampler's
+    /// default is [`DEFAULT_U_TURN_RULE`] with the frozen two-sided
+    /// exhaustion rule for retained transitions; `KernelOptions::default()`
+    /// is the frozen `v10` kernel (endpoint rule). See
+    /// `STUDIES/kernel_efficiency_v1`, `STUDIES/kernel_gap_v1` and
+    /// `STUDIES/joint_default_v1` for the measurements.
     pub fn kernel_options(mut self, options: KernelOptions) -> Self {
         self.kernel_options = options;
         self

@@ -55,9 +55,12 @@ class PaperAdaptation:
 class Tuning:
     """Kernel tuning. ``step_size`` is the macro step ``h``; ``max_error`` is
     the local energy-error threshold ``delta``. The defaults match
-    ``owalnuts::sampler::Tuning::default()`` (``h = 0.5``, depth 10, four
+    ``owalnuts::sampler::Tuning::default()`` (``h = 0.5``, depth 10, eight
     refinement levels, ``delta = 1``); the 0.1 package used ``h = 0.1`` and
-    depth 8."""
+    depth 8. The kernel rules are the frozen ``walnutpie`` ones (endpoint
+    U-turn rule, unit-variance metric prior); the Rust ``sampler`` defaults
+    are ``MomentumSum`` and Stan's metric prior since the post-WP31 default
+    change, which the next extension build follows."""
 
     step_size: float = 0.5
     max_depth: int = 10

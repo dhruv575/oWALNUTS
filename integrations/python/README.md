@@ -51,7 +51,13 @@ chosen by `STUDIES/adaptation_parity_v1`), eight refinement levels
 (`STUDIES/funnel_defaults_v1`: four halve the funnel's tail mass),
 `delta = 1`; dual-averaging warmup at target acceptance 0.8 with a diagonal
 metric. Pass `tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the
-0.1 package's behaviour. At depth 10 the exact worst-case evaluation count
+0.1 package's behaviour. One documented divergence: the package configures
+the `walnutpie` facade directly, so it keeps the frozen kernel rules
+(`UTurnRule::Endpoints`, `DiagonalMetricRegularization::TowardUnit`, the
+two-sided warmup exhaustion rule) where the Rust `sampler` defaults since
+the post-WP31 default change are `MomentumSum`, Stan's metric prior and
+`AcceptUnlessDivergent` in warmup (`STUDIES/joint_default_v1`,
+`STUDIES/posteriordb_bench_v5`); the next extension build follows them. At depth 10 the exact worst-case evaluation count
 of four chains x a few thousand transitions exceeds the facade's
 conservative 113M preflight ceiling, so `sample` admits such runs with
 their exact worst case by default (`admit_worst_case=True`, the Rust

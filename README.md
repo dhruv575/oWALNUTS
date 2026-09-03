@@ -144,8 +144,9 @@ zero divergences. [E4]
   (`DiagonalMetricRegularization::Stan`) the two together are 1.51x the
   default per gradient over the 17 models and pass 41 cells against 35.
   The preregistered flip rule failed on the two cells no option passes
-  (`hmm_drive_0`'s second-mode draw, the centered eight schools), so the
-  pair is the recommended opt-in below rather than the default.
+  (`hmm_drive_0`'s second-mode draw, the centered eight schools); the
+  pair was made the default afterwards as a post-hoc decision and
+  validated on fresh seeds in `STUDIES/posteriordb_bench_v5` [E15].
   [E5, E6, E12, E13, E14]
 
 The wins measured so far come from funnel-type targets and from structured
@@ -164,8 +165,9 @@ will use fewer gradients.
 | `Tuning::step_size` (`h`) | 0.5 | initial macro step; dual averaging adapts it |
 | `Tuning::max_refinement_levels` | 8 | micro-steps down to `h / 256`; four levels halve the funnel's tail mass at the adapted step, eight are exact and never engage on Eight Schools or a 100-D Gaussian [E11] |
 | `Tuning::max_error` (`delta`) | 1 | energy-error threshold per macro step |
-| `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75) |
-| `Metric` | adapted diagonal | Welford, regularised |
+| `Tuning::kernel_options` U-turn rule | `UTurnRule::MomentumSum` (Stan's generalised criterion) | **post-hoc default change after WP31**, validated by WP32: with Stan's metric prior it is 1.51x the endpoint rule per gradient over 17 posteriordb models; the frozen `v10` endpoint rule is `KernelOptions::default()` [E14, E15] |
+| `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75); warmup exhaustion rule `AcceptUnlessDivergent` [E10] |
+| `Metric` | adapted diagonal | Welford, regularised with Stan's prior (`DiagonalMetricRegularization::Stan`, **post-hoc default change after WP31**; the `v10` `TowardUnit` prior floors small variances at 0.01 and collapsed the step on `sblrc` / `arma11`) [E14, E15] |
 | initial evaluation | cached | one gradient per transition saved, draws bit-identical [E6] |
 | `Limits` | admit the exact worst case | the worst case is a bound the run cannot exceed, so admission costs nothing |
 
@@ -182,24 +184,28 @@ Opt-ins, each one builder call:
   statistic, `init_stepsize`, metric prior and restart reference. 2.0x the
   default's ESS per gradient on correlated regressions but 12–16 % worse on
   three models and R-hat > 1.01 on two, so opt-in [E7].
-- **Recommended for ordinary posteriors, as a pair**:
-  `Tuning::new().kernel_options(KernelOptions { u_turn: UTurnRule::MomentumSum, ..Default::default() })`
+- **The pre-WP31 kernel rules** (the frozen `v10` endpoint U-turn rule and
+  the unit-variance metric prior), for reproducing runs made before the
+  default change:
+  `Tuning::new().kernel_options(KernelOptions::default())`
   with
-  `Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DiagonalMetricRegularization::Stan))`.
-  Stan's generalised U-turn criterion and Stan's metric prior. On the 17
-  posteriordb models 1.51x the default's minimum bulk ESS per gradient
-  (earnings 3.7x, sblrc 9.1x, arma11 2.3x, kidiq 2.0x, hmm_example 1.9x,
-  nes2000 1.5x; nothing below 0.94x among the models the default passes),
-  41 cells against 35, 0.81–0.99x CmdStan on the healthy regressions
-  against the default's 0.09–0.88x, funnel tail mass exact at both tunings
-  with zero divergences, 1.29x on the Eight Schools strict track [E14].
-  Use them together: the U-turn rule alone is a per-model coin (1.06–1.12x
-  geomean) [E12], and the regularisation alone is unstable on `earnings`
-  (0.08x, R-hat up to 1.6: the short endpoint-rule orbits leave the window
-  variance at the prior's floor) [E14]. Not the default because the
-  preregistered rule's "no model below 0.85x" failed on `hmm_drive_0`'s
-  arm-dependent second-mode draw and on the centered eight schools, which
-  every option fails [E14].
+  `Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DiagonalMetricRegularization::TowardUnit))`.
+  The current defaults (`UTurnRule::MomentumSum` + `DiagonalMetricRegularization::Stan`)
+  are a **post-hoc decision**: `STUDIES/joint_default_v1` preregistered a
+  flip rule and failed it on two cells no option passes (`hmm_drive_0`'s
+  arm-dependent second-mode draw, the centered eight schools), while the
+  pair was 1.51x the old default's minimum bulk ESS per gradient over the
+  17 posteriordb models (earnings 3.7x, sblrc 9.1x, arma11 2.3x, kidiq
+  2.0x, hmm_example 1.9x, nes2000 1.5x; nothing below 0.94x among the
+  models the old default passes), 41 cells against 35, funnel tail mass
+  exact at both tunings with zero divergences and 1.29x on the Eight
+  Schools strict track [E14]. The flip was decided after that result and
+  validated on fresh seeds against CmdStan and nutpie in
+  `STUDIES/posteriordb_bench_v5` [E15]. The two rules go together: the
+  U-turn rule alone is a per-model coin (1.06–1.12x geomean) [E12], and
+  the Stan prior under the endpoint rule is unstable on `earnings` (0.08x,
+  R-hat up to 1.6: the short endpoint-rule orbits leave the window variance
+  at the prior's floor) [E14].
 - `Init::uniform()` (`run_from_random_starts`, `run_with_init`): Stan's
   uniform(-2, 2) starts redrawn until the log density and gradient are
   finite; `.run(&target, &starts)` uses your own.

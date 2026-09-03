@@ -7,15 +7,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use owalnuts::sampler::{
-    Adaptation, Cancellation, ChainOutput, DEFAULT_RANDOM_START_CHAINS, DEFAULT_WARMUP_EXHAUSTION,
-    Error, ErrorKind, Init, Limits, Metric, Sampler, StructuredBlockMass,
-    StructuredCovarianceBlock, StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary,
-    uniform_starts,
+    Adaptation, Cancellation, ChainOutput, DEFAULT_METRIC_REGULARIZATION,
+    DEFAULT_RANDOM_START_CHAINS, DEFAULT_U_TURN_RULE, DEFAULT_WARMUP_EXHAUSTION, Error, ErrorKind,
+    Init, Limits, Metric, Sampler, StructuredBlockMass, StructuredCovarianceBlock,
+    StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, uniform_starts,
 };
 use owalnuts::walnutpie::{
-    DenseMass, DiagonalMass, KernelTuning, PaperAdaptationConfig, RunConfig, RunControl,
-    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig, sample_chains,
-    sample_chains_dense, sample_chains_structured, sample_chains_structured_refresh,
+    DenseMass, DiagonalMass, KernelOptions, KernelTuning, PaperAdaptationConfig, RunConfig,
+    RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
+    sample_chains, sample_chains_dense, sample_chains_structured, sample_chains_structured_refresh,
     sample_chains_with_control, sample_chains_with_target_budget,
 };
 
@@ -63,9 +63,17 @@ fn starts(dimension: usize) -> Vec<Vec<f64>> {
         .collect()
 }
 
-/// The same numbers as `Tuning::default()`.
+/// The same numbers and kernel options as `Tuning::default()`: `h = 0.5`,
+/// depth 10, one micro-step, eight levels, `delta = 1`, and the momentum-sum
+/// U-turn rule (the post-WP31 default; `KernelOptions::default()` is the
+/// frozen endpoint rule).
 fn kernel_tuning() -> KernelTuning {
-    KernelTuning::new(0.5, nz(10), nz(1), nz(8), 1.0).unwrap()
+    KernelTuning::new(0.5, nz(10), nz(1), nz(8), 1.0)
+        .unwrap()
+        .with_options(KernelOptions {
+            u_turn: DEFAULT_U_TURN_RULE,
+            ..KernelOptions::default()
+        })
 }
 
 fn config(warmup: Option<WarmupConfig>) -> RunConfig {
@@ -135,6 +143,7 @@ fn identity_metric_matches_the_diagonal_facade_without_mass_adaptation() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
                 .with_mass_adaptation(false),
         )),
         nz(1),
@@ -170,7 +179,8 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
         &config(Some(
             WarmupConfig::new(0.8)
                 .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
     )
@@ -208,7 +218,8 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
         &config(Some(
             WarmupConfig::new(0.9)
                 .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
     )
@@ -230,7 +241,8 @@ fn adaptive_dense_metric_matches_the_dense_facade() {
         &config(Some(
             WarmupConfig::new(0.8)
                 .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
     )
@@ -250,6 +262,7 @@ fn adaptive_dense_metric_matches_the_dense_facade() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
                 .with_mass_adaptation(false),
         )),
         nz(1),
@@ -274,6 +287,7 @@ fn fixed_structured_metric_matches_the_structured_facade() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
                 .with_mass_adaptation(false),
         )),
         nz(1),
@@ -299,7 +313,8 @@ fn structured_refresh_matches_the_refresh_facade() {
         &config(Some(
             WarmupConfig::new(0.8)
                 .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
         &RunControl::new(),
@@ -334,7 +349,8 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
             WarmupConfig::default()
                 .with_mass_adaptation(false)
                 .with_paper_adaptation(paper)
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         );
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
     let posterior = sampler()
@@ -369,6 +385,7 @@ fn evaluation_budget_matches_the_budgeted_facade() {
         WarmupConfig::new(0.8)
             .unwrap()
             .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+            .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
             .with_mass_adaptation(false),
     ));
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
@@ -460,7 +477,8 @@ fn cancellation_and_timeout_match_run_control() {
         &config(Some(
             WarmupConfig::new(0.8)
                 .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
         &RunControl::new().with_cancellation(&*flag),
@@ -481,7 +499,8 @@ fn cancellation_and_timeout_match_run_control() {
         &config(Some(
             WarmupConfig::new(0.8)
                 .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION),
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
         &RunControl::new().with_timeout(Duration::ZERO).unwrap(),

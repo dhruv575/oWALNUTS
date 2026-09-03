@@ -20,6 +20,7 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `80403fc` | `sampler::Tuning` default depth 10; opt-in Stan-style warmup controls | `STUDIES/adaptation_parity_v1` |
 | `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
 | this release | `sampler::Tuning` default refinement levels 4 -> 8: the four-level default halved the funnel's tail mass; eight levels are exact on three seeds at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D Gaussian | `STUDIES/funnel_defaults_v1` (WP28) |
+| this release | **DEFAULT CHANGE (post-hoc after WP31)**: `sampler::Tuning::default()` U-turn rule `Endpoints` -> `MomentumSum`; `Adaptation::DualAveraging` / `Paper` regularise the diagonal metric with Stan's prior (`DEFAULT_U_TURN_RULE`, `DEFAULT_METRIC_REGULARIZATION`) | `STUDIES/joint_default_v1` (WP31, rule not met, decided post hoc), validated by `STUDIES/posteriordb_bench_v5` (WP32) |
 | this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
 
 The upgrade notes (facade unchanged, research items behind the feature,
@@ -230,9 +231,14 @@ the default's 0.317x, 0.81–0.99x on the healthy regressions. Either
 option alone is not it: `MomentumSum` alone 1.12x, the regularisation
 alone 1.26x but 0.08x and 0/3 on `earnings` (the short endpoint-rule
 orbits leave the window variance at the prior's 1e-5 floor and the metric
-overshoots 100x). **Not flipped** — the preregistered per-model floor
-failed on the mode lottery and the fail-everywhere cell — and documented
-as the recommended opt-in pair in the README. Ledger entry
+overshoots 100x). **Not flipped by the study** — the preregistered
+per-model floor failed on the mode lottery and the fail-everywhere cell.
+**Flipped afterwards as a post-hoc decision**: the two C2 failures are
+cells no arm passes, the other four criteria held with margin, and the
+pair became `Tuning::default()` / `Adaptation::{DualAveraging, Paper}`
+behaviour in the commit labelled "DEFAULT CHANGE (post-hoc after WP31)",
+validated on fresh seeds against CmdStan and nutpie in
+`STUDIES/posteriordb_bench_v5` (WP32, below). Ledger entry
 `WP31-JOINT-DEFAULT-V1`.
 
 ### Autodiff (`integrations/AUTODIFF-RESEARCH.md`)
