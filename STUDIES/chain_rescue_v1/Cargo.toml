@@ -1,0 +1,21 @@
+[package]
+name = "chain-rescue-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "oWALNUTS cells of the preregistered chain-rescue study (WP33): the v5 posteriordb protocol with the da / restart / pool arms, plus the funnel tail-mass row per arm"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "chain-rescue-v1"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]

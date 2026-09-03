@@ -1,0 +1,77 @@
+{
+  "schema": "chain-rescue-v1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-03",
+  "purpose": "Preregistered evaluation of two opt-in warmup-time chain-rescue candidates (restart-from-best at slow-window boundaries; cross-chain metric/step pooling at boundaries) on the posteriordb models whose remaining gate failures are one bad chain out of four, plus the 10-D funnel, against the shipped defaults on the same fresh seeds.",
+  "harness": "STUDIES/posteriordb_bench_v5 protocol (4 chains, 1000/1000, Init::uniform(), v5 gates, arviz 0.23.4); src/main.rs adds the arm switch; funnel src/bin/funnel.rs with the arm switch",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "C:/dev/owalnuts-wt/posteriordb-v4/STUDIES/posteriordb_bench_v4/posteriordb/posterior_database",
+    "venv": "C:/dev/owalnuts-wt/posteriordb-v4/STUDIES/posteriordb_bench_v4/.venv (read only)"
+  },
+  "models": [
+    "bball_drive_event_0-hmm_drive_0",
+    "arma-arma11",
+    "sblrc-blr",
+    "earnings-logearn_interaction",
+    "hudson_lynx_hare-lotka_volterra",
+    "kidiq-kidscore_momhsiq",
+    "mesquite-logmesquite_logvash",
+    "nes2000-nes"
+  ],
+  "arms": {
+    "da": "sampler defaults, nothing overridden",
+    "restart": "Adaptation::Custom(WarmupConfig::new(0.8) + DEFAULT_WARMUP_EXHAUSTION + DEFAULT_METRIC_REGULARIZATION + with_chain_rescue(ChainRescueConfig::restart_from_best()))",
+    "pool": "Adaptation::Custom(... with_chain_rescue(ChainRescueConfig::pool_at_boundaries()))"
+  },
+  "restart_constants": {
+    "step_ratio": 0.1,
+    "log_density_iqr_factor": 3.0,
+    "minimum_window_transitions": 10,
+    "boundaries": "every slow window end",
+    "source": "non-outlier chain with the largest step, ties by higher median log density",
+    "source_position": "uniform over the source's window positions, drawn with the rescued chain's RNG"
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "seeds": [88101, 88102, 88103],
+  "seeds_verified_unused": "grep -w over the repository: matches are digit substrings inside numeric trace values only",
+  "funnel": {
+    "dimension": 10,
+    "chains": 4,
+    "warmup": 2000,
+    "draws": 20000,
+    "starts": "omega in {-3,-1,1,3}",
+    "seeds": [88101, 88102, 88103],
+    "gate": "|z| <= 2 and omega bulk ESS >= 400 and omega rank R-hat <= 1.01"
+  },
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "cell_timeout_seconds": 2700,
+  "run_order": "models in listed order; arms da, restart, pool; seeds ascending; strictly sequential; then the funnel cells arm by arm",
+  "decision_rule": {
+    "gain_cells": 3,
+    "per_model_ess_per_gradient_floor": 0.9,
+    "agreement_abs_z_max_new": 3.5,
+    "funnel_abs_z_max": 2.0,
+    "cells_per_arm": 27,
+    "statement": "flip if a candidate passes >= 3 more of the 27 cells than da, no model seed-median ESS/gradient < 0.9x da, no |z| > 3.5 where da had none on the same seed, funnel |z| <= 2 on every seed"
+  },
+  "predictions": {
+    "P1": "restart fires on at most one chain per control cell and never after the second slow window there",
+    "P2": "restart: funnel final steps within 10x across chains, funnel gate passed on every seed",
+    "P3": "restart fires the density rule on any second-mode hmm_drive_0 chain by the third slow window and that cell passes R-hat",
+    "P4": "no candidate moves any model's seed-median max |z| by more than 1",
+    "P5": "pool within 0.9-1.2x da per gradient on every model, no gate gained",
+    "P6": "the decision rule is not met by either candidate"
+  }
+}
