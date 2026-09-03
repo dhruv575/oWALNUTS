@@ -187,7 +187,27 @@ leaves later per orbit than Stan's momentum sum on the isotropic Gaussian
 for no ESS gain (neutral within noise elsewhere). The exhaustion rule never
 triggers on these targets; the funnel tail mass is preserved under every
 option (`examples/funnel_kernel_options.rs`). The momentum-sum rule stays
-opt-in until the posteriordb re-run gates it.
+opt-in: the preregistered posteriordb decision (WP26, below) rejected it as
+the default.
+
+### U-turn rule default decision (WP26)
+
+`STUDIES/uturn_default_v1`: the v3 protocol on fresh seeds 80101–80103 with
+the U-turn rule as the only difference between arms (`Endpoints`,
+`MomentumSum`, `EndpointsWithCross`; CmdStan cited from v3), plus the
+funnel tail mass at the paper tuning and at the sampler defaults (three
+seeds pooled) and the Eight Schools strict track. Rule: flip iff geomean
+>= 1.10, no model < 0.85, funnel |z| <= 2 under both tunings, Eight Schools
+>= 0.9. Result: `MomentumSum` / `Endpoints` = **1.064** geomean (kidiq 1.37,
+garch 1.27, nes 1.18, one_comp 1.38, hmm_drive_0 1.26, lotka_volterra 2.14;
+centered eight schools 0.78, diamonds 0.80, gp_pois_regr 0.85, noncentered
+eight schools 0.88, arma11 0.90, arK 0.91, earnings 0.93), 37 vs 38 cells,
+Eight Schools 1.08x, funnel at the paper tuning z +1.03 (endpoints +0.90),
+funnel at the sampler defaults z −3.4 against the endpoint control's −11.2
+— biased under every rule there. **Not flipped.** The endpoint arm
+reproduces v3 (38/51, 0.434x CmdStan on these seeds; `hmm_drive_0` drew no
+second-mode chain, `lotka_volterra` one `rk45`-boundary start). Ledger entry
+`WP26-UTURN-DEFAULT-V1`.
 
 ### Autodiff (`integrations/AUTODIFF-RESEARCH.md`)
 
@@ -214,7 +234,8 @@ on Eight Schools at four threads, parity with nutpie.
   endpoint U-turn rule (0.75x on the isotropic Gaussian, 1.0x on the
   correlated one), with refinement rejections at 0.85-0.95x where refinement
   engages. The cache is now the `Sampler` default; Stan's momentum-sum
-  U-turn rule is opt-in (`KernelOptions`) until the posteriordb re-run.
+  U-turn rule stays opt-in (`KernelOptions`): on posteriordb it is 1.06x
+  geomean and 0.78–2.14x per model (WP26), not the gap.
 - **Refinement rarely engages on posteriordb models**: ~1 % of retained
   leaves refine (99 % at level 0), so on those targets oWALNUTS is NUTS with
   a slightly shorter step paying the reverse-check cost; the wins measured

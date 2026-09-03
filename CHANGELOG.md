@@ -169,8 +169,11 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   100-D Gaussian `MomentumSum` with the cache takes the kernel from 0.81x to
   1.09x reference NUTS ESS per gradient, is neutral within seed noise on the
   correlated Gaussian and Eight Schools, and preserves the funnel tail mass
-  (`examples/funnel_kernel_options.rs`). Not yet a default pending the
-  posteriordb re-run.
+  (`examples/funnel_kernel_options.rs`). The preregistered posteriordb
+  decision (`STUDIES/uturn_default_v1`, [WP26-UTURN-DEFAULT-V1]) kept
+  `Endpoints` as the default: `MomentumSum` is 1.06x geomean over the 17
+  models (1.18–2.14x on six, 0.78–0.93x on seven), passes one cell fewer,
+  and the funnel at the sampler defaults is biased under every rule.
 - **Additive, off-by-default Appendix C guards** on `PaperAdaptationConfig`:
   `with_min_max_error`, `with_first_update_after`,
   `with_metric_update_required`, `with_unhealthy_orbits_excluded`,

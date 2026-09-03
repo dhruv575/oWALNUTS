@@ -136,9 +136,12 @@ zero divergences. [E4]
 - **Refinement rarely engages on these posteriors.** A refinement level
   above zero is selected on 1–3 % of retained transitions, so on ordinary
   models the kernel runs as NUTS, and its endpoint U-turn rule then costs
-  0.75–0.9x per gradient against Stan's momentum-sum rule; the opt-in
-  `UTurnRule::MomentumSum` reaches reference-NUTS parity on the Gaussian
-  targets measured and is within seed noise on Eight Schools. [E5, E6]
+  0.75–0.9x per gradient against Stan's momentum-sum rule on Gaussian
+  targets. On the posteriordb set, however, swapping in Stan's rule
+  (`UTurnRule::MomentumSum`) is a per-model coin — 1.2–2.1x on six models,
+  0.78–0.93x on seven, 1.06x geometric mean, one cell fewer — so the gap on
+  ordinary models is not the U-turn rule, and the rule stays opt-in.
+  [E5, E6, E11]
 
 The wins measured so far come from funnel-type targets and from structured
 metrics, not from throughput on the posteriordb set. If your model is an
@@ -176,7 +179,11 @@ Opt-ins, each one builder call:
   three models and R-hat > 1.01 on two, so opt-in [E7].
 - `Tuning::new().kernel_options(KernelOptions { u_turn: UTurnRule::MomentumSum, ..Default::default() })`:
   Stan's generalised U-turn criterion; 0.81x -> 1.09x reference NUTS on a
-  100-D Gaussian, neutral elsewhere, funnel tail mass preserved [E6].
+  100-D Gaussian and 1.08x on the Eight Schools strict track, funnel tail
+  mass preserved at the paper tuning [E6]; on posteriordb 1.18–2.14x on
+  kidiq, garch11, nes, one_comp, hmm_drive_0, lotka_volterra and 0.78–0.93x
+  on both eight schools, diamonds, gp_pois_regr, arma11, arK, earnings
+  (1.06x geomean, so not the default) [E12].
 - `Init::uniform()` (`run_from_random_starts`, `run_with_init`): Stan's
   uniform(-2, 2) starts redrawn until the log density and gradient are
   finite; `.run(&target, &starts)` uses your own.
@@ -307,6 +314,10 @@ provenance.
 - [E6] U-turn rule 0.75x on the isotropic Gaussian, 1.0x correlated;
   `MomentumSum` 0.81x -> 1.09x; cache one gradient per transition:
   [`STUDIES/kernel_efficiency_v1`](STUDIES/kernel_efficiency_v1/README.md).
+- [E12] `MomentumSum` on the 17 posteriordb models, fresh seeds, funnel at
+  both tunings, Eight Schools strict track; preregistered default decision
+  (not flipped): [`STUDIES/uturn_default_v1`](STUDIES/uturn_default_v1/README.md)
+  (`WP26-UTURN-DEFAULT-V1`).
 - [E7] Depth 10 ablation, 1.45x, 17/18 gates; `stan_style` 2.0x with
   regressions: [`STUDIES/adaptation_parity_v1`](STUDIES/adaptation_parity_v1/README.md).
 - [E8] Appendix C on the funnel, 1.41x / 1.61x vs fixed paper tuning:
