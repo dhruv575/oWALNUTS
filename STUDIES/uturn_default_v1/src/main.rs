@@ -43,9 +43,14 @@ fn options(arm: &str) -> Result<KernelOptions, Box<dyn Error>> {
         "da" => UTurnRule::Endpoints,
         "da-rhosum" => UTurnRule::MomentumSum,
         "da-cross" => UTurnRule::EndpointsWithCross,
-        other => return Err(format!("unknown arm {other:?} (expected da|da-rhosum|da-cross)").into()),
+        other => {
+            return Err(format!("unknown arm {other:?} (expected da|da-rhosum|da-cross)").into());
+        }
     };
-    Ok(KernelOptions { u_turn, ..KernelOptions::default() })
+    Ok(KernelOptions {
+        u_turn,
+        ..KernelOptions::default()
+    })
 }
 
 fn warmup_json() -> serde_json::Value {
@@ -91,7 +96,10 @@ fn run(
     // Identical to `sampler.run_with_init(&target, &Init::uniform())`: the
     // starts are drawn here so that they and the search cost can be recorded.
     let (radius, max_attempts) = match Init::uniform() {
-        Init::Uniform { radius, max_attempts } => (radius, max_attempts),
+        Init::Uniform {
+            radius,
+            max_attempts,
+        } => (radius, max_attempts),
         _ => unreachable!(),
     };
     let starts = match uniform_starts(&target, CHAINS, seed, radius, max_attempts) {
@@ -216,7 +224,11 @@ fn run(
     eprintln!(
         "{arm} seed {seed}: wall {wall:.3}s, calls {}, div {}",
         target.calls(),
-        posterior.chains().iter().map(|c| c.telemetry().retained().divergences()).sum::<usize>()
+        posterior
+            .chains()
+            .iter()
+            .map(|c| c.telemetry().retained().divergences())
+            .sum::<usize>()
     );
     Ok(())
 }
@@ -231,7 +243,10 @@ fn main() {
                 _ => Err("seed and threads must be integers".into()),
             }
         }
-        _ => Err("usage: <model.so> <data.json> <da|da-rhosum|da-cross> <seed> <out.json> [threads]".into()),
+        _ => Err(
+            "usage: <model.so> <data.json> <da|da-rhosum|da-cross> <seed> <out.json> [threads]"
+                .into(),
+        ),
     };
     if let Err(error) = result {
         eprintln!("error: {error}");

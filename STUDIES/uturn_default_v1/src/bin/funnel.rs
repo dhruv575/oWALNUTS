@@ -65,7 +65,10 @@ fn run(tuning_name: &str, rule_name: &str, seed: u64, out: &Path) -> Result<(), 
         "cross" => UTurnRule::EndpointsWithCross,
         other => return Err(format!("unknown rule {other:?}").into()),
     };
-    let options = KernelOptions { u_turn, ..KernelOptions::default() };
+    let options = KernelOptions {
+        u_turn,
+        ..KernelOptions::default()
+    };
     let sampler = Sampler::new()
         .warmup(WARMUP)
         .draws(DRAWS)

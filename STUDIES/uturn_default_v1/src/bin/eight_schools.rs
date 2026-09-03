@@ -8,9 +8,9 @@
 //! repetitions and only wall time varies.
 #![forbid(unsafe_code)]
 use owalnuts::walnutpie::{
-    ALGORITHM_REVISION, DiagonalMass, KernelOptions, KernelTuning, RunConfig, Target,
-    TargetError, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, UTurnRule,
-    WarmupConfig, preflight_chains_with_target_budget, sample_chains_with_target_budget,
+    ALGORITHM_REVISION, DiagonalMass, KernelOptions, KernelTuning, RunConfig, Target, TargetError,
+    TargetEvaluationAdmissionLimit, TargetEvaluationBudget, UTurnRule, WarmupConfig,
+    preflight_chains_with_target_budget, sample_chains_with_target_budget,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -70,7 +70,9 @@ impl Target for CountingTarget {
     fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
         let n = self.calls.fetch_add(1, Ordering::Relaxed) + 1;
         if n > CAP {
-            return Err(TargetError::new("runtime target-evaluation budget exhausted"));
+            return Err(TargetError::new(
+                "runtime target-evaluation budget exhausted",
+            ));
         }
         let value = noncentered_log_density_gradient(q, g);
         if value.is_finite() && g.iter().all(|x| x.is_finite()) {
@@ -102,7 +104,10 @@ fn config(seed: u64, u_turn: UTurnRule) -> Result<RunConfig, Box<dyn Error>> {
                 1.,
             )?
             .with_divergence_threshold(1000.)?
-            .with_options(KernelOptions { u_turn, ..KernelOptions::default() }),
+            .with_options(KernelOptions {
+                u_turn,
+                ..KernelOptions::default()
+            }),
         )
         .with_warmup(WarmupConfig::new(0.95)?.with_mass_adaptation(true)))
 }
@@ -128,9 +133,18 @@ fn run_seed(rule: &str, seed: u64, reps: usize, out: &Path) -> Result<(), Box<dy
     let admission = TargetEvaluationAdmissionLimit::new(NonZeroUsize::new(exact).unwrap());
     let diagonal = DiagonalMass::identity(NonZeroUsize::new(10).unwrap());
     {
-        let target = CountingTarget { calls: AtomicUsize::new(0) };
+        let target = CountingTarget {
+            calls: AtomicUsize::new(0),
+        };
         let budget = TargetEvaluationBudget::new(NonZeroUsize::new(CAP).unwrap());
-        preflight_chains_with_target_budget(&target, &starts(), &diagonal, &config, admission, &budget)?;
+        preflight_chains_with_target_budget(
+            &target,
+            &starts(),
+            &diagonal,
+            &config,
+            admission,
+            &budget,
+        )?;
         if target.calls.load(Ordering::Relaxed) != 0 || budget.started() != 0 {
             return Err("preflight entered target".into());
         }
@@ -140,7 +154,9 @@ fn run_seed(rule: &str, seed: u64, reps: usize, out: &Path) -> Result<(), Box<dy
     let mut hashes = Vec::with_capacity(reps);
     let mut first = None;
     for _ in 0..reps {
-        let target = CountingTarget { calls: AtomicUsize::new(0) };
+        let target = CountingTarget {
+            calls: AtomicUsize::new(0),
+        };
         let budget = TargetEvaluationBudget::new(NonZeroUsize::new(CAP).unwrap());
         let begin = Instant::now();
         let sampled = sample_chains_with_target_budget(
