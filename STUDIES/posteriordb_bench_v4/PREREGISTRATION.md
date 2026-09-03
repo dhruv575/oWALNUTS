@@ -139,3 +139,17 @@ machine-independent primary figure.
 ## Deviations
 
 (none at freeze)
+
+* 2026-09-03 (recorded the morning after) — the driver died after 187 of
+  204 cells. The last cell written is `hudson_lynx_hare-lotka_volterra`
+  cmdstan 83101 (21:25:54 local); cmdstan 83102 was running (its chain 3 on
+  the `rk45` boundary, CSV still being written at 21:32:24) when the
+  background shell that launched the driver was reported killed by the
+  agent session tooling at ~21:32; by 2026-09-03 morning no driver process
+  existed and no further cell had been written. The protocol's rule
+  (relaunch, re-run the interrupted cell) was **not** followed: the study
+  had been superseded by WP32 (`posteriordb_bench_v5`, merged on main)
+  and the coordinator directed that v4 be finalised on the cells present.
+  Missing, marked "not run": `lotka_volterra` cmdstan 83102–83103 and
+  nutpie 83101–83103; all twelve `mcycle_gp-accel_gp` cells. No cell was
+  rerun; nothing was changed.
