@@ -9,8 +9,13 @@
 //! (`STUDIES/kernel_efficiency_v1`).
 //!
 //! ```text
-//! cargo run --release --example funnel_kernel_options -- [--uturn endpoints|cross|rhosum] [--exhaustion stop|accept] [--cache] [--draws N] [--warmup N]
+//! cargo run --release --example funnel_kernel_options -- [--uturn endpoints|cross|rhosum] [--exhaustion stop|accept] [--cache] [--draws N] [--warmup N] [--seed N] [--sampler-defaults]
 //! ```
+//!
+//! `--sampler-defaults` replaces the paper protocol by the sampler's own
+//! defaults (adaptive diagonal metric, dual averaging at 0.8, `Tuning::default()`
+//! with the given kernel options), so a candidate can be checked at both
+//! tunings (`STUDIES/kernel_gap_v1`).
 
 use std::error::Error;
 
@@ -55,6 +60,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cache = false;
     let mut draws = 20_000usize;
     let mut warmup = 2_000usize;
+    let mut seed = 0x0f0f_2026u64;
+    let mut sampler_defaults = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -76,6 +83,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             "--draws" => draws = args.next().ok_or("--draws needs a value")?.parse()?,
             "--warmup" => warmup = args.next().ok_or("--warmup needs a value")?.parse()?,
+            "--seed" => seed = args.next().ok_or("--seed needs a value")?.parse()?,
+            "--sampler-defaults" => sampler_defaults = true,
             other => return Err(format!("unknown flag {other}").into()),
         }
     }
@@ -83,19 +92,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sampler = Sampler::new()
         .warmup(warmup)
         .draws(draws)
-        .seed(0x0f0f_2026)
-        .metric(Metric::Identity)
-        .adaptation(Adaptation::Paper(PaperAdaptationConfig::default()))
-        .tuning(
-            Tuning::new()
-                .step_size(0.1)
-                .max_depth(10)
-                .max_refinement_levels(8)
-                .max_error(1.0)
-                .kernel_options(options),
-        )
+        .seed(seed)
         .cache_initial_evaluation(cache)
         .limits(Limits::new().admit_worst_case());
+    let sampler = if sampler_defaults {
+        sampler.tuning(Tuning::default().kernel_options(options))
+    } else {
+        sampler
+            .metric(Metric::Identity)
+            .adaptation(Adaptation::Paper(PaperAdaptationConfig::default()))
+            .tuning(
+                Tuning::new()
+                    .step_size(0.1)
+                    .max_depth(10)
+                    .max_refinement_levels(8)
+                    .max_error(1.0)
+                    .kernel_options(options),
+            )
+    };
     let starts: Vec<Vec<f64>> = [-3.0, -1.0, 1.0, 3.0]
         .into_iter()
         .map(|omega| {
@@ -146,7 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         / (batches - 1.0);
     let standard_error = (batch_variance / batches).sqrt();
     println!(
-        "options {options:?} cache {cache}: P(omega < -5) estimate {estimate:.4} vs exact {EXACT_TAIL_MASS:.4} \
+        "options {options:?} cache {cache} seed {seed} sampler-defaults {sampler_defaults}: P(omega < -5) estimate {estimate:.4} vs exact {EXACT_TAIL_MASS:.4} \
          (batch-means s.e. {standard_error:.4}, z = {:+.2}, {total} draws, {calls} target calls)",
         (estimate - EXACT_TAIL_MASS) / standard_error,
     );

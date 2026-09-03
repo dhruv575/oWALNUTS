@@ -318,6 +318,12 @@ provenance.
   both tunings, Eight Schools strict track; preregistered default decision
   (not flipped): [`STUDIES/uturn_default_v1`](STUDIES/uturn_default_v1/README.md)
   (`WP26-UTURN-DEFAULT-V1`).
+- [E13] The gap decomposed at CmdStan's step, metric and starts on six
+  posteriordb models: leaves per orbit 0.60x under the endpoint U-turn
+  statistic, gradients per leaf 1.01x, no selection difference;
+  `MomentumSum` 0.77x -> 0.90x of reference NUTS per gradient:
+  [`STUDIES/kernel_gap_v1`](STUDIES/kernel_gap_v1/README.md)
+  (`WP30-KERNEL-GAP-V1`).
 - [E7] Depth 10 ablation, 1.45x, 17/18 gates; `stan_style` 2.0x with
   regressions: [`STUDIES/adaptation_parity_v1`](STUDIES/adaptation_parity_v1/README.md).
 - [E8] Appendix C on the funnel, 1.41x / 1.61x vs fixed paper tuning:

@@ -393,6 +393,11 @@ pub struct Span {
     /// Sum of the leaf momenta, kept only under [`UTurnRule::MomentumSum`];
     /// empty otherwise.
     pub rho_sum: Vec<f64>,
+    /// Number of states in the span (one for a leaf span).
+    pub states: usize,
+    /// Index of `selected` counted from the backward end of the span
+    /// (`0..states`).
+    pub selected_offset: usize,
 }
 
 impl Span {
@@ -446,10 +451,18 @@ impl Span {
             forward: endpoint,
             log_weight: log_joint,
             rho_sum,
+            states: 1,
+            selected_offset: 0,
         })
     }
 
     fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
+        let selected_offset = if Rc::ptr_eq(&selected, &later.selected) {
+            earlier.states.saturating_add(later.selected_offset)
+        } else {
+            earlier.selected_offset
+        };
+        let states = earlier.states.saturating_add(later.states);
         let mut rho_sum = earlier.rho_sum;
         if !rho_sum.is_empty() && rho_sum.len() == later.rho_sum.len() {
             for (sum, value) in rho_sum.iter_mut().zip(&later.rho_sum) {
@@ -464,6 +477,8 @@ impl Span {
             selected,
             log_weight,
             rho_sum,
+            states,
+            selected_offset,
         }
     }
 }
@@ -1760,6 +1775,13 @@ pub struct TransitionDiagnostics {
     pub selected_refinement_level: Option<usize>,
     pub refinement_attempts: usize,
     pub reverse_coarser_rejections: usize,
+    /// States in the final orbit (the initial state plus every leaf merged
+    /// into it; leaves of a stopped subtree are not part of the orbit).
+    pub orbit_states: usize,
+    /// Index of the selected state within the orbit, from its backward end.
+    pub selected_index: usize,
+    /// Index of the transition's initial state within the orbit.
+    pub initial_index: usize,
 }
 
 /// Exact fused target-callback counts, partitioned by algorithmic purpose.
@@ -2431,6 +2453,7 @@ where
 
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
+    let mut initial_index = 0usize;
     for depth in 1..=tuning.max_depth {
         final_depth = depth;
         let direction = {
@@ -2490,6 +2513,9 @@ where
             tuning.leaf.options.u_turn,
             &mut workspace,
         );
+        if direction == Direction::Backward {
+            initial_index = initial_index.saturating_add(next_span.states);
+        }
         let combined = {
             let mut counted_rng = CountedTransitionRng {
                 inner: rng,
@@ -2527,6 +2553,7 @@ where
     record_stop(&mut work, final_stop)?;
     work.validate_invariants()?;
     workspace.release();
+    let (orbit_states, selected_index) = (span_accum.states, span_accum.selected_offset);
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
             selected: take_selected(span_accum),
@@ -2550,6 +2577,9 @@ where
                 selected_refinement_level: work.selected_refinement_level,
                 refinement_attempts: work.forward_refinement_attempts,
                 reverse_coarser_rejections: work.rejections.reverse_coarser_accepted,
+                orbit_states,
+                selected_index,
+                initial_index,
             },
         },
         work,
@@ -2623,6 +2653,7 @@ where
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
     let mut final_direction = None;
+    let mut initial_index = 0usize;
     for depth in 1..=tuning.max_depth {
         final_depth = depth;
         trace(TransitionTraceEvent::basic(
@@ -2759,6 +2790,9 @@ where
         event.forward_dot = Some(forward_dot);
         event.backward_dot = backward_dot;
         trace(event);
+        if direction == Direction::Backward {
+            initial_index = initial_index.saturating_add(next_span.states);
+        }
 
         let (combined, draw, update_log_probability, update) = {
             let mut counted_rng = CountedTransitionRng {
@@ -2826,6 +2860,9 @@ where
         selected_refinement_level: work.selected_refinement_level,
         refinement_attempts: work.forward_refinement_attempts,
         reverse_coarser_rejections: work.rejections.reverse_coarser_accepted,
+        orbit_states: span_accum.states,
+        selected_index: span_accum.selected_offset,
+        initial_index,
     };
     let mut event = TransitionTraceEvent::basic(
         "transition_stop",

@@ -42,6 +42,26 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Added
 
+- **Orbit-position diagnostics** (`STUDIES/kernel_gap_v1`,
+  [WP30-KERNEL-GAP-V1]). `walnutpie::TransitionDiagnostics` gains
+  `orbit_states` (states in the final orbit), `selected_index` and
+  `initial_index` (positions of the selected and the initial state within
+  it, from the backward end); `WorkTotals` gains
+  `accepted_forward_micro_steps` (target calls attached to a built leaf)
+  and `refinement_level_built` (built leaves by refinement level). Counters
+  only: draws, call counts and fingerprints are unchanged. The kernel's
+  `Span` carries `states` and `selected_offset` for them. The reference
+  NUTS of `examples/kernel_efficiency.rs` moved to
+  `examples/support/reference_nuts.rs` (any `Target`, the same orbit
+  statistics); `examples/funnel_kernel_options.rs` takes `--seed` and
+  `--sampler-defaults`. The study decomposes the per-gradient gap to NUTS
+  on six posteriordb models at CmdStan's adapted step, metric and starts:
+  gradients per leaf 1.01x and no selection difference; leaves per orbit
+  0.60x under the endpoint U-turn statistic (41-69 % recursive U-turns);
+  `UTurnRule::MomentumSum` restores 0.97x leaves and 0.90x ESS per gradient
+  (default 0.77x), with the residual refinement's reverse-coarser stops.
+  No new option; the recommendation is to re-decide `MomentumSum` as the
+  default jointly with `DiagonalMetricRegularization::Stan`.
 - **Per-chain R-hat attribution** (`STUDIES/step_collapse_v1`,
   [WP27-STEP-COLLAPSE-V1]). `diagnostics::Summary` carries
   `chain_disagreement: Option<ChainDisagreement>`: when the maximum rank
