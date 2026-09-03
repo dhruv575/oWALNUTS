@@ -1,10 +1,14 @@
-//! Thin PyO3 wrapper over the public `owalnuts::walnutpie` facade.
+//! Thin PyO3 wrapper over the public `owalnuts::sampler` API.
 //!
-//! Every sampling call goes through the public facade; nothing here touches
-//! kernel internals. The Python thread releases the GIL for the duration of a
-//! run (`Python::detach`), and each target callback re-attaches from whichever
-//! Rust worker thread executes it, so Python targets are serialised by the GIL
-//! while native built-in targets run fully parallel.
+//! Every sampling call builds an `owalnuts::sampler::Sampler` from the Python
+//! arguments, so the package inherits the sampler's defaults (tuning, kernel
+//! rules, warmup exhaustion, metric regularisation, cached initial evaluation,
+//! worst-case admission) instead of restating them; `DEFAULTS` reports them
+//! read-only. Nothing here touches kernel internals. The Python thread
+//! releases the GIL for the duration of a run (`Python::detach`), and each
+//! target callback re-attaches from whichever Rust worker thread executes it,
+//! so Python targets are serialised by the GIL while native built-in targets
+//! run fully parallel.
 
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
@@ -12,20 +16,22 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use numpy::{
-    IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
+    IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
     PyReadonlyArray3,
 };
 use owalnuts::diagnostics::ParameterSummary;
-use owalnuts::sampler::uniform_starts;
+use owalnuts::sampler::{
+    Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric,
+    Posterior, Sampler, Tuning, uniform_starts,
+};
 use owalnuts::walnutpie::{
-    ALGORITHM_REVISION, ChainOutput, DiagonalMass, Error, KernelTuning, MultiChainOutput,
+    ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput,
+    DiagonalMetricRegularization, Error, ExhaustionRule, KernelOptions, MultiChainOutput,
     PAPER_ADAPTATION_REVISION, PaperAdaptationConfig, PaperRestartPolicy, PaperStepStatistic,
-    RawTarget, RawTargetFn, RunConfig, RunControl, StopReason, StructuredBlockMass,
+    RESEARCH_MAX_TARGET_EVALUATIONS, RawTarget, RawTargetFn, StopReason, StructuredBlockMass,
     StructuredCovarianceBlock, StructuredMetricRefresh, StructuredRefreshConfig,
-    StructuredRefreshRestartPolicy, Target, TargetError, TargetEvaluationAdmissionLimit,
-    TargetEvaluationBudget, WarmupConfig, WindowSummary, WorkTotals, preflight_chains,
-    preflight_chains_structured, preflight_chains_with_target_budget, sample_chains,
-    sample_chains_structured, sample_chains_structured_refresh, sample_chains_with_target_budget,
+    StructuredRefreshRestartPolicy, Target, TargetError, UTurnRule, WarmupConfig, WindowSummary,
+    WorkTotals,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -300,18 +306,10 @@ impl Target for LocalLevel {
 }
 
 // ── Configuration parsing ────────────────────────────────────────────────
-
-enum Mass {
-    Diagonal(DiagonalMass),
-    Structured(StructuredBlockMass),
-}
-
-struct Run {
-    config: RunConfig,
-    mass: Mass,
-    threads: NonZeroUsize,
-    budget: Option<NonZeroUsize>,
-}
+//
+// Every key is optional except `warmup`, `draws` and `seed`: an absent key
+// leaves the corresponding `owalnuts::sampler` default in place, so the
+// package never restates a sampler default.
 
 fn get<'py, T>(dict: &Bound<'py, PyDict>, key: &str) -> PyResult<Option<T>>
 where
@@ -332,33 +330,201 @@ where
     get(dict, key)?.ok_or_else(|| value_error(format!("missing config key {key:?}")))
 }
 
-fn parse_mass(py: Python<'_>, dimension: usize, spec: Option<Bound<'_, PyAny>>) -> PyResult<Mass> {
-    let Some(spec) = spec else {
-        return Ok(Mass::Diagonal(DiagonalMass::identity(nonzero(
-            dimension,
-            "dimension",
-        )?)));
+// Python-facing names of the kernel rule and regularisation variants. The
+// `DEFAULTS` dict reports the sampler defaults through the same names.
+
+fn u_turn_name(rule: UTurnRule) -> &'static str {
+    match rule {
+        UTurnRule::Endpoints => "endpoints",
+        UTurnRule::EndpointsWithCross => "endpoints_with_cross",
+        UTurnRule::MomentumSum => "momentum_sum",
+    }
+}
+
+fn parse_u_turn(name: &str) -> PyResult<UTurnRule> {
+    match name {
+        "endpoints" => Ok(UTurnRule::Endpoints),
+        "endpoints_with_cross" => Ok(UTurnRule::EndpointsWithCross),
+        "momentum_sum" => Ok(UTurnRule::MomentumSum),
+        other => Err(value_error(format!(
+            "unknown u_turn_rule {other:?} (endpoints | endpoints_with_cross | momentum_sum)"
+        ))),
+    }
+}
+
+fn exhaustion_name(rule: ExhaustionRule) -> &'static str {
+    match rule {
+        ExhaustionRule::Stop => "stop",
+        ExhaustionRule::AcceptBelowDivergenceThreshold => "accept_below_divergence_threshold",
+        ExhaustionRule::AcceptUnlessDivergent => "accept_unless_divergent",
+    }
+}
+
+fn parse_exhaustion(name: &str) -> PyResult<ExhaustionRule> {
+    match name {
+        "stop" => Ok(ExhaustionRule::Stop),
+        "accept_below_divergence_threshold" => Ok(ExhaustionRule::AcceptBelowDivergenceThreshold),
+        "accept_unless_divergent" => Ok(ExhaustionRule::AcceptUnlessDivergent),
+        other => Err(value_error(format!(
+            "unknown exhaustion_rule {other:?} (stop | accept_below_divergence_threshold | \
+             accept_unless_divergent)"
+        ))),
+    }
+}
+
+fn regularization_name(regularization: DiagonalMetricRegularization) -> &'static str {
+    match regularization {
+        DiagonalMetricRegularization::TowardUnit => "toward_unit",
+        DiagonalMetricRegularization::Stan => "stan",
+        _ => "unknown",
+    }
+}
+
+fn parse_regularization(name: &str) -> PyResult<DiagonalMetricRegularization> {
+    match name {
+        "toward_unit" => Ok(DiagonalMetricRegularization::TowardUnit),
+        "stan" => Ok(DiagonalMetricRegularization::Stan),
+        other => Err(value_error(format!(
+            "unknown metric_regularization {other:?} (toward_unit | stan)"
+        ))),
+    }
+}
+
+/// `owalnuts::sampler::Tuning::default()` with the keys present in `cfg`
+/// applied on top.
+fn parse_tuning(cfg: &Bound<'_, PyDict>) -> PyResult<Tuning> {
+    let mut tuning = Tuning::new();
+    if let Some(v) = get::<f64>(cfg, "step_size")? {
+        tuning = tuning.step_size(v);
+    }
+    if let Some(v) = get::<usize>(cfg, "max_depth")? {
+        tuning = tuning.max_depth(v);
+    }
+    if let Some(v) = get::<usize>(cfg, "min_micro_steps")? {
+        tuning = tuning.min_micro_steps(v);
+    }
+    if let Some(v) = get::<usize>(cfg, "max_refinement_levels")? {
+        tuning = tuning.max_refinement_levels(v);
+    }
+    if let Some(v) = get::<f64>(cfg, "max_error")? {
+        tuning = tuning.max_error(v);
+    }
+    if let Some(v) = get::<f64>(cfg, "divergence_threshold")? {
+        tuning = tuning.divergence_threshold(v);
+    }
+    let u_turn: Option<String> = get(cfg, "u_turn_rule")?;
+    let exhaustion: Option<String> = get(cfg, "exhaustion_rule")?;
+    if u_turn.is_some() || exhaustion.is_some() {
+        let defaults = default_kernel_options()?;
+        tuning = tuning.kernel_options(KernelOptions {
+            u_turn: u_turn
+                .as_deref()
+                .map(parse_u_turn)
+                .transpose()?
+                .unwrap_or(defaults.u_turn),
+            exhaustion: exhaustion
+                .as_deref()
+                .map(parse_exhaustion)
+                .transpose()?
+                .unwrap_or(defaults.exhaustion),
+        });
+    }
+    Ok(tuning)
+}
+
+/// The kernel options of `owalnuts::sampler::Tuning::default()`.
+fn default_kernel_options() -> PyResult<KernelOptions> {
+    Ok(Tuning::default()
+        .to_kernel()
+        .map_err(facade_error)?
+        .options())
+}
+
+/// The target acceptance of `owalnuts::sampler::Adaptation::default()`.
+fn default_target_accept() -> PyResult<f64> {
+    match Adaptation::default() {
+        Adaptation::DualAveraging { target_accept } => Ok(target_accept),
+        other => Err(PyRuntimeError::new_err(format!(
+            "owalnuts sampler default adaptation is not dual averaging: {other:?}"
+        ))),
+    }
+}
+
+fn parse_paper(cfg: &Bound<'_, PyDict>) -> PyResult<Option<PaperAdaptationConfig>> {
+    let Some(paper) = cfg.get_item("paper_adaptation")? else {
+        return Ok(None);
     };
-    if spec.is_none() {
-        return Ok(Mass::Diagonal(DiagonalMass::identity(nonzero(
-            dimension,
-            "dimension",
-        )?)));
+    if paper.is_none() {
+        return Ok(None);
     }
-    if let Ok(diagonal) = spec.extract::<PyReadonlyArray1<'_, f64>>() {
-        let diagonal = diagonal.as_slice()?.to_vec();
-        return DiagonalMass::from_diagonal(diagonal)
-            .map(Mass::Diagonal)
-            .map_err(facade_error);
+    let paper = paper
+        .cast::<PyDict>()
+        .map_err(|_| value_error("paper_adaptation must be a dict or None"))?;
+    let delta: f64 = get(paper, "global_energy_bound")?.unwrap_or(2.0);
+    let p_a: f64 = get(paper, "quantile_probability")?.unwrap_or(0.95);
+    let gamma: f64 = get(paper, "unrefined_fraction_target")?.unwrap_or(0.8);
+    let adapt_local_error: bool = get(paper, "adapt_local_error")?.unwrap_or(true);
+    let mut paper_config = PaperAdaptationConfig::new(delta, p_a, gamma)
+        .map_err(facade_error)?
+        .with_local_error_adaptation(adapt_local_error);
+    if let Some(min_orbits) = get::<usize>(paper, "minimum_orbits")? {
+        paper_config = paper_config.with_minimum_orbits(nonzero(min_orbits, "minimum_orbits")?);
     }
-    let blocks = spec.cast::<PyList>().map_err(|_| {
-        value_error("mass must be None, a 1-D float64 array, or a list of block dicts")
-    })?;
-    let parsed = parse_blocks(blocks)?;
-    let _ = py;
-    StructuredBlockMass::new(parsed)
-        .map(Mass::Structured)
-        .map_err(facade_error)
+    if let Some(statistic) = get::<String>(paper, "step_statistic")? {
+        paper_config = paper_config.with_step_statistic(match statistic.as_str() {
+            "per_transition" => PaperStepStatistic::PerTransition,
+            "cumulative" => PaperStepStatistic::Cumulative,
+            other => return Err(value_error(format!("unknown step_statistic {other:?}"))),
+        });
+    }
+    if let Some(policy) = get::<String>(paper, "restart_policy")? {
+        paper_config = paper_config.with_restart_policy(match policy.as_str() {
+            "restart" => PaperRestartPolicy::RestartOnLocalErrorInstall,
+            "continue" => PaperRestartPolicy::ContinueThroughLocalErrorInstall,
+            other => return Err(value_error(format!("unknown restart_policy {other:?}"))),
+        });
+    }
+    Ok(Some(paper_config))
+}
+
+/// The sampler's own adaptation modes (`DualAveraging`, `Paper`) whenever the
+/// configuration is expressible through them; `Adaptation::Custom` only for
+/// `adapt_step_size=False` or an explicit `metric_regularization`, built with
+/// the same `DEFAULT_WARMUP_EXHAUSTION` / `DEFAULT_METRIC_REGULARIZATION` the
+/// sampler applies to its own modes.
+fn parse_adaptation(cfg: &Bound<'_, PyDict>) -> PyResult<Adaptation> {
+    let adapt: bool = get(cfg, "adapt")?.unwrap_or(true);
+    if !adapt {
+        return Ok(Adaptation::None);
+    }
+    let target_accept: f64 = match get(cfg, "target_accept")? {
+        Some(value) => value,
+        None => default_target_accept()?,
+    };
+    let adapt_step: bool = get(cfg, "adapt_step_size")?.unwrap_or(true);
+    let regularization: Option<String> = get(cfg, "metric_regularization")?;
+    let paper = parse_paper(cfg)?;
+    if adapt_step && regularization.is_none() {
+        return Ok(match paper {
+            Some(paper) => Adaptation::Paper(paper),
+            None => Adaptation::DualAveraging { target_accept },
+        });
+    }
+    let warmup = match paper {
+        Some(paper) => WarmupConfig::default().with_paper_adaptation(paper),
+        None => WarmupConfig::new(target_accept).map_err(facade_error)?,
+    };
+    let regularization = regularization
+        .as_deref()
+        .map(parse_regularization)
+        .transpose()?
+        .unwrap_or(DEFAULT_METRIC_REGULARIZATION);
+    Ok(Adaptation::Custom(
+        warmup
+            .with_step_size_adaptation(adapt_step)
+            .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+            .with_metric_regularization(regularization),
+    ))
 }
 
 fn parse_blocks(blocks: &Bound<'_, PyList>) -> PyResult<Vec<StructuredCovarianceBlock>> {
@@ -408,138 +574,166 @@ fn parse_blocks(blocks: &Bound<'_, PyList>) -> PyResult<Vec<StructuredCovariance
     Ok(parsed)
 }
 
-fn parse_run(
-    py: Python<'_>,
-    dimension: usize,
-    chains: usize,
-    cfg: &Bound<'_, PyDict>,
-    refresh_active: bool,
-) -> PyResult<Run> {
-    let discarded: usize = required(cfg, "warmup")?;
-    let retained: usize = required(cfg, "draws")?;
-    let seed: u64 = required(cfg, "seed")?;
-    let threads: usize = get(cfg, "threads")?.unwrap_or(1);
-    // Defaults match `owalnuts::sampler::Tuning::default()`.
-    let step_size: f64 = get(cfg, "step_size")?.unwrap_or(0.5);
-    let max_depth: usize = get(cfg, "max_depth")?.unwrap_or(10);
-    let min_micro_steps: usize = get(cfg, "min_micro_steps")?.unwrap_or(1);
-    let max_refinement_levels: usize = get(cfg, "max_refinement_levels")?.unwrap_or(8);
-    let max_error: f64 = get(cfg, "max_error")?.unwrap_or(1.0);
-    let divergence_threshold: f64 = get(cfg, "divergence_threshold")?.unwrap_or(1000.0);
-    let max_depth_stop_limit: Option<usize> = get(cfg, "max_depth_stop_limit")?;
-    let budget: Option<NonZeroUsize> = match get::<usize>(cfg, "max_target_evaluations")? {
-        Some(b) => Some(nonzero(b, "max_target_evaluations")?),
-        None => None,
-    };
+/// Python slow-window refresh callback for structured-mass runs.
+struct PyRefresh {
+    callable: Py<PyAny>,
+}
 
-    let tuning = KernelTuning::new(
-        step_size,
-        nonzero(max_depth, "max_depth")?,
-        nonzero(min_micro_steps, "min_micro_steps")?,
-        nonzero(max_refinement_levels, "max_refinement_levels")?,
-        max_error,
-    )
-    .and_then(|t| t.with_divergence_threshold(divergence_threshold))
-    .map_err(facade_error)?;
-
-    let mut config =
-        RunConfig::new(discarded, nonzero(retained, "draws")?, seed).with_tuning(tuning);
-    if let Some(limit) = max_depth_stop_limit {
-        config = config.with_maximum_depth_stop_limit(limit);
-    }
-    let mass = parse_mass(py, dimension, cfg.get_item("mass")?)?;
-
-    // `admit_worst_case` (default) mirrors `sampler::Limits::admit_worst_case`:
-    // when the conservative default admission ceiling would reject the run,
-    // admit it with its exact worst-case evaluation count instead. Needed
-    // at the sampler defaults (depth 10, eight refinement levels) for four
-    // chains of a few thousand transitions.
-    let admit_worst_case: bool = get(cfg, "admit_worst_case")?.unwrap_or(true);
-    let chains = nonzero(chains, "chains")?;
-    let budget = match budget {
-        Some(budget) => Some(budget),
-        None if admit_worst_case => {
-            let worst = config
-                .worst_case_target_evaluations(chains)
-                .map_err(facade_error)?;
-            (worst > owalnuts::walnutpie::CONSERVATIVE_MAX_TARGET_EVALUATIONS)
-                .then(|| nonzero(worst, "worst_case_target_evaluations"))
-                .transpose()?
-        }
-        None => None,
-    };
-    if let (Some(budget), Mass::Structured(_)) = (budget, &mass) {
-        // Structured-mass runs have no budgeted entry point: raise the
-        // constructor admission ceiling to the budget instead (bounded by
-        // the facade's hard research maximum). Diagonal runs go through the
-        // budgeted entry point with an explicit admission limit and must
-        // not also carry a research limit.
-        let ceiling = budget
-            .get()
-            .min(owalnuts::walnutpie::RESEARCH_MAX_TARGET_EVALUATIONS);
-        let limit = owalnuts::walnutpie::ResearchTargetEvaluationLimit::new(
-            NonZeroUsize::new(ceiling).expect("nonzero ceiling"),
-        )
-        .map_err(facade_error)?;
-        config = config.with_research_target_evaluation_limit(limit);
-    }
-
-    let adapt: bool = get(cfg, "adapt")?.unwrap_or(true);
-    if adapt {
-        let target_accept: f64 = get(cfg, "target_accept")?.unwrap_or(0.8);
-        let adapt_step: bool = get(cfg, "adapt_step_size")?.unwrap_or(true);
-        let adapt_mass_requested: bool = get(cfg, "adapt_mass")?.unwrap_or(true);
-        let adapt_mass =
-            adapt_mass_requested && (matches!(mass, Mass::Diagonal(_)) || refresh_active);
-        let mut warmup = WarmupConfig::new(target_accept)
-            .map_err(facade_error)?
-            .with_step_size_adaptation(adapt_step)
-            .with_mass_adaptation(adapt_mass);
-        if let Some(paper) = cfg.get_item("paper_adaptation")? {
-            if !paper.is_none() {
-                let paper = paper
-                    .cast::<PyDict>()
-                    .map_err(|_| value_error("paper_adaptation must be a dict or None"))?;
-                let delta: f64 = get(paper, "global_energy_bound")?.unwrap_or(2.0);
-                let p_a: f64 = get(paper, "quantile_probability")?.unwrap_or(0.95);
-                let gamma: f64 = get(paper, "unrefined_fraction_target")?.unwrap_or(0.8);
-                let adapt_local_error: bool = get(paper, "adapt_local_error")?.unwrap_or(true);
-                let mut paper_config = PaperAdaptationConfig::new(delta, p_a, gamma)
-                    .map_err(facade_error)?
-                    .with_local_error_adaptation(adapt_local_error);
-                if let Some(min_orbits) = get::<usize>(paper, "minimum_orbits")? {
-                    paper_config =
-                        paper_config.with_minimum_orbits(nonzero(min_orbits, "minimum_orbits")?);
-                }
-                if let Some(statistic) = get::<String>(paper, "step_statistic")? {
-                    paper_config = paper_config.with_step_statistic(match statistic.as_str() {
-                        "per_transition" => PaperStepStatistic::PerTransition,
-                        "cumulative" => PaperStepStatistic::Cumulative,
-                        other => {
-                            return Err(value_error(format!("unknown step_statistic {other:?}")));
-                        }
-                    });
-                }
-                if let Some(policy) = get::<String>(paper, "restart_policy")? {
-                    paper_config = paper_config.with_restart_policy(match policy.as_str() {
-                        "restart" => PaperRestartPolicy::RestartOnLocalErrorInstall,
-                        "continue" => PaperRestartPolicy::ContinueThroughLocalErrorInstall,
-                        other => {
-                            return Err(value_error(format!("unknown restart_policy {other:?}")));
-                        }
-                    });
-                }
-                warmup = warmup.with_paper_adaptation(paper_config);
+impl StructuredMetricRefresh for PyRefresh {
+    fn refresh(
+        &self,
+        summary: &WindowSummary,
+        current: &StructuredBlockMass,
+    ) -> Result<StructuredBlockMass, Error> {
+        Python::attach(|py| {
+            let mean = PyArray1::from_slice(py, summary.mean());
+            let variance = PyArray1::from_slice(py, summary.variance());
+            let result = self
+                .callable
+                .bind(py)
+                .call1((
+                    summary.window_index(),
+                    summary.transition(),
+                    summary.sample_count(),
+                    mean,
+                    variance,
+                ))
+                .map_err(|e| Error::metric_candidate(format!("refresh callback raised: {e}")))?;
+            if result.is_none() {
+                return Ok(current.clone());
             }
-        }
-        config = config.with_warmup(warmup);
+            let list = result.cast::<PyList>().map_err(|_| {
+                Error::metric_candidate(
+                    "refresh callback must return None or a list of mass blocks",
+                )
+            })?;
+            let blocks = parse_blocks(list)
+                .map_err(|e| Error::metric_candidate(format!("refresh blocks invalid: {e}")))?;
+            StructuredBlockMass::new(blocks)
+        })
     }
+}
 
+/// Structured-refresh request: the Python callback and its restart policy.
+struct Refresh {
+    callable: Py<PyAny>,
+    restart: StructuredRefreshRestartPolicy,
+}
+
+fn parse_refresh(callable: Option<Py<PyAny>>, restart: &str) -> PyResult<Option<Refresh>> {
+    let Some(callable) = callable else {
+        return Ok(None);
+    };
+    let restart = match restart {
+        "continue" => StructuredRefreshRestartPolicy::ContinueDualAveraging,
+        "restart" => StructuredRefreshRestartPolicy::RestartDualAveraging,
+        other => return Err(value_error(format!("unknown refresh_restart {other:?}"))),
+    };
+    Ok(Some(Refresh { callable, restart }))
+}
+
+/// `mass=None` is the identity diagonal, a 1-D array a diagonal, a list of
+/// block dicts a structured mass (`Metric::Structured`, or
+/// `Metric::StructuredRefresh` with a refresh callback). `adapt_mass` applies
+/// to the diagonal metrics only; a structured mass is fixed unless refreshed.
+fn parse_metric(
+    spec: Option<Bound<'_, PyAny>>,
+    adapt_mass: bool,
+    refresh: Option<Refresh>,
+) -> PyResult<Metric> {
+    let spec = spec.filter(|spec| !spec.is_none());
+    let blocks = match spec {
+        None => None,
+        Some(spec) => {
+            if let Ok(diagonal) = spec.extract::<PyReadonlyArray1<'_, f64>>() {
+                if refresh.is_some() {
+                    return Err(value_error("refresh requires a structured mass"));
+                }
+                return Ok(Metric::Diagonal {
+                    adapt: adapt_mass,
+                    initial: Some(diagonal.as_slice()?.to_vec()),
+                });
+            }
+            let list = spec.cast::<PyList>().map_err(|_| {
+                value_error("mass must be None, a 1-D float64 array, or a list of block dicts")
+            })?;
+            Some(StructuredBlockMass::new(parse_blocks(list)?).map_err(facade_error)?)
+        }
+    };
+    match (blocks, refresh) {
+        (None, Some(_)) => Err(value_error("refresh requires a structured mass")),
+        (None, None) => Ok(Metric::Diagonal {
+            adapt: adapt_mass,
+            initial: None,
+        }),
+        (Some(mass), None) => Ok(Metric::Structured(mass)),
+        (Some(mass), Some(refresh)) => Ok(Metric::StructuredRefresh {
+            initial: mass,
+            refresh: Box::new(PyRefresh {
+                callable: refresh.callable,
+            }),
+            config: StructuredRefreshConfig::default().with_restart_policy(refresh.restart),
+        }),
+    }
+}
+
+fn parse_limits(cfg: &Bound<'_, PyDict>) -> PyResult<Limits> {
+    let mut limits = Limits::new();
+    if let Some(budget) = get::<usize>(cfg, "max_target_evaluations")? {
+        nonzero(budget, "max_target_evaluations")?;
+        limits = limits.max_target_evaluations(budget);
+    }
+    if let Some(false) = get::<bool>(cfg, "admit_worst_case")? {
+        limits = limits.admit_conservative();
+    }
+    if let Some(stops) = get::<usize>(cfg, "max_depth_stop_limit")? {
+        limits = limits.max_depth_stops(stops);
+    }
+    Ok(limits)
+}
+
+/// One configured run: the `owalnuts::sampler::Sampler` plus what the
+/// zero-callback preflight needs to reproduce its admission decision.
+struct Run {
+    sampler: Sampler,
+    structured: bool,
+    max_target_evaluations: Option<usize>,
+    admit_worst_case: bool,
+}
+
+/// Build the sampler from the Python configuration dict.
+fn parse_run(cfg: &Bound<'_, PyDict>, refresh: Option<Refresh>) -> PyResult<Run> {
+    let warmup: usize = required(cfg, "warmup")?;
+    let draws: usize = required(cfg, "draws")?;
+    let seed: u64 = required(cfg, "seed")?;
+    let adapt: bool = get(cfg, "adapt")?.unwrap_or(true);
+    let adapt_mass = adapt && get::<bool>(cfg, "adapt_mass")?.unwrap_or(true);
+    let metric = parse_metric(cfg.get_item("mass")?, adapt_mass, refresh)?;
+    let structured = matches!(
+        metric,
+        Metric::Structured(_) | Metric::StructuredRefresh { .. }
+    );
+    let max_target_evaluations: Option<usize> = get(cfg, "max_target_evaluations")?;
+    let admit_worst_case: bool = get(cfg, "admit_worst_case")?.unwrap_or(true);
+    let mut sampler = Sampler::new()
+        .warmup(warmup)
+        .draws(draws)
+        .seed(seed)
+        .tuning(parse_tuning(cfg)?)
+        .adaptation(parse_adaptation(cfg)?)
+        .metric(metric)
+        .limits(parse_limits(cfg)?);
+    if let Some(threads) = get::<usize>(cfg, "threads")? {
+        sampler = sampler.threads(threads);
+    }
+    if let Some(cache) = get::<bool>(cfg, "cache_initial_evaluation")? {
+        sampler = sampler.cache_initial_evaluation(cache);
+    }
     Ok(Run {
-        config,
-        mass,
-        threads: nonzero(threads, "threads")?,
-        budget,
+        sampler,
+        structured,
+        max_target_evaluations,
+        admit_worst_case,
     })
 }
 
@@ -550,65 +744,37 @@ fn parse_starts(starts: PyReadonlyArray2<'_, f64>) -> PyResult<Vec<Vec<f64>>> {
 
 // ── Execution ────────────────────────────────────────────────────────────
 
-/// Admission ceiling used with an explicit runtime budget: the exact shared
-/// callback budget is authoritative, so the conservative constructor bound is
-/// only required to be representable.
-const BUDGETED_ADMISSION_LIMIT: usize = 1 << 50;
-
-fn admission() -> TargetEvaluationAdmissionLimit {
-    TargetEvaluationAdmissionLimit::new(
-        NonZeroUsize::new(BUDGETED_ADMISSION_LIMIT).expect("nonzero"),
-    )
+fn execute<T: Target>(target: &T, starts: &[Vec<f64>], run: &Run) -> Result<Posterior, Error> {
+    run.sampler.run(target, starts)
 }
 
-fn execute<T: Target>(
-    target: &T,
-    starts: &[Vec<f64>],
-    run: &Run,
-) -> Result<MultiChainOutput, Error> {
-    match (&run.mass, run.budget) {
-        (Mass::Diagonal(mass), None) => {
-            sample_chains(target, starts, mass, &run.config, run.threads)
-        }
-        (Mass::Diagonal(mass), Some(budget)) => sample_chains_with_target_budget(
-            target,
-            starts,
-            mass,
-            &run.config,
-            run.threads,
-            admission(),
-            &TargetEvaluationBudget::new(budget),
-        ),
-        (Mass::Structured(mass), _) => {
-            sample_chains_structured(target, starts, mass, &run.config, run.threads)
-        }
-    }
-}
-
-fn preflight<T: Target>(
-    target: &T,
-    starts: &[Vec<f64>],
-    run: &Run,
-) -> Result<(usize, usize, usize), Error> {
-    let report = match (&run.mass, run.budget) {
-        (Mass::Diagonal(mass), None) => preflight_chains(target, starts, mass, &run.config)?,
-        (Mass::Diagonal(mass), Some(budget)) => preflight_chains_with_target_budget(
-            target,
-            starts,
-            mass,
-            &run.config,
-            admission(),
-            &TargetEvaluationBudget::new(budget),
-        )?,
-        (Mass::Structured(mass), _) => {
-            preflight_chains_structured(target, starts, mass, &run.config)?
-        }
+/// Zero-callback admission report: transitions, the exact worst-case
+/// evaluation count (`Sampler::worst_case_target_evaluations`), and the
+/// ceiling the run is admitted against — the explicit budget, the worst case
+/// itself under `admit_worst_case` (capped at the research maximum on the
+/// structured paths, which have no budgeted admission variant), or the
+/// conservative `walnutpie` ceiling.
+fn preflight(chains: usize, transitions: usize, run: &Run) -> PyResult<(usize, usize, usize)> {
+    let worst = run
+        .sampler
+        .worst_case_target_evaluations(chains)
+        .map_err(facade_error)?;
+    let ceiling = match (run.max_target_evaluations, run.admit_worst_case) {
+        (Some(budget), _) => budget,
+        (None, true) if run.structured => worst.min(RESEARCH_MAX_TARGET_EVALUATIONS),
+        (None, true) => worst,
+        (None, false) => CONSERVATIVE_MAX_TARGET_EVALUATIONS,
     };
-    Ok((
-        report.total_transitions(),
-        report.worst_case_target_evaluations(),
-        report.admission_ceiling(),
-    ))
+    if worst > ceiling {
+        return Err(PyRuntimeError::new_err(format!(
+            "owalnuts ResourceLimit: worst-case target evaluations ({worst}) exceed the \
+             admission ceiling ({ceiling}), a resource limit"
+        )));
+    }
+    let total_transitions = transitions
+        .checked_mul(chains)
+        .ok_or_else(|| value_error("transition count overflows"))?;
+    Ok((total_transitions, worst, ceiling))
 }
 
 fn stop_code(stop: StopReason) -> u8 {
@@ -775,46 +941,6 @@ fn output_dict<'py>(
     Ok(d)
 }
 
-/// Python slow-window refresh callback for structured-mass runs.
-struct PyRefresh {
-    callable: Py<PyAny>,
-}
-
-impl StructuredMetricRefresh for PyRefresh {
-    fn refresh(
-        &self,
-        summary: &WindowSummary,
-        current: &StructuredBlockMass,
-    ) -> Result<StructuredBlockMass, Error> {
-        Python::attach(|py| {
-            let mean = PyArray1::from_slice(py, summary.mean());
-            let variance = PyArray1::from_slice(py, summary.variance());
-            let result = self
-                .callable
-                .bind(py)
-                .call1((
-                    summary.window_index(),
-                    summary.transition(),
-                    summary.sample_count(),
-                    mean,
-                    variance,
-                ))
-                .map_err(|e| Error::metric_candidate(format!("refresh callback raised: {e}")))?;
-            if result.is_none() {
-                return Ok(current.clone());
-            }
-            let list = result.cast::<PyList>().map_err(|_| {
-                Error::metric_candidate(
-                    "refresh callback must return None or a list of mass blocks",
-                )
-            })?;
-            let blocks = parse_blocks(list)
-                .map_err(|e| Error::metric_candidate(format!("refresh blocks invalid: {e}")))?;
-            StructuredBlockMass::new(blocks)
-        })
-    }
-}
-
 // ── Python API ───────────────────────────────────────────────────────────
 
 /// Sample a Python callable target `f(q) -> (log_density, gradient)`.
@@ -834,7 +960,8 @@ fn sample_callable<'py>(
         .first()
         .map(Vec::len)
         .ok_or_else(|| value_error("starts is empty"))?;
-    let run = parse_run(py, dimension, starts.len(), config, refresh.is_some())?;
+    let refreshed = refresh.is_some();
+    let run = parse_run(config, parse_refresh(refresh, refresh_restart)?)?;
     let py_target = PyTarget {
         callable: target,
         dimension,
@@ -845,41 +972,19 @@ fn sample_callable<'py>(
         last_fatal: Mutex::new(None),
     };
     let started = Instant::now();
-    if let Some(callback) = refresh {
-        let Mass::Structured(mass) = &run.mass else {
-            return Err(value_error("refresh requires a structured mass"));
-        };
-        let policy = match refresh_restart {
-            "continue" => StructuredRefreshRestartPolicy::ContinueDualAveraging,
-            "restart" => StructuredRefreshRestartPolicy::RestartDualAveraging,
-            other => return Err(value_error(format!("unknown refresh_restart {other:?}"))),
-        };
-        let adapter = PyRefresh { callable: callback };
-        let refresh_config = StructuredRefreshConfig::default().with_restart_policy(policy);
-        let control = RunControl::new();
-        let output = py
-            .detach(|| {
-                sample_chains_structured_refresh(
-                    &py_target,
-                    &starts,
-                    mass,
-                    &adapter,
-                    &refresh_config,
-                    &run.config,
-                    run.threads,
-                    &control,
-                )
-            })
-            .map_err(|e| py_target.fatal_error(e))?;
-        let wall = started.elapsed().as_secs_f64();
-        let dict = output_dict(
-            py,
-            output.chains(),
-            wall,
-            py_target.calls.load(Ordering::Relaxed),
-            py_target.recoverable.load(Ordering::Relaxed),
-            py_target.attached_nanos.load(Ordering::Relaxed) as f64 * 1e-9,
-        )?;
+    let output = py
+        .detach(|| execute(&py_target, &starts, &run))
+        .map_err(|e| py_target.fatal_error(e))?;
+    let wall = started.elapsed().as_secs_f64();
+    let dict = output_dict(
+        py,
+        output.inner(),
+        wall,
+        py_target.calls.load(Ordering::Relaxed),
+        py_target.recoverable.load(Ordering::Relaxed),
+        py_target.attached_nanos.load(Ordering::Relaxed) as f64 * 1e-9,
+    )?;
+    if refreshed {
         let updates = PyList::empty(py);
         for (chain, rows) in output.metric_updates().iter().enumerate() {
             for u in rows {
@@ -895,20 +1000,8 @@ fn sample_callable<'py>(
             }
         }
         dict.set_item("refresh_updates", updates)?;
-        return Ok(dict);
     }
-    let output = py
-        .detach(|| execute(&py_target, &starts, &run))
-        .map_err(|e| py_target.fatal_error(e))?;
-    let wall = started.elapsed().as_secs_f64();
-    output_dict(
-        py,
-        &output,
-        wall,
-        py_target.calls.load(Ordering::Relaxed),
-        py_target.recoverable.load(Ordering::Relaxed),
-        py_target.attached_nanos.load(Ordering::Relaxed) as f64 * 1e-9,
-    )
+    Ok(dict)
 }
 
 /// Zero-callback admission preflight for a callable target of `dimension`.
@@ -923,18 +1016,14 @@ fn preflight_callable<'py>(
         .first()
         .map(Vec::len)
         .ok_or_else(|| value_error("starts is empty"))?;
-    let run = parse_run(py, dimension, starts.len(), config, false)?;
-    struct Never(usize);
-    impl Target for Never {
-        fn dimension(&self) -> usize {
-            self.0
-        }
-        fn log_density_gradient(&self, _: &[f64], _: &mut [f64]) -> Result<f64, TargetError> {
-            Err(TargetError::new("preflight target must not be evaluated"))
-        }
-    }
-    let (transitions, worst, ceiling) =
-        preflight(&Never(dimension), &starts, &run).map_err(facade_error)?;
+    nonzero(dimension, "dimension")?;
+    let run = parse_run(config, None)?;
+    let warmup: usize = required(config, "warmup")?;
+    let draws: usize = required(config, "draws")?;
+    let transitions = warmup
+        .checked_add(draws)
+        .ok_or_else(|| value_error("transition count overflows"))?;
+    let (transitions, worst, ceiling) = preflight(starts.len(), transitions, &run)?;
     let d = PyDict::new(py);
     d.set_item("total_transitions", transitions)?;
     d.set_item("worst_case_target_evaluations", worst)?;
@@ -957,7 +1046,7 @@ fn sample_eight_schools<'py>(
         calls: AtomicUsize::new(0),
     };
     let starts = parse_starts(starts)?;
-    let run = parse_run(py, target.dimension(), starts.len(), config, false)?;
+    let run = parse_run(config, None)?;
     let started = Instant::now();
     let output = py
         .detach(|| execute(&target, &starts, &run))
@@ -965,7 +1054,7 @@ fn sample_eight_schools<'py>(
     let wall = started.elapsed().as_secs_f64();
     output_dict(
         py,
-        &output,
+        output.inner(),
         wall,
         target.calls.load(Ordering::Relaxed),
         0,
@@ -998,7 +1087,7 @@ fn sample_local_level<'py>(
         calls: AtomicUsize::new(0),
     };
     let starts = parse_starts(starts)?;
-    let run = parse_run(py, target.dimension(), starts.len(), config, false)?;
+    let run = parse_run(config, None)?;
     let started = Instant::now();
     let output = py
         .detach(|| execute(&target, &starts, &run))
@@ -1006,7 +1095,7 @@ fn sample_local_level<'py>(
     let wall = started.elapsed().as_secs_f64();
     output_dict(
         py,
-        &output,
+        output.inner(),
         wall,
         target.calls.load(Ordering::Relaxed),
         0,
@@ -1041,7 +1130,7 @@ fn sample_cfunc<'py>(
             "starts must be (chains, {dimension}) to match the cfunc dimension"
         )));
     }
-    let run = parse_run(py, dimension, starts.len(), config, false)?;
+    let run = parse_run(config, None)?;
     // SAFETY: the caller passes the address of a compiled callback with the
     // documented `RawTargetFn` ABI and keeps it alive for the whole call; the
     // remaining contract is asserted through `RawTarget::new` below.
@@ -1063,12 +1152,122 @@ fn sample_cfunc<'py>(
         .detach(|| execute(&target, &starts, &run))
         .map_err(facade_error)?;
     let wall = started.elapsed().as_secs_f64();
-    let calls = output
-        .chains()
-        .iter()
-        .map(|c| c.telemetry().total().target_calls_total())
-        .sum();
-    output_dict(py, &output, wall, calls, 0, 0.0)
+    let calls = output.total_target_calls();
+    output_dict(py, output.inner(), wall, calls, 0, 0.0)
+}
+
+/// Standard Gaussian reference target for the defaults-parity test: the log
+/// density is accumulated as `s += x * x` in index order (no fused
+/// multiply-add, no pairwise summation) so that a Python target written the
+/// same way returns bit-identical values.
+struct StandardGaussian(usize);
+
+impl Target for StandardGaussian {
+    fn dimension(&self) -> usize {
+        self.0
+    }
+    fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+        let mut sum = 0.0;
+        for (x, gradient) in q.iter().zip(g.iter_mut()) {
+            *gradient = -x;
+            sum += x * x;
+        }
+        Ok(-0.5 * sum)
+    }
+}
+
+/// Draws of `owalnuts::sampler::Sampler::new().warmup(..).draws(..).seed(..)`
+/// (every other setting at the sampler default) on the standard Gaussian,
+/// as a `(chains, draws, dim)` array. The Python test suite checks that
+/// `owalnuts.sample` with explicit arguments equal to `DEFAULTS` reproduces
+/// these draws bit for bit.
+#[pyfunction]
+fn reference_gaussian_sampler_run<'py>(
+    py: Python<'py>,
+    starts: PyReadonlyArray2<'py, f64>,
+    warmup: usize,
+    draws: usize,
+    seed: u64,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let starts = parse_starts(starts)?;
+    let dimension = starts
+        .first()
+        .map(Vec::len)
+        .ok_or_else(|| value_error("starts is empty"))?;
+    let target = StandardGaussian(dimension);
+    let sampler = Sampler::new().warmup(warmup).draws(draws).seed(seed);
+    let posterior = py
+        .detach(|| sampler.run(&target, &starts))
+        .map_err(facade_error)?;
+    let chains = posterior.chain_count();
+    let retained = posterior.draws_per_chain();
+    let mut flat = Vec::with_capacity(chains * retained * dimension);
+    for chain in posterior.chains() {
+        flat.extend_from_slice(chain.samples());
+    }
+    flat.into_pyarray(py).reshape([chains, retained, dimension])
+}
+
+/// The `owalnuts::sampler` defaults the package inherits, read from the Rust
+/// values (not restated): `Tuning::default()` through its validated kernel
+/// tuning, the sampler's warmup exhaustion rule and metric regularisation,
+/// `Adaptation::default()`, `Metric::default()`, `Init::default()`, and the
+/// `Sampler` / `Limits` defaults (read from their `Debug` output, which is
+/// the only public view of those two flags).
+fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    let tuning = Tuning::default().to_kernel().map_err(facade_error)?;
+    let d = PyDict::new(py);
+    d.set_item("algorithm_revision", ALGORITHM_REVISION)?;
+    d.set_item("paper_adaptation_revision", PAPER_ADAPTATION_REVISION)?;
+    d.set_item("step_size", tuning.step_size())?;
+    d.set_item("max_depth", tuning.max_depth())?;
+    d.set_item("min_micro_steps", tuning.min_micro_steps())?;
+    d.set_item("max_refinement_levels", tuning.max_refinement_levels())?;
+    d.set_item("max_error", tuning.max_error())?;
+    d.set_item("divergence_threshold", tuning.divergence_threshold())?;
+    d.set_item("u_turn_rule", u_turn_name(tuning.options().u_turn))?;
+    d.set_item(
+        "exhaustion_rule",
+        exhaustion_name(tuning.options().exhaustion),
+    )?;
+    d.set_item(
+        "warmup_exhaustion_rule",
+        exhaustion_name(DEFAULT_WARMUP_EXHAUSTION),
+    )?;
+    d.set_item(
+        "metric_regularization",
+        regularization_name(DEFAULT_METRIC_REGULARIZATION),
+    )?;
+    d.set_item("target_accept", default_target_accept()?)?;
+    d.set_item(
+        "adapt_mass",
+        matches!(Metric::default(), Metric::Diagonal { adapt: true, .. }),
+    )?;
+    match Init::default() {
+        Init::Uniform {
+            radius,
+            max_attempts,
+        } => {
+            d.set_item("init_radius", radius)?;
+            d.set_item("init_max_attempts", max_attempts)?;
+        }
+        other => {
+            return Err(PyRuntimeError::new_err(format!(
+                "owalnuts sampler default init is not uniform: {other:?}"
+            )));
+        }
+    }
+    let sampler = format!("{:?}", Sampler::default());
+    d.set_item(
+        "cache_initial_evaluation",
+        sampler.contains("cache_initial_evaluation: true"),
+    )?;
+    let limits = format!("{:?}", Limits::default());
+    d.set_item(
+        "admit_worst_case",
+        limits.contains("admit_worst_case: true"),
+    )?;
+    Ok(d)
 }
 
 /// Evaluate the built-in Eight Schools density once (for adapter tests).
@@ -1226,6 +1425,7 @@ fn summary<'py>(
 fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("ALGORITHM_REVISION", ALGORITHM_REVISION)?;
     m.add("PAPER_ADAPTATION_REVISION", PAPER_ADAPTATION_REVISION)?;
+    m.add("DEFAULTS", defaults(m.py())?)?;
     m.add(
         "STOP_CODES",
         vec![
@@ -1250,5 +1450,6 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uniform_starts_callable, m)?)?;
     m.add_function(wrap_pyfunction!(uniform_starts_cfunc, m)?)?;
     m.add_function(wrap_pyfunction!(summary, m)?)?;
+    m.add_function(wrap_pyfunction!(reference_gaussian_sampler_run, m)?)?;
     Ok(())
 }

@@ -789,3 +789,44 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
         .unwrap();
     assert_eq!(random.chains(), again.chains());
 }
+
+/// The structured paths have no budgeted admission variant; with the
+/// `research` feature the sampler raises the `RunConfig` admission ceiling to
+/// the worst case (`Limits::admit_worst_case`) so the sampler defaults are
+/// admitted on a structured metric as on the diagonal path. 500 transitions
+/// at depth 10 with eight refinement levels have a worst case above the
+/// conservative 113M ceiling while a 2-D Gaussian does negligible work.
+#[cfg(feature = "research")]
+#[test]
+fn structured_metric_is_admitted_with_its_worst_case_under_research() {
+    use owalnuts::walnutpie::CONSERVATIVE_MAX_TARGET_EVALUATIONS;
+    let mass = StructuredBlockMass::new(vec![StructuredCovarianceBlock::BidiagonalCholesky {
+        diagonal: vec![1.0, 1.2],
+        subdiagonal: vec![0.1],
+    }])
+    .unwrap();
+    let sampler = Sampler::new()
+        .warmup(300)
+        .draws(200)
+        .seed(SEED)
+        .metric(Metric::Structured(mass));
+    assert!(
+        sampler.worst_case_target_evaluations(1).unwrap() > CONSERVATIVE_MAX_TARGET_EVALUATIONS
+    );
+    let posterior = sampler.run(&Gaussian(2), &starts(2)[..1]).unwrap();
+    assert_eq!(posterior.draws_per_chain(), 200);
+    let conservative = Sampler::new()
+        .warmup(300)
+        .draws(200)
+        .seed(SEED)
+        .metric(Metric::Structured(
+            StructuredBlockMass::new(vec![StructuredCovarianceBlock::BidiagonalCholesky {
+                diagonal: vec![1.0, 1.2],
+                subdiagonal: vec![0.1],
+            }])
+            .unwrap(),
+        ))
+        .limits(Limits::new().admit_conservative())
+        .run(&Gaussian(2), &starts(2)[..1]);
+    assert_eq!(conservative.unwrap_err().kind(), ErrorKind::ResourceLimit);
+}

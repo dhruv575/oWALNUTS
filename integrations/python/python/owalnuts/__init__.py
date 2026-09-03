@@ -2,14 +2,16 @@
 
 The lowest common denominator is a callable ``f(q) -> (log_density, gradient)``
 taking and returning ``float64`` numpy arrays. Adapters wrap JAX, PyTorch and
-PyMC models into that shape. Every run goes through the Rust ``walnutpie``
-facade; this module only marshals arrays and configuration.
+PyMC models into that shape. Every run builds an ``owalnuts::sampler::Sampler``
+in Rust, so the defaults are the sampler's (``DEFAULTS``); this module only
+marshals arrays and configuration.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from types import MappingProxyType
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -18,6 +20,20 @@ from . import _owalnuts
 ALGORITHM_REVISION: str = _owalnuts.ALGORITHM_REVISION
 PAPER_ADAPTATION_REVISION: str = _owalnuts.PAPER_ADAPTATION_REVISION
 STOP_CODES: tuple[str, ...] = tuple(_owalnuts.STOP_CODES)
+
+#: The ``owalnuts::sampler`` defaults this package inherits, read from the
+#: Rust constants at import time (read-only): ``step_size``, ``max_depth``,
+#: ``min_micro_steps``, ``max_refinement_levels``, ``max_error``,
+#: ``divergence_threshold``, ``u_turn_rule`` (``DEFAULT_U_TURN_RULE``),
+#: ``exhaustion_rule`` (retained transitions), ``warmup_exhaustion_rule``
+#: (``DEFAULT_WARMUP_EXHAUSTION``), ``metric_regularization``
+#: (``DEFAULT_METRIC_REGULARIZATION``), ``target_accept``, ``adapt_mass``,
+#: ``init_radius``, ``init_max_attempts``, ``cache_initial_evaluation``,
+#: ``admit_worst_case``, ``algorithm_revision`` and
+#: ``paper_adaptation_revision``. ``Tuning()`` and ``Adaptation()`` take
+#: their defaults from here, and ``sample`` sends only what you set, so a
+#: Rust default change reaches the package without any edit here.
+DEFAULTS: Mapping[str, Any] = MappingProxyType(dict(_owalnuts.DEFAULTS))
 
 LogpGrad = Callable[[np.ndarray], tuple[float, np.ndarray]]
 
@@ -54,30 +70,45 @@ class PaperAdaptation:
 @dataclass(frozen=True)
 class Tuning:
     """Kernel tuning. ``step_size`` is the macro step ``h``; ``max_error`` is
-    the local energy-error threshold ``delta``. The defaults match
-    ``owalnuts::sampler::Tuning::default()`` (``h = 0.5``, depth 10, eight
-    refinement levels, ``delta = 1``); the 0.1 package used ``h = 0.1`` and
-    depth 8. The kernel rules are the frozen ``walnutpie`` ones (endpoint
-    U-turn rule, unit-variance metric prior); the Rust ``sampler`` defaults
-    are ``MomentumSum`` and Stan's metric prior since the post-WP31 default
-    change, which the next extension build follows."""
+    the local energy-error threshold ``delta``. The defaults are
+    ``owalnuts::sampler::Tuning::default()`` read from ``DEFAULTS`` (``h =
+    0.5``, depth 10, eight refinement levels, ``delta = 1``, the momentum-sum
+    U-turn rule); the 0.1 package used ``h = 0.1`` and depth 8.
 
-    step_size: float = 0.5
-    max_depth: int = 10
-    min_micro_steps: int = 1
-    max_refinement_levels: int = 8
-    max_error: float = 1.0
-    divergence_threshold: float = 1000.0
+    ``u_turn_rule`` (``"endpoints"`` | ``"endpoints_with_cross"`` |
+    ``"momentum_sum"``) and ``exhaustion_rule`` (``"stop"`` |
+    ``"accept_below_divergence_threshold"`` | ``"accept_unless_divergent"``)
+    override the kernel options of the retained transitions
+    (``Tuning::kernel_options``); ``None`` keeps the sampler default
+    (``DEFAULTS["u_turn_rule"]``, ``DEFAULTS["exhaustion_rule"]``). The
+    frozen ``v10`` kernel is ``u_turn_rule="endpoints"``."""
+
+    step_size: float = DEFAULTS["step_size"]
+    max_depth: int = DEFAULTS["max_depth"]
+    min_micro_steps: int = DEFAULTS["min_micro_steps"]
+    max_refinement_levels: int = DEFAULTS["max_refinement_levels"]
+    max_error: float = DEFAULTS["max_error"]
+    divergence_threshold: float = DEFAULTS["divergence_threshold"]
+    u_turn_rule: str | None = None
+    exhaustion_rule: str | None = None
 
 
 @dataclass(frozen=True)
 class Adaptation:
-    """Warmup adaptation during the discarded transitions."""
+    """Warmup adaptation during the discarded transitions: the sampler's
+    ``Adaptation::DualAveraging`` (or ``Adaptation::Paper`` with ``paper``),
+    which applies ``DEFAULT_WARMUP_EXHAUSTION`` and
+    ``DEFAULT_METRIC_REGULARIZATION`` (``DEFAULTS["warmup_exhaustion_rule"]``,
+    ``DEFAULTS["metric_regularization"]``). ``metric_regularization``
+    (``"stan"`` | ``"toward_unit"``) overrides the diagonal-metric prior;
+    ``adapt_step_size=False`` and an override are expressed through
+    ``Adaptation::Custom`` with the same warmup exhaustion rule."""
 
-    target_accept: float = 0.8
+    target_accept: float = DEFAULTS["target_accept"]
     adapt_step_size: bool = True
-    adapt_mass: bool = True
+    adapt_mass: bool = DEFAULTS["adapt_mass"]
     paper: PaperAdaptation | None = None
+    metric_regularization: str | None = None
 
 
 @dataclass
@@ -164,6 +195,7 @@ def _config_dict(
     max_target_evaluations: int | None,
     max_depth_stop_limit: int | None,
     admit_worst_case: bool = True,
+    cache_initial_evaluation: bool | None = None,
 ) -> dict[str, Any]:
     cfg: dict[str, Any] = {
         "warmup": int(warmup),
@@ -176,10 +208,13 @@ def _config_dict(
         "max_refinement_levels": int(tuning.max_refinement_levels),
         "max_error": float(tuning.max_error),
         "divergence_threshold": float(tuning.divergence_threshold),
+        "u_turn_rule": tuning.u_turn_rule,
+        "exhaustion_rule": tuning.exhaustion_rule,
         "mass": _normalize_mass(mass),
         "max_target_evaluations": max_target_evaluations,
         "max_depth_stop_limit": max_depth_stop_limit,
         "admit_worst_case": bool(admit_worst_case),
+        "cache_initial_evaluation": cache_initial_evaluation,
     }
     if adaptation is None:
         cfg["adapt"] = False
@@ -189,6 +224,7 @@ def _config_dict(
         cfg["adapt_step_size"] = bool(adaptation.adapt_step_size)
         cfg["adapt_mass"] = bool(adaptation.adapt_mass)
         cfg["paper_adaptation"] = adaptation.paper.to_dict() if adaptation.paper else None
+        cfg["metric_regularization"] = adaptation.metric_regularization
     return cfg
 
 
@@ -306,13 +342,20 @@ def sample(
     max_depth_stop_limit: int | None = None,
     admit_worst_case: bool = True,
     init_jitter: float = 2.0,
-    init_radius: float = 2.0,
-    init_max_attempts: int = 100,
+    init_radius: float = DEFAULTS["init_radius"],
+    init_max_attempts: int = DEFAULTS["init_max_attempts"],
     coerce: bool = True,
     refresh: Callable[..., Any] | None = None,
     refresh_restart: str = "continue",
+    cache_initial_evaluation: bool | None = None,
 ) -> SampleResult:
-    """Sample ``logp_and_grad`` with oWALNUTS.
+    """Sample ``logp_and_grad`` with oWALNUTS through ``owalnuts::sampler``.
+
+    Every argument maps onto the Rust ``Sampler`` builder (``Tuning``,
+    ``Adaptation``, ``Metric``, ``Limits``, ``Init``); anything not set here
+    keeps the sampler default (``DEFAULTS``), including the cached initial
+    evaluation (``cache_initial_evaluation=None``; pass ``False`` for the
+    0.1 target-call accounting).
 
     ``init`` is ``None`` (independent uniform(-``init_jitter``, ``init_jitter``)
     starts drawn in numpy without evaluating the target), a ``(dim,)`` point
@@ -349,6 +392,7 @@ def sample(
         warmup=warmup, draws=draws, seed=seed, threads=threads, tuning=tuning,
         adaptation=adaptation, mass=mass, max_target_evaluations=max_target_evaluations,
         max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,
+        cache_initial_evaluation=cache_initial_evaluation,
     )
     if isinstance(logp_and_grad, CFuncTarget):
         if refresh is not None:
@@ -434,7 +478,8 @@ def summary(samples: np.ndarray, var_names: Sequence[str] | None = None) -> list
 
 
 def uniform_starts(logp_and_grad: LogpGrad, dim: int, *, chains: int = 4, seed: int = 0,
-                   radius: float = 2.0, max_attempts: int = 100, nonfinite: str = "zero_density",
+                   radius: float = DEFAULTS["init_radius"], max_attempts: int = DEFAULTS["init_max_attempts"],
+                   nonfinite: str = "zero_density",
                    coerce: bool = True) -> np.ndarray:
     """Draw ``(chains, dim)`` starts by the ``init="uniform"`` rule without sampling."""
     if isinstance(logp_and_grad, CFuncTarget):
@@ -756,7 +801,7 @@ def eight_schools_logp_grad(y: np.ndarray, se: np.ndarray, q: np.ndarray) -> tup
 
 
 __all__ = [
-    "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "ZeroDensityError",
+    "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
     "summary", "uniform_starts", "CFuncTarget", "from_cfunc", "numba_raw_signature",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
