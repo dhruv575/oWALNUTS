@@ -1,0 +1,121 @@
+{
+  "schema": "joint-default-v1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-03",
+  "ledger": "WP31-JOINT-DEFAULT-V1",
+  "purpose": "Preregistered joint decision: should the sampler defaults become UTurnRule::MomentumSum + DiagonalMetricRegularization::Stan together? STUDIES/kernel_gap_v1 (WP30) showed that under CmdStan's matched step and metric the default kernel is 0.77x reference NUTS per gradient, entirely from leaves per orbit under the endpoint U-turn statistic, and that MomentumSum restores 0.90x; STUDIES/step_collapse_v1 (WP27) showed that the Stan regularisation removes the unit-variance metric floor (sblrc 9.7x) but loses the earnings gate because the orbits shorten exactly when the metric is right; STUDIES/uturn_default_v1 (WP26) found MomentumSum alone a wash under the floored metric (1.06x). The two are one finding; this study decides them together.",
+  "predecessors": {
+    "kernel_gap": "STUDIES/kernel_gap_v1: default kernel 0.77x reference NUTS ESS/gradient at matched step, metric and starts on six healthy posteriors; leaves per orbit 0.60x; MomentumSum 0.90x (0.84-0.96 per model); funnel tail preserved at both tunings under MomentumSum",
+    "step_collapse": "STUDIES/step_collapse_v1: DiagonalMetricRegularization::Stan alone gives sblrc 9.7x, earnings 1.9x but 0/2 gates (R-hat 1.02 from 49-leaf orbits at CmdStan's step), controls 1.08x geomean; no default flip",
+    "uturn_default": "STUDIES/uturn_default_v1: MomentumSum alone 1.064x geomean, 0.78x worst model, 37 vs 38 cells; no default flip",
+    "funnel_defaults": "STUDIES/funnel_defaults_v1: eight refinement levels became the Tuning::default() (funnel |z| <= 2 on every seed at the sampler defaults; 1.05x / 1.00x on Eight Schools / 100-D Gaussian)",
+    "posteriordb_reference": "STUDIES/posteriordb_bench_v3 (seeds 79101-79103): CmdStan 2.39.0 and nutpie seed medians are cited from its artifacts/summary.json; neither is rerun here",
+    "posteriordb_v4": "wt/posteriordb-v4 (in progress on the same machine, not touched) tests stanreg alone against CmdStan and nutpie; walls here are shared-machine upper bounds",
+    "eight_schools_reference": "STUDIES/eight_schools_v9_rebench_v1 strict track; uturn_default_v1 measured endpoints 0.01734 and rhosum 0.01867 min bulk ESS/call on seeds 80101-80103"
+  },
+  "kernel_under_test": {
+    "algorithm_revision_required": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+    "candidate": "UTurnRule::MomentumSum in Tuning::default().kernel_options and DiagonalMetricRegularization::Stan in the WarmupConfig that Adaptation::DualAveraging / Adaptation::Paper build",
+    "baseline": "sampler defaults at freeze: Tuning::default() (h0 0.5, depth 10, min_micro_steps 1, 8 refinement levels, delta 1, divergence threshold 1000, KernelOptions::default() = Endpoints + Stop), Adaptation::default() (dual averaging 0.8, DEFAULT_WARMUP_EXHAUSTION = AcceptUnlessDivergent, DiagonalMetricRegularization::TowardUnit), Metric::diagonal(), cached initial evaluation, Limits::admit_worst_case()",
+    "arms_construction": "src/arms.rs: the U-turn rule through Tuning::default().kernel_options(KernelOptions { u_turn, ..Default }); the regularisation through Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(..)), which is exactly what Adaptation::default() builds (sampler.rs Adaptation::warmup_config) plus the regularisation; the TowardUnit arms use Adaptation::default() itself"
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database",
+    "models_compiled": "fresh in this study directory, BridgeStan 2.9.0 / Stan 2.39.0, no STAN_THREADS, same flags as v3"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "arms": {
+    "owalnuts-da": "the current defaults: UTurnRule::Endpoints, DiagonalMetricRegularization::TowardUnit",
+    "owalnuts-rhosum": "UTurnRule::MomentumSum, TowardUnit",
+    "owalnuts-stanreg": "Endpoints, DiagonalMetricRegularization::Stan",
+    "owalnuts-joint": "MomentumSum + Stan (the decided candidate)",
+    "common": {
+      "target": "owalnuts-bridgestan ReplicatedStanTarget, 4 replicas, non-STAN_THREADS BridgeStan build",
+      "tuning": "sampler::Tuning::default() plus the arm's KernelOptions",
+      "warmup": "dual averaging 0.8 with the WP24 warmup exhaustion rule plus the arm's regularisation; Metric::diagonal()",
+      "starts": "sampler::Init::uniform() via uniform_starts(seed): the four arms share the starts of a seed",
+      "threads": 4,
+      "limits": "Limits::admit_worst_case()"
+    }
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "seeds": [86101, 86102, 86103],
+  "seeds_verified_unused": "grep -w of wiki/, STUDIES/*/{README.md, protocol.json, PREREGISTRATION.md, *.py, src/}, src/, tests/, examples/ before freezing: no occurrence as a seed (85101-85104 named in the task were consumed by STUDIES/funnel_bias_fix_v1 and were not used)",
+  "run_order": "models in listed order; arms owalnuts-da, owalnuts-rhosum, owalnuts-stanreg, owalnuts-joint; seeds ascending; strictly sequential; then the funnel and Eight Schools checks",
+  "cell_timeout_seconds": 2700,
+  "parameter_set": "columns of the posteriordb reference draws; draws constrained by BridgeStan param_constrain(include_tp=True)",
+  "estimators": "arviz 0.23.4: rank rhat; bulk ESS; tail ESS prob (0.05, 0.95); mcse method mean — as v3",
+  "metrics": "as posteriordb_bench_v3: gradients_total = target calls (start search + warmup + sampling, all chains); min over reference parameters of bulk ESS / gradients_total is the decision statistic; wall, ESS/s, sampling-only variants, agreement z and the frozen-chain flag reported. The machine is shared with the v4 run: ESS per gradient is the robust metric; walls are upper bounds",
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "funnel": {
+    "target": "Neal's 10-D funnel, omega ~ N(0, 9), x_i | omega ~ N(0, e^omega); exact P(omega < -5) = 0.0478",
+    "starts": "omega in {-3, -1, 1, 3}, x = 0",
+    "chains": 4, "warmup": 2000, "draws": 20000,
+    "tunings": {
+      "paper": "examples/funnel_kernel_options.rs protocol: Adaptation::Paper(default), Metric::Identity, h 0.1, depth 10, 8 levels, delta 1 (the regularisation is inert: stanreg = da, joint = rhosum by construction; all four arms are run)",
+      "defaults": "Tuning::default() (eight levels since WP28), Metric::diagonal(), dual averaging 0.8 with the WP24 rule, plus the arm's rule and regularisation"
+    },
+    "arms": ["da", "rhosum", "stanreg", "joint"],
+    "seeds": [86101, 86102, 86103],
+    "statistic": "per seed: z = (estimate - exact) / MCSE of the indicator omega < -5 (owalnuts::diagnostics::mcse_mean, the STUDIES/funnel_defaults_v1 statistic); the gate is |z| <= 2 on every seed under both tunings. The WP26 batch-means z per seed and the three-seed pooled batch-means z are reported alongside (kernel_gap_v1 found the batch-means s.e. underestimated)",
+    "binary": "src/bin/funnel.rs"
+  },
+  "eight_schools": {
+    "protocol": "STUDIES/eight_schools_v9_rebench_v1 settings verbatim: noncentered Eight Schools (mu, log tau, z_1..z_8), starts log tau in {-2, -1, 0, 1}, RunConfig 1,000/1,000, KernelTuning h 0.3, depth 8, min_micro_steps 1, 8 levels, delta 1, divergence threshold 1000, WarmupConfig::new(0.95) with mass adaptation (plus the arm's regularisation), threads 1, sample_chains_with_target_budget (walnutpie facade: no initial-evaluation cache), callback cap 1e7",
+    "arms": ["da", "rhosum", "stanreg", "joint"],
+    "seeds": [86101, 86102, 86103],
+    "repetitions": 3,
+    "statistic": "min over the six v38 functionals (mu, tau, mean_theta, sd_theta, theta_1, theta_8) of arviz bulk ESS divided by callbacks started; geometric mean over the three seeds; ratio joint / da",
+    "health": "bulk and tail ESS >= 400 on every functional, rank R-hat <= 1.01, zero divergences, zero refinement exhaustions (reported)",
+    "binary": "src/bin/eight_schools.rs"
+  },
+  "decision_rule": {
+    "statement": "Flip the sampler defaults to UTurnRule::MomentumSum + DiagonalMetricRegularization::Stan together if and only if all five hold for the joint arm; otherwise leave the defaults and report why. The rhosum and stanreg arms are reported (they attribute the joint effect), not decided.",
+    "geomean_min_ratio": 1.15,
+    "C1": "geometric mean over the 17 models of the seed-median min-bulk-ESS/gradient ratio owalnuts-joint / owalnuts-da >= 1.15 (a model with a missing median on either side is excluded from the geomean and reported)",
+    "per_model_min_ratio": 0.85,
+    "C2": "no model has that ratio below 0.85",
+    "C3": "cells passing all gates: joint >= da (out of 51)",
+    "funnel_max_abs_z": 2.0,
+    "C4": "funnel tail-mass |z| <= 2 on every seed for joint under both the paper tuning and the sampler defaults (MCSE statistic; the other arms are reported as controls)",
+    "eight_schools_min_ratio": 0.9,
+    "C5": "Eight Schools strict-track geomean min-bulk-ESS/call ratio joint / da >= 0.9",
+    "not_gated": "the rhosum and stanreg arms (reported); wall and ESS/s (shared machine, upper bounds); the v3 reproduction of da; the predictions below"
+  },
+  "expectations": {
+    "healthy_regressions": ["earnings-logearn_interaction", "kidiq-kidscore_momhsiq", "sblrc-blr", "mesquite-logmesquite_logvash", "nes2000-nes"],
+    "P1": "joint >= 1.2x da on each of the healthy regressions earnings, kidiq, sblrc, mesquite, nes2000",
+    "P2": "the earnings gate is recovered: joint passes at least as many earnings seeds as da and more than stanreg alone (step_collapse_v1: reg 0/2 at R-hat 1.02 from the short orbits; kernel_gap_v1: MomentumSum lengthens the earnings orbit 40 -> 151 leaves at that metric)",
+    "P3": "sblrc joint / da >= 5x (step_collapse_v1: reg 9.7x on seeds 80101-80102)"
+  },
+  "decision_rules": "Report all cells; no reruns; failures are results; nothing tuned after seeing results. A driver crash is relaunched and the interrupted cell re-run from scratch (seeded), recorded as a deviation. If the decision passes, the flip is a separate labelled final commit that changes the sampler defaults only (KernelOptions::default() in Tuning::default() and the regularisation in Adaptation::warmup_config; walnutpie::KernelOptions::default(), WarmupConfig::default(), RunConfig and tests/kernel_fingerprint.rs are untouched) and updates tests/sampler_api.rs, the README defaults table, the CHANGELOG 0.2.0 Changed section and wiki/release-0.2.0.md."
+}

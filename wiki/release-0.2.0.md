@@ -209,6 +209,32 @@ reproduces v3 (38/51, 0.434x CmdStan on these seeds; `hmm_drive_0` drew no
 second-mode chain, `lotka_volterra` one `rk45`-boundary start). Ledger entry
 `WP26-UTURN-DEFAULT-V1`.
 
+### Joint default decision: `MomentumSum` + Stan's regularisation (WP31)
+
+`STUDIES/joint_default_v1`: after `step_collapse_v1` (WP27: the default
+metric regularisation floors small posterior variances at 0.01, Stan's
+fixes `sblrc` but loses `earnings`) and `kernel_gap_v1` (WP30: at the
+corrected metric the endpoint U-turn rule ends orbits at 0.6x NUTS's
+length, `MomentumSum` restores them), the v3 protocol on fresh seeds
+86101–86103 with four arms: the defaults, `MomentumSum` alone, Stan's
+regularisation alone, and both (`joint`). Rule: flip iff `joint` >= 1.15x
+geomean, no model < 0.85x, gates >= the default's, funnel |z| <= 2 on
+every seed at both tunings, Eight Schools >= 0.9x. Result: `joint` /
+default = **1.508** geomean (earnings 3.69, sblrc 9.12, arma11 2.26,
+one_comp 2.16, kidiq 1.98, hmm_example 1.87, nes2000 1.50, garch 1.16,
+mesquite 1.12, arK 1.07; diamonds 0.94, gp_pois_regr 0.98; centered eight
+schools 0.79 and `hmm_drive_0` 0.005 — the two cells no arm passes),
+**41 vs 35 cells**, funnel exact at both tunings with zero divergences
+at the sampler defaults, Eight Schools 1.29x; 0.477x CmdStan against
+the default's 0.317x, 0.81–0.99x on the healthy regressions. Either
+option alone is not it: `MomentumSum` alone 1.12x, the regularisation
+alone 1.26x but 0.08x and 0/3 on `earnings` (the short endpoint-rule
+orbits leave the window variance at the prior's 1e-5 floor and the metric
+overshoots 100x). **Not flipped** — the preregistered per-model floor
+failed on the mode lottery and the fail-everywhere cell — and documented
+as the recommended opt-in pair in the README. Ledger entry
+`WP31-JOINT-DEFAULT-V1`.
+
 ### Autodiff (`integrations/AUTODIFF-RESEARCH.md`)
 
 `owalnuts-autodiff` (route (e), pure Rust, `#![forbid(unsafe_code)]`):
