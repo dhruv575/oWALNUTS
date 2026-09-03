@@ -3952,9 +3952,26 @@ pub struct TransitionDiagnostics {
     step_size: f64,
     position_changed: bool,
     acceptance_statistic: Option<f64>,
+    orbit_states: usize,
+    selected_index: usize,
+    initial_index: usize,
 }
 
 impl TransitionDiagnostics {
+    /// States in the final orbit: the initial state plus every leaf merged
+    /// into it (leaves of a subtree that stopped are built but not merged).
+    pub fn orbit_states(&self) -> usize {
+        self.orbit_states
+    }
+    /// Index of the selected state within the orbit, counted from its
+    /// backward (earliest in physical time) end.
+    pub fn selected_index(&self) -> usize {
+        self.selected_index
+    }
+    /// Index of the transition's initial state within the orbit.
+    pub fn initial_index(&self) -> usize {
+        self.initial_index
+    }
     pub fn depth(&self) -> usize {
         self.depth
     }
@@ -4077,9 +4094,22 @@ pub struct WorkTotals {
     refinement_exhaustion_stops: usize,
     reverse_coarser_stops: usize,
     reverse_coarser_rejections: usize,
+    accepted_forward_micro_steps: usize,
+    refinement_level_built: Vec<usize>,
 }
 
 impl WorkTotals {
+    /// Micro-steps (target calls) of the leaves that were accepted, i.e. the
+    /// target calls attached to a built leaf; the rest of
+    /// [`Self::target_calls_total`] went to the initial evaluation, rejected
+    /// refinement attempts and reverse checks.
+    pub fn accepted_forward_micro_steps(&self) -> usize {
+        self.accepted_forward_micro_steps
+    }
+    /// Built leaves by the zero-based refinement level they were accepted at.
+    pub fn refinement_level_built(&self) -> &[usize] {
+        &self.refinement_level_built
+    }
     pub fn transitions(&self) -> usize {
         self.transitions
     }
@@ -4227,6 +4257,17 @@ impl WorkTotals {
             reverse_coarser_rejections,
             diagnostics.reverse_coarser_rejections
         );
+        add!(
+            accepted_forward_micro_steps,
+            work.accepted_forward_micro_steps
+        );
+        let built = &work.histograms.refinement_level_built;
+        if self.refinement_level_built.len() < built.len() {
+            self.refinement_level_built.resize(built.len(), 0);
+        }
+        for (total, count) in self.refinement_level_built.iter_mut().zip(built) {
+            *total = total.checked_add(*count).ok_or_else(Error::overflow)?;
+        }
         Ok(())
     }
 }
@@ -6579,6 +6620,9 @@ fn run_chain<T: Target>(
             step_size: step_before_transition,
             position_changed: position != previous_position,
             acceptance_statistic: acceptance,
+            orbit_states: internal.orbit_states,
+            selected_index: internal.selected_index,
+            initial_index: internal.initial_index,
         };
         let partition = if transition_index < config.discarded {
             &mut telemetry.discarded

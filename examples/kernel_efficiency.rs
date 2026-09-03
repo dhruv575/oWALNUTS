@@ -155,236 +155,11 @@ impl Target for CorrelatedGaussian {
 }
 
 // ----------------------------------------------------------------------------
-// Reference NUTS (Stan's base_nuts, 2.21+), diagonal metric.
+// Reference NUTS (Stan's base_nuts, 2.21+), diagonal metric: shared module.
 
-#[derive(Clone)]
-struct Z {
-    q: Vec<f64>,
-    p: Vec<f64>,
-    g: Vec<f64>,
-    lp: f64,
-}
-
-struct Subtree {
-    valid: bool,
-    rho: Vec<f64>,
-    p_beg: Vec<f64>,
-    p_end: Vec<f64>,
-    propose: Z,
-    log_weight: f64,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct RefStats {
-    depth: usize,
-    leapfrogs: usize,
-    divergent: bool,
-    max_depth: bool,
-}
-
-struct RefNuts<'a, T: Target> {
-    target: &'a T,
-    step: f64,
-    /// `M^-1` (diagonal).
-    inv_mass: Vec<f64>,
-    max_depth: usize,
-    max_delta_h: f64,
-    leapfrogs: usize,
-    divergent: bool,
-    sum_metro_prob: f64,
-}
-
-impl<'a, T: Target> RefNuts<'a, T> {
-    fn hamiltonian(&self, z: &Z) -> f64 {
-        let kinetic: f64 =
-            z.p.iter()
-                .zip(&self.inv_mass)
-                .map(|(p, m)| 0.5 * p * p * m)
-                .sum();
-        -z.lp + kinetic
-    }
-
-    fn evaluate(&self, z: &mut Z) {
-        match self.target.log_density_gradient(&z.q, &mut z.g) {
-            Ok(lp) if lp.is_finite() && z.g.iter().all(|g| g.is_finite()) => z.lp = lp,
-            _ => {
-                z.lp = f64::NEG_INFINITY;
-                z.g.fill(0.0);
-            }
-        }
-    }
-
-    fn leapfrog(&mut self, z: &mut Z, eps: f64) {
-        for (p, g) in z.p.iter_mut().zip(&z.g) {
-            *p += 0.5 * eps * g;
-        }
-        for ((q, p), m) in z.q.iter_mut().zip(&z.p).zip(&self.inv_mass) {
-            *q += eps * m * p;
-        }
-        self.evaluate(z);
-        for (p, g) in z.p.iter_mut().zip(&z.g) {
-            *p += 0.5 * eps * g;
-        }
-        self.leapfrogs += 1;
-    }
-
-    /// `p_sharp_plus . rho > 0 && p_sharp_minus . rho > 0`.
-    fn criterion(&self, p_minus: &[f64], p_plus: &[f64], rho: &[f64]) -> bool {
-        let dot = |p: &[f64]| -> f64 {
-            p.iter()
-                .zip(rho)
-                .zip(&self.inv_mass)
-                .map(|((p, r), m)| p * m * r)
-                .sum()
-        };
-        dot(p_plus) > 0.0 && dot(p_minus) > 0.0
-    }
-
-    fn build_tree(
-        &mut self,
-        depth: usize,
-        z: &mut Z,
-        sign: f64,
-        h0: f64,
-        rng: &mut SmallRng,
-    ) -> Subtree {
-        if depth == 0 {
-            self.leapfrog(z, sign * self.step);
-            let mut h = self.hamiltonian(z);
-            if h.is_nan() {
-                h = f64::INFINITY;
-            }
-            if h - h0 > self.max_delta_h {
-                self.divergent = true;
-            }
-            self.sum_metro_prob += (h0 - h).min(0.0).exp();
-            return Subtree {
-                valid: !self.divergent,
-                rho: z.p.clone(),
-                p_beg: z.p.clone(),
-                p_end: z.p.clone(),
-                propose: z.clone(),
-                log_weight: h0 - h,
-            };
-        }
-        let init = self.build_tree(depth - 1, z, sign, h0, rng);
-        if !init.valid {
-            return init;
-        }
-        let fin = self.build_tree(depth - 1, z, sign, h0, rng);
-        if !fin.valid {
-            return fin;
-        }
-        let log_weight = log_sum_exp(init.log_weight, fin.log_weight);
-        // Multinomial sampling within the subtree.
-        let propose = if rng.random::<f64>().ln() < fin.log_weight - log_weight {
-            fin.propose
-        } else {
-            init.propose
-        };
-        let rho: Vec<f64> = init.rho.iter().zip(&fin.rho).map(|(a, b)| a + b).collect();
-        let mut persist = self.criterion(&init.p_beg, &fin.p_end, &rho);
-        let ext: Vec<f64> = init
-            .rho
-            .iter()
-            .zip(&fin.p_beg)
-            .map(|(a, b)| a + b)
-            .collect();
-        persist &= self.criterion(&init.p_beg, &fin.p_beg, &ext);
-        let ext: Vec<f64> = fin
-            .rho
-            .iter()
-            .zip(&init.p_end)
-            .map(|(a, b)| a + b)
-            .collect();
-        persist &= self.criterion(&init.p_end, &fin.p_end, &ext);
-        Subtree {
-            valid: persist,
-            rho,
-            p_beg: init.p_beg,
-            p_end: fin.p_end,
-            propose,
-            log_weight,
-        }
-    }
-
-    fn transition(&mut self, current: &Z, rng: &mut SmallRng) -> (Z, RefStats) {
-        let mut z = current.clone();
-        for (p, m) in z.p.iter_mut().zip(&self.inv_mass) {
-            *p = rng.sample::<f64, _>(StandardNormal) / m.sqrt();
-        }
-        self.leapfrogs = 0;
-        self.divergent = false;
-        self.sum_metro_prob = 0.0;
-        let h0 = self.hamiltonian(&z);
-        let mut z_fwd = z.clone();
-        let mut z_bck = z.clone();
-        let mut sample = z.clone();
-        let mut rho = z.p.clone();
-        let (mut p_bck, mut p_fwd) = (z.p.clone(), z.p.clone());
-        let mut log_weight = 0.0;
-        let mut depth = 0;
-        let mut hit_max = true;
-        while depth < self.max_depth {
-            let forward = rng.random::<f64>() > 0.5;
-            let sub = if forward {
-                self.build_tree(depth, &mut z_fwd, 1.0, h0, rng)
-            } else {
-                self.build_tree(depth, &mut z_bck, -1.0, h0, rng)
-            };
-            if !sub.valid {
-                hit_max = false;
-                break;
-            }
-            depth += 1;
-            // Biased progressive sampling across doublings.
-            if sub.log_weight > log_weight || rng.random::<f64>().ln() < sub.log_weight - log_weight
-            {
-                sample = sub.propose;
-            }
-            log_weight = log_sum_exp(log_weight, sub.log_weight);
-            let merged: Vec<f64> = rho.iter().zip(&sub.rho).map(|(a, b)| a + b).collect();
-            let (tree_near, tree_far) = if forward {
-                (&p_fwd, &p_bck)
-            } else {
-                (&p_bck, &p_fwd)
-            };
-            let mut persist = self.criterion(tree_far, &sub.p_end, &merged);
-            let ext: Vec<f64> = rho.iter().zip(&sub.p_beg).map(|(a, b)| a + b).collect();
-            persist &= self.criterion(tree_far, &sub.p_beg, &ext);
-            let ext: Vec<f64> = sub.rho.iter().zip(tree_near).map(|(a, b)| a + b).collect();
-            persist &= self.criterion(tree_near, &sub.p_end, &ext);
-            rho = merged;
-            if forward {
-                p_fwd = sub.p_end;
-            } else {
-                p_bck = sub.p_end;
-            }
-            if !persist {
-                hit_max = false;
-                break;
-            }
-        }
-        let stats = RefStats {
-            depth,
-            leapfrogs: self.leapfrogs,
-            divergent: self.divergent,
-            max_depth: hit_max,
-        };
-        (sample, stats)
-    }
-}
-
-fn log_sum_exp(a: f64, b: f64) -> f64 {
-    if a == f64::NEG_INFINITY {
-        return b;
-    }
-    if b == f64::NEG_INFINITY {
-        return a;
-    }
-    let m = a.max(b);
-    m + ((a - m).exp() + (b - m).exp()).ln()
-}
+#[path = "support/reference_nuts.rs"]
+mod reference_nuts;
+use reference_nuts::RefNuts;
 
 // ----------------------------------------------------------------------------
 // Arms
@@ -551,25 +326,15 @@ fn run_walnuts<T: Target>(
 }
 
 fn run_reference<T: Target>(target: &T, adapted: &Adapted, draws: usize, seed: u64) -> ChainRun {
-    let mut nuts = RefNuts {
+    let mut nuts = RefNuts::new(
         target,
-        step: adapted.step,
-        inv_mass: adapted.mass.iter().map(|m| m.recip()).collect(),
-        max_depth: 10,
-        max_delta_h: 1000.0,
-        leapfrogs: 0,
-        divergent: false,
-        sum_metro_prob: 0.0,
-    };
+        adapted.step,
+        adapted.mass.iter().map(|m| m.recip()).collect(),
+        10,
+    );
     let mut rng = SmallRng::seed_from_u64(seed);
     let d = target.dimension();
-    let mut z = Z {
-        q: adapted.start.clone(),
-        p: vec![0.0; d],
-        g: vec![0.0; d],
-        lp: 0.0,
-    };
-    nuts.evaluate(&mut z);
+    let mut z = nuts.initial(adapted.start.clone());
     let mut run = ChainRun {
         samples: Vec::with_capacity(draws * d),
         gradients: 0,
