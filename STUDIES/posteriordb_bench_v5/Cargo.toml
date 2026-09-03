@@ -1,0 +1,21 @@
+[package]
+name = "posteriordb-bench-v5"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "oWALNUTS arm of the preregistered posteriordb benchmark v5 (the v3 protocol on the post-WP31 sampler defaults) plus the funnel tail-mass row"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "posteriordb-bench-v5"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]

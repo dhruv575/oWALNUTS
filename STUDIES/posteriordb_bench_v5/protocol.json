@@ -1,0 +1,145 @@
+{
+  "schema": "posteriordb-bench-v5",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-03",
+  "purpose": "Preregistered validation of the post-hoc default change made after WP31 (commit 'DEFAULT CHANGE (post-hoc after WP31)': sampler::Tuning::default() U-turn rule Endpoints -> MomentumSum, and Adaptation::DualAveraging / Adaptation::Paper regularise the adapted diagonal metric with DiagonalMetricRegularization::Stan) on the posteriordb_bench_v3 protocol: identical model set, gates, estimators, chains/iterations, competitor versions and settings; fresh seeds; the harness rebuilt against the flipped src/; arms owalnuts-da (the new defaults), cmdstan, nutpie. The decision to flip was taken before this study, on the evidence of STUDIES/joint_default_v1, whose preregistered rule was NOT met (C2 failed on hmm_drive_0's arm-dependent second-mode draw and on the centered eight schools, which no arm passes). This study does not decide the flip; it measures it against the competitors on fresh seeds and reports the preregistered predictions as held or not.",
+  "predecessor": {
+    "study": "STUDIES/posteriordb_bench_v3",
+    "seeds": [79101, 79102, 79103],
+    "artifacts_reused": "summary.json read only for the v3-vs-v5 comparison table; the v3 compiled models no longer exist. The BridgeStan libraries, the CmdStan executables and the posteriordb checkout are COPIED from the wt/posteriordb-v4 worktree (STUDIES/posteriordb_bench_v4/models, same BridgeStan 2.9.0 / Stan 2.39.0 / CmdStan 2.39.0 toolchain, no STAN_THREADS, posteriordb commit 28f8d3d), never modified there; mcycle_gp-accel_gp was not compiled in that worktree and is compiled here by the driver with the same flags. The venv is a copy of the v4 venv (Python 3.11.16, bridgestan 2.9.0, nutpie 0.16.8, cmdstanpy 1.3.0, arviz 0.23.4).",
+    "decision_study": "STUDIES/joint_default_v1 (WP31, seeds 86101-86103): joint / da 1.508 geomean min-bulk-ESS/gradient over 17 models, 41 vs 35 cells, funnel |z| <= 2 at both tunings, Eight Schools 1.29x; joint 0.477x the cited v3 CmdStan medians per gradient, 0.424x nutpie per gradient, ESS/s 1.56x the default arm's"
+  },
+  "kernel_under_test": {
+    "algorithm_revision_required": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+    "paper_adaptation_revision_required": "walnutpie-paper-adaptation-kquantile-gamma-v4",
+    "api": "owalnuts::sampler (Sampler, Init::uniform(), Tuning::default(), Metric::diagonal(), Adaptation::default()); harness src/main.rs identical to v3 except the recorded u_turn / metric_regularization fields and the schema name",
+    "sampler_defaults_under_test": {
+      "u_turn": "sampler::DEFAULT_U_TURN_RULE = UTurnRule::MomentumSum (Tuning::default().kernel_options)",
+      "metric_regularization": "sampler::DEFAULT_METRIC_REGULARIZATION = DiagonalMetricRegularization::Stan (applied by Adaptation::DualAveraging and Adaptation::Paper)",
+      "unchanged": "h0 0.5, depth 10, min_micro_steps 1, eight refinement levels (WP28), delta 1, divergence threshold 1000, retained exhaustion rule Stop, DEFAULT_WARMUP_EXHAUSTION = AcceptUnlessDivergent (WP24), dual averaging 0.8, adapted diagonal metric from the identity, cached initial evaluation, Limits::admit_worst_case()",
+      "source": "STUDIES/joint_default_v1 (WP31); the flip commit is the parent of the commit that freezes this protocol"
+    }
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "arms": {
+    "owalnuts-da": {
+      "target": "owalnuts-bridgestan ReplicatedStanTarget, 4 replicas (BridgeStan 2.9.0, Stan 2.39.0, built WITHOUT STAN_THREADS)",
+      "tuning": {
+        "source": "sampler::Tuning::default()",
+        "step_size": 0.5,
+        "max_depth": 10,
+        "min_micro_steps": 1,
+        "max_refinement_levels": 8,
+        "max_error": 1.0,
+        "divergence_threshold": 1000.0,
+        "u_turn": "MomentumSum",
+        "exhaustion_retained": "Stop"
+      },
+      "warmup": {
+        "mode": "Adaptation::DualAveraging (default)",
+        "target_accept": 0.8,
+        "metric": "Metric::diagonal() (adapted from identity)",
+        "metric_regularization": "Stan",
+        "warmup_exhaustion_rule": "AcceptUnlessDivergent"
+      },
+      "threads": 4,
+      "starts": "sampler::Init::uniform(): uniform(-2,2) unconstrained, redrawn up to 100 times until finite density and gradient; SmallRng(splitmix64(seed ^ INIT_SEED_TAG))",
+      "limits": "Limits::admit_worst_case()"
+    },
+    "cmdstan": {
+      "version": "2.39.0",
+      "driver": "cmdstanpy 1.3.0 CmdStanModel.sample defaults",
+      "settings": {
+        "adapt_delta": 0.8,
+        "max_treedepth": 10,
+        "metric": "diag_e",
+        "inits": "random uniform(-2,2)",
+        "chains": 4,
+        "parallel_chains": 4,
+        "threads_per_chain": 1
+      }
+    },
+    "nutpie": {
+      "version": "0.16.8",
+      "backend": "bridgestan (nutpie.compile_stan_model; nutpie builds its own STAN_THREADS library)",
+      "settings": {
+        "target_accept": 0.8,
+        "maxdepth": 10,
+        "chains": 4,
+        "cores": "default (all)",
+        "init": "nutpie default"
+      }
+    }
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "seeds": [87101, 87102, 87103],
+  "seeds_verified_unused": "grep -w over wiki/, STUDIES/ (README, protocol, PREREGISTRATION, *.py, src/), src/, tests/, examples/ before freezing: no occurrence as a seed (85101-85103 were consumed by funnel_bias_fix_v1, 86101-86103 by joint_default_v1)",
+  "run_order": "models in listed order; arms owalnuts-da, cmdstan, nutpie; seeds ascending; strictly sequential; then the funnel row",
+  "cell_timeout_seconds": 2700,
+  "parameter_set": "columns of the posteriordb reference draws; oWALNUTS draws constrained by BridgeStan param_constrain(include_tp=True)",
+  "estimators": "arviz 0.23.4: rank rhat; bulk ESS; tail ESS prob (0.05, 0.95); mcse method mean",
+  "metrics": {
+    "gradients_total": "owalnuts target calls (start search + warmup + sampling, all chains); cmdstan sum n_leapfrog__ (warmup+sampling); nutpie sum n_steps (warmup+sampling)",
+    "wall": "seconds around the single sampler call (Sampler::run, CmdStanModel.sample, nutpie.sample), warmup included, compile excluded; the oWALNUTS start search (a handful of evaluations) is outside the wall",
+    "wall_per_gradient_us": "1e6 * wall / gradients_total",
+    "wall_sampling_estimated": "wall * gradients_sampling / gradients_total (all arms); cmdstan CSV elapsed times also recorded",
+    "ess_per_second": "min over parameters of bulk (tail) ESS / wall",
+    "ess_per_gradient": "min over parameters of bulk (tail) ESS / gradients_total; sampling-only variant also reported",
+    "agreement": "z = (mean - mean_ref)/sqrt(mcse^2 + mcse_ref^2) with arviz mean MCSE on both sides; max |z| over parameters; flag if > 4",
+    "frozen_chain": "an oWALNUTS chain with more than 500 of its 1,000 retained transitions ending in refinement exhaustion; a cell is frozen if any chain is",
+    "installed_mass": "per chain max and min of the final diagonal mass (the WP31 floor diagnostic), recorded"
+  },
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "head_to_head": "per competitor: geometric mean over models with all seeds ok on both sides of the seed-median ratios of min bulk ESS/gradient, min bulk ESS/s and wall per gradient; wins counted per model; 'outright win' = gates passed >= competitor and higher seed-median ESS/gradient and ESS/s",
+  "funnel": {
+    "target": "Neal's 10-D funnel, omega ~ N(0, 9), x_i | omega ~ N(0, e^omega); exact P(omega < -5) = 0.0478",
+    "starts": "omega in {-3, -1, 1, 3}, x = 0",
+    "chains": 4, "warmup": 2000, "draws": 20000,
+    "tuning": "the sampler defaults, nothing overridden: Tuning::default() (MomentumSum, eight levels), Metric::diagonal() (Stan regularisation), Adaptation::default(), threads 4 — the joint_default_v1 'defaults / joint' cell on fresh seeds",
+    "seeds": [87101, 87102, 87103],
+    "statistic": "per seed: z = (estimate - exact) / MCSE of the indicator omega < -5 (owalnuts::diagnostics::mcse_mean, the funnel_defaults_v1 statistic); the gate is |z| <= 2 on every seed. The batch-means z per seed and pooled is reported alongside",
+    "binary": "src/bin/funnel.rs"
+  },
+  "predictions": {
+    "P1": "owalnuts-da passes all gates on >= 39 of 51 cells (v3 default arm 35; WP31 joint arm 41 on seeds 86101-86103; CmdStan 37 and nutpie 31 in v3)",
+    "P2": "owalnuts-da geometric-mean min-bulk-ESS/gradient vs CmdStan >= 0.45 over all 17 models (v3 default 0.344; WP31 joint against the cited v3 CmdStan medians 0.477)",
+    "P3": "owalnuts-da geometric-mean min-bulk-ESS/second vs nutpie >= 1.5 over the models complete on both sides (v3 default 1.35; WP31 joint ESS/s 1.56x the default arm's)",
+    "P4": "owalnuts-da geometric-mean wall per gradient <= 1.0x CmdStan (v3: 0.751)",
+    "P5": "funnel tail mass at the sampler defaults: |z| <= 2 on every one of the three seeds (WP31 joint at the defaults: -0.06, +0.81, -1.16)"
+  },
+  "reported_not_gated": "v5 / v3 seed-median ratios per model and arm (the DA arm's geomean is expected near WP31's 1.51x; cmdstan and nutpie are the seed-noise control); models below 0.8x or above 1.2x v3 for the DA arm; frozen cells; cells not ok; installed mass ranges; final steps and depth caps per seed; outright wins against each competitor",
+  "decision_rules": "Report all cells; no reruns; failures are results; nothing tuned after seeing results. A driver crash is relaunched and the interrupted cell re-run from scratch (seeded), recorded as a deviation. The default change is NOT reversed by this study on its own: it was a post-hoc decision documented as such; the study reports which predictions held. If P1, P2 and P4 all hold the release notes may cite this run as the breadth figure for the 0.2.0 defaults; if P2 or P5 fails, the release notes must say so next to the numbers.",
+  "machine_note": "shared machine; other worktrees may run concurrently; walls and ESS/s are upper bounds / reported, ESS per gradient is the robust metric"
+}

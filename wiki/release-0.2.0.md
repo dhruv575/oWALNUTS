@@ -20,6 +20,7 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `80403fc` | `sampler::Tuning` default depth 10; opt-in Stan-style warmup controls | `STUDIES/adaptation_parity_v1` |
 | `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
 | this release | `sampler::Tuning` default refinement levels 4 -> 8: the four-level default halved the funnel's tail mass; eight levels are exact on three seeds at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D Gaussian | `STUDIES/funnel_defaults_v1` (WP28) |
+| this release | **DEFAULT CHANGE (post-hoc after WP31)**: `sampler::Tuning::default()` U-turn rule `Endpoints` -> `MomentumSum`; `Adaptation::DualAveraging` / `Paper` regularise the diagonal metric with Stan's prior (`DEFAULT_U_TURN_RULE`, `DEFAULT_METRIC_REGULARIZATION`) | `STUDIES/joint_default_v1` (WP31, rule not met, decided post hoc), validated by `STUDIES/posteriordb_bench_v5` (WP32) |
 | this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
 
 The upgrade notes (facade unchanged, research items behind the feature,
@@ -230,10 +231,49 @@ the default's 0.317x, 0.81–0.99x on the healthy regressions. Either
 option alone is not it: `MomentumSum` alone 1.12x, the regularisation
 alone 1.26x but 0.08x and 0/3 on `earnings` (the short endpoint-rule
 orbits leave the window variance at the prior's 1e-5 floor and the metric
-overshoots 100x). **Not flipped** — the preregistered per-model floor
-failed on the mode lottery and the fail-everywhere cell — and documented
-as the recommended opt-in pair in the README. Ledger entry
+overshoots 100x). **Not flipped by the study** — the preregistered
+per-model floor failed on the mode lottery and the fail-everywhere cell.
+**Flipped afterwards as a post-hoc decision**: the two C2 failures are
+cells no arm passes, the other four criteria held with margin, and the
+pair became `Tuning::default()` / `Adaptation::{DualAveraging, Paper}`
+behaviour in the commit labelled "DEFAULT CHANGE (post-hoc after WP31)",
+validated on fresh seeds against CmdStan and nutpie in
+`STUDIES/posteriordb_bench_v5` (WP32, below). Ledger entry
 `WP31-JOINT-DEFAULT-V1`.
+
+### posteriordb v5: the 0.2.0 defaults as shipped, against CmdStan and nutpie (WP32)
+
+`STUDIES/posteriordb_bench_v5`: the v3 protocol on the post-hoc defaults
+(`MomentumSum` + Stan's regularisation), fresh seeds 87101–87103, CmdStan
+2.39.0 and nutpie 0.16.8 rerun on the same seeds, predictions fixed before
+the first cell (>= 39/51 gates, >= 0.45x CmdStan per gradient over 17,
+>= 1.5x nutpie ESS/s, <= 1.0x CmdStan wall per gradient, funnel |z| <= 2 on
+every seed at the defaults) — all five held. Ledger entry
+`WP32-POSTERIORDB-BENCH-V5`. **This is the breadth figure for 0.2.0;** the
+v3 table above is the pre-change history.
+
+| arm | cells passing | models 3/3 | ESS/grad vs CmdStan | ESS/s vs CmdStan | wall/grad vs CmdStan | ESS/grad vs nutpie | ESS/s vs nutpie |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| owalnuts-da (0.2.0 defaults) | **42**/51 | **12** | **1.069** over 17; **0.822** over the 16 without `arma11` | 1.401 | **0.801** | 0.841 (16) | **3.085** |
+| cmdstan | 36/51 | 10 | 1 | 1 | 1 | — | — |
+| nutpie | 28/51 | 8 | — | — | — | 1 | 1 |
+
+Read the per-gradient figure as 0.82x: the 1.07x over all 17 is `arma11`,
+where CmdStan and nutpie each lose two of three seeds to a chain that never
+leaves its start (WP27's crawl start) and oWALNUTS passes 3/3 at 71x.
+On the healthy regressions oWALNUTS is 0.67x (`earnings`), 0.92x
+(`kidiq`), 0.87x (`sblrc`), 0.85x (`nes2000`), 0.90x (`mesquite`) of
+CmdStan per gradient, against 0.22 / 0.47 / 0.09 / 0.58 / 0.88 in v3; the
+DA arm's v5/v3 geomean is 2.01x per gradient at 1.02x the gradients, no
+model below 0.8x. Outright wins (gates >=, more ESS per gradient and per
+second): vs CmdStan `arma11` and the centered eight schools; vs nutpie
+`diamonds`, `arma11`, `gp_pois_regr`. Gate wins: noncentered eight schools
+(3/3; nutpie 0/3), `gp_pois_regr` (3/3; CmdStan 0/3 with 6–22
+divergences, nutpie 0/3), `sblrc` (3/3; CmdStan 2/3). Still failing
+everywhere: the centered eight schools, `accel_gp`. Funnel at the
+defaults 0.0571 / 0.0474 / 0.0578 (z +1.02 / −0.05 / +0.93) with zero
+divergences, one chain on one seed at `h` 0.0013 (unbiased, not efficient;
+WP28). No oWALNUTS cell errored, froze or diverged.
 
 ### Autodiff (`integrations/AUTODIFF-RESEARCH.md`)
 
