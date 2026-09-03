@@ -1559,7 +1559,7 @@ impl ChainRescueConfig {
     /// Candidate A of `STUDIES/chain_rescue_v1`: restart outliers from the
     /// best chain, step ratio 0.1, density factor 3 IQRs, windows of at
     /// least 10 transitions.
-    pub fn restart_from_best() -> Self {
+    pub const fn restart_from_best() -> Self {
         Self {
             mode: ChainRescueMode::RestartFromBest,
             step_ratio: 0.1,
@@ -1570,7 +1570,7 @@ impl ChainRescueConfig {
 
     /// Candidate B of `STUDIES/chain_rescue_v1`: pool the metric and the
     /// step across chains at every slow-window boundary.
-    pub fn pool_at_boundaries() -> Self {
+    pub const fn pool_at_boundaries() -> Self {
         Self {
             mode: ChainRescueMode::PoolAtBoundaries,
             ..Self::restart_from_best()

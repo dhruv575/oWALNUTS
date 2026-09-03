@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use owalnuts::sampler::{
-    Adaptation, Cancellation, ChainOutput, DEFAULT_METRIC_REGULARIZATION,
+    Adaptation, Cancellation, ChainOutput, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION,
     DEFAULT_RANDOM_START_CHAINS, DEFAULT_U_TURN_RULE, DEFAULT_WARMUP_EXHAUSTION, Error, ErrorKind,
     Init, Limits, Metric, Sampler, StructuredBlockMass, StructuredCovarianceBlock,
     StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, uniform_starts,
@@ -144,6 +144,7 @@ fn identity_metric_matches_the_diagonal_facade_without_mass_adaptation() {
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
                 .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_chain_rescue(DEFAULT_CHAIN_RESCUE)
                 .with_mass_adaptation(false),
         )),
         nz(1),
@@ -180,7 +181,8 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
         )),
         nz(1),
     )
@@ -219,7 +221,8 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
             WarmupConfig::new(0.9)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
         )),
         nz(1),
     )
@@ -350,7 +353,8 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
                 .with_mass_adaptation(false)
                 .with_paper_adaptation(paper)
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
         );
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
     let posterior = sampler()
@@ -386,6 +390,7 @@ fn evaluation_budget_matches_the_budgeted_facade() {
             .unwrap()
             .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
             .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+            .with_chain_rescue(DEFAULT_CHAIN_RESCUE)
             .with_mass_adaptation(false),
     ));
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
@@ -478,7 +483,8 @@ fn cancellation_and_timeout_match_run_control() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
         )),
         nz(1),
         &RunControl::new().with_cancellation(&*flag),
@@ -500,7 +506,8 @@ fn cancellation_and_timeout_match_run_control() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
         )),
         nz(1),
         &RunControl::new().with_timeout(Duration::ZERO).unwrap(),

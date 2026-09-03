@@ -42,6 +42,35 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Added
 
+- **Warmup-time chain rescue** (`STUDIES/chain_rescue_v1`,
+  [WP33-CHAIN-RESCUE-V1]). `walnutpie::WarmupConfig::with_chain_rescue(ChainRescueConfig)`
+  makes the multi-chain diagonal driver (`sample_chains_with_control` and
+  its wrappers; the `sampler` identity and diagonal paths) advance the
+  chains window by window and meet at the end of every slow metric window.
+  `ChainRescueConfig::restart_from_best()` scores every chain on the window
+  just completed (post-boundary step; median and IQR of the selected
+  states' log density) and re-seeds an outlier — step below 0.1x the
+  chains' median, or median log density more than three within-chain IQRs
+  below the chains' median — from the largest-step non-outlier chain's
+  window: one of its positions (drawn with the outlier's own RNG stream),
+  its metric, step and dual-averaging state. `pool_at_boundaries()` merges
+  the chains' window variances exactly and installs the pooled metric and
+  the median step everywhere. Both act only on discarded transitions;
+  retained draws come from the unchanged per-chain kernel, and a boundary
+  with no outlier changes nothing. Every decision is a `ChainRescueUpdate`
+  (`window_index`, `transition`, `chain`, scores, `ChainRescueOutcome::{Kept,
+  Skipped, Restarted { source, criterion, source_position, step_after },
+  Pooled }`) in `RunTelemetry::chain_rescues`. Internally `run_chain` is
+  now `ChainRun::start / advance / finish`; the plain path runs the three
+  back to back on one thread and is bit-identical (every fingerprint and
+  test unchanged). Single-chain runs ignore the option; the dense and
+  structured-refresh facades reject it. Tests: `tests/chain_rescue.rs`
+  (determinism across seeds and thread counts, the density rule fires on a
+  chain started in a trap and the rescued chain samples the main mode,
+  never fires on a Gaussian and the draws are the plain run's, every
+  record lies in warmup, skipped boundaries and one chain are the plain
+  run, dense rejects).
+
 - **Orbit-position diagnostics** (`STUDIES/kernel_gap_v1`,
   [WP30-KERNEL-GAP-V1]). `walnutpie::TransitionDiagnostics` gains
   `orbit_states` (states in the final orbit), `selected_index` and
@@ -257,6 +286,36 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   profiles).
 
 ### Changed
+
+- **DEFAULT CHANGE (WP33, by the preregistered rule): the sampler's own
+  adaptation modes apply `sampler::DEFAULT_CHAIN_RESCUE =
+  ChainRescueConfig::restart_from_best()` on the identity and diagonal
+  metrics with at least two chains** (`STUDIES/chain_rescue_v1`,
+  [WP33-CHAIN-RESCUE-V1]). The study preregistered the rule — a candidate
+  flips if it passes >= 3 more of 27 cells (8 posteriordb models x 3 fresh
+  seeds + 3 funnel cells) than the plain driver, no model below 0.9x
+  ESS/gradient, no new reference disagreement |z| > 3.5, funnel |z| <= 2 on
+  every seed — before the implementation existed, and restart-from-best
+  met every part: 25 vs 21 cells (`lotka_volterra` 0/3 -> 3/3, the frozen
+  chain caught at the first boundary, 25 min -> 5 min on one seed; `arma11`
+  2/3 -> 3/3, the crawl cell R-hat 1.60 -> 1.003), per-model ESS/gradient
+  1.00–289x (geomean 2.72), `mesquite` and `nes2000` byte-identical,
+  funnel z +0.94 / −0.77 / −1.02, max |z| unchanged within noise. Pooling
+  (`pool_at_boundaries`) gained two cells and fell to 0.42x on
+  `lotka_volterra`; it stays opt-in. Draws of every multi-chain `Sampler`
+  run on an identity or diagonal metric with `Adaptation::DualAveraging`
+  or `Adaptation::Paper` can change (they are the plain draws whenever no
+  chain is an outlier at any boundary); `Adaptation::Custom` is used as
+  given (the opt-out), dense and structured metrics, single-chain runs,
+  `walnutpie::WarmupConfig::default()`, `RunConfig`, `ALGORITHM_REVISION`
+  and the kernel fingerprints are unchanged. Read
+  `RunTelemetry::chain_rescues` before trusting R-hat on a multimodal
+  target: a `LogDensity` rescue merges a chain into the others and hides
+  the mode it had found. Three of six predictions failed and are reported
+  (the density rule also fires on chains merely late at the first
+  boundary; the funnel 88101 R-hat is not a one-bad-chain failure; the
+  rule was predicted not to be met). `tests/sampler_api.rs` mirrors the
+  new default.
 
 - **DEFAULT CHANGE (post-hoc after WP31): `sampler::Tuning::default()`
   U-turn rule `Endpoints` -> `MomentumSum`, and the sampler's own
