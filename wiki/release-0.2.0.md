@@ -333,5 +333,24 @@ on Eight Schools at four threads, parity with nutpie.
       model tests run locally) green, fmt and clippy clean
 - [x] Python package rebuilt and its pytest suite green
 - [x] `cargo package --allow-dirty` verify build
-- [ ] `git tag v0.2.0` and `cargo publish` â€” left to the maintainer
+- [ ] `git tag v0.2.0` and `cargo publish` - left to the maintainer
+- [ ] PyPI wheels: the `wheels.yml` matrix has only been exercised on Windows;
+      the manylinux, macOS and MSVC legs are unverified
 - [x] WP23 posteriordb v2 numbers above
+
+### Outstanding before the release numbers are final
+
+The validation tables above end at **WP32 (posteriordb v5, 42/51 gates)**. Two
+later studies changed or characterised the shipped defaults and are not yet
+reflected in the headline:
+
+- **WP33 `chain_rescue_v1`** made warmup chain rescue a default *after* v5, so
+  the v5 figure understates the current sampler. A fresh-seed validation on all
+  17 models (WP35, posteriordb v6) was preregistered but **not run**; the
+  programme was paused on 2026-09-04.
+- **WP34 `refinement_role_v1`** established that refinement does not pay on
+  ordinary posteriors and that `delta = 2` is worth 1.07x per gradient at the
+  same gates, pending a decision study.
+
+See [`research-program-2026-09-04.md`](research-program-2026-09-04.md) for the
+full state and the open lines.

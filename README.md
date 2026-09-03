@@ -300,9 +300,12 @@ the facade keeps the frozen replay defaults so pinned fingerprints hold.
   validation tables and limitations; [`CHANGELOG.md`](CHANGELOG.md) for the
   upgrade notes.
 - [`wiki/research-ledger-2026-08-31.md`](wiki/research-ledger-2026-08-31.md):
-  one checksummed entry per study;
+  one checksummed entry per study.
+- [`wiki/research-program-2026-09-04.md`](wiki/research-program-2026-09-04.md):
+  the 0.2 program — what shipped, why each default changed, what the
+  posteriordb benchmark falsified, and the open lines;
   [`wiki/research-program-2026-08-31.md`](wiki/research-program-2026-08-31.md):
-  the program and why.
+  the program that produced `0.1.0-beta.2`.
 - [`STUDIES/`](STUDIES/): every preregistration, runner, artifact and
   checksum.
 
