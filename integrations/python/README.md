@@ -1,18 +1,37 @@
 # owalnuts (Python)
 
 oWALNUTS — the within-orbit adaptive leapfrog No-U-Turn sampler — for Python
-callables, JAX, PyTorch and PyMC models. The extension is a thin PyO3 wrapper
-over the public Rust `owalnuts::sampler` API (kernel revision is exposed as
-`owalnuts.ALGORITHM_REVISION`); autodiff comes from the framework you already
-use.
+callables, JAX, PyTorch, PyMC and Stan models. The extension is a thin PyO3
+wrapper over the public Rust `owalnuts::sampler` API (kernel revision is
+exposed as `owalnuts.ALGORITHM_REVISION`); autodiff comes from the framework
+you already use.
 
-## Install (development)
+## Install
+
+```console
+pip install owalnuts               # numpy only
+pip install "owalnuts[stan]"       # + bridgestan: Stan programs via from_stan
+pip install "owalnuts[jax]"        # or [torch], [pymc], [numba], [arviz]
+```
+
+Wheels are abi3 (one per platform, CPython 3.10+) for Linux x86_64/aarch64,
+macOS x86_64/arm64 and Windows x86_64; anywhere else `pip` builds the sdist
+with a Rust 1.88+ toolchain. `[stan]` additionally needs a C++17 compiler
+and GNU make (BridgeStan fetches its own Stan sources on first use; on
+Windows use the mingw-w64 `g++`/`mingw32-make`).
+
+### From source
 
 ```console
 cd integrations/python
 python -m venv .venv && .venv\Scripts\pip install maturin numpy
 RUSTUP_TOOLCHAIN=1.88.0-x86_64-pc-windows-gnu .venv\Scripts\maturin develop --release
 ```
+
+`maturin build --release` produces the wheel, `maturin sdist` the source
+distribution (maturin vendors the root crate and `integrations/bridgestan`
+into it, so it builds from a clean directory); `.github/workflows/wheels.yml`
+does both on every `v*` tag and publishes through PyPI trusted publishing.
 
 ## Use
 
@@ -86,6 +105,38 @@ target = owalnuts.from_torch(logp)                  # autograd, float64
 target, dim, q0, names, unravel = owalnuts.from_pymc(model)  # compiled logp_dlogp
 ```
 
+## Stan models
+
+`from_stan` compiles a Stan program with the [BridgeStan](https://github.com/roualdes/bridgestan)
+package (`pip install "owalnuts[stan]"`) and samples it GIL-free:
+
+```python
+import owalnuts
+
+data = {"J": 8, "y": [28, 8, -3, 7, -1, 1, 18, 12], "sigma": [15, 10, 16, 11, 9, 11, 10, 18]}
+target = owalnuts.from_stan("eight_schools.stan", data, seed=1)   # or a built *_model.so
+result = owalnuts.sample(target, chains=4, warmup=1000, draws=1000, seed=1, threads=4)
+
+result.summary()                     # rows named by Stan's unconstrained parameters
+theta = target.constrain(result)     # (chains, draws, n) constrained draws, bs_param_constrain
+target.constrained_names()           # their names; include_tp=/include_gq= as in BridgeStan
+```
+
+The library is built **without** `STAN_THREADS` (pass
+`make_args=["STAN_THREADS=true"]` to change that): on Windows/mingw-w64 a
+threaded Stan build is 9-16x slower per gradient (emulated TLS,
+`STUDIES/posteriordb_bench_v1/artifacts/wall-gap`), and `sample` does not
+need it — the Rust `owalnuts_bridgestan::ReplicatedStanTarget` loads one
+copy of the library per thread (each copy has its own global autodiff
+stack) and runs the chains with the interpreter detached, so `threads=4`
+is four parallel chains at the single-thread per-gradient cost. Positions
+are Stan's unconstrained parameters (`propto=False, jacobian=True`); a Stan
+exception or nonfinite value is a zero-density proposal (refined, then
+rejected), as in CmdStan. `data` is a dict (numpy arrays allowed), a
+`.json` path or JSON text; `seed` is the Stan model seed, the sampling seed
+is `sample(seed=...)`. A `StanTarget` is also a plain `logp_and_grad`
+callable through the `bridgestan` package, for inspection.
+
 Structured metrics (the state-space "path metric" from the 2026-08-31
 research program) are one call:
 
@@ -125,7 +176,14 @@ ESS per second is what the callback overhead taxes.
 .venv\Scripts\python -m pytest -q
 ```
 
-## GIL-free compiled targets
+## GIL-free chains
+
+Every `sample` call releases the GIL for the whole run; the kernel calls
+the target from Rust worker threads. A Python callable re-attaches the
+interpreter on each call, so those chains are serialised (use `threads=1`).
+Three transports never touch the interpreter and run `threads` chains in
+parallel: the built-in native targets, `from_stan` (BridgeStan, above), and
+compiled C-ABI callbacks (`from_cfunc`, `from_pymc(gil_free=True)`):
 
 ```python
 import numba, owalnuts

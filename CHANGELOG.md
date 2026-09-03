@@ -252,6 +252,24 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   backed by `owalnuts::diagnostics`, plus the `from_cfunc` /
   `from_pymc(gil_free=True)` GIL-free transport and the structured-metric
   refresh callback. See its README.
+- **Python package on PyPI.** `pip install owalnuts` (`owalnuts[stan]`,
+  `[jax]`, `[torch]`, `[pymc]`, `[numba]`, `[arviz]`): abi3 wheels
+  (CPython 3.10+, one per platform) for Linux x86_64/aarch64 (manylinux),
+  macOS x86_64/arm64 and Windows x86_64 plus a self-contained sdist (maturin
+  vendors the root crate and `integrations/bridgestan` into it), built and
+  tested against a fresh interpreter by `.github/workflows/wheels.yml` and
+  published from `v*` tags through PyPI trusted publishing.
+- **Stan models from Python.** `owalnuts.from_stan(stan_file, data, seed=,
+  make_args=)` compiles a Stan program with the `bridgestan` package (no
+  `STAN_THREADS` by default: the fast build on Windows/mingw-w64) and
+  returns a `StanTarget` that `owalnuts.sample` runs through the Rust
+  `owalnuts_bridgestan::ReplicatedStanTarget` — one library copy per thread,
+  GIL-free, so `threads=4` gives four parallel chains — with the model's
+  unconstrained parameter names on the result (`bs_param_unc_names`, new in
+  the bridgestan crate) and `StanTarget.constrain(result)` for the
+  constrained draws (`bs_param_constrain`). Cargo feature `stan` of the
+  extension (default on); the bridgestan crate's tape-backend `bench` binary
+  moved behind its own `bench` feature.
 - `examples/kernel_bench.rs` (kernel hot-path microbenchmark) and
   `tests/kernel_fingerprint.rs` (bit-exact run fingerprints in both build
   profiles).

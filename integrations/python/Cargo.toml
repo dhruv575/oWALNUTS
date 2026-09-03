@@ -4,17 +4,26 @@ version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 publish = false
-description = "Python bindings for the oWALNUTS walnutpie facade (callable, JAX, PyTorch, PyMC targets)"
+description = "Python bindings for the oWALNUTS walnutpie facade (callable, JAX, PyTorch, PyMC, Stan targets)"
 license = "MIT"
+repository = "https://github.com/dhruv575/oWALNUTS"
 
 [lib]
 name = "_owalnuts"
 crate-type = ["cdylib"]
 path = "src/lib.rs"
 
+[features]
+default = ["stan"]
+# BridgeStan-compiled Stan models through `owalnuts-bridgestan`
+# (`ReplicatedStanTarget`, one library copy per thread, GIL-free).
+stan = ["dep:owalnuts-bridgestan"]
+
 [dependencies]
 owalnuts = { path = "../..", features = ["research"] }
-pyo3 = { version = "0.28", features = ["extension-module", "generate-import-lib"] }
+owalnuts-bridgestan = { path = "../bridgestan", optional = true }
+# `abi3-py310`: one wheel per platform covers CPython 3.10+ (stable ABI).
+pyo3 = { version = "0.28", features = ["extension-module", "generate-import-lib", "abi3-py310"] }
 numpy = "0.28"
 
 [profile.release]

@@ -9,14 +9,20 @@ license = "MIT"
 
 [dependencies]
 owalnuts = { path = "../.." }
-owalnuts-autodiff-tape = { path = "../enzyme" }
+owalnuts-autodiff-tape = { path = "../enzyme", optional = true }
 libloading = "0.8"
 serde_json = "1"
 rand = { version = "0.9", features = ["small_rng"] }
 rand_distr = "0.5"
 
+[features]
+# The `bench` binary compares against the tape backend; the library itself
+# needs only libloading (keeps the Python wheel's sdist free of the tape crate).
+bench = ["dep:owalnuts-autodiff-tape"]
+
 [[bin]]
 name = "bench"
 path = "src/bin/bench.rs"
+required-features = ["bench"]
 
 [workspace]

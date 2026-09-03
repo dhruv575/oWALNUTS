@@ -1156,6 +1156,126 @@ fn sample_cfunc<'py>(
     output_dict(py, output.inner(), wall, calls, 0, 0.0)
 }
 
+// ── BridgeStan (feature `stan`) ──────────────────────────────────────────
+
+/// Stan models compiled by the `bridgestan` Python package, loaded through
+/// `owalnuts_bridgestan::ReplicatedStanTarget`: one copy of the model
+/// library per thread (the recommended non-`STAN_THREADS` build has one
+/// global autodiff stack per loaded module), evaluated with the interpreter
+/// detached, so `threads > 1` gives real parallel chains.
+#[cfg(feature = "stan")]
+mod stan {
+    use super::*;
+    use owalnuts_bridgestan::{ReplicatedStanTarget, Threading, default_preload};
+    use std::path::{Path, PathBuf};
+
+    fn load(
+        model_so: &str,
+        data: Option<&str>,
+        seed: u32,
+        replicas: usize,
+        preload: Option<Vec<String>>,
+    ) -> PyResult<ReplicatedStanTarget> {
+        let mut libraries = default_preload();
+        libraries.extend(preload.into_iter().flatten().map(PathBuf::from));
+        ReplicatedStanTarget::load(Path::new(model_so), &libraries, data, seed, replicas)
+            .map_err(|e| PyRuntimeError::new_err(format!("bridgestan: {e}")))
+    }
+
+    fn threading_name(threading: Threading) -> &'static str {
+        match threading {
+            Threading::Concurrent => "concurrent",
+            Threading::Serialised => "serialised",
+        }
+    }
+
+    /// Load a BridgeStan model library once and report its unconstrained
+    /// dimension, `bs_param_unc_names`, `bs_model_info` and threading mode.
+    #[pyfunction]
+    #[pyo3(signature = (model_so, data=None, seed=1, preload=None))]
+    pub fn stan_model_info<'py>(
+        py: Python<'py>,
+        model_so: &str,
+        data: Option<&str>,
+        seed: u32,
+        preload: Option<Vec<String>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let target = py.detach(|| load(model_so, data, seed, 1, preload))?;
+        let d = PyDict::new(py);
+        d.set_item("dimension", target.dimension())?;
+        d.set_item(
+            "parameter_names",
+            target.param_unc_names().map(<[String]>::to_vec),
+        )?;
+        d.set_item("info", target.info())?;
+        d.set_item("threading", threading_name(target.threading()))?;
+        Ok(d)
+    }
+
+    /// Sample a BridgeStan model library (`*_model.so`) with CmdStan-JSON
+    /// `data`. `config["threads"]` copies of the library are loaded.
+    #[pyfunction]
+    #[pyo3(signature = (model_so, data, starts, config, seed=1, preload=None))]
+    pub fn sample_stan<'py>(
+        py: Python<'py>,
+        model_so: &str,
+        data: Option<&str>,
+        starts: PyReadonlyArray2<'py, f64>,
+        config: &Bound<'py, PyDict>,
+        seed: u32,
+        preload: Option<Vec<String>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let starts = parse_starts(starts)?;
+        let run = parse_run(config, None)?;
+        let threads = get::<usize>(config, "threads")?.unwrap_or(1).max(1);
+        let started = Instant::now();
+        let (target, output) = py.detach(|| {
+            let target = load(model_so, data, seed, threads, preload)?;
+            if starts.first().map(Vec::len) != Some(target.dimension()) {
+                return Err(value_error(format!(
+                    "starts must be (chains, {}) to match the model's unconstrained dimension",
+                    target.dimension()
+                )));
+            }
+            let output = execute(&target, &starts, &run).map_err(facade_error)?;
+            Ok((target, output))
+        })?;
+        let wall = started.elapsed().as_secs_f64();
+        output_dict(
+            py,
+            output.inner(),
+            wall,
+            target.calls(),
+            target.recoverable_failures(),
+            0.0,
+        )
+    }
+
+    /// Uniform starts with retries for a BridgeStan model.
+    #[pyfunction]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (model_so, data, chains, seed, radius=2.0, max_attempts=100, model_seed=1, preload=None))]
+    pub fn uniform_starts_stan<'py>(
+        py: Python<'py>,
+        model_so: &str,
+        data: Option<&str>,
+        chains: usize,
+        seed: u64,
+        radius: f64,
+        max_attempts: usize,
+        model_seed: u32,
+        preload: Option<Vec<String>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let (dimension, starts) = py.detach(|| {
+            let target = load(model_so, data, model_seed, 1, preload)?;
+            let starts = uniform_starts(&target, chains, seed, radius, max_attempts)
+                .map_err(facade_error)?;
+            Ok::<_, PyErr>((target.dimension(), starts))
+        })?;
+        starts_array(py, starts, dimension)
+    }
+}
+
 /// Standard Gaussian reference target for the defaults-parity test: the log
 /// density is accumulated as `s += x * x` in index order (no fused
 /// multiply-add, no pairwise summation) so that a Python target written the
@@ -1451,5 +1571,12 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uniform_starts_cfunc, m)?)?;
     m.add_function(wrap_pyfunction!(summary, m)?)?;
     m.add_function(wrap_pyfunction!(reference_gaussian_sampler_run, m)?)?;
+    m.add("HAS_STAN", cfg!(feature = "stan"))?;
+    #[cfg(feature = "stan")]
+    {
+        m.add_function(wrap_pyfunction!(stan::sample_stan, m)?)?;
+        m.add_function(wrap_pyfunction!(stan::stan_model_info, m)?)?;
+        m.add_function(wrap_pyfunction!(stan::uniform_starts_stan, m)?)?;
+    }
     Ok(())
 }
