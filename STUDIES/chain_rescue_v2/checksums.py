@@ -11,6 +11,8 @@ SOURCE_FILES = [
     "AMENDMENT-1.md",
     "AMENDMENT-2.md",
     "AMENDMENT-3.md",
+    "POST-RUN-CORRECTION.md",
+    "LEDGER-ENTRY.md",
     "README.md",
     ".gitignore",
     "Cargo.toml",

@@ -8,6 +8,7 @@ Commands:
   run_rescue.py analyze
   run_rescue.py prepare-provenance  # curator-only, create-new
   run_rescue.py rebind-amendment-3-provenance  # curator-only, create-new
+  run_rescue.py rebind-post-run-provenance  # curator-only, create-new
   run_rescue.py conformance         # curator-only, create-new
 
 `run` is the only command that launches evidence cells. It follows the frozen
@@ -38,6 +39,8 @@ PROTOCOL = json.loads(PROTOCOL_PATH.read_text(encoding="utf-8"))
 AMENDMENT_1 = HERE / "AMENDMENT-1.md"
 AMENDMENT_2 = HERE / "AMENDMENT-2.md"
 AMENDMENT_3 = HERE / "AMENDMENT-3.md"
+POST_RUN_CORRECTION = HERE / "POST-RUN-CORRECTION.md"
+LEDGER_ENTRY = HERE / "LEDGER-ENTRY.md"
 ARTIFACTS = HERE / "artifacts"
 RAW = ARTIFACTS / "raw"
 PROCESSES = ARTIFACTS / "processes"
@@ -55,6 +58,7 @@ PROVENANCE_INDEX = ARTIFACTS / "provenance" / "current.json"
 AMENDMENT_3_PROVENANCE_INDEX = (
     ARTIFACTS / "provenance" / "current-amendment-3.json"
 )
+POST_RUN_PROVENANCE_INDEX = ARTIFACTS / "provenance" / "current-post-run.json"
 
 DEFAULT_ASSETS = Path(
     r"C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6"
@@ -191,9 +195,13 @@ def authenticated_pointer_path(index: Path, field: str, legacy: Path) -> Path:
 
 def provenance_paths() -> tuple[Path, Path]:
     index = (
-        AMENDMENT_3_PROVENANCE_INDEX
-        if AMENDMENT_3_PROVENANCE_INDEX.is_file()
-        else PROVENANCE_INDEX
+        POST_RUN_PROVENANCE_INDEX
+        if POST_RUN_PROVENANCE_INDEX.is_file()
+        else (
+            AMENDMENT_3_PROVENANCE_INDEX
+            if AMENDMENT_3_PROVENANCE_INDEX.is_file()
+            else PROVENANCE_INDEX
+        )
     )
     return (
         authenticated_pointer_path(
@@ -471,6 +479,8 @@ def source_file_records(repository: Path) -> list[dict[str, Any]]:
         "STUDIES/chain_rescue_v2/AMENDMENT-1.md",
         "STUDIES/chain_rescue_v2/AMENDMENT-2.md",
         "STUDIES/chain_rescue_v2/AMENDMENT-3.md",
+        "STUDIES/chain_rescue_v2/POST-RUN-CORRECTION.md",
+        "STUDIES/chain_rescue_v2/LEDGER-ENTRY.md",
         "STUDIES/chain_rescue_v2/README.md",
     ).splitlines()
     return [
@@ -532,6 +542,8 @@ def inspect_external_inputs() -> dict[str, Any]:
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
         "amendment_3_sha256": sha256(AMENDMENT_3),
+        "post_run_correction_sha256": sha256(POST_RUN_CORRECTION),
+        "ledger_entry_sha256": sha256(LEDGER_ENTRY),
         "assets": str(ASSETS.resolve()),
         "model_dir": str(MODEL_DIR.resolve()),
         "posteriordb": pdb,
@@ -552,6 +564,8 @@ def logical_external_identity(manifest: dict[str, Any]) -> dict[str, Any]:
         "amendment_1_sha256": manifest.get("amendment_1_sha256"),
         "amendment_2_sha256": manifest.get("amendment_2_sha256"),
         "amendment_3_sha256": manifest.get("amendment_3_sha256"),
+        "post_run_correction_sha256": manifest.get("post_run_correction_sha256"),
+        "ledger_entry_sha256": manifest.get("ledger_entry_sha256"),
         "posteriordb": {
             key: manifest.get("posteriordb", {}).get(key)
             for key in ("head", "tree", "status_porcelain")
@@ -822,6 +836,104 @@ def rebind_amendment_3_provenance() -> None:
     print(f"wrote {AMENDMENT_3_PROVENANCE_INDEX.relative_to(HERE)}")
 
 
+def rebind_post_run_provenance() -> None:
+    if POST_RUN_PROVENANCE_INDEX.exists():
+        raise RuntimeError("post-run provenance index already exists; refusing replacement")
+    repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
+    if git_output(repository, "status", "--porcelain=v1"):
+        raise RuntimeError("source worktree must be clean before post-run provenance rebind")
+    old_input = authenticated_pointer_path(
+        AMENDMENT_3_PROVENANCE_INDEX, "external_inputs", LEGACY_INPUT_MANIFEST
+    )
+    old_build_path = authenticated_pointer_path(
+        AMENDMENT_3_PROVENANCE_INDEX, "build_manifest", LEGACY_BUILD_MANIFEST
+    )
+    old_build = json.loads(old_build_path.read_text(encoding="utf-8"))
+    rust_source_files = old_build.get("rust_binary_source_files") or [
+        record
+        for record in old_build.get("source_files", [])
+        if is_rust_binary_source(record["path"])
+    ]
+    changed_rust = [
+        record["path"]
+        for record in rust_source_files
+        if not canonical_source_matches(repository, record)
+    ]
+    if changed_rust:
+        raise RuntimeError(
+            f"Rust binary sources changed; audited rebuild is required: {changed_rust}"
+        )
+    for name, path in (
+        ("cell", HARNESS),
+        ("funnel", FUNNEL),
+        ("conformance", CONFORMANCE_BIN),
+    ):
+        if not file_matches_record(path, old_build["executables"][name]["primary"]):
+            raise RuntimeError(f"prepared executable changed before post-run rebind: {name}")
+    source_commit = git_output(repository, "rev-parse", "HEAD")
+    source_tree = git_output(repository, "rev-parse", "HEAD^{tree}")
+    suffix = source_commit[:12]
+    input_manifest = (
+        ARTIFACTS / "provenance" / f"external-inputs-post-run-{suffix}.json"
+    )
+    build_manifest = (
+        ARTIFACTS / "provenance" / f"build-manifest-post-run-{suffix}.json"
+    )
+    if input_manifest.exists() or build_manifest.exists():
+        raise RuntimeError("versioned post-run provenance path already exists")
+    external = inspect_external_inputs()
+    external["implementation_source_commit"] = source_commit
+    external["implementation_source_tree"] = source_tree
+    exclusive_write_json(input_manifest, external)
+    build = {
+        **old_build,
+        "schema": "chain-rescue-v2-build-manifest-post-run-analysis-rebind",
+        "provenance_revision": "post-run-derived-correction-v1",
+        "source_commit": source_commit,
+        "source_tree": source_tree,
+        "source_files": source_file_records(repository),
+        "external_input_manifest_sha256": sha256(input_manifest),
+        "build_performed_for_rebind": False,
+        "rust_binary_source_files": rust_source_files,
+        "prior_analysis_provenance": {
+            "build_manifest": {
+                **file_record(old_build_path),
+                "path": old_build_path.relative_to(HERE).as_posix(),
+            },
+            "external_inputs": {
+                **file_record(old_input),
+                "path": old_input.relative_to(HERE).as_posix(),
+            },
+        },
+    }
+    exclusive_write_json(build_manifest, build)
+    exclusive_write_json(
+        POST_RUN_PROVENANCE_INDEX,
+        {
+            "schema": "chain-rescue-v2-provenance-index-post-run",
+            "immutable": True,
+            "analysis_only": True,
+            "implementation_source_commit": source_commit,
+            "implementation_source_tree": source_tree,
+            "external_inputs": {
+                **file_record(input_manifest),
+                "path": input_manifest.relative_to(HERE).as_posix(),
+            },
+            "build_manifest": {
+                **file_record(build_manifest),
+                "path": build_manifest.relative_to(HERE).as_posix(),
+            },
+            "prior_analysis_provenance": {
+                **file_record(old_build_path),
+                "path": old_build_path.relative_to(HERE).as_posix(),
+            },
+        },
+    )
+    print(f"wrote {input_manifest.relative_to(HERE)}")
+    print(f"wrote {build_manifest.relative_to(HERE)}")
+    print(f"wrote {POST_RUN_PROVENANCE_INDEX.relative_to(HERE)}")
+
+
 def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
     errors = []
     input_manifest, build_manifest = provenance_paths()
@@ -861,6 +973,13 @@ def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
             != sha256(reused_build)
         ):
             errors.append("conformance reused-build hash mismatch")
+    prior_analysis = build.get("prior_analysis_provenance")
+    if prior_analysis is not None:
+        for label in ("build_manifest", "external_inputs"):
+            record = prior_analysis.get(label, {})
+            path = HERE / record.get("path", "")
+            if not file_matches_record(path, record):
+                errors.append(f"prior analysis provenance mismatch: {label}")
     if build.get("toolchain") != EXPECTED_TOOLCHAIN:
         errors.append("build manifest toolchain mismatch")
     if require_binaries:
@@ -1048,6 +1167,8 @@ def validate_environment(
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
         "amendment_3_sha256": sha256(AMENDMENT_3),
+        "post_run_correction_sha256": sha256(POST_RUN_CORRECTION),
+        "ledger_entry_sha256": sha256(LEDGER_ENTRY),
         "provenance": provenance,
         "conformance": conformance,
     }
@@ -2571,6 +2692,74 @@ def load_processes() -> dict[tuple[str, int, str], dict[str, Any]]:
     return records
 
 
+def process_fault_cell(
+    target: str, seed: int, arm: str, process: dict[str, Any] | None
+) -> dict[str, Any]:
+    if process is None:
+        return {
+            "schema": "chain-rescue-v2-cell-report",
+            "target": target,
+            "seed": seed,
+            "arm": arm,
+            "process_valid": False,
+            "process_status": "missing_process_record",
+            "sampler_status": "process_fault",
+            "failure_reasons": ["process record is missing"],
+            "return_code": None,
+            "last_heartbeat": None,
+            "raw_output_exists": False,
+        }
+    timed_out = process.get("timed_out") is True
+    return {
+        "schema": "chain-rescue-v2-cell-report",
+        "target": target,
+        "seed": seed,
+        "arm": arm,
+        "process_valid": False,
+        "process_record": process.get("cell_id"),
+        "process_status": "timeout" if timed_out else "process_fault",
+        "sampler_status": "timeout" if timed_out else "process_fault",
+        "timed_out": timed_out,
+        "duration_seconds": process.get("duration_seconds"),
+        "failure_reasons": process.get("failure_reasons", []),
+        "return_code": process.get("return_code"),
+        "last_heartbeat": process.get("last_heartbeat"),
+        "raw_output_exists": process.get("raw_output_exists", False),
+        "raw_output_status": process.get("raw_output_status"),
+        "raw_output_sha256": process.get("raw_output_sha256"),
+    }
+
+
+def process_accounting(
+    processes: dict[tuple[str, int, str], dict[str, Any]]
+) -> dict[str, Any]:
+    faults = [process for process in processes.values() if not process.get("process_valid")]
+    return {
+        "launch_markers": len(list(LAUNCHES.glob("*.json"))),
+        "process_records": len(processes),
+        "process_valid": len(processes) - len(faults),
+        "process_faults": len(faults),
+        "heap_corruption_0xC0000374": sum(
+            process.get("return_code", {}).get("hex_32") == "0xC0000374"
+            for process in faults
+        ),
+        "timeouts": sum(process.get("timed_out") is True for process in faults),
+        "post_result_drop_timeouts": sum(
+            process.get("timed_out") is True
+            and process.get("raw_output_exists") is True
+            and process.get("last_heartbeat", {}).get("stage") == "drop"
+            and process.get("last_heartbeat", {}).get("boundary") == "before"
+            for process in faults
+        ),
+        "fault_cells": [
+            process_fault_cell(
+                process["target"], int(process["seed"]), process["arm"], process
+            )
+            for process in faults
+        ],
+    }
+
+
 def validate_process_marker(
     process: dict[str, Any], marker: Path
 ) -> list[str]:
@@ -2867,6 +3056,28 @@ def prediction_p6_held(
     )
 
 
+def adjudicate_prediction_holds(
+    nuisance: bool,
+    efficacy: bool,
+    p3: bool,
+    p4: bool,
+    funnel: bool,
+    p6: bool,
+    efficiency: bool,
+    decision: str,
+) -> dict[str, bool]:
+    return {
+        "P1": nuisance,
+        "P2": efficacy,
+        "P3": p3,
+        "P4": p4,
+        "P5": funnel,
+        "P6": p6,
+        "P7": efficiency,
+        "P8": decision == "no_rescue",
+    }
+
+
 def evaluate_funnel_gate(
     cells: dict[tuple[str, int, str], dict[str, Any]],
     triplet_valid: dict[tuple[str, int], bool],
@@ -2924,33 +3135,220 @@ def evaluate_funnel_gate(
     }
 
 
+def fixed_post_run_audit(summary: dict[str, Any]) -> dict[str, Any]:
+    expected_predictions = {
+        "P1": False,
+        "P2": False,
+        "P3": False,
+        "P4": False,
+        "P5": False,
+        "P6": True,
+        "P7": False,
+        "P8": True,
+    }
+    expected_valid = {
+        "bball_drive_event_0-hmm_drive_0": 10,
+        "kidiq-kidscore_momhsiq": 12,
+        "earnings-logearn_interaction": 12,
+        "diamonds-diamonds": 9,
+        "arma-arma11": 12,
+        "hudson_lynx_hare-lotka_volterra": 12,
+        "mesquite-logmesquite_logvash": 11,
+        "funnel-10d": 12,
+    }
+    observed_predictions = {
+        name: value["held"] for name, value in summary["predictions"].items()
+    }
+    checks = {
+        "process_counts": {
+            key: summary["process_accounting"][key]
+            for key in (
+                "launch_markers",
+                "process_records",
+                "process_valid",
+                "process_faults",
+                "heap_corruption_0xC0000374",
+                "timeouts",
+                "post_result_drop_timeouts",
+            )
+        }
+        == {
+            "launch_markers": 288,
+            "process_records": 288,
+            "process_valid": 281,
+            "process_faults": 7,
+            "heap_corruption_0xC0000374": 6,
+            "timeouts": 1,
+            "post_result_drop_timeouts": 1,
+        },
+        "valid_triplets": summary["decision_gates"]["completeness"][
+            "valid_triplets_by_target"
+        ]
+        == expected_valid,
+        "invalid_triplet_count": len(summary["invalid_triplets"]) == 6,
+        "predictions": observed_predictions == expected_predictions,
+        "mechanical_decision": summary["mechanical_decision"] == "no_rescue",
+        "paired_gate_totals": summary["paired_standard_gate_totals"]
+        == {
+            "observe": {"raw": 71, "credited": 71},
+            "current": {"raw": 74, "credited": 71},
+            "two_hit": {"raw": 76, "credited": 72},
+        },
+        "action_origin_totals": summary["action_origin_totals"]
+        == {
+            "current": {
+                "restart_events": 117,
+                "origin_overwrite_events": 5,
+                "origin_safety_unknown_events": 2,
+            },
+            "two_hit": {
+                "restart_events": 58,
+                "origin_overwrite_events": 5,
+                "origin_safety_unknown_events": 2,
+            },
+        },
+        "nuisance": (
+            summary["decision_gates"]["nuisance_action_reduction"][
+                "current_actions"
+            ]
+            == 35
+            and summary["decision_gates"]["nuisance_action_reduction"][
+                "two_hit_actions"
+            ]
+            == 14
+            and summary["decision_gates"]["nuisance_action_reduction"]["sign_test"][
+                "wins"
+            ]
+            == 8
+            and summary["decision_gates"]["nuisance_action_reduction"]["sign_test"][
+                "losses"
+            ]
+            == 1
+            and summary["decision_gates"]["nuisance_action_reduction"]["sign_test"][
+                "complete_blocks"
+            ]
+            == 9
+            and math.isclose(
+                summary["decision_gates"]["nuisance_action_reduction"]["sign_test"][
+                    "one_sided_exact_p"
+                ],
+                0.01953125,
+            )
+        ),
+        "efficacy": (
+            summary["decision_gates"]["efficacy"]["sign_test"]["wins"] == 1
+            and summary["decision_gates"]["efficacy"]["sign_test"]["losses"] == 0
+            and summary["decision_gates"]["efficacy"]["sign_test"]["ties"] == 9
+            and math.isclose(
+                summary["decision_gates"]["efficacy"]["sign_test"][
+                    "one_sided_exact_p"
+                ],
+                0.5,
+            )
+        ),
+        "funnel": (
+            summary["decision_gates"]["funnel"]["candidate_full_gate_count"] == 4
+            and summary["decision_gates"]["funnel"]["candidate_half_required"] == 6
+            and summary["decision_gates"]["funnel"]["candidate_tail_z_failures"]
+            == [92107, 92111, 92112]
+            and summary["decision_gates"]["funnel"]["gross_red_lines"]
+            == ["funnel-10d/92111"]
+        ),
+        "no_fire": summary["decision_gates"]["no_fire"]["passed"] is True,
+        "efficiency": (
+            summary["decision_gates"]["efficiency"]["available_case_ratio_count"]
+            == 77
+            and math.isclose(
+                summary["decision_gates"]["efficiency"][
+                    "available_case_geometric_mean_ratio"
+                ],
+                0.8931682041554473,
+            )
+            and summary["decision_gates"]["efficiency"]["passed"] is False
+        ),
+        "origin_classifier_scope": (
+            summary["stable_origin_classifier"]["hmm_origin_count"] == 0
+            and summary["stable_origin_classifier"]["targets_with_origins"]
+            == [
+                "arma-arma11",
+                "hudson_lynx_hare-lotka_volterra",
+            ]
+        ),
+    }
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "expected_predictions": expected_predictions,
+        "observed_predictions": observed_predictions,
+    }
+
+
 def write_results_tables(summary: dict[str, Any]) -> None:
     cells = summary["cells"]
     lines = [
         "# chain_rescue_v2 — complete WP36 results",
         "",
         f"Mechanical decision: **{summary['mechanical_decision']}**.",
+        (
+            f"Process accounting: {summary['process_accounting']['launch_markers']}/288 "
+            f"launches, {summary['process_accounting']['process_records']}/288 process "
+            f"records, {summary['process_accounting']['process_valid']} process-valid, "
+            f"{summary['process_accounting']['process_faults']} faults."
+        ),
+        (
+            "Available-case efficiency: "
+            f"{summary['decision_gates']['efficiency']['available_case_geometric_mean_ratio']:.6f} "
+            f"over {summary['decision_gates']['efficiency']['available_case_ratio_count']} "
+            "ratios; the registered full efficiency gate failed."
+        ),
+        (
+            "Stable-origin limitation: "
+            f"{summary['stable_origin_classifier']['substantive_limitation']}"
+        ),
         "",
         "## Every planned cell",
         "",
-        "| target | seed | arm | process | triplet | sampler | raw gate | credited gate | actions | origin overwritten | max R-hat | min bulk/tail ESS | max |z| | decisive | efficiency | no-fire identity |",
-        "|---|---:|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---|",
+        "| target | seed | arm | process | fault detail | triplet | sampler | raw gate | credited gate | actions | origin overwritten | max R-hat | min/omega bulk/tail ESS | reference max abs(z) / funnel signed tail z | decisive | efficiency | no-fire identity |",
+        "|---|---:|---|---|---|---|---|---|---|---:|---|---:|---|---|---|---:|---|",
     ]
     for target, seed, arm in planned_cells():
         cell = cells.get(target, {}).get(str(seed), {}).get(arm)
         if not cell:
             lines.append(
-                f"| {target} | {seed} | {arm} | missing | false | — | — | — | — | — | — | — | — | — | — | — |"
+                f"| {target} | {seed} | {arm} | process_fault | no report cell | false | process_fault | — | — | — | — | — | — | — | — | — | — |"
             )
             continue
         triplet = summary["triplets"][target][str(seed)]["valid"]
+        process_status = (
+            "ok" if cell.get("process_valid") else cell.get("process_status", "process_fault")
+        )
+        if cell.get("process_valid"):
+            fault_detail = "—"
+        else:
+            return_code = (cell.get("return_code") or {}).get("hex_32") or "none"
+            heartbeat = cell.get("last_heartbeat") or {}
+            heartbeat_label = (
+                f"{heartbeat.get('stage', 'none')}/{heartbeat.get('boundary', 'none')}"
+            )
+            raw_label = "present" if cell.get("raw_output_exists") else "absent"
+            duration = cell.get("duration_seconds")
+            duration_label = f"{duration:.3f}s" if finite_number(duration) else "—"
+            fault_detail = (
+                f"code={return_code}; last={heartbeat_label}; raw={raw_label}; "
+                f"duration={duration_label}"
+            )
+        bulk = cell.get("min_bulk_ess", cell.get("omega_bulk_ess", "—"))
+        tail = cell.get("min_tail_ess", cell.get("omega_tail_ess", "—"))
+        if target == "funnel-10d":
+            z_display = f"signed tail z={(cell.get('tail_mass') or {}).get('z', '—')}"
+        else:
+            z_display = f"max abs(z)={cell.get('max_abs_z', '—')}"
         lines.append(
-            f"| {target} | {seed} | {arm} | {cell.get('process_valid')} | {triplet} | "
+            f"| {target} | {seed} | {arm} | {process_status} | {fault_detail} | {triplet} | "
             f"{cell.get('sampler_status')} | {cell.get('raw_diagnostic_pass')} | "
             f"{cell.get('credited_diagnostic_pass')} | {cell.get('restart_actions')} | "
             f"{cell.get('origin_overwritten')} | {cell.get('max_rank_folded_split_rhat', cell.get('omega_rank_folded_split_rhat', '—'))} | "
-            f"{cell.get('min_bulk_ess', cell.get('omega_bulk_ess', '—'))} / {cell.get('min_tail_ess', '—')} | "
-            f"{cell.get('max_abs_z', (cell.get('tail_mass') or {}).get('z', '—'))} | "
+            f"{bulk} / {tail} | {z_display} | "
             f"{','.join(cell.get('decisive_reference_disagreements', [])) or 'none'} | "
             f"{cell.get('efficiency', '—')} | {cell.get('zero_action_identity_to_observe', '—')} |"
         )
@@ -2965,6 +3363,14 @@ def write_results_tables(summary: dict[str, Any]) -> None:
     )
     for name, gate in summary["decision_gates"].items():
         lines.append(f"| {name} | {gate['passed']} | `{json.dumps(gate, sort_keys=True)}` |")
+    lines.extend(
+        [
+            "",
+            "## Registered red lines",
+            "",
+            f"`{json.dumps(summary['registered_red_lines'], sort_keys=True)}`",
+        ]
+    )
     lines.extend(
         [
             "",
@@ -3062,6 +3468,14 @@ def analyze() -> dict[str, Any]:
             cell = posteriordb_cell(raw, process, refs[target])
         flat_cells[(target, seed, arm)] = cell
         write_json(cell_path(target, arm, seed), cell)
+    for target, seed, arm in planned_cells():
+        if (target, seed, arm) not in flat_cells:
+            write_json(
+                cell_path(target, arm, seed),
+                process_fault_cell(
+                    target, seed, arm, processes.get((target, seed, arm))
+                ),
+            )
     apply_origin_credit_and_identity(flat_cells, triplet_valid)
     for (target, seed, arm), cell in flat_cells.items():
         write_json(cell_path(target, arm, seed), cell)
@@ -3176,7 +3590,6 @@ def analyze() -> dict[str, Any]:
         and not two_decisive
         and not two_legacy
         and not two_unknown_run_errors
-        and not two_funnel_redlines
         and all(loss <= 1 for losses in safety_losses.values() for loss in losses.values())
         and all(sum(losses.values()) <= 2 for losses in safety_losses.values())
     )
@@ -3202,6 +3615,7 @@ def analyze() -> dict[str, Any]:
     nuisance = nuisance_sign["passed"] and nuisance_ratio <= 0.60
 
     funnel_evaluation = evaluate_funnel_gate(flat_cells, triplet_valid, SEEDS)
+    funnel_evaluation["gross_red_lines"] = two_funnel_redlines
     funnel_gate = funnel_evaluation["passed"]
 
     conformance_pass = environment["conformance"]["authenticated"]
@@ -3263,12 +3677,15 @@ def analyze() -> dict[str, Any]:
     efficiency_geomean = geometric_mean(
         ratio for values in efficiency_ratios.values() for ratio in values
     )
+    efficiency_ratio_count = sum(len(values) for values in efficiency_ratios.values())
+    efficiency_model_floor_failures = {
+        target: value
+        for target, value in efficiency_medians.items()
+        if value is None or value < 0.90
+    }
     efficiency = (
         not efficiency_bad
-        and all(
-            value is not None and value >= 0.90
-            for value in efficiency_medians.values()
-        )
+        and not efficiency_model_floor_failures
         and efficiency_geomean is not None
         and efficiency_geomean >= 0.95
     )
@@ -3288,7 +3705,6 @@ def analyze() -> dict[str, Any]:
             "decisive_reference_disagreements": two_decisive,
             "legacy_reference_gate_violations": two_legacy,
             "unknown_run_errors": two_unknown_run_errors,
-            "funnel_gross_red_lines": two_funnel_redlines,
             "credited_pass_losses": safety_losses,
         },
         "efficacy": {
@@ -3317,7 +3733,10 @@ def analyze() -> dict[str, Any]:
             "passed": efficiency,
             "bad_cells": efficiency_bad,
             "per_model_median_ratio": efficiency_medians,
-            "geometric_mean_ratio": efficiency_geomean,
+            "model_floor_failures": efficiency_model_floor_failures,
+            "available_case_ratio_count": efficiency_ratio_count,
+            "available_case_geometric_mean_ratio": efficiency_geomean,
+            "registered_full_gate_requires_all_ratios": True,
         },
     }
 
@@ -3329,8 +3748,8 @@ def analyze() -> dict[str, Any]:
     ]
     current_findings = all_process_safety_findings(current_cells, "current")
     current_no_fire_failures = [
-            item for item in no_fire_failures if item.endswith("/current")
-        ]
+        item for item in no_fire_failures if item.endswith("/current")
+    ]
     current_red_lines = current_red_line_report(
         current_findings, current_no_fire_failures, observe_mutations
     )
@@ -3392,36 +3811,47 @@ def analyze() -> dict[str, Any]:
         )
         is not True
     ]
+    p3_held = prediction_p3_held(
+        hmm_observe_origins,
+        hmm_overwrites["current"],
+        hmm_overwrites["two_hit"],
+    )
+    p4_held = prediction_p4_held(
+        two_decisive,
+        current_red_lines["reference"],
+        mutating_raw_over_4_small_shift,
+    )
+    p6_held = prediction_p6_held(
+        mesquite_zero, mesquite_two_hit_identity_failures
+    )
+    prediction_holds = adjudicate_prediction_holds(
+        nuisance,
+        efficacy,
+        p3_held,
+        p4_held,
+        funnel_gate,
+        p6_held,
+        efficiency_geomean is not None and efficiency_geomean >= 0.95,
+        decision,
+    )
     predictions = {
         "P1": {
-            "held": nuisance if completeness else None,
+            "held": prediction_holds["P1"],
             "value": {"ratio": nuisance_ratio, "sign_test": nuisance_sign},
         },
         "P2": {
-            "held": efficacy if completeness else None,
+            "held": prediction_holds["P2"],
             "value": {"sign_test": efficacy_sign, "losses": current_failure_losses},
         },
         "P3": {
-            "held": prediction_p3_held(
-                hmm_observe_origins,
-                hmm_overwrites["current"],
-                hmm_overwrites["two_hit"],
-            )
-            if completeness
-            else None,
+            "held": prediction_holds["P3"],
             "value": {
                 "observe_origin_chain_occurrences": hmm_observe_origins,
                 "overwrites": hmm_overwrites,
             },
         },
         "P4": {
-            "held": prediction_p4_held(
-                two_decisive,
-                current_red_lines["reference"],
-                mutating_raw_over_4_small_shift,
-            )
-            if completeness
-            else None,
+            "held": prediction_holds["P4"],
             "value": {
                 "two_hit": two_decisive,
                 "current": current_red_lines["reference"],
@@ -3429,33 +3859,85 @@ def analyze() -> dict[str, Any]:
             },
         },
         "P5": {
-            "held": funnel_gate if completeness else None,
+            "held": prediction_holds["P5"],
             "value": gates["funnel"],
         },
         "P6": {
-            "held": prediction_p6_held(
-                mesquite_zero, mesquite_two_hit_identity_failures
-            )
-            if completeness
-            else None,
+            "held": prediction_holds["P6"],
             "value": {
                 "zero_action_cells": mesquite_zero,
                 "identity_failures": mesquite_two_hit_identity_failures,
             },
         },
         "P7": {
-            "held": efficiency_geomean is not None and efficiency_geomean >= 0.95
-            if completeness
-            else None,
-            "value": efficiency_geomean,
+            "held": prediction_holds["P7"],
+            "value": {
+                "available_case_geometric_mean_ratio": efficiency_geomean,
+                "available_case_ratio_count": efficiency_ratio_count,
+                "registered_full_efficiency_gate": efficiency,
+                "missing_or_invalid_ratios": efficiency_bad,
+                "model_floor_failures": efficiency_model_floor_failures,
+            },
         },
         "P8": {
-            "held": decision == "no_rescue" if completeness else None,
+            "held": prediction_holds["P8"],
             "value": decision,
         },
     }
+    paired_standard_gate_totals = {
+        arm: {
+            "raw": sum(
+                bool(flat_cells[(target, seed, arm)].get("raw_diagnostic_pass"))
+                for target in MODELS
+                for seed in SEEDS
+                if triplet_valid[(target, seed)]
+            ),
+            "credited": sum(pass_counts[target][arm] for target in MODELS),
+        }
+        for arm in ARMS
+    }
+    action_origin_totals = {
+        arm: {
+            "restart_events": sum(
+                cell.get("restart_actions") or 0
+                for cell in (current_cells if arm == "current" else two_cells)
+            ),
+            "origin_overwrite_events": sum(
+                cell.get("origin_overwrite_event_count") or 0
+                for cell in (current_cells if arm == "current" else two_cells)
+            ),
+            "origin_safety_unknown_events": sum(
+                cell.get("origin_safety_unknown_event_count") or 0
+                for cell in (current_cells if arm == "current" else two_cells)
+            ),
+        }
+        for arm in ("current", "two_hit")
+    }
+    origin_classifier_observations = [
+        {
+            "target": target,
+            "seed": seed,
+            "chains": (
+                flat_cells[(target, seed, "observe")]["stable_separated_origins"][
+                    "chains"
+                ]
+            ),
+        }
+        for target in TARGETS
+        for seed in SEEDS
+        if (target, seed, "observe") in flat_cells
+        and (
+            flat_cells[(target, seed, "observe")].get("stable_separated_origins")
+            or {}
+        ).get("chains")
+    ]
     nested_cells: dict[str, dict[str, dict[str, Any]]] = {}
-    for (target, seed, arm), cell in flat_cells.items():
+    for target, seed, arm in planned_cells():
+        cell = flat_cells.get((target, seed, arm))
+        if cell is None:
+            cell = process_fault_cell(
+                target, seed, arm, processes.get((target, seed, arm))
+            )
         nested_cells.setdefault(target, {}).setdefault(str(seed), {})[arm] = cell
     triplets = {
         target: {
@@ -3469,6 +3951,13 @@ def analyze() -> dict[str, Any]:
     }
     input_manifest, build_manifest = provenance_paths()
     conformance_artifact = current_conformance_path()
+    accounting = process_accounting(processes)
+    invalid_triplets = [
+        f"{target}/{seed}"
+        for target in TARGETS
+        for seed in SEEDS
+        if not triplet_valid[(target, seed)]
+    ]
     summary = {
         "schema": "chain-rescue-v2-summary",
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -3476,11 +3965,39 @@ def analyze() -> dict[str, Any]:
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
         "amendment_3_sha256": sha256(AMENDMENT_3),
+        "post_run_correction_sha256": sha256(POST_RUN_CORRECTION),
+        "ledger_entry_sha256": sha256(LEDGER_ENTRY),
         "input_manifest_sha256": sha256(input_manifest),
         "build_manifest_sha256": sha256(build_manifest),
         "conformance_sha256": sha256(conformance_artifact),
         "mechanical_decision": decision,
+        "process_accounting": accounting,
+        "invalid_triplets": invalid_triplets,
+        "paired_standard_gate_totals": paired_standard_gate_totals,
+        "action_origin_totals": action_origin_totals,
+        "stable_origin_classifier": {
+            "observations": origin_classifier_observations,
+            "targets_with_origins": sorted(
+                {row["target"] for row in origin_classifier_observations}
+            ),
+            "hmm_origin_count": hmm_observe_origins,
+            "substantive_limitation": (
+                "The classifier identified only frozen/pathological ARMA and "
+                "lotka_volterra starts and no HMM origins; this limits substantive "
+                "interpretation but does not alter the frozen fallback."
+            ),
+        },
         "current_red_lines": current_red_lines,
+        "registered_red_lines": {
+            "two_hit": {
+                "origin_overwritten": two_findings["origin_overwritten"],
+                "reference": two_findings["reference"],
+                "funnel": two_findings["funnel"],
+                "unknown_run_error": two_findings["unknown_run_error"],
+                "no_fire": no_fire_failures + observe_mutations,
+            },
+            "current": current_red_lines,
+        },
         "origin_safety_findings": {
             "two_hit": {
                 "origin_overwritten": two_findings["origin_overwritten"],
@@ -3510,6 +4027,16 @@ def analyze() -> dict[str, Any]:
         "triplets": triplets,
         "cells": nested_cells,
     }
+    summary["post_run_correction_audit"] = fixed_post_run_audit(summary)
+    if not summary["post_run_correction_audit"]["passed"]:
+        failed = [
+            name
+            for name, passed in summary["post_run_correction_audit"][
+                "checks"
+            ].items()
+            if not passed
+        ]
+        raise RuntimeError(f"post-run correction audit failed: {failed}")
     write_json(ARTIFACTS / "summary.json", summary)
     write_results_tables(summary)
     print(f"mechanical decision: {decision}")
@@ -3609,6 +4136,8 @@ def main() -> None:
         prepare_provenance()
     elif command == "rebind-amendment-3-provenance":
         rebind_amendment_3_provenance()
+    elif command == "rebind-post-run-provenance":
+        rebind_post_run_provenance()
     elif command == "run":
         run_all()
     elif command == "analyze":

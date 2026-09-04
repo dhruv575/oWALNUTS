@@ -1,7 +1,7 @@
 # chain_rescue_v2 — WP36
 
-Status: **pre-evidence review fixes implemented; evidence remains blocked
-unless authenticated hit-path conformance passes; no evidence launched**.
+Status: **complete; all 288 evidence cells launched exactly once; final
+mechanical decision `no_rescue`**.
 
 `PREREGISTRATION.md`, `protocol.json`, and the superseding clarifications in
 `AMENDMENT-1.md`, `AMENDMENT-2.md`, and `AMENDMENT-3.md` are frozen. The
@@ -56,6 +56,20 @@ zero-action identity, efficiency ratios, all predictions, and the frozen
 mechanical decision. `results-table.md` lists all 288 cells and
 `parameters-table.md` lists every scalar reference result.
 
+## Final verdict
+
+The registered completeness gate failed with 281 process-valid cells, seven
+process faults, and six invalid triplets. `two_hit` reduced nuisance actions
+but did not satisfy the registered nuisance sample-size, efficacy, funnel,
+origin-safety, or efficiency requirements. No-fire passed. Independently
+adjudicated predictions were P1–P5 false, P6 true, P7 false, and P8 true.
+The frozen mechanical decision is **`no_rescue`**.
+
+The original as-executed analysis is preserved in commit `b8aee0f`.
+`POST-RUN-CORRECTION.md` records derived-reporting corrections, and
+`LEDGER-ENTRY.md` is the final concise study record. No cell was rerun for
+those corrections.
+
 Funnel `two_hit` tail-z and half-pass requirements scan every process-valid
 candidate cell, even when a sibling invalidates the triplet. The full gate is
 exactly omega R-hat, omega bulk ESS, zero divergences, finite draws, and no
@@ -108,8 +122,8 @@ committed artifacts must never be overwritten.
    conformance indexes. Do not check out only the recorded implementation
    commit. The selected provenance index authenticates that implementation
    source commit/tree from within the complete publication revision.
-   `current-amendment-3.json` is the active provenance index;
-   `current.json` remains the immutable pre-Amendment-3 historical index.
+   `current-post-run.json` is the active provenance index; prior immutable
+   indexes remain historical records.
 2. Check out posteriordb commit
    `28f8d3d6e975315f42aa274a8399f21e07a43b30` cleanly. Set
    `WP36_POSTERIORDB_PATH` to that checkout.
@@ -135,7 +149,6 @@ evidence unless all prepared-worktree hashes and the hit-path PASS match.
 
 Every versioned conformance JSON is immutable; its index authenticates the one
 bound to the audited Rust binary source and build manifest. The selected
-Amendment-3 provenance index separately authenticates the publication's
-analysis source and its reuse of those unchanged binaries. Earlier fixtures
-and indexes remain untouched historical artifacts.
-None of the 12 registered evidence seeds has been launched.
+The post-run provenance index separately authenticates the corrected analysis
+source and its reuse of those unchanged binaries. Earlier fixtures and indexes
+remain untouched historical artifacts.

@@ -446,6 +446,24 @@ class FormulaAndClassificationTests(unittest.TestCase):
             study.prediction_p6_held(10, ["mesquite/seed/two_hit"])
         )
 
+    def test_prediction_holds_are_independent_of_completeness(self):
+        observed = study.adjudicate_prediction_holds(
+            False, False, False, False, False, True, False, "no_rescue"
+        )
+        self.assertEqual(
+            observed,
+            {
+                "P1": False,
+                "P2": False,
+                "P3": False,
+                "P4": False,
+                "P5": False,
+                "P6": True,
+                "P7": False,
+                "P8": True,
+            },
+        )
+
 
 class SignTestTests(unittest.TestCase):
     def test_nine_wins_of_ten_passes_exact_one_sided_test(self):
@@ -528,6 +546,31 @@ class ProcessProtocolTests(unittest.TestCase):
                 "without required launch marker",
                 study.validate_process_marker({}, marker)[0],
             )
+
+    def test_fault_report_cell_preserves_code_heartbeat_and_raw_presence(self):
+        process = {
+            "cell_id": "target-current-1",
+            "timed_out": True,
+            "duration_seconds": 7200.0,
+            "failure_reasons": ["child timed out"],
+            "return_code": {
+                "raw": None,
+                "signed_32": None,
+                "unsigned_32": None,
+                "hex_32": None,
+            },
+            "last_heartbeat": {"stage": "drop", "boundary": "before"},
+            "raw_output_exists": True,
+            "raw_output_status": "ok",
+            "raw_output_sha256": "a" * 64,
+        }
+        cell = study.process_fault_cell("target", 1, "current", process)
+        self.assertEqual(cell["process_status"], "timeout")
+        self.assertEqual(cell["sampler_status"], "timeout")
+        self.assertEqual(
+            cell["last_heartbeat"], {"stage": "drop", "boundary": "before"}
+        )
+        self.assertTrue(cell["raw_output_exists"])
 
     def test_raw_hash_authentication_detects_tamper(self):
         raw = sampler_error_raw("init")
