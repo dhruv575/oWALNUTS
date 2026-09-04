@@ -434,5 +434,12 @@ restores v5's no-rescue defaults, and parity with explicit no rescue is tested
 directly. A future v7 is required if an automatic cross-chain action is
 reintroduced.
 
+Post-release kernel research has not changed the candidate release:
+WP37A did not qualify fixed `delta = 2` for its adaptive-to-2 path, and WP37B
+is paused off-main after 73 of 84 launches because the first incumbent
+state-space cell returned a fatal nonfinite target evaluation. Eleven WP37B
+cells were never launched, its candidate is not qualified, and no default or
+release number changed.
+
 See [`research-program-2026-09-04.md`](research-program-2026-09-04.md) for the
 full state and the open lines.

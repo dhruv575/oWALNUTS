@@ -1,15 +1,19 @@
 # Research program 2026-09-04: the 0.2 program — make it usable, then make it competitive
 
-Status: **complete through WP37A and the append-only Windows BridgeStan
-lifetime diagnostics; no sampling is running.** Everything described here is
-committed in the current `0.2.0` release tree; nothing is pushed, tagged or
-published. The owned-one-worker mitigation passed its final Windows GNU
-diagnostic, but publication remains blocked on Windows MSVC, Linux/macOS and
-package/wheel verification. The historical native root cause is not proven.
+Status: **complete through WP37A; WP37B is paused incomplete and no sampling
+process is running.** Everything through WP37A and the append-only
+Windows BridgeStan lifetime diagnostics is committed in the current `0.2.0`
+release tree; nothing is pushed, tagged or published. WP37B remains off-main
+on `wt/reverse-coarsening-order`: 73 of 84 planned cells were launched, the
+first state-space cell failed, and 11 cells were never launched. The
+owned-one-worker mitigation passed its final Windows GNU diagnostic, but
+publication remains blocked on Windows MSVC, Linux/macOS and package/wheel
+verification. The historical native root cause is not proven.
 Companion documents:
 `research-program-2026-08-31.md`
 (the programme that produced `0.1.0-beta.2`), `research-ledger-2026-08-31.md`
-(one checksummed entry per study, WP22–WP37A, including subordinate WP35A),
+(completed studies WP22–WP37A, including subordinate WP35A, plus a provisional
+WP37B pause record),
 `release-0.2.0.md`.
 
 ## What this programme was
@@ -209,7 +213,7 @@ oWALNUTS finishes cleanly where CmdStan and nutpie leave a chain stuck or
 divergent, while still spending more gradients per effective sample on healthy
 models (0.67–0.95x).
 
-## Open investigations after WP37A, in priority order
+## Open investigations after the paused WP37B, in priority order
 
 1. **Qualify the narrow BridgeStan mitigation beyond Windows GNU.** WP35A and
    WP36 reproduced the replicated-target failure class; the first
@@ -226,12 +230,19 @@ models (0.67–0.95x).
    `StanTarget` use is mitigation-qualified only on Windows GNU; Windows
    Python `from_stan` and direct Python BridgeStan remain disabled.
    Publication remains blocked until this matrix is complete.
-3. **A semantics-preserving cheaper reverse-coarsening check at fixed
-   `delta = 1`.** This is the next kernel study after the external release
-   gates. Reverse-coarsening is the named residual on the hard models: WP30
-   measured it at 3–7% of orbits on regressions and WP34 at 10–54% on the four
-   worst models, and it is the difference between 0.90x and 0.95x of reference
-   NUTS. The study must preserve sampler semantics and leave defaults unchanged.
+3. **Resolve the paused reverse-coarsening study before starting another
+   kernel experiment.** WP37B preregistered finest-to-coarsest versus
+   coarsest-to-finest reverse checks at fixed `delta = 1`, as an explicit
+   opt-in qualification only. The first 72 cells (four posteriordb targets,
+   funnel and Gaussian) returned authenticated results. The 73rd launch, the
+   incumbent-order `sspd-11` seed 96101 cell, exited 1 after 23.13 s with
+   `canonical log density or gradient is not representable as finite f64`
+   on chain 1, transition 1; it wrote no raw result. The unchanged runner then
+   stopped, leaving 11 state-space cells unlaunched. Under the frozen rule the
+   study is incomplete and cannot qualify the candidate. No cell was rerun,
+   no result was merged, and no default changed. Preserve and archive the
+   partial record before deciding whether a fresh protocol should omit or
+   repair that target; any new evidence decision requires fresh seeds.
 4. **Further target-adaptive `delta` research, after reverse-coarsening.**
    WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
    fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.
@@ -262,3 +273,6 @@ models (0.67–0.95x).
 - Future high-volume stress studies should consolidate heartbeat/process
   evidence into reviewable archives or indexed bundles. Existing study
   history and raw files remain append-only and are not rewritten.
+- A stopped one-shot study is still a result. WP37B's 72 successful cells,
+  one process-valid fatal target failure and 11 unlaunched cells must remain
+  distinguishable; the failed cell must not be deleted or rerun.
