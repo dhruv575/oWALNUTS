@@ -19,6 +19,9 @@ inconclusive gate rejects fixed 2 and adaptive-to-2 and moves the research
 program to the cheaper reverse-coarsening check.
 
 Protocol details are in `PREREGISTRATION.md` and `protocol.json`.
+Protocol-review clarifications are frozen append-only in `AMENDMENT-1.md`;
+it controls where more specific, while the original two frozen files and
+their checksums remain unchanged.
 
 ## Scaffold checksums
 
