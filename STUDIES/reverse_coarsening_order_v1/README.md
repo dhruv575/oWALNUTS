@@ -3,10 +3,13 @@
 Status: **preregistered scaffold only — frozen before implementation, build, or
 evidence**.
 
-Controlling review clarification: [`AMENDMENT-1.md`](AMENDMENT-1.md). It
-replaces the original pass label and action: a pass can qualify only explicit
-Rust opt-ins for deterministic finite-or-recoverable targets. No generic,
-walnutpie, high-level sampler, or Python default may change.
+Controlling review clarifications, in order:
+[`AMENDMENT-1.md`](AMENDMENT-1.md), then
+[`AMENDMENT-2.md`](AMENDMENT-2.md). The later amendment controls conflicts,
+freezes direct typed comparison and zero-work handling, and pins the WP37A
+Funnel/Gaussian source. A pass can qualify only explicit Rust opt-ins for
+deterministic finite-or-recoverable targets. No generic, walnutpie, high-level
+sampler, or Python default may change.
 
 `PREREGISTRATION.md` and `protocol.json` freeze a two-arm mechanical study of
 reverse-level traversal at fixed `delta = 1`:
