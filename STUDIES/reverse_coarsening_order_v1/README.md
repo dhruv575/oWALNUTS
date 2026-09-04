@@ -3,6 +3,11 @@
 Status: **preregistered scaffold only — frozen before implementation, build, or
 evidence**.
 
+Controlling review clarification: [`AMENDMENT-1.md`](AMENDMENT-1.md). It
+replaces the original pass label and action: a pass can qualify only explicit
+Rust opt-ins for deterministic finite-or-recoverable targets. No generic,
+walnutpie, high-level sampler, or Python default may change.
+
 `PREREGISTRATION.md` and `protocol.json` freeze a two-arm mechanical study of
 reverse-level traversal at fixed `delta = 1`:
 
@@ -32,7 +37,7 @@ traces, starts, RNG and adaptation identity; no health/invalid regression; and
 all frozen call-efficiency gates. Wall time and posterior validity statistics
 are descriptive and cannot select results.
 
-Passing authorizes only a separate labelled high-level sampler-default
-implementation while preserving walnutpie replay. Failure keeps
-`FinestToCoarsest`. This scaffold itself authorizes and contains no code or
-default change.
+Under the controlling amendment, passing can qualify only a later explicit
+Rust opt-in on `KernelTuning` and high-level `Tuning` for eligible targets.
+Every default remains `FinestToCoarsest`; Python is unchanged. This scaffold
+itself authorizes and contains no code or default change.
