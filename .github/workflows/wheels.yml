@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           python -m venv wheel-venv
-          if [ -x wheel-venv/bin/python ]; then PY=wheel-venv/bin/python; else PY=wheel-venv/Scripts/python; fi
+          if [ -x wheel-venv/bin/python ]; then PY="$PWD/wheel-venv/bin/python"; else PY="$PWD/wheel-venv/Scripts/python"; fi
           "$PY" -m pip install --upgrade pip
           "$PY" -m pip install pytest numpy dist/owalnuts-*.whl
           cd "$PACKAGE_DIR/tests"
