@@ -484,3 +484,13 @@ def test_summary_rows_match_arviz():
             assert row["ess_tail"] == pytest.approx(float(tail[name]), rel=1e-6)
         assert row["mcse_mean"] == pytest.approx(float(az.mcse(idata, method="mean")[name]), rel=1e-6)
         assert row["sd"] == pytest.approx(float(idata.posterior[name].std(ddof=1)), rel=1e-9)
+
+
+def test_version_and_printed_summary():
+    assert owalnuts.__version__
+    result = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), dim=2, warmup=200, draws=200, seed=3)
+    text = str(result)
+    assert text.splitlines()[0].startswith("name")
+    assert "theta.1" in text and "theta.2" in text and text.splitlines()[-1].startswith("health:")
+    assert repr(result).startswith("SampleResult(chains=4, draws=200, dim=2")
+    assert owalnuts.format_summary(result.summary()) == text.rsplit("\n", 1)[0]

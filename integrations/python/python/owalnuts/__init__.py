@@ -20,6 +20,13 @@ import numpy as np
 
 from . import _owalnuts
 
+try:  # the installed distribution's version; the source tree has none
+    from importlib.metadata import version as _dist_version
+
+    __version__ = _dist_version("owalnuts")
+except Exception:  # pragma: no cover - source checkout without metadata
+    __version__ = "0.2.0"
+
 ALGORITHM_REVISION: str = _owalnuts.ALGORITHM_REVISION
 PAPER_ADAPTATION_REVISION: str = _owalnuts.PAPER_ADAPTATION_REVISION
 STOP_CODES: tuple[str, ...] = tuple(_owalnuts.STOP_CODES)
@@ -174,6 +181,18 @@ class SampleResult:
         Python objects; no pandas.
         """
         return summary(self.samples, self.parameter_names if var_names is None else var_names)
+
+    def summary_table(self, var_names: Sequence[str] | None = None) -> str:
+        """``summary()`` rendered as a fixed-width, Stan-style text table
+        followed by one line of pooled health; what ``print(result)`` shows."""
+        return format_summary(self.summary(var_names), self.health(), self.wall_seconds)
+
+    def __str__(self) -> str:
+        return self.summary_table()
+
+    def __repr__(self) -> str:
+        chains, draws, dim = self.samples.shape
+        return f"SampleResult(chains={chains}, draws={draws}, dim={dim}, wall_seconds={self.wall_seconds:.3g})"
 
     def health(self) -> dict[str, Any]:
         """Pooled sampler-health counts over the retained transitions:
@@ -676,6 +695,34 @@ def summary(samples: np.ndarray, var_names: Sequence[str] | None = None) -> list
     return list(_owalnuts.summary(samples, names))
 
 
+def format_summary(rows: Sequence[Mapping[str, Any]], health: Mapping[str, Any] | None = None,
+                   wall_seconds: float | None = None) -> str:
+    """Render ``summary()`` rows as a fixed-width text table (plus an optional
+    pooled-health line). Pure Python; no pandas."""
+    columns = ["mean", "sd", "mcse_mean", "q5", "q50", "q95", "ess_bulk", "ess_tail", "rhat"]
+    width = max([4] + [len(str(r["name"])) for r in rows])
+
+    def cell(key: str, value: Any) -> str:
+        if key in ("ess_bulk", "ess_tail"):
+            return f"{value:9.0f}"
+        if key == "rhat":
+            return f"{value:7.3f}"
+        return f"{value:10.3g}"
+
+    header = f"{'name':<{width}} " + " ".join(
+        f"{c:>9}" if c in ("ess_bulk", "ess_tail") else (f"{c:>7}" if c == "rhat" else f"{c:>10}") for c in columns)
+    lines = [header]
+    for r in rows:
+        lines.append(f"{str(r['name']):<{width}} " + " ".join(cell(c, r[c]) for c in columns))
+    if health is not None:
+        extra = f", wall {wall_seconds:.2f}s" if wall_seconds is not None else ""
+        lines.append(
+            f"health: {health['divergences']} divergences, {health['maximum_depth_stops']} depth-cap stops, "
+            f"{health['refinement_exhaustion_stops']} refinement exhaustions, mean depth {health['mean_tree_depth']:.2f}, "
+            f"step {health['step_size']:.3g}, {health['target_calls']} target calls{extra}")
+    return "\n".join(lines)
+
+
 def uniform_starts(logp_and_grad: LogpGrad, dim: int, *, chains: int = 4, seed: int = 0,
                    radius: float = DEFAULTS["init_radius"], max_attempts: int = DEFAULTS["init_max_attempts"],
                    nonfinite: str = "zero_density",
@@ -1017,7 +1064,7 @@ def eight_schools_logp_grad(y: np.ndarray, se: np.ndarray, q: np.ndarray) -> tup
 __all__ = [
     "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "HAS_STAN", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
-    "summary", "uniform_starts", "CFuncTarget", "from_cfunc", "numba_raw_signature",
+    "summary", "format_summary", "uniform_starts", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
     "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",

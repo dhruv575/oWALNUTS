@@ -45,8 +45,9 @@ def logp_and_grad(q):
     return -0.5 * float(q @ q), -q
 
 result = owalnuts.sample(logp_and_grad, dim=10, warmup=1000, draws=1000, seed=1)
-rows = result.summary()             # list of dicts: mean, sd, mcse_mean, q5/q50/q95,
-                                    # ess_bulk, ess_tail, rhat (owalnuts::diagnostics)
+print(result)                       # Stan-style table (mean, sd, MCSE, q5/q50/q95,
+                                    # bulk/tail ESS, R-hat) plus one health line
+rows = result.summary()             # the same rows as a list of dicts
 result.health()                     # pooled divergences, depth-cap stops, target calls, ...
 idata = result.to_inferencedata()   # arviz InferenceData with sample_stats
 ```
