@@ -1,0 +1,28 @@
+sblrc_process_stability_v1 verification
+UTC date: 2026-09-04
+
+Initial environment check:
+- `cargo check --locked` with the default x86_64-pc-windows-msvc target: FAILED
+  before linking the study because `link.exe` is not installed.
+- Classification: local build-environment mismatch, not a diagnostic child and
+  not part of the process-stability result.
+
+Executed WP35-compatible toolchain checks:
+- `cargo +1.88.0-x86_64-pc-windows-gnu fmt -- --check`: PASS
+- `cargo +1.88.0-x86_64-pc-windows-gnu check --locked`: PASS
+- `cargo +1.88.0-x86_64-pc-windows-gnu test --locked`: PASS
+  (3 Rust unit tests passed)
+- `python -m unittest -v test_run_stability.py`: PASS
+  (5 Python unit tests passed)
+- `cargo +1.88.0-x86_64-pc-windows-gnu build --release --locked`: PASS
+- external model path/size/SHA-256 verification: PASS
+- external data path/size/SHA-256 verification: PASS
+- protocol child count, seed uniqueness, and forbidden seed 90101 checks: PASS
+
+Study execution:
+- fixed child records: 46/46
+- successful children: 45
+- faults: 1
+- silent faults: 1
+- seed 90101 run: no
+- result-driven reruns: none

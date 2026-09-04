@@ -512,11 +512,29 @@ def analyze() -> dict[str, Any]:
         )
     elif faults:
         verdict = "fault_reproduced"
-        verdict_text = (
-            f"A process-stability fault reproduced in {len(faults)}/{len(ordered)} "
-            f"diagnostic children; {len(silent)} were silent by the frozen rule. "
-            "Heartbeat localization is descriptive and does not establish root cause."
-        )
+        if len(faults) == 1:
+            fault = faults[0]
+            last = fault.get("last_heartbeat")
+            location = (
+                f"{last.get('stage')}/{last.get('boundary')}"
+                if isinstance(last, dict)
+                else "no heartbeat"
+            )
+            code = fault["return_code"]["hex_32"]
+            label = " (STATUS_HEAP_CORRUPTION)" if code == "0xC0000374" else ""
+            verdict_text = (
+                f"A process-stability fault reproduced in 1/{len(ordered)} diagnostic "
+                f"children: {fault['case_id']} exited {code}{label}, "
+                f"{'silently' if fault.get('silent_failure') else 'with output'}, after "
+                f"the last durable heartbeat {location}. Heartbeat localization is "
+                "descriptive and does not establish root cause."
+            )
+        else:
+            verdict_text = (
+                f"Process-stability faults reproduced in {len(faults)}/{len(ordered)} "
+                f"diagnostic children; {len(silent)} were silent by the frozen rule. "
+                "Heartbeat localization is descriptive and does not establish root cause."
+            )
     else:
         verdict = "fault_not_reproduced"
         verdict_text = (
