@@ -246,14 +246,21 @@ models (0.67–0.95x).
    at every diagnostic seed at the frozen initial step. Any renewed decision
    needs a fresh preregistration and seeds, and must omit or repair that
    target before evidence.
-3a. **Kernel policy on a non-finite proposed position.** With the target
-   repaired, 2 of 13 diagnostic seeds at initial step 0.5 still abort the whole
-   run with `ErrorKind::Numerical` ("kernel attempted a nonfinite target
-   position"). Stan treats the same event as a divergent leaf and continues.
-   Whether oWALNUTS should do likewise is a robustness decision for a
-   preregistered study: it cannot change registered fingerprints on targets
-   where the event never occurs, but it changes what a user sees on stiff
-   targets with an aggressive initial step.
+3a. **Kernel policy on a non-finite proposed position: opt-in built, not yet
+   qualified.** `NonfinitePositionPolicy::RejectLeaf` (research-only; the
+   default `Abort` and every fingerprint unchanged) treats an overflowed
+   integrator position as a zero-density leaf, as Stan does. WP38 measured it
+   on the repaired state-space target at initial step 0.5 with 24 fresh seeds
+   plus funnel and Gaussian identity controls: the event is real (`Abort`
+   ends 2 of 24 runs), `RejectLeaf` completes all 24 with one or two
+   warmup-only rejected leaves, and the policy is bit-identical to `Abort` on
+   every one of the 34 cells without the event. The frozen decision is still
+   `NOT_QUALIFIED`, because the registered health gate (bulk ESS >= 400 on
+   nine coordinates in 1,000 draws) fails on every cell, with draws identical
+   to the `Abort` arm on 22 of them: the gate measured the target's mixing,
+   not the policy. A renewed qualification needs a fresh preregistration with
+   a paired health gate and fresh seeds. Until then `Abort` stays the default
+   and `RejectLeaf` is unsupported.
 4. **Further target-adaptive `delta` research, after reverse-coarsening.**
    WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
    fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.
