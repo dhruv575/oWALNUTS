@@ -67,6 +67,8 @@ use std::time::{Duration, Instant};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
 #[cfg(feature = "research")]
+pub use crate::walnutpie::NonfinitePositionPolicy;
+#[cfg(feature = "research")]
 pub use crate::walnutpie::ReverseCoarseningOrder;
 pub use crate::walnutpie::{
     Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
@@ -523,6 +525,8 @@ pub struct Tuning {
     kernel_options: KernelOptions,
     #[cfg(feature = "research")]
     reverse_coarsening_order: ReverseCoarseningOrder,
+    #[cfg(feature = "research")]
+    nonfinite_position: NonfinitePositionPolicy,
 }
 
 impl Default for Tuning {
@@ -540,6 +544,8 @@ impl Default for Tuning {
             },
             #[cfg(feature = "research")]
             reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
+            #[cfg(feature = "research")]
+            nonfinite_position: NonfinitePositionPolicy::Abort,
         }
     }
 }
@@ -599,6 +605,14 @@ impl Tuning {
         self.reverse_coarsening_order = order;
         self
     }
+    /// Select how a transition treats a nonfinite integrator position.
+    /// Research-only; the default remains `Abort`, which ends the run with
+    /// `ErrorKind::Numerical`. See `STUDIES/nonfinite_position_policy_v1`.
+    #[cfg(feature = "research")]
+    pub fn nonfinite_position(mut self, policy: NonfinitePositionPolicy) -> Self {
+        self.nonfinite_position = policy;
+        self
+    }
 
     /// The validated `walnutpie` tuning this configures.
     pub fn to_kernel(&self) -> Result<KernelTuning, Error> {
@@ -617,6 +631,8 @@ impl Tuning {
         .map(|tuning| tuning.with_options(self.kernel_options))?;
         #[cfg(feature = "research")]
         let tuning = tuning.with_reverse_coarsening_order(self.reverse_coarsening_order);
+        #[cfg(feature = "research")]
+        let tuning = tuning.with_nonfinite_position(self.nonfinite_position);
         Ok(tuning)
     }
 }

@@ -225,6 +225,24 @@ use rayon::prelude::*;
 
 #[cfg(feature = "research")]
 pub use crate::kernel::ReverseCoarseningOrder;
+
+/// What a transition does when the integrator hands the target a position
+/// that is not finite (the momentum or the drift overflowed).
+///
+/// The frozen `v10` behaviour is [`Self::Abort`]: the run ends with
+/// [`ErrorKind::Numerical`]. [`Self::RejectLeaf`] instead treats the point as
+/// a zero-density evaluation with a zero gradient, exactly like a recoverable
+/// target failure, so the leaf is rejected and the transition continues; the
+/// event is counted in [`WorkTotals::nonfinite_position_rejections`]. Stan
+/// treats the same event as a divergent leaf. The non-default variant is
+/// exposed only by the crate's `research` facade and is measured in
+/// `STUDIES/nonfinite_position_policy_v1`; no default changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NonfinitePositionPolicy {
+    #[default]
+    Abort,
+    RejectLeaf,
+}
 use crate::kernel::{
     ContextKineticScope, Direction, EvaluatedTransitionInput, EvaluationPhase, FixedTuning,
     InPlaceEval, MassOperator, OuterSelectionPolicy,
@@ -308,6 +326,7 @@ pub struct KernelTuning {
     divergence_threshold: f64,
     options: KernelOptions,
     reverse_coarsening_order: KernelReverseCoarseningOrder,
+    nonfinite_position: NonfinitePositionPolicy,
 }
 
 // All floating-point fields are finite by construction.
@@ -324,6 +343,7 @@ impl Default for KernelTuning {
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
             options: KernelOptions::default(),
             reverse_coarsening_order: KernelReverseCoarseningOrder::FinestToCoarsest,
+            nonfinite_position: NonfinitePositionPolicy::Abort,
         }
     }
 }
@@ -355,6 +375,7 @@ impl KernelTuning {
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
             options: KernelOptions::default(),
             reverse_coarsening_order: KernelReverseCoarseningOrder::FinestToCoarsest,
+            nonfinite_position: NonfinitePositionPolicy::Abort,
         };
         tuning.max_leaves_per_transition()?;
         tuning.maximum_micro_steps()?;
@@ -405,6 +426,19 @@ impl KernelTuning {
     #[cfg(feature = "research")]
     pub fn with_reverse_coarsening_order(mut self, order: ReverseCoarseningOrder) -> Self {
         self.reverse_coarsening_order = order;
+        self
+    }
+    /// How a transition treats a nonfinite integrator position; the default
+    /// is [`NonfinitePositionPolicy::Abort`].
+    pub fn nonfinite_position(&self) -> NonfinitePositionPolicy {
+        self.nonfinite_position
+    }
+    /// Select the treatment of a nonfinite integrator position. Research-only;
+    /// the default remains [`NonfinitePositionPolicy::Abort`], and any run in
+    /// which the event never occurs is bit-identical under either policy.
+    #[cfg(feature = "research")]
+    pub fn with_nonfinite_position(mut self, policy: NonfinitePositionPolicy) -> Self {
+        self.nonfinite_position = policy;
         self
     }
     pub fn with_divergence_threshold(mut self, threshold: f64) -> Result<Self, Error> {
@@ -4695,6 +4729,7 @@ pub struct WorkTotals {
     uniform_draws: usize,
     maximum_depth_stops: usize,
     recoverable_target_failures: usize,
+    nonfinite_position_rejections: usize,
     zero_density_evaluations: usize,
     divergences: usize,
     invalid_evaluation_stops: usize,
@@ -4769,6 +4804,12 @@ impl WorkTotals {
     pub fn recoverable_target_failures(&self) -> usize {
         self.recoverable_target_failures
     }
+    /// Integrator positions that were not finite and were rejected as
+    /// zero-density leaves under [`NonfinitePositionPolicy::RejectLeaf`];
+    /// always zero under the default policy, which ends the run instead.
+    pub fn nonfinite_position_rejections(&self) -> usize {
+        self.nonfinite_position_rejections
+    }
     /// Fused calls that returned a zero-density point and refined instead of
     /// stopping a transition (kernel revision `v10` semantics).
     pub fn zero_density_evaluations(&self) -> usize {
@@ -4796,6 +4837,7 @@ impl WorkTotals {
         work: &TransitionWorkTelemetry,
         uniform_draws: usize,
         recoverable_target_failures: usize,
+        nonfinite_position_rejections: usize,
         diagnostics: &crate::kernel::TransitionDiagnostics,
     ) -> Result<(), Error> {
         macro_rules! add {
@@ -4834,6 +4876,7 @@ impl WorkTotals {
         add!(uniform_draws, uniform_draws);
         add!(maximum_depth_stops, work.stops.max_depth);
         add!(recoverable_target_failures, recoverable_target_failures);
+        add!(nonfinite_position_rejections, nonfinite_position_rejections);
         add!(
             zero_density_evaluations,
             diagnostics.zero_density_evaluations
@@ -7208,6 +7251,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             let mut observer_panic = false;
             let mut recoverable_target_failure = None;
             let mut recoverable_target_failures = 0usize;
+            let mut nonfinite_position_rejections = 0usize;
             let mut observed_target_calls = 0usize;
             let mut observed_phase_calls = [0usize; 3];
             let mut eval = InPlaceEval(|theta: &[f64], gradient: &mut [f64]| {
@@ -7256,6 +7300,17 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     return f64::NAN;
                 }
                 if theta.len() != dimension || theta.iter().any(|value| !value.is_finite()) {
+                    if theta.len() == dimension
+                        && config.tuning.nonfinite_position == NonfinitePositionPolicy::RejectLeaf
+                    {
+                        // Opt-in: the integrator overflowed. Treat the point as
+                        // zero density with a zero gradient, exactly like a
+                        // recoverable target failure, instead of ending the run.
+                        nonfinite_position_rejections += 1;
+                        observe!(ProposalTargetOutcome::KernelNonfinite, None, gradient);
+                        gradient.fill(0.0);
+                        return f64::NEG_INFINITY;
+                    }
                     numerical_failure = true;
                     observe!(ProposalTargetOutcome::KernelNonfinite, None, gradient);
                     return f64::NAN;
@@ -7587,6 +7642,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 &work,
                 internal.uniform_draws,
                 recoverable_target_failures,
+                nonfinite_position_rejections,
                 &internal,
             )?;
             telemetry.total.add_transition(
@@ -7594,6 +7650,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 &work,
                 internal.uniform_draws,
                 recoverable_target_failures,
+                nonfinite_position_rejections,
                 &internal,
             )?;
             if transition_index < config.discarded
@@ -7612,6 +7669,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     &work,
                     internal.uniform_draws,
                     recoverable_target_failures,
+                    nonfinite_position_rejections,
                     &internal,
                 )?;
             }
@@ -8563,6 +8621,7 @@ fn add_work(left: &mut WorkTotals, right: &WorkTotals) -> Result<(), Error> {
     add!(uniform_draws);
     add!(maximum_depth_stops);
     add!(recoverable_target_failures);
+    add!(nonfinite_position_rejections);
     Ok(())
 }
 
