@@ -160,6 +160,9 @@
 //!
 //! A seed is not a cross-version portability promise. Bitwise replay requires
 //! the same algorithm revision, crate build, `Cargo.lock`, target architecture,
+//! operating system (the platform C math library sets the last bits of `exp`
+//! and `ln`, so Windows and Linux runs make identical decisions but differ in
+//! the low bits of the draws; see `tests/kernel_fingerprint.rs`),
 //! floating-point behavior, inputs, and thread-independent deterministic
 //! target. Random algorithms may change when dependencies change. Chain `i`
 //! uses `splitmix64(base_seed + i)`, so chain zero agrees between single- and

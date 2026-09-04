@@ -311,8 +311,10 @@ wraps (`tests/sampler_api.rs`).
   reparameterisation, not a metric [E2].
 - On an exactly whitened Gaussian a fixed macro step can alias the
   tree-doubling schedule; there is no step-jitter option.
-- Seeds reproduce runs only under the same kernel revision, crate build, lock
-  file, target architecture and thread-independent deterministic target.
+- Seeds reproduce runs bit for bit only under the same kernel revision, crate
+  build, lock file, target architecture, operating system (the C math library
+  sets the last bits of the draws; trajectory decisions agree across Windows
+  and Linux) and thread-independent deterministic target.
 - Cancellation and deadlines are cooperative; a callback that never returns
   cannot be interrupted. `ResourceLimits` are preflight ceilings for
   accounted allocations, not process memory.

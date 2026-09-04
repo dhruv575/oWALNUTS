@@ -2,8 +2,8 @@
 
 All notable changes to oWALNUTS are documented here. Kernel behaviour is
 identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
-run only under the same revision, crate build, lock file, and target
-architecture (see the `walnutpie` module documentation).
+run only under the same revision, crate build, lock file, target
+architecture and operating system (see the `walnutpie` module documentation).
 
 ## [0.2.0] - 2026-09-04
 
