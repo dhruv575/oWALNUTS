@@ -488,22 +488,28 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   Every library/symbol, construct, metadata/name, gradient/error-free, and
   model-destruct call now runs on that owner; bounded-channel callers never
   enter model code, and drop joins through native TLS teardown. Windows
-  `ReplicatedStanTarget` records the requested count but uses one effective
-  replica; `threading()` reports serialized effective execution while
-  `compiled_threading()` preserves the DLL capability and `execution()`
-  names the backend. Model bytes use a verified SHA-256 cache and
+  `ReplicatedStanTarget::requested_replicas()` preserves the caller's request
+  while `effective_replicas()` returns one; `threading()` reports serialized
+  effective execution, `compiled_threading()` preserves the DLL capability,
+  and `execution()` names the owned-serialized backend. Model bytes use a
+  verified SHA-256 cache and
   module-global setup is locked; a process-global Windows native-call mutex
   additionally serializes all owner threads/models through setup, evaluation,
   error free, and destruction. Non-Windows replica 0 preserves the original
   `$ORIGIN`/`@loader_path` path while replicas 1..n use one source snapshot.
-  The first resident-DLL/scoped-pool diagnostic failed (8/180);
-  the follow-up owned-one diagnostic had zero faults in 540 children
-  (one-sided 95% upper bound 0.553229%) against 19/180 event-inclusive
-  comparator faults, with exact invariants in all 167 comparable pairs.
-  Sampling medians were 3.1–5.1x the four-replica comparator. Scope is one
-  Windows GNU host and three short-run models; MSVC/Linux/macOS and more than
-  one effective Windows worker per target remain unqualified, so release
-  publication stays blocked.
+  The first resident-DLL/scoped-pool mitigation was rejected because its fixed
+  arm still faulted in 8/180 children. The owned-one follow-up had zero faults
+  in 540 children against 19/180 event-inclusive comparator faults. A fresh
+  fixed-only qualification of the final process-global implementation then
+  completed all 540 ordinary and 180 concurrent-four-target children with
+  zero process faults, timeouts, missing/incomplete outputs, invariant
+  mismatches, or correlated Event 1000 records: 0/720, with a one-sided 95%
+  upper bound of 0.415210%. Sampling medians remained 3.1–5.1x the
+  four-replica comparator. The historical root cause is not proven, and this
+  mitigation is qualified only on one Windows GNU host, three model binaries,
+  short runs, and one effective worker per target. Windows MSVC,
+  Linux/macOS, the package/wheel matrix, and multi-worker Windows execution
+  remain unqualified, so release publication stays blocked.
   Python `from_stan` and direct Python `bridgestan.StanModel` call/name/
   constrain paths are disabled on Windows 0.2 because they bypass this Rust
   owner backend. Python `StanTarget.probe_*` metadata now names its one-load

@@ -1,10 +1,12 @@
 # Research program 2026-09-04: the 0.2 program — make it usable, then make it competitive
 
-Status: **complete through WP36; no sampling is running.** Everything described
-here is committed in the current `0.2.0` release tree; nothing is pushed,
-tagged or published. Publication remains blocked on the Windows native
-BridgeStan process-lifecycle fault and release-platform verification. Companion
-documents:
+Status: **complete through WP36 and the append-only Windows BridgeStan
+lifetime diagnostics; no sampling is running.** Everything described here is
+committed in the current `0.2.0` release tree; nothing is pushed, tagged or
+published. The owned-one-worker mitigation passed its final Windows GNU
+diagnostic, but publication remains blocked on Windows MSVC, Linux/macOS and
+package/wheel verification. The historical native root cause is not proven.
+Companion documents:
 `research-program-2026-08-31.md`
 (the programme that produced `0.1.0-beta.2`), `research-ledger-2026-08-31.md`
 (one checksummed entry per study, WP22–WP36, including subordinate WP35A),
@@ -68,12 +70,13 @@ comparison, BridgeStan is 6.7–38 µs per call and the `reverse` crate measured
 **A Python package that cannot drift.** `integrations/python` now constructs
 `owalnuts::sampler` types, so it inherits every default automatically, and a
 test asserts its draws are bit-identical to a Rust `Sampler` run. It exposes
-`owalnuts.DEFAULTS`, `init="uniform"`, `summary()`, `from_stan()` (BridgeStan
-with GIL-free replicas) and the numba `cfunc` path. A `wheels.yml` matrix builds
-abi3 wheels for Linux x86_64 and aarch64, macOS x86_64 and arm64, and Windows,
-with an sdist that vendors the path-dependency crates and PyPI trusted
-publishing gated on a tag. The name `owalnuts` is available on PyPI. The
-non-Windows legs have not been exercised.
+`owalnuts.DEFAULTS`, `init="uniform"`, `summary()`, `from_stan()` on Linux and
+macOS, and the numba `cfunc` path. Windows 0.2 disables `from_stan` and direct
+Python BridgeStan operations because those paths do not use the Rust owner
+backend. A `wheels.yml` matrix builds abi3 wheels for Linux x86_64 and aarch64,
+macOS x86_64 and arm64, and Windows, with an sdist that vendors the
+path-dependency crates and PyPI trusted publishing gated on a tag. The name
+`owalnuts` is available on PyPI. The non-Windows legs have not been exercised.
 
 ## The defaults changed nine times, each behind evidence
 
@@ -136,6 +139,18 @@ thread, each with its own global stack) took `arK` from 10.54 s to 1.53 s at
 identical trajectories. nutpie pays the same cost and cannot avoid it from this
 repository.
 
+That original replicated path later exposed a separate Windows native
+lifetime failure class. `bridgestan_lifetime_v1` tested resident DLLs plus
+joined Rayon workers, but its fixed arm still faulted in 8/180 children and
+was rejected. `bridgestan_owned_worker_v1` moved every native call onto one
+owned OS thread per target and added a process-global native-call mutex. Its
+final fixed-only qualification completed 540 ordinary and 180 concurrent
+four-target children with zero faults or correlated Event 1000 records
+(one-sided 95% upper bound 0.415210% for 0/720), exact settings/counters and
+one effective replica throughout. Sampling cost was 3.1–5.1x the historical
+four-replica comparator. This is a narrow Windows GNU mitigation result, not
+proof of root cause or general native-runtime safety.
+
 ## What we learned about the kernel
 
 **The per-gradient gap decomposes cleanly.** Under CmdStan's own adapted step
@@ -185,20 +200,21 @@ models (0.67–0.95x).
 
 ## Open investigations after WP36, in priority order
 
-1. **Windows DLL/thread teardown fault.** WP35A reproduced the process-fault
-   class in one of 46 diagnostic children: a four-replica sampling child
-   durably published its result, reached `drop/before`, and then exited
-   `0xC0000374`; the other 45 children succeeded. WP36 independently recorded
-   six `0xC0000374` exits and one post-result timeout in the same Windows
-   native replicated-target path. The root cause is not established. Localise
-   or mitigate the BridgeStan DLL/thread lifecycle defect with diagnostic-only
-   inputs; keep the WP35 `sblrc` evidence cell and all WP36 cells immutable.
-   Nothing here identifies a fault in the core Rust sampler.
-2. **Release-platform verification.** After the native lifecycle defect is
-   addressed, exercise the core crate on Windows MSVC and the Linux backends,
-   and exercise the Python/BridgeStan package jobs across Windows, manylinux
-   x86_64/aarch64 and macOS x86_64/arm64, including the sdist. Publication
-   remains blocked until both this matrix and item 1 are complete.
+1. **Qualify the narrow BridgeStan mitigation beyond Windows GNU.** WP35A and
+   WP36 reproduced the replicated-target failure class; the first
+   resident/scoped mitigation still faulted in 8/180 children and was
+   rejected. The owned-one-worker/process-global-serialization backend passed
+   the final 720-child Windows GNU diagnostic, but the root cause remains
+   unestablished. Exercise that exact backend on Windows MSVC, then Linux and
+   macOS as applicable. Keep the WP35/WP36 and both lifetime-study raw trees
+   immutable. Nothing in these failures identifies a defect in the core Rust
+   sampler.
+2. **Release/package verification.** Exercise the core crate on Windows MSVC
+   and Linux, and the Python/BridgeStan package jobs across Windows, manylinux
+   x86_64/aarch64 and macOS x86_64/arm64, including the sdist. Expert Rust
+   `StanTarget` use is mitigation-qualified only on Windows GNU; Windows
+   Python `from_stan` and direct Python BridgeStan remain disabled.
+   Publication remains blocked until this matrix is complete.
 3. **Optional rescue research, not a default.** WP36 resolves the 0.2 default:
    no automatic cross-chain action. A future study may test an observe-only
    warning or a narrowly scoped step-only action. It must preserve original
@@ -234,3 +250,6 @@ models (0.67–0.95x).
 - Wall times were measured on a shared machine with other agents running, so ESS
   per gradient is the machine-independent figure and is what every decision
   used.
+- Future high-volume stress studies should consolidate heartbeat/process
+  evidence into reviewable archives or indexed bundles. Existing study
+  history and raw files remain append-only and are not rewritten.

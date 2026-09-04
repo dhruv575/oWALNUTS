@@ -84,8 +84,15 @@ python run_final_qualification.py run --binary .\target\release\final_qualificat
 The runner refuses any existing final launch/process record and cannot resume.
 It validates the frozen WP35 asset hashes, records the final source/binary
 identity, verifies historical raw Git objects against `14b1791`, launches
-exclusively, and captures/correlates Windows events. Status before execution:
-preregistered, not yet run.
+exclusively, and captures/correlates Windows events. It was preregistered and
+not yet run when that command was frozen. The one permitted execution later
+completed 540/540 ordinary and 180/180 concurrent-target children without a
+fault; `artifacts/final-qualification/REPORT.md` and
+`artifacts/final-qualification/qualification-verdict.json` are the reporting
+record. The original event capture is preserved: PowerShell returned
+`NoMatchingEventsFound` for the exact window, and the reporting-only
+supplement records that as an available zero-event result rather than an
+inaccessible event log.
 
 ## Verdict
 
@@ -126,3 +133,11 @@ to these three model binaries, four-chain/four-thread 4/4 runs, the recorded
 Windows GNU host, and one owned worker. Multi-worker Windows execution and
 MSVC, Linux, and macOS qualification remain open, so the entire release is not
 declared unblocked. No merge, push, tag, or publication was performed.
+
+## Integrity
+
+`python checksums.py verify` checks the complete current study against
+`CHECKSUMS.sha256` twice: once from worktree bytes and once from committed Git
+blobs. Text line endings are canonicalized for checkout portability. The
+nested final-qualification checksum manifest is itself covered by the
+top-level manifest; neither manifest rewrites frozen raw records.
