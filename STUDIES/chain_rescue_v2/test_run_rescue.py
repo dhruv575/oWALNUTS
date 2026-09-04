@@ -72,6 +72,7 @@ def sampler_error_raw(stage):
             "start_search_calls": 4,
         },
         "warmup_config": warmup_config("observe"),
+        "warmup_schedule": None,
         "algorithm_revision": "test",
         "chains_data": None if stage == "run" else [],
         "actions": None if stage == "run" else [],
@@ -85,53 +86,57 @@ def successful_raw(arm="observe", restart=False):
     hashes = [study.initial_position_sha256(position) for position in starts]
     chains = []
     actions = []
+    schedule = study.expected_warmup_schedule(1000)
     for chain_index in range(4):
-        hit = restart and chain_index == 0
-        median = -4.0 if hit else 0.0
-        criterion = "LogDensity" if hit else None
-        outcome = "restarted" if hit else "kept"
-        installed = [3.0] if hit else None
-        event = {
-            "target": target,
-            "seed": seed,
-            "arm": arm,
-            "window_index": 0,
-            "transition": 100,
-            "chain": chain_index,
-            "window_transitions": 50,
-            "initial_position_sha256": hashes[chain_index],
-            "current_step": 1.0,
-            "median_log_density": median,
-            "log_density_iqr": 1.0,
-            "eligible": True,
-            "skip_reason": None,
-            "median_step": 1.0,
-            "step_threshold": 0.1,
-            "step_hit": False,
-            "density_reference": 0.0,
-            "density_spread": 1.0,
-            "density_gap": 4.0 if hit else 0.0,
-            "density_threshold": 3.0,
-            "density_hit": hit,
-            "observed_canonical_criterion": criterion,
-            "prior_criterion": None,
-            "prior_streak": 0,
-            "resulting_criterion": None,
-            "resulting_streak": 0,
-            "proposed_source_chain": 3,
-            "pre_action_unconstrained_position": starts[chain_index],
-            "actual_source_chain": 3 if hit else None,
-            "source_window_position_index": 0 if hit else None,
-            "installed_step": 1.0 if hit else None,
-            "installed_unconstrained_position": installed,
-            "installed_position_sha256": (
-                study.installed_position_sha256(installed) if hit else None
-            ),
-            "outcome": outcome,
-            "outcome_criterion": criterion,
-        }
-        if hit:
-            actions.append(event)
+        events = []
+        for window in schedule["windows"]:
+            hit = restart and chain_index == 0 and window["window_index"] == 0
+            median = -4.0 if hit else 0.0
+            criterion = "LogDensity" if hit else None
+            outcome = "restarted" if hit else "kept"
+            installed = [3.0] if hit else None
+            event = {
+                "target": target,
+                "seed": seed,
+                "arm": arm,
+                "window_index": window["window_index"],
+                "transition": window["boundary_transition"],
+                "chain": chain_index,
+                "window_transitions": window["window_transitions"],
+                "initial_position_sha256": hashes[chain_index],
+                "current_step": 1.0,
+                "median_log_density": median,
+                "log_density_iqr": 1.0,
+                "eligible": True,
+                "skip_reason": None,
+                "median_step": 1.0,
+                "step_threshold": 0.1,
+                "step_hit": False,
+                "density_reference": 0.0,
+                "density_spread": 1.0,
+                "density_gap": 4.0 if hit else 0.0,
+                "density_threshold": 3.0,
+                "density_hit": hit,
+                "observed_canonical_criterion": criterion,
+                "prior_criterion": None,
+                "prior_streak": 0,
+                "resulting_criterion": None,
+                "resulting_streak": 0,
+                "proposed_source_chain": 3,
+                "pre_action_unconstrained_position": starts[chain_index],
+                "actual_source_chain": 3 if hit else None,
+                "source_window_position_index": 0 if hit else None,
+                "installed_step": 1.0 if hit else None,
+                "installed_unconstrained_position": installed,
+                "installed_position_sha256": (
+                    study.installed_position_sha256(installed) if hit else None
+                ),
+                "outcome": outcome,
+                "outcome_criterion": criterion,
+            }
+            events.append(event)
+            if hit:
+                actions.append(event)
         samples = [[float(chain_index)] for _ in range(1000)]
         chains.append(
             {
@@ -168,7 +173,7 @@ def successful_raw(arm="observe", restart=False):
                 "retained_diagnostics": {
                     name: 0 for name in study.DIAGNOSTIC_FIELDS
                 },
-                "chain_rescues": [event],
+                "chain_rescues": events,
             }
         )
     return {
@@ -190,6 +195,7 @@ def successful_raw(arm="observe", restart=False):
         "initial_positions": starts,
         "initial_position_sha256": hashes,
         "warmup_config": warmup_config(arm),
+        "warmup_schedule": schedule,
         "init": {
             "rule": "owalnuts::sampler::Init::uniform()",
             "radius": 2.0,
@@ -325,6 +331,75 @@ class FormulaAndClassificationTests(unittest.TestCase):
         findings = study.all_process_safety_findings([candidate], "two_hit")
         self.assertEqual(findings["origin_overwritten"], ["model/1"])
         self.assertEqual(findings["reference"], ["model/1/theta"])
+
+    def test_funnel_candidate_gate_includes_unpaired_process_valid_cell(self):
+        cells = {}
+        valid = {}
+        for seed in (1, 2):
+            valid[("funnel-10d", seed)] = seed == 1
+            for arm in study.ARMS:
+                cells[("funnel-10d", seed, arm)] = {
+                    "target": "funnel-10d",
+                    "seed": seed,
+                    "arm": arm,
+                    "funnel_full_gate": True,
+                    "tail_mass": {"z": 0.5},
+                }
+        cells[("funnel-10d", 2, "two_hit")]["tail_mass"]["z"] = 2.5
+        result = study.evaluate_funnel_gate(cells, valid, (1, 2))
+        self.assertEqual(result["candidate_process_valid_seeds"], [1, 2])
+        self.assertEqual(result["candidate_tail_z_failures"], [2])
+        self.assertFalse(result["passed"])
+
+    def test_funnel_full_gate_definition_excludes_tail_z_and_tail_ess(self):
+        self.assertEqual(
+            study.FUNNEL_FULL_GATE_FIELDS,
+            (
+                "omega_rank_folded_split_rhat",
+                "omega_bulk_ess",
+                "zero_retained_divergences",
+                "finite_draws",
+                "no_sampler_error",
+            ),
+        )
+
+    def test_origin_mapping_is_per_action_chain_and_hash(self):
+        hashes = [f"h{index}" for index in range(4)]
+        observe = {
+            "stable_separated_origins": {
+                "chains": [1],
+                "by_chain": {
+                    str(index): {"initial_position_sha256": hashes[index]}
+                    for index in range(4)
+                },
+            }
+        }
+        candidate = {
+            "initial_position_sha256": ["wrong", "h1", "h2", "h3"],
+            "actions": [{"chain": 1}],
+        }
+        mapped = study.classify_origin_actions(candidate, observe)
+        self.assertTrue(mapped["origin_overwritten"])
+        self.assertFalse(mapped["origin_safety_unknown"])
+        candidate["actions"] = [{"chain": 0}]
+        unknown = study.classify_origin_actions(candidate, observe)
+        self.assertFalse(unknown["origin_overwritten"])
+        self.assertTrue(unknown["origin_safety_unknown"])
+        self.assertIn("hash mismatch", unknown["origin_safety_unknown_actions"][0]["reason"])
+
+    def test_missing_observe_origin_metadata_is_unknown_not_safe(self):
+        candidate = {
+            "target": "model",
+            "seed": 2,
+            "arm": "current",
+            "initial_position_sha256": ["a", "b", "c", "d"],
+            "actions": [{"chain": 2}],
+        }
+        result = study.classify_origin_actions(candidate, None)
+        candidate.update(result)
+        findings = study.all_process_safety_findings([candidate], "current")
+        self.assertTrue(result["origin_safety_unknown"])
+        self.assertEqual(findings["origin_safety_unknown"], ["model/2"])
 
     def test_unique_restarted_chains_not_event_count(self):
         raw = {"actions": [{"chain": 1, "outcome_criterion": "Step"}] * 3}
@@ -491,6 +566,32 @@ class ProcessProtocolTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertTrue(any("source mismatch" in error for error in errors))
 
+    def test_strict_telemetry_rejects_truncated_scheduled_boundary(self):
+        raw = successful_raw()
+        raw["chains_data"][0]["chain_rescues"].pop()
+        valid, errors = study.validate_raw(raw, raw["target"], "observe", 7)
+        self.assertFalse(valid)
+        self.assertTrue(any("exactly match warmup schedule" in error for error in errors))
+
+    def test_expected_warmup_schedules_for_both_registered_lengths(self):
+        one = study.expected_warmup_schedule(1000)
+        two = study.expected_warmup_schedule(2000)
+        self.assertEqual(
+            [(window["start"], window["end"]) for window in one["windows"]],
+            [(75, 100), (100, 150), (150, 250), (250, 450), (450, 950)],
+        )
+        self.assertEqual(
+            [(window["start"], window["end"]) for window in two["windows"]],
+            [
+                (75, 100),
+                (100, 150),
+                (150, 250),
+                (250, 450),
+                (450, 850),
+                (850, 1950),
+            ],
+        )
+
     def test_manifest_file_mismatch_is_detected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "exe"
@@ -499,6 +600,38 @@ class ProcessProtocolTests(unittest.TestCase):
             self.assertTrue(study.file_matches_record(path, record))
             path.write_bytes(b"tampered")
             self.assertFalse(study.file_matches_record(path, record))
+
+    def test_logical_external_identity_ignores_absolute_paths(self):
+        left = {
+            "protocol_sha256": "p",
+            "amendment_1_sha256": "a1",
+            "amendment_2_sha256": "a2",
+            "posteriordb": {
+                "path": "C:/one",
+                "head": "h",
+                "tree": "t",
+                "status_porcelain": "",
+            },
+            "versions": {"python": "x"},
+            "files": {
+                "target": {
+                    "model": {"path": "C:/one/model", "bytes": 2, "sha256": "s"}
+                }
+            },
+        }
+        right = deepcopy(left)
+        right["posteriordb"]["path"] = "D:/two"
+        right["files"]["target"]["model"]["path"] = "D:/two/model"
+        self.assertEqual(
+            study.logical_external_identity(left),
+            study.logical_external_identity(right),
+        )
+
+    def test_rebuild_equivalence_uses_pe_sections_not_full_path_hash(self):
+        expected = {".text": {"bytes": 2, "sha256": "same"}}
+        self.assertEqual(study.pe_section_differences(expected, deepcopy(expected)), [])
+        changed = {".text": {"bytes": 2, "sha256": "different"}}
+        self.assertEqual(study.pe_section_differences(expected, changed), [".text"])
 
 
 if __name__ == "__main__":

@@ -214,6 +214,32 @@ pub fn work_json(work: &WorkTotals) -> Value {
     })
 }
 
+pub fn warmup_schedule_json(chain: &ChainOutput) -> Result<Value, Box<dyn Error>> {
+    let schedule = chain
+        .metadata()
+        .warmup_schedule()
+        .ok_or("chain metadata is missing the warmup schedule")?;
+    Ok(json!({
+        "schema": "chain-rescue-v2-warmup-schedule",
+        "source": "sampler_metadata",
+        "initial_fast_end": schedule.initial_fast_end(),
+        "terminal_fast_start": schedule.terminal_fast_start(),
+        "used_short_warmup_fallback": schedule.used_short_warmup_fallback(),
+        "windows": schedule
+            .windows()
+            .iter()
+            .enumerate()
+            .map(|(window_index, window)| json!({
+                "window_index": window_index,
+                "start": window.start(),
+                "end": window.end(),
+                "window_transitions": window.len(),
+                "boundary_transition": window.end() - 1,
+            }))
+            .collect::<Vec<_>>(),
+    }))
+}
+
 pub fn rescues_json(
     target: &str,
     seed: u64,

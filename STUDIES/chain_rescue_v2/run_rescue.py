@@ -3,9 +3,11 @@
 
 Commands:
   run_rescue.py verify
+  run_rescue.py verify-rebuild
   run_rescue.py run
   run_rescue.py analyze
-  run_rescue.py conformance
+  run_rescue.py prepare-provenance  # curator-only, create-new
+  run_rescue.py conformance         # curator-only, create-new
 
 `run` is the only command that launches evidence cells. It follows the frozen
 target/seed/rotated-arm order and refuses every rerun once either a launch
@@ -43,10 +45,11 @@ STDOUT = ARTIFACTS / "stdout"
 STDERR = ARTIFACTS / "stderr"
 CELLS = ARTIFACTS / "cells"
 DRAWS = ARTIFACTS / "draws"
-CONFORMANCE = ARTIFACTS / "conformance" / "observe-vs-disabled.json"
-CONFORMANCE_HISTORY = ARTIFACTS / "conformance" / "history"
-INPUT_MANIFEST = ARTIFACTS / "provenance" / "external-inputs.json"
-BUILD_MANIFEST = ARTIFACTS / "provenance" / "build-manifest.json"
+LEGACY_CONFORMANCE = ARTIFACTS / "conformance" / "observe-vs-disabled.json"
+CONFORMANCE_INDEX = ARTIFACTS / "conformance" / "current.json"
+LEGACY_INPUT_MANIFEST = ARTIFACTS / "provenance" / "external-inputs.json"
+LEGACY_BUILD_MANIFEST = ARTIFACTS / "provenance" / "build-manifest.json"
+PROVENANCE_INDEX = ARTIFACTS / "provenance" / "current.json"
 
 DEFAULT_ASSETS = Path(
     r"C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6"
@@ -80,6 +83,10 @@ EXPECTED_ARVIZ = "0.23.4"
 EXPECTED_NUMPY = "2.4.6"
 EXPECTED_BRIDGESTAN = "2.9.0"
 EXPECTED_POSTERIORDB = "0.2.0"
+EXPECTED_SCIPY = "1.17.1"
+EXPECTED_PANDAS = "3.0.5"
+EXPECTED_XARRAY = "2026.7.0"
+EXPECTED_XARRAY_EINSTATS = "0.9.1"
 EXPECTED_TOOLCHAIN = "1.88.0-x86_64-pc-windows-gnu"
 WORK_FIELDS = {
     "transitions",
@@ -119,6 +126,13 @@ DIAGNOSTIC_FIELDS = {
     "reverse_coarser_rejections",
     "target_calls_total",
 }
+FUNNEL_FULL_GATE_FIELDS = (
+    "omega_rank_folded_split_rhat",
+    "omega_bulk_ess",
+    "zero_retained_divergences",
+    "finite_draws",
+    "no_sampler_error",
+)
 
 
 def sha256(path: Path) -> str:
@@ -151,6 +165,40 @@ def exclusive_write_json(path: Path, value: Any) -> None:
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def authenticated_pointer_path(index: Path, field: str, legacy: Path) -> Path:
+    if not index.is_file():
+        return legacy
+    pointer = json.loads(index.read_text(encoding="utf-8"))
+    record = pointer.get(field)
+    if not isinstance(record, dict):
+        raise RuntimeError(f"{index} lacks pointer field {field}")
+    path = HERE / record.get("path", "")
+    try:
+        path.resolve().relative_to(ARTIFACTS.resolve())
+    except ValueError as error:
+        raise RuntimeError(f"{index} points outside artifacts") from error
+    if not file_matches_record(path, record):
+        raise RuntimeError(f"{index} does not authenticate {field}")
+    return path
+
+
+def provenance_paths() -> tuple[Path, Path]:
+    return (
+        authenticated_pointer_path(
+            PROVENANCE_INDEX, "external_inputs", LEGACY_INPUT_MANIFEST
+        ),
+        authenticated_pointer_path(
+            PROVENANCE_INDEX, "build_manifest", LEGACY_BUILD_MANIFEST
+        ),
+    )
+
+
+def current_conformance_path() -> Path:
+    return authenticated_pointer_path(
+        CONFORMANCE_INDEX, "conformance", LEGACY_CONFORMANCE
+    )
 
 
 def short(target: str) -> str:
@@ -322,7 +370,11 @@ def git_output(repository: Path, *args: str) -> str:
 def package_versions() -> dict[str, str]:
     import arviz
     import bridgestan
+    import pandas
     import posteriordb
+    import scipy
+    import xarray
+    import xarray_einstats
 
     return {
         "python": sys.version.split()[0],
@@ -330,6 +382,10 @@ def package_versions() -> dict[str, str]:
         "numpy": np.__version__,
         "bridgestan": bridgestan.__version__,
         "posteriordb": posteriordb.__version__,
+        "scipy": scipy.__version__,
+        "pandas": pandas.__version__,
+        "xarray": xarray.__version__,
+        "xarray_einstats": xarray_einstats.__version__,
     }
 
 
@@ -373,6 +429,16 @@ def pe_sections(path: Path) -> dict[str, dict[str, Any]]:
     return result
 
 
+def pe_section_differences(
+    expected: dict[str, dict[str, Any]], actual: dict[str, dict[str, Any]]
+) -> list[str]:
+    return sorted(
+        name
+        for name in set(expected) | set(actual)
+        if expected.get(name) != actual.get(name)
+    )
+
+
 def source_file_records(repository: Path) -> list[dict[str, Any]]:
     paths = git_output(
         repository,
@@ -400,6 +466,7 @@ def source_file_records(repository: Path) -> list[dict[str, Any]]:
             "path": path.replace("\\", "/"),
             "bytes": (repository / path).stat().st_size,
             "sha256": sha256(repository / path),
+            "git_blob_sha1": git_output(repository, "rev-parse", f"HEAD:{path}"),
         }
         for path in sorted(set(paths))
     ]
@@ -439,6 +506,10 @@ def inspect_external_inputs() -> dict[str, Any]:
         "numpy": EXPECTED_NUMPY,
         "bridgestan": EXPECTED_BRIDGESTAN,
         "posteriordb": EXPECTED_POSTERIORDB,
+        "scipy": EXPECTED_SCIPY,
+        "pandas": EXPECTED_PANDAS,
+        "xarray": EXPECTED_XARRAY,
+        "xarray_einstats": EXPECTED_XARRAY_EINSTATS,
     }
     for name, expected in expected_versions.items():
         if versions[name] != expected:
@@ -462,16 +533,48 @@ def inspect_external_inputs() -> dict[str, Any]:
     return result
 
 
+def logical_external_identity(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "protocol_sha256": manifest.get("protocol_sha256"),
+        "amendment_1_sha256": manifest.get("amendment_1_sha256"),
+        "amendment_2_sha256": manifest.get("amendment_2_sha256"),
+        "posteriordb": {
+            key: manifest.get("posteriordb", {}).get(key)
+            for key in ("head", "tree", "status_porcelain")
+        },
+        "versions": manifest.get("versions"),
+        "files": {
+            target: {
+                kind: {
+                    "bytes": record.get("bytes"),
+                    "sha256": record.get("sha256"),
+                }
+                for kind, record in inputs.items()
+            }
+            for target, inputs in manifest.get("files", {}).items()
+        },
+    }
+
+
 def prepare_provenance() -> None:
-    if INPUT_MANIFEST.exists() or BUILD_MANIFEST.exists():
-        raise RuntimeError("provenance manifests already exist; refusing replacement")
+    if PROVENANCE_INDEX.exists():
+        raise RuntimeError(
+            "committed provenance is immutable; create a new study/version to regenerate it"
+        )
     repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
     if git_output(repository, "status", "--porcelain=v1"):
         raise RuntimeError("source worktree must be clean before audited build")
-    external = inspect_external_inputs()
-    exclusive_write_json(INPUT_MANIFEST, external)
     source_commit = git_output(repository, "rev-parse", "HEAD")
     source_tree = git_output(repository, "rev-parse", "HEAD^{tree}")
+    suffix = source_commit[:12]
+    input_manifest = ARTIFACTS / "provenance" / f"external-inputs-{suffix}.json"
+    build_manifest = ARTIFACTS / "provenance" / f"build-manifest-{suffix}.json"
+    if input_manifest.exists() or build_manifest.exists():
+        raise RuntimeError("versioned provenance path already exists; refusing replacement")
+    external = inspect_external_inputs()
+    external["implementation_source_commit"] = source_commit
+    external["implementation_source_tree"] = source_tree
+    exclusive_write_json(input_manifest, external)
     manifest_path = HERE / "Cargo.toml"
     build_command = [
         "cargo",
@@ -506,10 +609,8 @@ def prepare_provenance() -> None:
             full_match = left["sha256"] == right["sha256"] and left["bytes"] == right["bytes"]
             section_match = left_sections == right_sections
             if not full_match and not section_match:
-                different_sections = sorted(
-                    name
-                    for name in set(left_sections) | set(right_sections)
-                    if left_sections.get(name) != right_sections.get(name)
+                different_sections = pe_section_differences(
+                    left_sections, right_sections
                 )
                 raise RuntimeError(
                     f"isolated rebuild differs in PE sections for {name}: "
@@ -543,37 +644,67 @@ def prepare_provenance() -> None:
         ).stdout.strip(),
         "build_command": build_command,
         "isolated_rebuild_command": rebuild_command,
-        "external_input_manifest_sha256": sha256(INPUT_MANIFEST),
+        "external_input_manifest_sha256": sha256(input_manifest),
         "executables": executables,
     }
-    exclusive_write_json(BUILD_MANIFEST, build)
-    print(f"wrote {INPUT_MANIFEST.relative_to(HERE)}")
-    print(f"wrote {BUILD_MANIFEST.relative_to(HERE)}")
+    exclusive_write_json(build_manifest, build)
+    exclusive_write_json(
+        PROVENANCE_INDEX,
+        {
+            "schema": "chain-rescue-v2-provenance-index",
+            "immutable": True,
+            "implementation_source_commit": source_commit,
+            "implementation_source_tree": source_tree,
+            "external_inputs": {
+                **file_record(input_manifest),
+                "path": input_manifest.relative_to(HERE).as_posix(),
+            },
+            "build_manifest": {
+                **file_record(build_manifest),
+                "path": build_manifest.relative_to(HERE).as_posix(),
+            },
+        },
+    )
+    print(f"wrote {input_manifest.relative_to(HERE)}")
+    print(f"wrote {build_manifest.relative_to(HERE)}")
+    print(f"wrote {PROVENANCE_INDEX.relative_to(HERE)}")
 
 
 def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
     errors = []
-    if not INPUT_MANIFEST.is_file() or not BUILD_MANIFEST.is_file():
+    input_manifest, build_manifest = provenance_paths()
+    if not input_manifest.is_file() or not build_manifest.is_file():
         raise RuntimeError("audited input/build manifests are missing")
-    frozen = json.loads(INPUT_MANIFEST.read_text(encoding="utf-8"))
-    build = json.loads(BUILD_MANIFEST.read_text(encoding="utf-8"))
+    frozen = json.loads(input_manifest.read_text(encoding="utf-8"))
+    build = json.loads(build_manifest.read_text(encoding="utf-8"))
     current = inspect_external_inputs()
-    for key in (
-        "protocol_sha256",
-        "amendment_1_sha256",
-        "amendment_2_sha256",
-        "posteriordb",
-        "versions",
-        "files",
-    ):
-        if current[key] != frozen.get(key):
-            errors.append(f"external provenance mismatch: {key}")
-    if build.get("external_input_manifest_sha256") != sha256(INPUT_MANIFEST):
+    if logical_external_identity(current) != logical_external_identity(frozen):
+        errors.append("logical external provenance mismatch")
+    if build.get("external_input_manifest_sha256") != sha256(input_manifest):
         errors.append("build manifest input-manifest hash mismatch")
+    if (
+        frozen.get("implementation_source_commit") != build.get("source_commit")
+        or frozen.get("implementation_source_tree") != build.get("source_tree")
+    ):
+        errors.append("implementation source commit/tree provenance mismatch")
     repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
     for record in build.get("source_files", []):
         path = repository / record["path"]
-        if not file_matches_record(path, record):
+        if record.get("git_blob_sha1") is not None:
+            actual_blob = (
+                git_output(
+                    repository,
+                    "hash-object",
+                    f"--path={record['path']}",
+                    str(path),
+                )
+                if path.is_file()
+                else None
+            )
+            source_matches = actual_blob == record["git_blob_sha1"]
+        else:
+            source_matches = file_matches_record(path, record)
+        if not source_matches:
             errors.append(f"audited source mismatch: {record['path']}")
     if build.get("toolchain") != EXPECTED_TOOLCHAIN:
         errors.append("build manifest toolchain mismatch")
@@ -589,8 +720,15 @@ def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
     result = {
         "verified": not errors,
         "errors": errors,
-        "input_manifest_sha256": sha256(INPUT_MANIFEST),
-        "build_manifest_sha256": sha256(BUILD_MANIFEST),
+        "mode": (
+            "prepared_worktree_full_executable_authentication"
+            if require_binaries
+            else "source_and_logical_inputs_only"
+        ),
+        "input_manifest_path": input_manifest.relative_to(HERE).as_posix(),
+        "build_manifest_path": build_manifest.relative_to(HERE).as_posix(),
+        "input_manifest_sha256": sha256(input_manifest),
+        "build_manifest_sha256": sha256(build_manifest),
         "source_commit": build.get("source_commit"),
         "source_tree": build.get("source_tree"),
         "executables": build.get("executables"),
@@ -600,10 +738,79 @@ def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
     return result
 
 
+def verify_rebuild() -> dict[str, Any]:
+    provenance = verify_provenance(require_binaries=False)
+    _, build_manifest = provenance_paths()
+    build = json.loads(build_manifest.read_text(encoding="utf-8"))
+    repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
+    rustc = subprocess.run(
+        ["rustc", f"+{EXPECTED_TOOLCHAIN}", "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    cargo = subprocess.run(
+        ["cargo", f"+{EXPECTED_TOOLCHAIN}", "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if rustc != build.get("rustc") or cargo != build.get("cargo"):
+        raise RuntimeError("fresh rebuild Rust/Cargo versions differ from build manifest")
+    command = [
+        "cargo",
+        f"+{EXPECTED_TOOLCHAIN}",
+        "build",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        str(HERE / "Cargo.toml"),
+    ]
+    (HERE / "target").mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="wp36-verify-rebuild-", dir=HERE / "target"
+    ) as temporary:
+        subprocess.run(command + ["--target-dir", temporary], cwd=repository, check=True)
+        results = {}
+        names = {
+            "cell": f"chain-rescue-v2{EXE}",
+            "funnel": f"funnel{EXE}",
+            "conformance": f"conformance{EXE}",
+        }
+        for name, filename in names.items():
+            rebuilt = Path(temporary) / "release" / filename
+            expected_sections = build["executables"][name]["primary_pe_sections"]
+            actual_sections = pe_sections(rebuilt)
+            differing = pe_section_differences(expected_sections, actual_sections)
+            results[name] = {
+                "equivalent": not differing,
+                "different_pe_sections": differing,
+                "rebuilt": file_record(rebuilt),
+                "full_file_matches_prepared_worktree": (
+                    sha256(rebuilt)
+                    == build["executables"][name]["primary"]["sha256"]
+                ),
+            }
+    if not all(result["equivalent"] for result in results.values()):
+        raise RuntimeError(f"fresh rebuild PE section mismatch: {results}")
+    return {
+        "verified": True,
+        "mode": "fresh_rebuild_pe_section_equivalence",
+        "implementation_source_commit": provenance["source_commit"],
+        "implementation_source_tree": provenance["source_tree"],
+        "build_manifest_sha256": provenance["build_manifest_sha256"],
+        "rustc": rustc,
+        "cargo": cargo,
+        "results": results,
+    }
+
+
 def validate_conformance_artifact() -> dict[str, Any]:
-    if not CONFORMANCE.is_file():
+    conformance = current_conformance_path()
+    _, build_manifest = provenance_paths()
+    if not conformance.is_file():
         raise RuntimeError("current conformance artifact is missing")
-    result = json.loads(CONFORMANCE.read_text(encoding="utf-8"))
+    result = json.loads(conformance.read_text(encoding="utf-8"))
     errors = []
     comparison = result.get("comparison", {})
     required = (
@@ -630,18 +837,27 @@ def validate_conformance_artifact() -> dict[str, Any]:
         errors.append("conformance amendment-1 hash mismatch")
     if result.get("amendment_2_sha256") != sha256(AMENDMENT_2):
         errors.append("conformance amendment-2 hash mismatch")
-    if result.get("build_manifest_sha256") != sha256(BUILD_MANIFEST):
+    if result.get("build_manifest_sha256") != sha256(build_manifest):
         errors.append("conformance build-manifest hash mismatch")
-    expected_exe = json.loads(BUILD_MANIFEST.read_text(encoding="utf-8"))[
+    expected_exe = json.loads(build_manifest.read_text(encoding="utf-8"))[
         "executables"
     ]["conformance"]["primary"]
+    build = json.loads(build_manifest.read_text(encoding="utf-8"))
+    if result.get("immutable") is not True:
+        errors.append("conformance artifact is not marked immutable")
+    if (
+        result.get("implementation_source_commit") != build.get("source_commit")
+        or result.get("implementation_source_tree") != build.get("source_tree")
+    ):
+        errors.append("conformance implementation source mismatch")
     if result.get("conformance_executable") != expected_exe:
         errors.append("conformance executable provenance mismatch")
     if errors:
         raise RuntimeError("; ".join(errors))
     return {
         "authenticated": True,
-        "artifact_sha256": sha256(CONFORMANCE),
+        "artifact_path": conformance.relative_to(HERE).as_posix(),
+        "artifact_sha256": sha256(conformance),
         "observe_hits": result["observe_hits"],
         "build_manifest_sha256": result["build_manifest_sha256"],
     }
@@ -687,6 +903,40 @@ def finite_number(value: Any) -> bool:
 
 def canonical_criterion(step_hit: bool, density_hit: bool) -> str | None:
     return "Step" if step_hit else "LogDensity" if density_hit else None
+
+
+def expected_warmup_schedule(warmup: int) -> dict[str, Any]:
+    initial = 75
+    terminal = 50
+    slow_end = warmup - terminal
+    start = initial
+    size = 25
+    windows = []
+    while start < slow_end:
+        remaining = slow_end - start
+        length = min(size, remaining)
+        if remaining > length and remaining - length < size * 2:
+            length = remaining
+        end = start + length
+        windows.append(
+            {
+                "window_index": len(windows),
+                "start": start,
+                "end": end,
+                "window_transitions": length,
+                "boundary_transition": end - 1,
+            }
+        )
+        start = end
+        size *= 2
+    return {
+        "schema": "chain-rescue-v2-warmup-schedule",
+        "source": "sampler_metadata",
+        "initial_fast_end": initial,
+        "terminal_fast_start": slow_end,
+        "used_short_warmup_fallback": False,
+        "windows": windows,
+    }
 
 
 def validate_boundary(
@@ -953,6 +1203,8 @@ def validate_raw(
             "unavailable" if expected_unknown else "known_zero"
         ):
             errors.append("sampler_error rescue_history is inconsistent with stage")
+        if raw.get("warmup_schedule") is not None:
+            errors.append("sampler_error must mark warmup schedule unavailable")
         if expected_unknown:
             if (
                 not isinstance(starts, list)
@@ -972,6 +1224,9 @@ def validate_raw(
         or raw.get("rescue_history") != "complete"
     ):
         errors.append("successful raw result lacks complete rescue telemetry")
+    expected_schedule = expected_warmup_schedule(expected_warmup)
+    if raw.get("warmup_schedule") != expected_schedule:
+        errors.append("successful raw warmup schedule metadata is not exact")
     if (
         not isinstance(starts, list)
         or not isinstance(hashes, list)
@@ -1133,6 +1388,27 @@ def validate_raw(
             errors.append(f"chain {index} has no successful-run boundary telemetry")
             events = []
         chain_events.append(events)
+        expected_boundaries = [
+            (
+                window["window_index"],
+                window["boundary_transition"],
+                window["window_transitions"],
+            )
+            for window in expected_schedule["windows"]
+        ]
+        recorded_boundaries = [
+            (
+                event.get("window_index"),
+                event.get("transition"),
+                event.get("window_transitions"),
+            )
+            for event in events
+            if isinstance(event, dict)
+        ]
+        if recorded_boundaries != expected_boundaries:
+            errors.append(
+                f"chain {index} rescue boundaries do not exactly match warmup schedule"
+            )
         prior: tuple[str | None, int] = (None, 0)
         previous_window = -1
         previous_transition = -1
@@ -1596,6 +1872,26 @@ def stable_separated_origins(
     return {"chains": origin_chains, "by_chain": details}
 
 
+def bind_origin_initial_hashes(
+    origins: dict[str, Any], initial_hashes: list[str]
+) -> dict[str, Any]:
+    if len(initial_hashes) != 4:
+        raise ValueError("origin metadata requires four initial hashes")
+    for chain in range(4):
+        origins["by_chain"][str(chain)]["initial_position_sha256"] = initial_hashes[
+            chain
+        ]
+    origins["origin_metadata"] = [
+        {
+            "chain": chain,
+            "initial_position_sha256": initial_hashes[chain],
+            "parameters": origins["by_chain"][str(chain)]["parameters"],
+        }
+        for chain in origins["chains"]
+    ]
+    return origins
+
+
 def reference_z(mean: float, reference_mean: float, mcse: float, reference_mcse: float) -> float:
     denominator = math.sqrt(mcse * mcse + reference_mcse * reference_mcse)
     return (
@@ -1838,8 +2134,11 @@ def posteriordb_cell(
         if metrics["required_metrics_finite"] and calls > 0
         else None
     )
-    origins = stable_separated_origins(
-        reference_draws, ref["names"], ref["median"], ref["iqr"]
+    origins = bind_origin_initial_hashes(
+        stable_separated_origins(
+            reference_draws, ref["names"], ref["median"], ref["iqr"]
+        ),
+        raw["initial_position_sha256"],
     )
     draw_path = DRAWS / f"{cell_id(raw['target'], raw['arm'], raw['seed'])}.npz"
     draw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1924,6 +2223,9 @@ def posteriordb_cell(
 def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
     if raw["status"] != "ok":
         cell = sampler_error_cell(raw, process)
+        cell["funnel_full_gate_parts"] = {
+            field: False for field in FUNNEL_FULL_GATE_FIELDS
+        }
         cell["funnel_full_gate"] = False
         cell["tail_mass"] = None
         return cell
@@ -1938,35 +2240,45 @@ def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
     mcse = float(indicator_stats["mcse"][0])
     z = (estimate - 0.0478) / mcse if math.isfinite(mcse) and mcse > 0 else None
     finite = bool(np.isfinite(unconstrained).all())
-    required_metrics_finite = all(
+    omega_full_gate_metrics_finite = all(
         math.isfinite(float(value))
         for value in (
             stats["bulk_ess"][0],
-            stats["tail_ess"][0],
             stats["rhat"][0],
-            mcse,
         )
-    ) and z is not None and math.isfinite(z)
+    )
+    tail_metrics_finite = (
+        math.isfinite(float(stats["tail_ess"][0]))
+        and math.isfinite(mcse)
+        and z is not None
+        and math.isfinite(z)
+    )
     divergences = sum(
         int(chain["retained_diagnostics"]["divergences"])
         for chain in raw["chains_data"]
     )
-    full_gate_parts = {
-        "required_metrics_finite": required_metrics_finite,
-        "omega_rank_folded_split_rhat": required_metrics_finite
-        and float(stats["rhat"][0]) <= 1.01,
-        "omega_bulk_ess": required_metrics_finite
-        and float(stats["bulk_ess"][0]) >= 400,
-        "zero_retained_divergences": divergences == 0,
-        "finite_draws": finite,
-        "no_sampler_error": True,
-    }
+    full_gate_parts = dict(
+        zip(
+            FUNNEL_FULL_GATE_FIELDS,
+            (
+                omega_full_gate_metrics_finite and float(stats["rhat"][0]) <= 1.01,
+                omega_full_gate_metrics_finite and float(stats["bulk_ess"][0]) >= 400,
+                divergences == 0,
+                finite,
+                True,
+            ),
+            strict=True,
+        )
+    )
     analytic_iqr = 6.0 * 0.6744897501960817
-    origins = stable_separated_origins(
-        omega,
-        ["omega"],
-        np.asarray([0.0]),
-        np.asarray([analytic_iqr]),
+    origins = bind_origin_initial_hashes(
+        stable_separated_origins(
+            omega,
+            ["omega"],
+            np.asarray([0.0]),
+            np.asarray([analytic_iqr]),
+        ),
+        raw["initial_position_sha256"],
     )
     draw_path = DRAWS / f"{cell_id(raw['target'], raw['arm'], raw['seed'])}.npz"
     draw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1992,7 +2304,8 @@ def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
             "omega_bulk_ess": float(stats["bulk_ess"][0]) if math.isfinite(stats["bulk_ess"][0]) else None,
             "omega_tail_ess": float(stats["tail_ess"][0]) if math.isfinite(stats["tail_ess"][0]) else None,
             "omega_rank_folded_split_rhat": float(stats["rhat"][0]) if math.isfinite(stats["rhat"][0]) else None,
-            "required_metrics_finite": required_metrics_finite,
+            "omega_full_gate_metrics_finite": omega_full_gate_metrics_finite,
+            "tail_metrics_finite": tail_metrics_finite,
             "funnel_full_gate_parts": full_gate_parts,
             "funnel_full_gate": all(full_gate_parts.values()),
             "raw_diagnostic_pass": all(full_gate_parts.values()),
@@ -2170,6 +2483,85 @@ def classify_triplets(
     return valid, reasons
 
 
+def classify_origin_actions(
+    cell: dict[str, Any], observe: dict[str, Any] | None
+) -> dict[str, Any]:
+    actions = cell.get("actions") or []
+    origin_data = (
+        observe.get("stable_separated_origins")
+        if observe is not None
+        else None
+    )
+    details = origin_data.get("by_chain") if isinstance(origin_data, dict) else None
+    origin_chains = set(origin_data.get("chains", [])) if isinstance(origin_data, dict) else set()
+    candidate_hashes = cell.get("initial_position_sha256") or []
+    mappings = []
+    for action_index, action in enumerate(actions):
+        chain = int(action["chain"])
+        row = {
+            "action_index": action_index,
+            "chain": chain,
+            "candidate_initial_position_sha256": (
+                candidate_hashes[chain] if chain < len(candidate_hashes) else None
+            ),
+            "observe_initial_position_sha256": None,
+            "classification": "unknown",
+            "reason": None,
+        }
+        observe_chain = details.get(str(chain)) if isinstance(details, dict) else None
+        if observe_chain is None:
+            row["reason"] = (
+                "matching process-valid observe origin metadata is unavailable"
+            )
+        else:
+            row["observe_initial_position_sha256"] = observe_chain.get(
+                "initial_position_sha256"
+            )
+            if (
+                row["candidate_initial_position_sha256"] is None
+                or row["candidate_initial_position_sha256"]
+                != row["observe_initial_position_sha256"]
+            ):
+                row["reason"] = "action-chain initial-position hash mismatch"
+            elif chain in origin_chains:
+                row["classification"] = "origin_overwritten"
+            else:
+                row["classification"] = "mapped_non_origin"
+        mappings.append(row)
+    overwrite_events = [
+        actions[row["action_index"]]
+        for row in mappings
+        if row["classification"] == "origin_overwritten"
+    ]
+    unknown = [row for row in mappings if row["classification"] == "unknown"]
+    mapped_origin_chains = sorted(
+        chain
+        for chain in origin_chains
+        if (
+            isinstance(details, dict)
+            and details.get(str(chain), {}).get("initial_position_sha256")
+            == (candidate_hashes[chain] if chain < len(candidate_hashes) else None)
+        )
+    )
+    return {
+        "origin_action_mappings": mappings,
+        "origin_mapping_complete": not unknown,
+        "origin_safety_unknown": bool(unknown),
+        "origin_safety_unknown_actions": unknown,
+        "origin_safety_unknown_event_count": len(unknown),
+        "mapped_stable_separated_origin_chains": mapped_origin_chains,
+        "origin_overwritten": bool(overwrite_events),
+        "origin_overwrite_events": overwrite_events,
+        "origin_overwrite_event_count": len(overwrite_events),
+        "origin_overwritten_chain_indices": sorted(
+            {int(action["chain"]) for action in overwrite_events}
+        ),
+        "origin_overwritten_unique_chains": len(
+            {int(action["chain"]) for action in overwrite_events}
+        ),
+    }
+
+
 def apply_origin_credit_and_identity(
     cells: dict[tuple[str, int, str], dict[str, Any]],
     triplet_valid: dict[tuple[str, int], bool],
@@ -2177,44 +2569,24 @@ def apply_origin_credit_and_identity(
     for target in TARGETS:
         for seed in SEEDS:
             observe = cells.get((target, seed, "observe"))
-            if observe is None:
-                continue
-            origins = (observe.get("stable_separated_origins") or {}).get("chains", [])
-            observe_hashes = observe.get("initial_position_sha256", [])
             for arm in ARMS:
                 cell = cells.get((target, seed, arm))
                 if cell is None:
                     continue
-                mapped = (
-                    cell.get("initial_position_sha256") == observe_hashes
-                    and len(observe_hashes) == 4
+                origin_result = classify_origin_actions(
+                    cell, observe if arm in {"current", "two_hit"} else cell
                 )
-                overwrite_events = (
-                    [
-                        action
-                        for action in (cell.get("actions") or [])
-                        if int(action["chain"]) in origins
-                    ]
-                    if mapped
-                    else []
-                )
-                overwritten_chains = sorted(
-                    {int(action["chain"]) for action in overwrite_events}
-                )
-                overwritten = bool(overwrite_events)
-                cell["mapped_stable_separated_origin_chains"] = origins if mapped else []
-                cell["origin_overwritten"] = overwritten
-                cell["origin_overwrite_events"] = overwrite_events
-                cell["origin_overwrite_event_count"] = len(overwrite_events)
-                cell["origin_overwritten_chain_indices"] = overwritten_chains
-                cell["origin_overwritten_unique_chains"] = len(overwritten_chains)
+                cell.update(origin_result)
                 cell["credited_diagnostic_pass"] = bool(
-                    cell.get("raw_diagnostic_pass") and not overwritten
+                    cell.get("raw_diagnostic_pass")
+                    and not cell["origin_overwritten"]
+                    and not cell["origin_safety_unknown"]
                 )
                 if (
                     triplet_valid[(target, seed)]
                     and arm in {"current", "two_hit"}
                     and cell.get("restart_actions") == 0
+                    and observe is not None
                 ):
                     cell["zero_action_identity_to_observe"] = (
                         identity_signature(cell) == identity_signature(observe)
@@ -2245,6 +2617,11 @@ def all_process_safety_findings(
             f"{cell['target']}/{cell['seed']}"
             for cell in arm_cells
             if cell.get("origin_overwritten")
+        ],
+        "origin_safety_unknown": [
+            f"{cell['target']}/{cell['seed']}"
+            for cell in arm_cells
+            if cell.get("origin_safety_unknown")
         ],
         "reference": [
             f"{cell['target']}/{cell['seed']}/{name}"
@@ -2305,6 +2682,63 @@ def prediction_p6_held(
         mesquite_two_hit_zero_actions >= 10
         and not mesquite_two_hit_identity_failures
     )
+
+
+def evaluate_funnel_gate(
+    cells: dict[tuple[str, int, str], dict[str, Any]],
+    triplet_valid: dict[tuple[str, int], bool],
+    seeds: Iterable[int],
+) -> dict[str, Any]:
+    seeds = list(seeds)
+    candidate_cells = [
+        cells[("funnel-10d", seed, "two_hit")]
+        for seed in seeds
+        if ("funnel-10d", seed, "two_hit") in cells
+    ]
+    tail_failures = [
+        cell["seed"]
+        for cell in candidate_cells
+        if (
+            cell.get("tail_mass") is None
+            or not finite_number(cell["tail_mass"].get("z"))
+            or abs(cell["tail_mass"]["z"]) > 2.0
+        )
+    ]
+    candidate_full_gate_count = sum(
+        cell.get("funnel_full_gate") is True for cell in candidate_cells
+    )
+    candidate_half_required = math.ceil(len(candidate_cells) / 2)
+    paired_seeds = [
+        seed for seed in seeds if triplet_valid.get(("funnel-10d", seed), False)
+    ]
+    paired_counts = {
+        arm: sum(
+            cells[("funnel-10d", seed, arm)].get("funnel_full_gate") is True
+            for seed in paired_seeds
+        )
+        for arm in ARMS
+    }
+    paired_count_comparison = all(
+        paired_counts["two_hit"] >= paired_counts[arm] - 1
+        for arm in ("observe", "current")
+    )
+    return {
+        "passed": (
+            len(paired_seeds) >= 10
+            and bool(candidate_cells)
+            and not tail_failures
+            and candidate_full_gate_count >= candidate_half_required
+            and paired_count_comparison
+        ),
+        "candidate_process_valid_seeds": [cell["seed"] for cell in candidate_cells],
+        "candidate_tail_z_failures": tail_failures,
+        "candidate_all_abs_z_le_2": bool(candidate_cells) and not tail_failures,
+        "candidate_full_gate_count": candidate_full_gate_count,
+        "candidate_half_required": candidate_half_required,
+        "paired_valid_seeds": paired_seeds,
+        "paired_full_gate_counts": paired_counts,
+        "paired_count_comparison": paired_count_comparison,
+    }
 
 
 def write_results_tables(summary: dict[str, Any]) -> None:
@@ -2545,6 +2979,7 @@ def analyze() -> dict[str, Any]:
     ]
     two_findings = all_process_safety_findings(two_cells, "two_hit")
     two_origin = two_findings["origin_overwritten"]
+    two_origin_unknown = two_findings["origin_safety_unknown"]
     two_decisive = two_findings["reference"]
     two_legacy = [
         f"{cell['target']}/{cell['seed']}"
@@ -2555,6 +2990,7 @@ def analyze() -> dict[str, Any]:
     two_funnel_redlines = two_findings["funnel"]
     safety = (
         not two_origin
+        and not two_origin_unknown
         and not two_decisive
         and not two_legacy
         and not two_unknown_run_errors
@@ -2583,34 +3019,8 @@ def analyze() -> dict[str, Any]:
     )
     nuisance = nuisance_sign["passed"] and nuisance_ratio <= 0.60
 
-    funnel_seeds = [
-        seed for seed in SEEDS if triplet_valid[("funnel-10d", seed)]
-    ]
-    funnel_two = [
-        flat_cells[("funnel-10d", seed, "two_hit")] for seed in funnel_seeds
-    ]
-    funnel_tail = all(
-        cell.get("tail_mass") is not None
-        and finite_number(cell["tail_mass"].get("z"))
-        and abs(cell["tail_mass"]["z"]) <= 2.0
-        for cell in funnel_two
-    )
-    funnel_passes = {
-        arm: sum(
-            bool(flat_cells[("funnel-10d", seed, arm)].get("funnel_full_gate"))
-            for seed in funnel_seeds
-        )
-        for arm in ARMS
-    }
-    funnel_gate = (
-        len(funnel_seeds) >= 10
-        and funnel_tail
-        and funnel_passes["two_hit"] >= math.ceil(len(funnel_seeds) / 2)
-        and all(
-            funnel_passes["two_hit"] >= funnel_passes[arm] - 1
-            for arm in ("observe", "current")
-        )
-    )
+    funnel_evaluation = evaluate_funnel_gate(flat_cells, triplet_valid, SEEDS)
+    funnel_gate = funnel_evaluation["passed"]
 
     conformance_pass = environment["conformance"]["authenticated"]
     mesquite_zero = sum(
@@ -2692,6 +3102,7 @@ def analyze() -> dict[str, Any]:
         "safety": {
             "passed": safety,
             "origin_overwritten": two_origin,
+            "origin_safety_unknown": two_origin_unknown,
             "decisive_reference_disagreements": two_decisive,
             "legacy_reference_gate_violations": two_legacy,
             "unknown_run_errors": two_unknown_run_errors,
@@ -2711,10 +3122,7 @@ def analyze() -> dict[str, Any]:
             "ratio": nuisance_ratio,
         },
         "funnel": {
-            "passed": funnel_gate,
-            "valid_seeds": funnel_seeds,
-            "all_two_hit_abs_z_le_2": funnel_tail,
-            "full_gate_counts": funnel_passes,
+            **funnel_evaluation,
         },
         "no_fire": {
             "passed": no_fire,
@@ -2740,6 +3148,7 @@ def analyze() -> dict[str, Any]:
     current_findings = all_process_safety_findings(current_cells, "current")
     current_red_lines = {
         "origin_overwritten": current_findings["origin_overwritten"],
+        "origin_safety_unknown": current_findings["origin_safety_unknown"],
         "reference": current_findings["reference"],
         "funnel": current_findings["funnel"],
         "unknown_run_error": current_findings["unknown_run_error"],
@@ -2881,15 +3290,17 @@ def analyze() -> dict[str, Any]:
         }
         for target in TARGETS
     }
+    input_manifest, build_manifest = provenance_paths()
+    conformance_artifact = current_conformance_path()
     summary = {
         "schema": "chain-rescue-v2-summary",
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "protocol_sha256": sha256(PROTOCOL_PATH),
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
-        "input_manifest_sha256": sha256(INPUT_MANIFEST),
-        "build_manifest_sha256": sha256(BUILD_MANIFEST),
-        "conformance_sha256": sha256(CONFORMANCE),
+        "input_manifest_sha256": sha256(input_manifest),
+        "build_manifest_sha256": sha256(build_manifest),
+        "conformance_sha256": sha256(conformance_artifact),
         "mechanical_decision": decision,
         "current_red_lines": current_red_lines,
         "decision_gates": gates,
@@ -2919,6 +3330,16 @@ def analyze() -> dict[str, Any]:
 
 def run_conformance() -> None:
     provenance = verify_provenance(require_binaries=True)
+    if CONFORMANCE_INDEX.exists():
+        raise RuntimeError(
+            "committed conformance is immutable; create a new study/version to regenerate it"
+        )
+    _, build_manifest = provenance_paths()
+    conformance = ARTIFACTS / "conformance" / (
+        f"observe-vs-disabled-{provenance['source_commit'][:12]}.json"
+    )
+    if conformance.exists():
+        raise RuntimeError(f"versioned conformance already exists: {conformance}")
     candidate = HERE / "target" / f"conformance-candidate-{os.getpid()}.json"
     if candidate.exists():
         raise RuntimeError(f"temporary conformance path already exists: {candidate}")
@@ -2955,24 +3376,30 @@ def run_conformance() -> None:
                 "input_manifest_sha256": provenance["input_manifest_sha256"],
                 "build_manifest_sha256": provenance["build_manifest_sha256"],
                 "conformance_executable": json.loads(
-                    BUILD_MANIFEST.read_text(encoding="utf-8")
+                    build_manifest.read_text(encoding="utf-8")
                 )["executables"]["conformance"]["primary"],
+                "implementation_source_commit": provenance["source_commit"],
+                "implementation_source_tree": provenance["source_tree"],
+                "immutable": True,
                 "authenticated_utc": time.strftime(
                     "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
                 ),
             }
         )
-        if CONFORMANCE.exists():
-            previous = CONFORMANCE.read_bytes()
-            history = CONFORMANCE_HISTORY / (
-                f"observe-vs-disabled-{hashlib.sha256(previous).hexdigest()[:16]}.json"
-            )
-            history.parent.mkdir(parents=True, exist_ok=True)
-            with history.open("xb") as stream:
-                stream.write(previous)
-                stream.flush()
-                os.fsync(stream.fileno())
-        write_json(CONFORMANCE, result)
+        exclusive_write_json(conformance, result)
+        exclusive_write_json(
+            CONFORMANCE_INDEX,
+            {
+                "schema": "chain-rescue-v2-conformance-index",
+                "immutable_artifact": True,
+                "implementation_source_commit": provenance["source_commit"],
+                "implementation_source_tree": provenance["source_tree"],
+                "conformance": {
+                    **file_record(conformance),
+                    "path": conformance.relative_to(HERE).as_posix(),
+                },
+            },
+        )
         authenticated = validate_conformance_artifact()
         print(
             "pre-evidence conformance: PASS "
@@ -2987,6 +3414,8 @@ def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "verify"
     if command == "verify":
         print(json.dumps(validate_environment(require_binaries=True), indent=2, sort_keys=True))
+    elif command == "verify-rebuild":
+        print(json.dumps(verify_rebuild(), indent=2, sort_keys=True))
     elif command == "prepare-provenance":
         prepare_provenance()
     elif command == "run":

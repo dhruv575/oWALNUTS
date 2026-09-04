@@ -35,7 +35,10 @@ safety under Amendment 2.
 Successful raw cells include all retained unconstrained draws, every
 preregistered rescue-boundary field, exact initial-position hashes, installed
 position hashes, every action, final metric/tuning/diagnostic hashes, and full
-work totals. Analysis uses BridgeStan to create constrained draws on every
+work totals. The raw schedule is exported from sampler metadata and validation
+requires exactly all five scheduled boundaries at warmup 1,000 or all six at
+warmup 2,000 for every chain; monotone but truncated telemetry is invalid.
+Analysis uses BridgeStan to create constrained draws on every
 reference parameter, saves both representations in ignored NPZ files, and
 records their durable hashes in per-cell JSON.
 
@@ -45,11 +48,20 @@ name hashes are recorded. Funnel records and hashes all ten dimensions in both
 coordinate labels.
 
 The analysis implements the ArviZ 0.23.4 gates, type-7 reference transforms,
-observe-defined stable-separated origins, raw versus credited gates, triplet
+observe-defined stable-separated origins mapped independently by chain index
+and initial hash, raw versus credited gates, triplet
 exclusions, exact sign tests, nuisance/failure scores, funnel analysis,
 zero-action identity, efficiency ratios, all predictions, and the frozen
 mechanical decision. `results-table.md` lists all 288 cells and
 `parameters-table.md` lists every scalar reference result.
+
+Funnel `two_hit` tail-z and half-pass requirements scan every process-valid
+candidate cell, even when a sibling invalidates the triplet. The full gate is
+exactly omega R-hat, omega bulk ESS, zero divergences, finite draws, and no
+sampler error; tail z is separate and tail ESS is report-only. Paired-arm
+full-gate count comparisons remain restricted to valid triplets. Any action
+whose observe-origin metadata cannot be mapped by that chain's initial hash is
+reported as unknown and conservatively fails rescue safety.
 
 ## External read-only assets
 
@@ -68,7 +80,6 @@ It does not copy or modify those files. Paths are configurable:
 Use the WP35 virtual environment for Python/ArviZ/BridgeStan:
 
 ```powershell
-cargo build --release --manifest-path STUDIES/chain_rescue_v2/Cargo.toml
 & 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' `
   STUDIES/chain_rescue_v2/run_rescue.py verify
 ```
@@ -76,33 +87,46 @@ cargo build --release --manifest-path STUDIES/chain_rescue_v2/Cargo.toml
 ## Commands
 
 ```text
-run_rescue.py prepare-provenance # one-time audited build/input manifests
-run_rescue.py verify       # authenticate current files/manifests/conformance
-run_rescue.py conformance  # fixed non-evidence observe-vs-disabled fixture
-run_rescue.py run          # launches all 288 evidence cells exactly once
-run_rescue.py analyze      # reconstructs the frozen analysis without sampling
+run_rescue.py verify          # prepared-worktree full-exe/input/conformance auth
+run_rescue.py verify-rebuild  # fresh-build PE-section equivalence, no overwrite
+run_rescue.py run             # launches all 288 evidence cells exactly once
+run_rescue.py analyze         # reconstructs the frozen analysis without sampling
 ```
 
-## Clean-checkout preparation
+`prepare-provenance` and `conformance` are curator-only publication commands.
+They use create-new output and refuse once the current immutable indexes
+exist. They are not regeneration commands. Any future source or protocol
+change requires a new study/version and new versioned manifests/conformance;
+committed artifacts must never be overwritten.
 
-1. Check out the harness implementation commit with a clean worktree.
-2. Set the path variables above if the read-only WP35 assets are elsewhere.
-3. Use the exact audited WP35 Python environment (Python 3.11.16, ArviZ
-   0.23.4, NumPy 2.4.6, BridgeStan 2.9.0, posteriordb 0.2.0).
-4. Run the Rust/Python tests.
-5. Run `prepare-provenance` once. It freezes every model/data size and SHA-256,
-   the clean posteriordb HEAD/tree, package versions, protocol/amendment
-   hashes, audited source files, and GNU Rust 1.88 release executables. It also
-   performs an isolated rebuild and compares full PE files or every PE section.
-6. Run `conformance`; it archives the prior conformance result, exercises a
-   deterministic observed-hit trap, and publishes a manifest-bound result.
-7. Run `verify`.
+## Clean-checkout reproduction
 
-`verify` is read-only authentication of the current source, inputs, release
-executables, and current conformance artifact. It does not rerun or overwrite
-the immutable archived conformance history. `run` calls the same verification
-and refuses evidence unless the current authenticated artifact is a hit-path
-PASS.
+1. Check out the implementation source commit/tree identified in
+   `artifacts/provenance/current.json` and the referenced build manifest.
+2. Check out posteriordb commit
+   `28f8d3d6e975315f42aa274a8399f21e07a43b30` cleanly. Set
+   `WP36_POSTERIORDB_PATH` to that checkout.
+3. Set `WP36_MODEL_DIR` to a directory containing the seven logical
+   `<posterior>__<model>_model.so` and `.data.json` pairs. The existing
+   read-only WP35 model directory is accepted. For independent preparation,
+   build those exact posteriordb models/data with BridgeStan 2.9.0 and retain
+   the manifest filenames; verification authenticates each logical file by
+   size/SHA-256, independent of absolute path.
+4. Use Python 3.11.16 with ArviZ 0.23.4, NumPy 2.4.6, SciPy 1.17.1, pandas
+   3.0.5, xarray 2026.7.0, xarray-einstats 0.9.1, BridgeStan 2.9.0, and
+   posteriordb 0.2.0.
+5. Run the Rust/Python tests, then `verify-rebuild`. It performs an isolated
+   GNU Rust 1.88 release build at a fresh path and checks every PE section
+   against the immutable build manifest without changing any artifact.
 
-The earlier no-hit fixture result is retained as immutable conformance history.
+`verify-rebuild` proves equivalent fresh-build code even when path-dependent PE
+metadata makes the complete executable hash differ. It does not authorize that
+new executable for evidence. `verify` separately authenticates the prepared
+launch worktree's complete executable bytes, logical external inputs, source,
+and current immutable conformance artifact. `run` calls `verify` and refuses
+evidence unless all prepared-worktree hashes and the hit-path PASS match.
+
+Every versioned conformance JSON is immutable; `current.json` authenticates the
+one bound to the implementation source and build manifest. The earlier
+fixtures remain untouched historical artifacts.
 None of the 12 registered evidence seeds has been launched.

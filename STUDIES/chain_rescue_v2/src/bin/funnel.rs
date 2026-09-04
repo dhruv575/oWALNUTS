@@ -153,6 +153,7 @@ fn run(cfg: &Config) -> Result<(), Box<dyn Error>> {
                 "initial_position_sha256": initial_hashes,
                 "wall_seconds": wall_seconds,
                 "warmup_config": arms::warmup_json(cfg.arm),
+                "warmup_schedule": null,
                 "tuning": {
                     "step_size": kernel.step_size(),
                     "max_depth": kernel.max_depth(),
@@ -177,6 +178,15 @@ fn run(cfg: &Config) -> Result<(), Box<dyn Error>> {
         }
     };
 
+    let schedules = posterior
+        .chains()
+        .iter()
+        .map(arms::warmup_schedule_json)
+        .collect::<Result<Vec<_>, _>>()?;
+    if schedules.iter().any(|schedule| schedule != &schedules[0]) {
+        return Err("chain warmup schedules differ".into());
+    }
+    let warmup_schedule = schedules[0].clone();
     let chains_data = posterior
         .chains()
         .iter()
@@ -254,6 +264,7 @@ fn run(cfg: &Config) -> Result<(), Box<dyn Error>> {
             "source": "owalnuts::sampler::Tuning::default()",
         },
         "warmup_config": arms::warmup_json(cfg.arm),
+        "warmup_schedule": warmup_schedule,
         "constructor_admission_bound": admission_bound,
         "wall_seconds": wall_seconds,
         "target_calls_total": target_calls_total,

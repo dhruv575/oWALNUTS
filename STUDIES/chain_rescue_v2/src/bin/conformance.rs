@@ -240,4 +240,20 @@ mod tests {
         assert_eq!(result["comparison"]["observe_forbidden_outcomes"], 0);
         assert_ne!(result["seed"], 92_101);
     }
+
+    #[test]
+    fn exported_schedule_matches_every_observed_boundary() {
+        let output = run_arm(Arm::Observe).unwrap();
+        for chain in output.chains() {
+            let schedule = arms::warmup_schedule_json(chain).unwrap();
+            let windows = schedule["windows"].as_array().unwrap();
+            let events = chain.telemetry().chain_rescues();
+            assert_eq!(windows.len(), events.len());
+            for (window, event) in windows.iter().zip(events) {
+                assert_eq!(window["window_index"], event.window_index());
+                assert_eq!(window["boundary_transition"], event.transition());
+                assert_eq!(window["window_transitions"], event.window_transitions());
+            }
+        }
+    }
 }
