@@ -9,9 +9,11 @@ children were launched exactly once, in manifest order, with process-valid,
 schema-valid, configuration-authenticated results. No sampler default,
 production code, seed, setting, or frozen protocol file changed.
 
-The result rejects the preregistered adaptive-to-2 path. Fixed 2 remains
-ineligible for default selection. The next registered work is the cheaper
-reverse-coarsening check.
+The result nonqualifies only the adaptive-to-2 path preregistered by WP37A;
+no implementation is authorized under WP37A, and fixed 2 remains ineligible
+for default selection. It does not establish fixed2 inferiority or invalidate
+every conceivable target-adaptive rule that could reach 2. The next registered
+work is the cheaper reverse-coarsening check.
 
 ## Result
 
@@ -36,10 +38,15 @@ Funnel pooled accuracy passed: fixed1/fixed2 respectively estimated
 `P(omega < -6)` as 0.022892/0.022133, and variance as 8.924742/8.903268.
 F3 failed because fixed2 had retained divergences on seeds 93102, 93105,
 93107, 93108, 93109, and 93111 (3, 2, 1, 4, 1, and 2); only 6/12 fixed2
-seeds were gross-safe. F4 failed because only 2/12 fixed2 seeds were healthy,
-below the frozen minimum of 9 (fixed1 was also 2/12). F5 still passed:
-fixed2 versus fixed1 totals were 13 versus 14 divergences, 0 versus 0 invalid
-stops, and 70 versus 276 refinement exhaustions.
+seeds were gross-safe. Fixed2 had 13 total divergences versus fixed1's 14,
+but they were spread across 6 versus 4 seeds. F4 fixed2 passed the relative
+healthy-count noninferiority predicate because 2/12 equaled fixed1's 2/12,
+but failed the absolute minimum of 9. The healthy sets were disjoint:
+fixed1 had 93104/93109, while fixed2 had 93106/93112. F5 still passed:
+fixed2 versus fixed1 totals were 0 versus 0 invalid stops and 70 versus 276
+refinement exhaustions. Together with the passing pooled accuracy predicates,
+these results establish preregistered nonqualification, not demonstrated
+inferiority.
 
 All strict Eight Schools triplicates were byte-identical. Every amended E2
 functional passed; the fixed2/fixed1 geometric-mean minimum bulk
@@ -48,7 +55,9 @@ All 100 pooled Gaussian coordinate checks passed; its ratio of seed-median
 mean bulk ESS/retained-call scores was 1.016804, and both arms were healthy
 on 12/12 seeds.
 
-Predictions P1–P3 held; P4, the predicted qualification label, did not.
+Predictions P1–P3 held; for P1, “without losing healthy seeds” held only as
+count noninferiority, with the disjoint healthy-set caveat above. P4, the
+predicted qualification label, did not.
 The 84 children used 30.045 seconds summed process time and spanned 38.884
 seconds from first to last launch marker.
 
