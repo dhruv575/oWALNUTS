@@ -1,7 +1,7 @@
 # chain_rescue_v2 — WP36
 
-Status: **pre-evidence harness implemented; conformance not yet executed;
-no evidence launched**.
+Status: **pre-evidence harness implemented; conformance passed; no evidence
+launched**.
 
 `PREREGISTRATION.md`, `protocol.json`, and the superseding exact-tie correction
 in `AMENDMENT-1.md` are frozen. The baseline is `17f1d97`; the harness was
@@ -73,7 +73,9 @@ run_rescue.py run          # launches all 288 evidence cells exactly once
 run_rescue.py analyze      # reconstructs the frozen analysis without sampling
 ```
 
-Evidence execution is forbidden until the pre-evidence conformance artifact
-records bit identity for retained bytes, work, final adaptation, diagnostics,
-and non-rescue telemetry. None of the 12 registered evidence seeds has been
+The deterministic non-evidence fixture passed. Its durable result is
+`artifacts/conformance/observe-vs-disabled.json`: observe and rescue-disabled
+execution were identical in retained draw bytes, work counters, final
+adaptation hashes, retained diagnostics, and non-rescue telemetry, with zero
+forbidden observe outcomes. None of the 12 registered evidence seeds has been
 launched.
