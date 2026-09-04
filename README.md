@@ -113,13 +113,23 @@ Every number below is from a preregistered, checksummed study in
 
 ## Where it does not (yet)
 
-The breadth benchmark is the honest picture of the crate at its defaults on
-ordinary Stan models: [`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md),
+The last breadth benchmark admitted by its preregistered release rule is
+[`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md),
 17 posteriordb posteriors, every sampler at its defaults, 4 chains,
 1,000/1,000, three fresh seeds, gates rank R-hat <= 1.01, bulk and tail
 ESS >= 400, zero divergences, CmdStan 2.39.0 and nutpie 0.16.8 rerun on the
 same seeds. [E15] (v3 on the pre-WP31 defaults, kept as history: 35/51,
 0.34x CmdStan per gradient [E4].)
+
+WP33 subsequently made warmup restart-from-best chain rescue the default.
+The full-current-default validation, `posteriordb_bench_v6`, passes **45/51**
+cells against CmdStan 34 and nutpie 29 with no frozen chain, but did not meet
+its frozen release rule: one passing `one_comp` cell has max |z| 4.023 and one
+`sblrc` sampler subprocess exited without a result, leaving its fixed-16
+efficiency gates unevaluable (observed 0.848x CmdStan per gradient over the 15
+complete models). The v5 numbers below therefore remain the qualified
+headline; v6 is the current-default record and must be read beside them. [E16,
+E17]
 
 - **More cells pass than CmdStan or nutpie.** oWALNUTS passes **42/51**
   cells; CmdStan 36, nutpie 28. Twelve models at 3/3 against ten and eight.
@@ -177,6 +187,7 @@ regression that CmdStan already samples cleanly still costs oWALNUTS
 | `Tuning::kernel_options` U-turn rule | `UTurnRule::MomentumSum` (Stan's generalised criterion) | **post-hoc default change after WP31**, validated by WP32: with Stan's metric prior it is 1.51x the endpoint rule per gradient over 17 posteriordb models; the frozen `v10` endpoint rule is `KernelOptions::default()` [E14, E15] |
 | `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75); warmup exhaustion rule `AcceptUnlessDivergent` [E10] |
 | `Metric` | adapted diagonal | Welford, regularised with Stan's prior (`DiagonalMetricRegularization::Stan`, **post-hoc default change after WP31**; the `v10` `TowardUnit` prior floors small variances at 0.01 and collapsed the step on `sblrc` / `arma11`) [E14, E15] |
+| warmup chain rescue | restart from the best healthy chain | with at least two identity/diagonal chains, step or log-density outliers are re-seeded at slow-window boundaries; improves bad-start robustness but a log-density rescue can hide a discovered mode from R-hat, so inspect `RunTelemetry::chain_rescues` [E16, E17] |
 | initial evaluation | cached | one gradient per transition saved, draws bit-identical [E6] |
 | `Limits` | admit the exact worst case | the worst case is a bound the run cannot exceed, so admission costs nothing |
 
@@ -386,6 +397,18 @@ provenance.
   second, funnel exact at the defaults:
   [`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md)
   (`WP32-POSTERIORDB-BENCH-V5`).
+- [E16] Warmup restart-from-best chain rescue: 25/27 cells against the plain
+  driver's 21, `lotka_volterra` 0/3 -> 3/3 and `arma11` 2/3 -> 3/3; the
+  preregistered default rule held, with the mode-hiding caveat recorded:
+  [`STUDIES/chain_rescue_v1`](STUDIES/chain_rescue_v1/README.md)
+  (`WP33-CHAIN-RESCUE-V1`).
+- [E17] posteriordb v6: complete current defaults on fresh seeds, 45/51
+  gates against CmdStan 34 and nutpie 29, no frozen chain, 30 recorded
+  rescues and funnel tail-mass |z| <= 2 on every seed; the release rule did
+  not pass because one passing cell reached max |z| 4.023 and one `sblrc`
+  process errored:
+  [`STUDIES/posteriordb_bench_v6`](STUDIES/posteriordb_bench_v6/README.md)
+  (`WP35-POSTERIORDB-BENCH-V6`).
 - [E11] The sampler defaults on the funnel: four levels 0.0203 / 0.0242 /
   0.0625 (z -3.5 / -3.8 / +0.3), eight levels 0.0412 / 0.0346 / 0.0897
   (|z| <= 1.43) at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D

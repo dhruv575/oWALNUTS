@@ -1,10 +1,11 @@
 # Research program 2026-09-04: the 0.2 program — make it usable, then make it competitive
 
-Status: **paused at the coordinator's request on 2026-09-04.** No sampling is
-running. Everything described here is merged into `main` at `0.2.0`; nothing is
-pushed, tagged or published. Companion documents: `research-program-2026-08-31.md`
+Status: **resumed on 2026-09-04 for WP35; the run is complete and no sampling
+is running.** Everything described here is merged into `main` at `0.2.0`;
+nothing is pushed, tagged or published. Companion documents:
+`research-program-2026-08-31.md`
 (the programme that produced `0.1.0-beta.2`), `research-ledger-2026-08-31.md`
-(one checksummed entry per study, WP22–WP34), `release-0.2.0.md`.
+(one checksummed entry per study, WP22–WP35), `release-0.2.0.md`.
 
 ## What this programme was
 
@@ -97,7 +98,13 @@ posteriors, 4 chains, 1,000 warmup and 1,000 retained, defaults on every sampler
 | v3 | WP25 | 35 | 37 | 31 | 0.344x | 0.751x |
 | v4 | WP29 | partial, superseded | | | | |
 | v5 | WP32 | **42** | 36 | 28 | 1.069x all / **0.822x** healthy | **0.80x** |
-| v6 | WP35 | not started (paused) | | | | |
+| v6 | WP35 | **45** | 34 | 29 | 0.848x on 15/16 fixed non-`arma11` models; one `sblrc` error | **0.825x** on those 15 |
+
+v6 is the full-current-default run after WP33. It has the strongest gate count
+but did **not** meet its preregistered release rule: a passing `one_comp` cell
+has max |z| 4.023 and one `sblrc` oWALNUTS subprocess exited without a result,
+so the fixed-16 efficiency criteria are unevaluable. v5 remains the last
+headline admitted by its own rule; v6 must be reported beside it.
 
 v1 was the falsification that mattered: at defaults the sampler lost to CmdStan
 on every model, ran ten times slower per gradient, and the Appendix C adaptation
@@ -159,15 +166,19 @@ oWALNUTS finishes cleanly where CmdStan and nutpie leave a chain stuck or
 divergent, while still spending more gradients per effective sample on healthy
 models (0.67–0.95x).
 
-## Open lines — what we were exploring when we paused
+## Open lines after WP35
 
-1. **posteriordb v6 (WP35), not started.** A fresh-seed validation of the chain
-   rescue default on all 17 models against CmdStan and nutpie, with rescue
-   telemetry per cell and a bias check (max |z| against the reference draws on
-   every passing cell). The v5 headline in `release-0.2.0.md` and the README
-   predates WP33, so the published figure understates the current default. The
-   worktree `wt/posteriordb-v6` exists with nothing committed.
-2. **`delta = 2`, the strongest unexploited lead.** WP34's near-miss arm is
+1. **Chain-rescue safety and timing.** WP35 records 30 restarts in 21 cells:
+   21 log-density and nine step events, including one log-density restart on
+   every `hmm_drive_0` seed and two step restarts as late as transition 249.
+   The next decision study should pair the current rule with a second-window
+   or two-consecutive-boundary score and a no-rescue control. It must gate
+   reference agreement and make the original mode assignment visible.
+2. **The unexplained `sblrc` process exit.** Seed 90101 exited without stderr
+   or raw JSON while 90102/90103 passed. Diagnose library load/unload and
+   process stability with synthetic or non-evidence seeds before another
+   breadth run; do not post-hoc rerun the WP35 cell.
+3. **`delta = 2`, the strongest unexploited efficiency lead.** WP34's near-miss arm is
    1.070x over 17 models and 1.077x on the healthy ones at the *same* step and
    the same 42 gates, taking the CmdStan ratio from 0.850x to 0.915x;
    `da06-d2` reaches 1.122x on the healthy models. Both fail the preregistered
@@ -176,25 +187,22 @@ models (0.67–0.95x).
    The right experiment is `delta` adapted per target from the observed `|dH|`
    distribution rather than a fixed constant, with the funnel and Eight Schools
    side checks that WP34 did not get to run.
-3. **A cheaper reverse-coarsening check.** This is now the named residual on the
+4. **A cheaper reverse-coarsening check.** This is now the named residual on the
    hard models: WP30 measured it at 3–7% of orbits on regressions and WP34 at
    10–54% on the four worst models, and it is the difference between 0.90x and
    0.95x of reference NUTS.
-4. **The funnel at the sampler defaults is unbiased but not efficient.** Eight
+5. **The funnel at the sampler defaults is unbiased but not efficient.** Eight
    levels fixed the tail mass (v5 per-seed z of +1.02, −0.05, +0.93), but one
    chain per seed still adapts to `h` between 0.001 and 0.02 and contributes
    almost no ESS. Eight levels with `delta = 0.5` mixes far better at a 21% cost
-   on a 100-D Gaussian and remains a documented opt-in.
-5. **Chain rescue can hide a mode.** A rescue triggered by the log-density rule
-   moves a chain out of a second mode, which is exactly what R-hat exists to
-   detect. This is documented on `DEFAULT_CHAIN_RESCUE` and in the README, and
-   the telemetry names every rescue, but a variant that scores from the second
-   window, to avoid first-boundary false positives on merely-late chains, is the
-   obvious refinement.
+   on a 100-D Gaussian and remains a documented opt-in. WP35 again has exact
+   per-seed tail mass, but omega bulk ESS 388/539/356 and two divergences on
+   seed 90103.
 6. **Targets nothing samples.** The centered eight schools and `accel_gp` fail
-   every gate for every sampler in every run, and `hmm_drive_0` is a start-draw
-   coin flip on second-mode assignment for oWALNUTS and CmdStan alike. These
-   belong in a known-hard list rather than in a tuning loop.
+   almost every gate for every sampler (`accel_gp` is oWALNUTS 1/3 in WP35),
+   and `hmm_drive_0` remains a start-draw mode question even though density
+   rescue makes it 3/3 by moving the outlying chain. These belong in a
+   known-hard list rather than in an ordinary tuning loop.
 7. **Publishing.** crates.io and PyPI are both untouched. The wheel matrix has
    only been exercised on Windows; the manylinux and macOS legs, the MSVC
    toolchain and the Linux backends job are unverified.

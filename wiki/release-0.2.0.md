@@ -340,17 +340,22 @@ on Eight Schools at four threads, parity with nutpie.
 
 ### Outstanding before the release numbers are final
 
-The validation tables above end at **WP32 (posteriordb v5, 42/51 gates)**. Two
-later studies changed or characterised the shipped defaults and are not yet
-reflected in the headline:
+The validation tables above end at **WP32 (posteriordb v5, 42/51 gates)**.
+Three later studies changed, characterised and remeasured the shipped defaults:
 
-- **WP33 `chain_rescue_v1`** made warmup chain rescue a default *after* v5, so
-  the v5 figure understates the current sampler. A fresh-seed validation on all
-  17 models (WP35, posteriordb v6) was preregistered but **not run**; the
-  programme was paused on 2026-09-04.
+- **WP33 `chain_rescue_v1`** made warmup chain rescue a default *after* v5.
 - **WP34 `refinement_role_v1`** established that refinement does not pay on
   ordinary posteriors and that `delta = 2` is worth 1.07x per gradient at the
   same gates, pending a decision study.
+- **WP35 `posteriordb_bench_v6`** measured the complete current defaults on
+  fresh seeds: **45/51** gates against CmdStan 34 and nutpie 29, no frozen
+  chain, and funnel tail-mass |z| <= 2 on every seed. It did **not** meet its
+  preregistered release rule: one passing `one_comp` cell has max |z| 4.023,
+  and one `sblrc` oWALNUTS subprocess exited without a result, leaving the
+  fixed-16 efficiency gates unevaluable (observed 0.848x CmdStan per gradient
+  and 0.825x wall per gradient over the 15 complete models). The v5 table
+  remains the last headline admitted by its own rule; WP35 must be reported
+  beside it rather than substituted silently.
 
 See [`research-program-2026-09-04.md`](research-program-2026-09-04.md) for the
 full state and the open lines.
