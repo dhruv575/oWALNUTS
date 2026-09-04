@@ -1,0 +1,73 @@
+{
+  "schema": "bridgestan-owned-worker-final-qualification-verdict",
+  "generated_utc": "2026-09-04T17:30:34.9189609Z",
+  "source_commit": "81bf936ee9667856a8be5fcf117feaea2df3f830",
+  "original_summary_sha256": "f7bcb698efaa60f4c322b6063475432b35b021ee5373a6a7ce8bfb755b3d9ba9",
+  "original_summary_accepted": false,
+  "reporting_correction": {
+    "field": "event_capture_available",
+    "original_value": false,
+    "corrected_value": true,
+    "reason": "The original Get-WinEvent query returned NoMatchingEventsFound for the exact execution window. A reporting-only supplemental query over the same frozen window classified that result as an available zero-event result. The original capture is preserved unchanged.",
+    "supplement": "windows-events-supplement.json"
+  },
+  "matrix": {
+    "ordinary": {
+      "planned": 540,
+      "recorded": 540,
+      "process_successes": 540,
+      "faults": 0,
+      "raw_invariant_failures": 0,
+      "effective_replicas": 1
+    },
+    "concurrent_multi_target": {
+      "planned": 180,
+      "recorded": 180,
+      "process_successes": 180,
+      "faults": 0,
+      "raw_invariant_failures": 0,
+      "target_instances_per_child": 4,
+      "effective_replicas_per_target": 1
+    }
+  },
+  "artifact_inventories_exact": true,
+  "nonzero_exits": 0,
+  "timeouts": 0,
+  "missing_or_incomplete_outputs": 0,
+  "incomplete_heartbeats": 0,
+  "event_parse_anomalies": 0,
+  "correlated_event_1000": 0,
+  "exact_parity_and_invariant_failures": 0,
+  "validated_invariants": [
+    "settings",
+    "sample/probe fingerprints",
+    "diagnostic checksums",
+    "target call counts",
+    "recoverable failure counts",
+    "algorithm revision",
+    "sample/probe counts",
+    "dimension",
+    "parameter names",
+    "model info",
+    "compiled threading",
+    "effective threading",
+    "execution backend",
+    "requested replicas",
+    "effective replicas"
+  ],
+  "zero_failure_one_sided_95_percent_upper_bounds": {
+    "ordinary": 0.005532292551836959,
+    "concurrent_multi_target": 0.01650522819566269,
+    "combined": 0.0041520953856636345
+  },
+  "qualification_gate_accepted": true,
+  "release_blocked": true,
+  "remaining_release_blockers": [
+    "Windows MSVC qualification",
+    "Linux and macOS BridgeStan qualification",
+    "cross-platform package/wheel matrix",
+    "Windows Python from_stan remains disabled"
+  ],
+  "scope": "Windows GNU, one host, three frozen WP35 model/data assets, short diagnostic runs and concurrent four-target probes",
+  "diagnostic_only": true
+}
