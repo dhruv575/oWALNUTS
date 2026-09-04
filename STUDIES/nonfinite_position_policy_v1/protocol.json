@@ -1,0 +1,101 @@
+{
+  "schema": "owalnuts-study-protocol-v1",
+  "study": "nonfinite_position_policy_v1",
+  "work_package": "WP38",
+  "status": "preregistered",
+  "frozen_utc": "2026-09-04",
+  "purpose": "Qualify the research-only NonfinitePositionPolicy::RejectLeaf as an explicit opt-in for deterministic finite-or-recoverable targets. No default changes under any outcome.",
+  "source_baseline": {
+    "commit": "36dd4c6718ea9e037ba76a5cd2fd0bc04aed4dd5",
+    "tree": "450b62e42a6b1fd371d2b19355c8599e139c311b",
+    "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+    "features": ["research"]
+  },
+  "arms_order": ["abort", "reject"],
+  "arms": {
+    "abort": {"nonfinite_position": "Abort"},
+    "reject": {"nonfinite_position": "RejectLeaf"}
+  },
+  "common_config": {
+    "sampler": "owalnuts::sampler::Sampler",
+    "metric": "Metric::diagonal()",
+    "adaptation": "Adaptation::default()",
+    "limits": "Limits::new().admit_worst_case()",
+    "chains": 4,
+    "threads": 4,
+    "warmup": 1000,
+    "retained": 1000,
+    "tuning": {
+      "max_depth": 10,
+      "min_micro_steps": 1,
+      "max_refinement_levels": 8,
+      "max_error": 1.0,
+      "divergence_threshold": 1000.0,
+      "kernel_options": "sampler defaults at baseline"
+    }
+  },
+  "targets": {
+    "sspd_repaired": {
+      "definition": "polyscope-canonical-v2 state space, a = 1, T = 1000; frozen sspd11_confirmation_v1 source included by path; fatal-classified target results reclassified recoverable",
+      "source": "STUDIES/sspd11_confirmation_v1/primary/src/canonical.rs",
+      "fixture": "STUDIES/reverse_coarsening_order_v1/config/sspd-target-fixture.json",
+      "starts": "STUDIES/sspd11_confirmation_v1/primary/starts/sspd-11.json via from_innovations(., 1.0)",
+      "initial_step": 0.5,
+      "seeds": [97201, 97202, 97203, 97204, 97205, 97206, 97207, 97208, 97209, 97210, 97211, 97212, 97213, 97214, 97215, 97216, 97217, 97218, 97219, 97220, 97221, 97222, 97223, 97224],
+      "monitored_coordinates": [0, 1, 2, 3, 4, 5, 6, 505, 1005],
+      "role": "event target"
+    },
+    "neal_funnel_10d": {
+      "definition": "omega ~ N(0, 9), x_i ~ N(0, exp(omega)), 9 latents; exp(-omega) overflow recoverable",
+      "initial_step": 0.5,
+      "starts": "omega in {-3, -1, 1, 3}, latents 0",
+      "seeds": [97301, 97302, 97303, 97304, 97305, 97306],
+      "monitored_coordinates": [0],
+      "tail_functional": {"event": "omega < -5", "exact": 0.04779035},
+      "role": "identity control"
+    },
+    "gaussian_100d": {
+      "definition": "100-D standard normal",
+      "initial_step": 0.5,
+      "starts": "uniform_starts(target, 4, seed, 2.0, 100)",
+      "seeds": [97301, 97302, 97303, 97304, 97305, 97306],
+      "monitored_coordinates": [0, 49, 99],
+      "role": "identity control"
+    }
+  },
+  "run_plan": {
+    "cells": 72,
+    "order": "target order sspd_repaired, neal_funnel_10d, gaussian_100d; within target seed ascending; within seed arms_order",
+    "one_shot": true,
+    "timeout_seconds": 1800,
+    "rerun_policy": "never; nonzero exit, timeout or missing record is a result"
+  },
+  "record_fields": [
+    "status", "error_kind", "error_message", "wall_seconds", "total_target_calls",
+    "recoverable_target_failures", "nonfinite_position_rejections_discarded",
+    "nonfinite_position_rejections_retained", "rejection_transitions",
+    "retained_divergences", "draw_hash_sha256", "functionals"
+  ],
+  "gates": {
+    "G1_identity_controls": "every control seed: both arms complete, equal draw hash, equal total target calls, reject rejections == 0; 12/12",
+    "G2_completion": "reject completes 24/24 sspd_repaired cells",
+    "G3_informativeness": "abort fails >= 1 sspd_repaired cell with ErrorKind::Numerical and the nonfinite-position message",
+    "G4_health": "every completed reject sspd_repaired cell: all nine monitored coordinates rhat <= 1.01, ess_bulk >= 400, ess_tail >= 400",
+    "G5_confinement": "every reject sspd_repaired cell: retained-phase nonfinite rejections == 0",
+    "G6_consistency": "every sspd_repaired seed where abort completed: reject rejections == 0 and equal draw hash and total target calls"
+  },
+  "decision": {
+    "QUALIFIED_OPT_IN": "G1..G6 all pass",
+    "UNINFORMATIVE": "G3 fails and G1, G2, G4, G5, G6 pass",
+    "NOT_QUALIFIED": "otherwise",
+    "default_change_authorised": false
+  },
+  "predictions": {
+    "P1": "G1 passes",
+    "P2": "abort fails between 1 and 8 of 24 sspd_repaired cells",
+    "P3": "reject completes 24/24",
+    "P4": "G4 passes",
+    "P5": "every rejection occurs within the first 100 warmup transitions",
+    "P6": "decision QUALIFIED_OPT_IN"
+  }
+}
