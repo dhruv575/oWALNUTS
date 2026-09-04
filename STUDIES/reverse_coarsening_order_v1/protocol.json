@@ -1,0 +1,554 @@
+{
+  "schema": "owalnuts-reverse-coarsening-order-v1",
+  "study": "reverse_coarsening_order_v1",
+  "work_package": "WP37B",
+  "status": "FROZEN_BEFORE_IMPLEMENTATION_BUILD_OR_EVIDENCE",
+  "frozen_utc": "2026-09-04",
+  "source_baseline": {
+    "commit": "a630e04151842cf7a92131dcadd8e9412c675f5b",
+    "tree": "59ff3f52debb54fd8cea62effd51982c7ecd7a88"
+  },
+  "preregistration_scope": {
+    "scaffold_only": true,
+    "candidate_implemented": false,
+    "harness_implemented": false,
+    "study_built": false,
+    "evidence_run": false,
+    "sampling_run": false,
+    "production_code_changed": false,
+    "defaults_changed": false,
+    "algorithm_revision_changed": false
+  },
+  "purpose": "Mechanical semantic-and-work qualification of coarsest-to-finest reverse-level evaluation at fixed delta=1. Passing may authorize a separate labelled high-level sampler-default implementation while preserving walnutpie defaults, fingerprints, revision, and replay.",
+  "arms_order": [
+    "finest_to_coarsest",
+    "coarsest_to_finest"
+  ],
+  "arms": {
+    "finest_to_coarsest": {
+      "role": "incumbent and current behavior",
+      "reverse_level_order": "generation order: nearest coarser level to coarsest"
+    },
+    "coarsest_to_finest": {
+      "role": "research-only candidate",
+      "reverse_level_order": "reverse of the generated list: coarsest level to nearest coarser"
+    }
+  },
+  "only_arm_difference": "Traversal order of the identical generated reverse-level (coarse_step, coarse_micro_steps) list.",
+  "reverse_level_contract": {
+    "max_error_delta": 1.0,
+    "pair_generation": "Starting from the accepted forward level's step and micro_steps, repeatedly execute coarse_steps /= 2 then coarse_step *= 2.0 while coarse_steps / 2 >= min_micro_steps. Both arms store the identical resulting pairs before traversal.",
+    "forbidden_generation_changes": [
+      "direct powers",
+      "division from the original step",
+      "floating-point reassociation",
+      "changed integrator",
+      "changed endpoint validity predicate",
+      "changed endpoint-error predicate",
+      "cached or reused reverse trajectory"
+    ],
+    "short_circuit": [
+      "The first valid reverse attempt with endpoint_error <= delta rejects the leaf as ReverseCoarserAccepted.",
+      "The first invalid reverse attempt rejects the leaf through the current invalid-evaluation path.",
+      "The forward leaf is retained only when every evaluated reverse attempt is valid and has endpoint_error > delta."
+    ]
+  },
+  "semantic_qualification": {
+    "qualified_statement": "For deterministic targets when all reverse attempts reached by either order are valid, accepted endpoint, leaf accepted/rejected boolean, sampler RNG, adaptation, and retained draws are order-independent because both arms evaluate the same OR over the same generated level set.",
+    "qualification_limit": "A level set containing both an accepted and an invalid reverse attempt can change rejection cause and public error according to traversal order. No universal bit-identity claim is made.",
+    "evidence_requirement": "Require semantic-hash equality, exact stop/rejection and public-error identity, exact forward-call identity, and no health/invalid regression independently in every paired cell."
+  },
+  "research_option_contract": {
+    "candidate_visibility": "explicitly named research-only option",
+    "candidate_revision": "separate WP37B implementation identifier",
+    "unchanged_walnutpie_default_order": "FinestToCoarsest",
+    "unchanged_algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+    "unchanged_interfaces": [
+      "walnutpie::KernelOptions::default()",
+      "walnutpie::RunConfig",
+      "registered walnutpie kernel fingerprints",
+      "existing walnutpie replay paths"
+    ]
+  },
+  "current_explicit_sampler_defaults": {
+    "step_size_h0": 0.5,
+    "max_tree_depth": 10,
+    "min_micro_steps": 1,
+    "max_refinement_levels": 8,
+    "max_error_delta": 1.0,
+    "divergence_threshold": 1000.0,
+    "u_turn_rule": "MomentumSum",
+    "retained_exhaustion_rule": "Stop",
+    "adaptation": "DualAveraging",
+    "target_acceptance": 0.8,
+    "metric": "adapted diagonal from identity",
+    "metric_regularization": "DiagonalMetricRegularization::Stan",
+    "warmup_exhaustion_rule": "ExhaustionRule::AcceptUnlessDivergent",
+    "chain_rescue": null,
+    "chain_rescue_assertion": "DEFAULT_CHAIN_RESCUE == None and no explicit rescue policy",
+    "initial_evaluation_cache": true,
+    "admission": "Limits::admit_worst_case()",
+    "chains": 4,
+    "sampler_threads": 4
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "model_set_source": "WP35 posteriordb_bench_v6",
+    "warmup": 1000,
+    "retained": 1000,
+    "initialization": "Init::uniform(), identical four unconstrained starts across paired arms",
+    "bridgestan": {
+      "source_version": "2.9.0",
+      "stan_version": "2.39.0",
+      "stan_threads": false,
+      "platform": "Windows",
+      "requested_replicas": 4,
+      "effective_replicas": 1,
+      "execution": "Execution::OwnedSerialised",
+      "native_call_policy": "one owned OS worker per target plus process-global native-call mutex",
+      "required_external_hashes": [
+        "Stan source SHA-256 and byte length for every model",
+        "data JSON SHA-256 and byte length for every model",
+        "compiled model library SHA-256 and byte length for every model",
+        "BridgeStan runtime SHA-256 and byte length",
+        "native dependency SHA-256 and byte length"
+      ]
+    },
+    "targets": {
+      "posteriordb_accel_gp": {
+        "posterior": "mcycle_gp-accel_gp",
+        "model": "accel_gp"
+      },
+      "posteriordb_gp_pois_regr": {
+        "posterior": "gp_pois_regr-gp_pois_regr",
+        "model": "gp_pois_regr"
+      },
+      "posteriordb_eight_schools_centered": {
+        "posterior": "eight_schools-eight_schools_centered",
+        "model": "eight_schools_centered"
+      },
+      "posteriordb_eight_schools_noncentered": {
+        "posterior": "eight_schools-eight_schools_noncentered",
+        "model": "eight_schools_noncentered"
+      }
+    }
+  },
+  "pure_targets": {
+    "neal_funnel_10d": {
+      "implementation": "in-process Rust Target",
+      "definition": "omega ~ Normal(0,3); nine x_i | omega have mean 0 and standard deviation exp(omega/2)",
+      "dimension": 10,
+      "starts": [
+        {
+          "omega": -3.0,
+          "x_1_through_x_9": 0.0
+        },
+        {
+          "omega": -1.0,
+          "x_1_through_x_9": 0.0
+        },
+        {
+          "omega": 1.0,
+          "x_1_through_x_9": 0.0
+        },
+        {
+          "omega": 3.0,
+          "x_1_through_x_9": 0.0
+        }
+      ],
+      "warmup": 2000,
+      "retained": 20000,
+      "exact": {
+        "p_omega_lt_minus5": 0.0477903522728147,
+        "p_omega_lt_minus6": 0.0227501319481792,
+        "variance_omega": 9.0
+      }
+    },
+    "gaussian_100d": {
+      "implementation": "in-process Rust Target",
+      "definition": "100-dimensional standard Gaussian",
+      "dimension": 100,
+      "initialization": "Init::uniform(), uniform(-2,2), identical across paired arms",
+      "warmup": 1000,
+      "retained": 1000,
+      "exact_coordinate_mean": 0.0,
+      "exact_coordinate_variance": 1.0
+    },
+    "state_space_sspd11_t1000": {
+      "implementation": "in-process Rust polyscope-canonical-v2 Target",
+      "model_revision": "polyscope-canonical-v2",
+      "centeredness": 1.0,
+      "t": 1000,
+      "parity_oracle": "fixtures/polyscope_parity.json",
+      "parity_oracle_sha256": "4c91f5fddda2e15f42e4209343ee9234bdab866a32918c260fe29fd6b0cf7d0c",
+      "fixture": "sspd-11-n1000-mixed-regular-moderate-h1-none-none-cold.json",
+      "fixture_sha256": "2fff97663b6e7946e64e465610ebf9dd4350d6615ecaa5aa513ff070b683baad",
+      "starts": {
+        "rule": "fixture initial_innovations plus fixed mu offsets, zero sigma offsets; fixture cold-initialization factor not applied",
+        "mu_offsets": [
+          -0.03,
+          -0.01,
+          0.01,
+          0.03
+        ],
+        "sigma_offsets": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "warmup": 500,
+      "retained": 2000,
+      "functionals": [
+        "mu",
+        "sigma_x",
+        "alpha",
+        "beta",
+        "gamma",
+        "nu",
+        "x_terminal",
+        "x_path_mean"
+      ]
+    }
+  },
+  "seeds": {
+    "range": [
+      96101,
+      96102,
+      96103,
+      96104,
+      96105,
+      96106
+    ],
+    "contiguous": true,
+    "skipped_numbers": [],
+    "used_by_every_target": true,
+    "paired_across_arms": true,
+    "search": {
+      "baseline": "a630e04151842cf7a92131dcadd8e9412c675f5b",
+      "scope": "all tracked files, including tracked artifacts",
+      "pattern": "(?<![0-9A-Za-z_.])(?:96101|96102|96103|96104|96105|96106)(?![0-9A-Za-z_.])",
+      "command": "git grep -n -P $pattern HEAD -- .",
+      "result": "NO_MATCHES",
+      "interpretation": "No candidate appeared as an exact standalone whole-number token. Lookarounds exclude longer integers, decimals, exponents, identifiers, and hexadecimal checksum substrings."
+    }
+  },
+  "run_plan": {
+    "target_order": [
+      "posteriordb_accel_gp",
+      "posteriordb_gp_pois_regr",
+      "posteriordb_eight_schools_centered",
+      "posteriordb_eight_schools_noncentered",
+      "neal_funnel_10d",
+      "gaussian_100d",
+      "state_space_sspd11_t1000"
+    ],
+    "seed_order": "ascending",
+    "arm_rotation": {
+      "zero_based_even_seed_index": [
+        "finest_to_coarsest",
+        "coarsest_to_finest"
+      ],
+      "zero_based_odd_seed_index": [
+        "coarsest_to_finest",
+        "finest_to_coarsest"
+      ]
+    },
+    "fresh_child_per_cell": true,
+    "cells_per_target": 12,
+    "paired_blocks_per_target": 6,
+    "paired_blocks_total": 42,
+    "paired_cell_phase_comparisons": 84,
+    "planned_cells": 84,
+    "manifest_id_format": "target/seed/arm",
+    "ordered_cell_ids": [
+      "posteriordb_accel_gp/96101/finest_to_coarsest",
+      "posteriordb_accel_gp/96101/coarsest_to_finest",
+      "posteriordb_accel_gp/96102/coarsest_to_finest",
+      "posteriordb_accel_gp/96102/finest_to_coarsest",
+      "posteriordb_accel_gp/96103/finest_to_coarsest",
+      "posteriordb_accel_gp/96103/coarsest_to_finest",
+      "posteriordb_accel_gp/96104/coarsest_to_finest",
+      "posteriordb_accel_gp/96104/finest_to_coarsest",
+      "posteriordb_accel_gp/96105/finest_to_coarsest",
+      "posteriordb_accel_gp/96105/coarsest_to_finest",
+      "posteriordb_accel_gp/96106/coarsest_to_finest",
+      "posteriordb_accel_gp/96106/finest_to_coarsest",
+      "posteriordb_gp_pois_regr/96101/finest_to_coarsest",
+      "posteriordb_gp_pois_regr/96101/coarsest_to_finest",
+      "posteriordb_gp_pois_regr/96102/coarsest_to_finest",
+      "posteriordb_gp_pois_regr/96102/finest_to_coarsest",
+      "posteriordb_gp_pois_regr/96103/finest_to_coarsest",
+      "posteriordb_gp_pois_regr/96103/coarsest_to_finest",
+      "posteriordb_gp_pois_regr/96104/coarsest_to_finest",
+      "posteriordb_gp_pois_regr/96104/finest_to_coarsest",
+      "posteriordb_gp_pois_regr/96105/finest_to_coarsest",
+      "posteriordb_gp_pois_regr/96105/coarsest_to_finest",
+      "posteriordb_gp_pois_regr/96106/coarsest_to_finest",
+      "posteriordb_gp_pois_regr/96106/finest_to_coarsest",
+      "posteriordb_eight_schools_centered/96101/finest_to_coarsest",
+      "posteriordb_eight_schools_centered/96101/coarsest_to_finest",
+      "posteriordb_eight_schools_centered/96102/coarsest_to_finest",
+      "posteriordb_eight_schools_centered/96102/finest_to_coarsest",
+      "posteriordb_eight_schools_centered/96103/finest_to_coarsest",
+      "posteriordb_eight_schools_centered/96103/coarsest_to_finest",
+      "posteriordb_eight_schools_centered/96104/coarsest_to_finest",
+      "posteriordb_eight_schools_centered/96104/finest_to_coarsest",
+      "posteriordb_eight_schools_centered/96105/finest_to_coarsest",
+      "posteriordb_eight_schools_centered/96105/coarsest_to_finest",
+      "posteriordb_eight_schools_centered/96106/coarsest_to_finest",
+      "posteriordb_eight_schools_centered/96106/finest_to_coarsest",
+      "posteriordb_eight_schools_noncentered/96101/finest_to_coarsest",
+      "posteriordb_eight_schools_noncentered/96101/coarsest_to_finest",
+      "posteriordb_eight_schools_noncentered/96102/coarsest_to_finest",
+      "posteriordb_eight_schools_noncentered/96102/finest_to_coarsest",
+      "posteriordb_eight_schools_noncentered/96103/finest_to_coarsest",
+      "posteriordb_eight_schools_noncentered/96103/coarsest_to_finest",
+      "posteriordb_eight_schools_noncentered/96104/coarsest_to_finest",
+      "posteriordb_eight_schools_noncentered/96104/finest_to_coarsest",
+      "posteriordb_eight_schools_noncentered/96105/finest_to_coarsest",
+      "posteriordb_eight_schools_noncentered/96105/coarsest_to_finest",
+      "posteriordb_eight_schools_noncentered/96106/coarsest_to_finest",
+      "posteriordb_eight_schools_noncentered/96106/finest_to_coarsest",
+      "neal_funnel_10d/96101/finest_to_coarsest",
+      "neal_funnel_10d/96101/coarsest_to_finest",
+      "neal_funnel_10d/96102/coarsest_to_finest",
+      "neal_funnel_10d/96102/finest_to_coarsest",
+      "neal_funnel_10d/96103/finest_to_coarsest",
+      "neal_funnel_10d/96103/coarsest_to_finest",
+      "neal_funnel_10d/96104/coarsest_to_finest",
+      "neal_funnel_10d/96104/finest_to_coarsest",
+      "neal_funnel_10d/96105/finest_to_coarsest",
+      "neal_funnel_10d/96105/coarsest_to_finest",
+      "neal_funnel_10d/96106/coarsest_to_finest",
+      "neal_funnel_10d/96106/finest_to_coarsest",
+      "gaussian_100d/96101/finest_to_coarsest",
+      "gaussian_100d/96101/coarsest_to_finest",
+      "gaussian_100d/96102/coarsest_to_finest",
+      "gaussian_100d/96102/finest_to_coarsest",
+      "gaussian_100d/96103/finest_to_coarsest",
+      "gaussian_100d/96103/coarsest_to_finest",
+      "gaussian_100d/96104/coarsest_to_finest",
+      "gaussian_100d/96104/finest_to_coarsest",
+      "gaussian_100d/96105/finest_to_coarsest",
+      "gaussian_100d/96105/coarsest_to_finest",
+      "gaussian_100d/96106/coarsest_to_finest",
+      "gaussian_100d/96106/finest_to_coarsest",
+      "state_space_sspd11_t1000/96101/finest_to_coarsest",
+      "state_space_sspd11_t1000/96101/coarsest_to_finest",
+      "state_space_sspd11_t1000/96102/coarsest_to_finest",
+      "state_space_sspd11_t1000/96102/finest_to_coarsest",
+      "state_space_sspd11_t1000/96103/finest_to_coarsest",
+      "state_space_sspd11_t1000/96103/coarsest_to_finest",
+      "state_space_sspd11_t1000/96104/coarsest_to_finest",
+      "state_space_sspd11_t1000/96104/finest_to_coarsest",
+      "state_space_sspd11_t1000/96105/finest_to_coarsest",
+      "state_space_sspd11_t1000/96105/coarsest_to_finest",
+      "state_space_sspd11_t1000/96106/coarsest_to_finest",
+      "state_space_sspd11_t1000/96106/finest_to_coarsest"
+    ]
+  },
+  "semantic_identity": {
+    "algorithm": "SHA-256",
+    "domain_separator_ascii": "owalnuts.reverse_coarsening_order_v1.semantic.v1",
+    "encoding": "canonical length-delimited little-endian fields; floating-point values use IEEE-754 f64::to_bits() encoded as little-endian u64",
+    "included": [
+      "target and effective configuration identity, evidence seed, and chain index",
+      "exact initial unconstrained position bits",
+      "all retained unconstrained draw bits",
+      "all retained posteriordb constrained/reference-parameter bits",
+      "every warmup and retained transition phase/index",
+      "selection result and selected-state bits",
+      "orbit direction, depth, and leaf-selection trace",
+      "sampler RNG state or exact digest before and after each transition",
+      "every adaptation input/output and dual-averaging state",
+      "warmup-window boundaries and metric installations",
+      "final tuning and metric bits"
+    ],
+    "excluded": [
+      "reverse-work counters",
+      "visited reverse-level order and list",
+      "reverse-only energy extrema and traces",
+      "stop, rejection, and cause fields"
+    ],
+    "separate_exact_comparisons": {
+      "stop_rejection_sequence": "Exact canonical per-chain per-transition warmup and retained stop and leaf-rejection sequence, including public sampler/target error identity.",
+      "forward_call_identity": {
+        "algorithm": "SHA-256",
+        "domain_separator_ascii": "owalnuts.reverse_coarsening_order_v1.forward_calls.v1",
+        "included": "Every forward target call phase, chain, transition, leaf/step index, unconstrained input bits, and returned log-density/gradient/error bits.",
+        "counts_exact": true
+      },
+      "initial_positions": "Exact four per-chain position hashes.",
+      "effective_configuration": "Exact configuration fingerprints."
+    }
+  },
+  "required_telemetry_per_cell_phase": [
+    "forward target calls",
+    "reverse target calls",
+    "total target calls",
+    "attempted reverse micro-steps",
+    "executed reverse micro-steps",
+    "generated reverse-level histogram",
+    "visited reverse-level histogram",
+    "first-rejecting reverse level and cause",
+    "forward and reverse invalid evaluations",
+    "all stop and rejection counts",
+    "divergences",
+    "refinement exhaustions",
+    "maximum-depth stops",
+    "nonfinite outcomes",
+    "sampler and public target errors",
+    "final step and metric",
+    "wall duration"
+  ],
+  "validity_reporting": {
+    "selection_role": "descriptive only; all planned cells remain in the mechanical gates",
+    "posteriordb": [
+      "ArviZ 0.23.4 rank-normalized split R-hat, bulk ESS, tail ESS, mean, SD, and MCSE for every reference parameter",
+      "reference agreement for every parameter",
+      "all health and work counters"
+    ],
+    "funnel": [
+      "P(omega < -5), P(omega < -6), indicator MCSEs, descriptive z scores, and Var(omega)",
+      "omega rank R-hat, bulk ESS, tail ESS, and all health/work counters"
+    ],
+    "gaussian100": [
+      "mean, variance, rank R-hat, bulk ESS, and tail ESS for all 100 coordinates",
+      "all health and work counters"
+    ],
+    "state_space": [
+      "mean, SD, MCSE, rank R-hat, bulk ESS, and tail ESS for all eight frozen functionals",
+      "all health and work counters"
+    ],
+    "wall": "reported only and never gated"
+  },
+  "process_contract": {
+    "fresh_child_per_cell": true,
+    "launch_marker": "atomic immutable create-new marker keyed by target, seed, and arm",
+    "marker_or_process_record_forbids_relaunch": true,
+    "maximum_launches_per_cell": 1,
+    "atomic_raw_result": "write temporary result, flush, and atomically rename before teardown",
+    "nonzero_exit_after_result": "process failure",
+    "sampler_error_in_successful_process": "valid failing result",
+    "parent_process_record": [
+      "command",
+      "timestamps",
+      "PID and process start time",
+      "stdout and stderr plus SHA-256",
+      "timeout state",
+      "raw, signed, unsigned, and hexadecimal exit status",
+      "raw-result state and SHA-256"
+    ],
+    "no_reruns": true,
+    "replacement_seeds": false,
+    "result_driven_exclusions": false,
+    "post_first_evidence_defect_policy": "Mechanical failure; preserve evidence and do not restart."
+  },
+  "provenance_contract": {
+    "required_committed_before_first_evidence": true,
+    "required_bindings": [
+      "source baseline commit and tree",
+      "PREREGISTRATION.md and protocol.json UTF-8/LF-normalized SHA-256",
+      "candidate and harness source commit and tree",
+      "complete release binary SHA-256",
+      "Cargo.lock and toolchain hashes",
+      "ordered manifest SHA-256",
+      "serialized effective target and arm configurations",
+      "rustc -Vv, Cargo profile/features, OS/build/CPU metadata, and dependency versions",
+      "posteriordb checkout commit and tree",
+      "all external Stan source, data JSON, compiled model library, BridgeStan runtime, and native dependency SHA-256 values and byte lengths",
+      "state-space target, oracle, fixture, and start hashes",
+      "pure-target implementation hashes"
+    ],
+    "evidence_outputs": "append-only",
+    "hash_or_configuration_mismatch": "cell unauthenticated and study fails"
+  },
+  "gates": {
+    "M1_completeness_and_authentication": {
+      "planned_launch_records": 84,
+      "planned_process_records": 84,
+      "planned_raw_records": 84,
+      "all_launched_exactly_once": true,
+      "all_successful_processes": true,
+      "all_complete_schema_valid_finite": true,
+      "all_manifest_binary_model_data_target_config_authenticated": true,
+      "minimum_valid_subset": null
+    },
+    "M2_identity": {
+      "all_42_paired_blocks_semantic_hash_equal": true,
+      "all_stop_rejection_sequences_exact": true,
+      "all_public_error_identities_exact": true,
+      "all_forward_call_hashes_and_counts_exact": true,
+      "all_initial_positions_exact": true,
+      "all_effective_configurations_exact": true
+    },
+    "M3_no_health_or_invalid_regression": {
+      "no_candidate_only_event_classes": [
+        "process failure",
+        "sampler error",
+        "public target error",
+        "nonfinite result",
+        "divergence",
+        "invalid evaluation",
+        "invalid stop",
+        "refinement exhaustion"
+      ],
+      "candidate_cell_phase_counts_lte_incumbent": [
+        "invalid evaluations",
+        "invalid stops",
+        "divergences",
+        "refinement exhaustions",
+        "nonfinite outcomes",
+        "sampler errors",
+        "public target errors"
+      ],
+      "candidate_target_and_global_sums_lte_incumbent": true
+    },
+    "E1_cell_phase_nonincrease": {
+      "comparison_units": 84,
+      "unit": "target/seed paired block x warmup or retained phase, summed over four chains",
+      "candidate_reverse_calls_lte_incumbent_in_every_unit": true,
+      "candidate_total_calls_lte_incumbent_in_every_unit": true
+    },
+    "E2_strict_global_saving": {
+      "candidate_reverse_calls_strictly_lt_incumbent": true,
+      "candidate_total_calls_strictly_lt_incumbent": true,
+      "incumbent_reverse_calls_must_be_positive": true,
+      "candidate_reverse_calls_div_incumbent_reverse_calls_max": 0.95
+    },
+    "E3_target_nonincrease": {
+      "targets": 7,
+      "aggregation": "sum all six seeds, four chains, and both phases within target",
+      "candidate_reverse_calls_lte_incumbent_for_every_target": true,
+      "candidate_total_calls_lte_incumbent_for_every_target": true,
+      "warmup_and_retained_subtotals_reported": true
+    }
+  },
+  "decision": {
+    "pass_condition": "M1-M3 and E1-E3 all pass using all 84 cells.",
+    "pass_label": "QUALIFIED_FOR_SEPARATE_HIGH_LEVEL_DEFAULT_IMPLEMENTATION",
+    "pass_action": "Authorize a separate labelled implementation selecting CoarsestToFinest only in the high-level owalnuts::sampler default while preserving walnutpie::KernelOptions::default(), RunConfig, v10 revision, fingerprints, and replay as FinestToCoarsest.",
+    "failure_or_inconclusive_label": "KEEP_FINEST_TO_COARSEST",
+    "failure_or_inconclusive_action": "Keep FinestToCoarsest as both high-level and walnutpie default; candidate remains research-only.",
+    "this_preregistration_authorizes_code_or_default_change": false
+  },
+  "reporting": {
+    "report_all_84_cells": true,
+    "report_every_gate": true,
+    "seed_selection": false,
+    "target_selection": false,
+    "chain_selection": false,
+    "phase_selection": false,
+    "result_selection": false,
+    "reruns": false
+  },
+  "predictions": {
+    "P1": "All deterministic all-valid paths have exact semantic hashes, exact stop/rejection sequences, exact forward-call identity, and no health or invalid regression.",
+    "P2": "CoarsestToFinest reduces global reverse calls by at least 5 percent, never increases reverse or total calls in a cell/phase, and strictly lowers both global sums.",
+    "P3": "The largest call reductions occur on accel_gp, gp_pois_regr, and centered/noncentered Eight Schools; no target aggregate increases.",
+    "P4": "The predicted result is QUALIFIED_FOR_SEPARATE_HIGH_LEVEL_DEFAULT_IMPLEMENTATION; this prediction weakens no gate and authorizes nothing before the frozen evidence result."
+  }
+}
