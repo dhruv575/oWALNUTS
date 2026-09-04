@@ -1,6 +1,13 @@
 # reverse_coarsening_order_v1 (WP37B)
 
-Status: **implementation and one-shot harness complete; no evidence launched**.
+Status: **paused incomplete on 2026-09-04; 72 of 84 cells authenticated,
+cell 72 failed, 11 cells never launched; partial record archived; verdict
+`KEEP_FINEST_TO_COARSEST`; no default changed.** See
+[`LEDGER-ENTRY.md`](LEDGER-ENTRY.md) for the pause record and
+`evidence/ARTIFACTS-MANIFEST.sha256` for the SHA-256 and byte size of every
+uncommitted telemetry file under `evidence/artifacts/` (119 GB, ignored by
+Git, kept on the study machine). Nothing under `evidence/` was rerun,
+replaced, or deleted.
 
 Controlling review clarifications, in order:
 [`AMENDMENT-1.md`](AMENDMENT-1.md), then
