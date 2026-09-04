@@ -375,18 +375,22 @@ on Eight Schools at four threads, parity with nutpie.
       owned-one-worker/process-global-serialization backend and complete the
       final 720-child Windows GNU diagnostic; immutable earlier evidence was
       not rerun
-- [ ] Observe a green dedicated BridgeStan 2.9.0 real-model CI gate on Linux
-      GNU and on a Windows MSVC Rust host loading the MinGW-built model; the
-      workflow is configured, but has not run externally. Windows Python
-      `from_stan` remains disabled
-- [ ] Observe green core and integration matrices including Windows MSVC 1.88,
-      and green release jobs for Windows, manylinux x86_64/aarch64, macOS
-      x86_64/arm64 and the sdist; these workflow gates are configured but
-      remain pending
-- [ ] Configure the repository `pypi` environment and pending PyPI trusted
-      publisher, then push and observe the required CI gates
-- [ ] `git tag v0.2.0`, `cargo publish` and PyPI publish — blocked on the
-      preceding external gates
+- [x] Green dedicated BridgeStan 2.9.0 real-model CI gate on Linux GNU and on
+      a Windows MSVC Rust host loading the MinGW-built model (run 33926437149,
+      2026-09-04). Windows Python `from_stan` remains disabled
+- [x] Green core and integration matrices including Windows MSVC 1.88 (CI run
+      33927801361 on `60a54a2`), after pinning platform-specific kernel
+      fingerprints (Linux glibc differs from Windows in the last bits of the
+      draws; call counts and every trajectory decision agree)
+- [x] Green release jobs for Windows, manylinux x86_64/aarch64, macOS
+      x86_64/arm64, the sdist and the optional Linux backends on Python 3.10
+      and 3.13 (manual `wheels.yml` dispatch, run 33927800782, publish
+      skipped by design off a tag)
+- [ ] Configure the repository `pypi` environment and the PyPI trusted
+      publisher for `owalnuts` (repository owner action on pypi.org)
+- [ ] `git tag v0.2.0` and push the tag (runs `wheels.yml` with publish),
+      then `cargo publish` from a `cargo login`-ed shell; `cargo publish
+      --dry-run` already passes (61 files, 3.9 MiB compressed)
 
 ### Final default and benchmark status
 

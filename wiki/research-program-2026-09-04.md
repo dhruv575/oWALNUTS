@@ -224,12 +224,16 @@ models (0.67–0.95x).
    macOS as applicable. Keep the WP35/WP36 and both lifetime-study raw trees
    immutable. Nothing in these failures identifies a defect in the core Rust
    sampler.
-2. **Release/package verification.** Exercise the core crate on Windows MSVC
-   and Linux, and the Python/BridgeStan package jobs across Windows, manylinux
-   x86_64/aarch64 and macOS x86_64/arm64, including the sdist. Expert Rust
-   `StanTarget` use is mitigation-qualified only on Windows GNU; Windows
-   Python `from_stan` and direct Python BridgeStan remain disabled.
-   Publication remains blocked until this matrix is complete.
+2. **Release/package verification: done on 2026-09-04.** Main was pushed to
+   GitHub and the core matrix (Linux GNU 1.88, Linux stable, Windows GNU 1.88,
+   Windows MSVC 1.88, the three integration jobs and both BridgeStan
+   real-model gates) is green, after pinning Linux-specific kernel
+   fingerprints. A manual wheels dispatch built and tested the Windows,
+   manylinux x86_64/aarch64 and macOS x86_64/arm64 wheels, the sdist and the
+   optional Linux backends. What remains is owner action: the PyPI trusted
+   publisher, the `v0.2.0` tag and `cargo publish`. Expert Rust `StanTarget`
+   use is mitigation-qualified only on Windows GNU; Windows Python
+   `from_stan` and direct Python BridgeStan remain disabled.
 3. **Reverse-coarsening: WP37B archived, a fresh protocol is needed.** WP37B
    preregistered finest-to-coarsest versus coarsest-to-finest reverse checks
    at fixed `delta = 1`, as an explicit opt-in qualification only. It was
