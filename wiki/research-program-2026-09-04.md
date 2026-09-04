@@ -230,19 +230,30 @@ models (0.67–0.95x).
    `StanTarget` use is mitigation-qualified only on Windows GNU; Windows
    Python `from_stan` and direct Python BridgeStan remain disabled.
    Publication remains blocked until this matrix is complete.
-3. **Resolve the paused reverse-coarsening study before starting another
-   kernel experiment.** WP37B preregistered finest-to-coarsest versus
-   coarsest-to-finest reverse checks at fixed `delta = 1`, as an explicit
-   opt-in qualification only. The first 72 cells (four posteriordb targets,
-   funnel and Gaussian) returned authenticated results. The 73rd launch, the
-   incumbent-order `sspd-11` seed 96101 cell, exited 1 after 23.13 s with
-   `canonical log density or gradient is not representable as finite f64`
-   on chain 1, transition 1; it wrote no raw result. The unchanged runner then
-   stopped, leaving 11 state-space cells unlaunched. Under the frozen rule the
-   study is incomplete and cannot qualify the candidate. No cell was rerun,
-   no result was merged, and no default changed. Preserve and archive the
-   partial record before deciding whether a fresh protocol should omit or
-   repair that target; any new evidence decision requires fresh seeds.
+3. **Reverse-coarsening: WP37B archived, a fresh protocol is needed.** WP37B
+   preregistered finest-to-coarsest versus coarsest-to-finest reverse checks
+   at fixed `delta = 1`, as an explicit opt-in qualification only. It was
+   paused after cell 72 (the incumbent-order `sspd-11` seed 96101 cell) exited
+   with a fatal target error at chain 1, transition 1, leaving 11 state-space
+   cells unlaunched; the frozen rule returns `KEEP_FINEST_TO_COARSEST`. The
+   partial exactly-once record (73 process records, 72 authenticated raw
+   results, a SHA-256 manifest of the 119 GB ignored telemetry tree) is
+   archived and merged. Descriptively, over the 36 complete paired blocks the
+   candidate made *more* reverse calls (ratio 1.086), which lowers the prior
+   that coarsest-first is cheaper. The follow-up diagnostic
+   (`STUDIES/sspd_target_fatal_diag_v1`) shows the stop was the frozen
+   target's fatal classification of reachable non-finite results, reproduced
+   at every diagnostic seed at the frozen initial step. Any renewed decision
+   needs a fresh preregistration and seeds, and must omit or repair that
+   target before evidence.
+3a. **Kernel policy on a non-finite proposed position.** With the target
+   repaired, 2 of 13 diagnostic seeds at initial step 0.5 still abort the whole
+   run with `ErrorKind::Numerical` ("kernel attempted a nonfinite target
+   position"). Stan treats the same event as a divergent leaf and continues.
+   Whether oWALNUTS should do likewise is a robustness decision for a
+   preregistered study: it cannot change registered fingerprints on targets
+   where the event never occurs, but it changes what a user sees on stiff
+   targets with an aggressive initial step.
 4. **Further target-adaptive `delta` research, after reverse-coarsening.**
    WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
    fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.
