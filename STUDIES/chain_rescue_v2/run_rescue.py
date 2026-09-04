@@ -22,6 +22,7 @@ import statistics
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Iterable
@@ -31,6 +32,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 PROTOCOL_PATH = HERE / "protocol.json"
 PROTOCOL = json.loads(PROTOCOL_PATH.read_text(encoding="utf-8"))
+AMENDMENT_1 = HERE / "AMENDMENT-1.md"
+AMENDMENT_2 = HERE / "AMENDMENT-2.md"
 ARTIFACTS = HERE / "artifacts"
 RAW = ARTIFACTS / "raw"
 PROCESSES = ARTIFACTS / "processes"
@@ -41,6 +44,9 @@ STDERR = ARTIFACTS / "stderr"
 CELLS = ARTIFACTS / "cells"
 DRAWS = ARTIFACTS / "draws"
 CONFORMANCE = ARTIFACTS / "conformance" / "observe-vs-disabled.json"
+CONFORMANCE_HISTORY = ARTIFACTS / "conformance" / "history"
+INPUT_MANIFEST = ARTIFACTS / "provenance" / "external-inputs.json"
+BUILD_MANIFEST = ARTIFACTS / "provenance" / "build-manifest.json"
 
 DEFAULT_ASSETS = Path(
     r"C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6"
@@ -62,11 +68,57 @@ MODELS = tuple(PROTOCOL["posteriordb"]["models"])
 SEEDS = tuple(int(seed) for seed in PROTOCOL["seeds"])
 TIMEOUT = int(os.environ.get("WP36_CELL_TIMEOUT_SECONDS", "7200"))
 INITIAL_DOMAIN = b"chain_rescue_v2.initial_position.v1"
+INSTALLED_DOMAIN = b"chain_rescue_v2.installed_position.v1"
 RETAINED_DOMAIN = b"chain_rescue_v2.retained_unconstrained.v1"
 ARRAY_DOMAIN = b"chain_rescue_v2.numpy_array.v1"
 BOUNDARY_FIELDS = set(PROTOCOL["telemetry"]["required_per_boundary_per_chain"])
 RESTART_FIELDS = set(PROTOCOL["telemetry"]["required_on_restart"])
+RESTART_FIELDS.add("installed_unconstrained_position")
 OUTCOMES = set(PROTOCOL["telemetry"]["outcomes"])
+EXPECTED_PYTHON = "3.11.16"
+EXPECTED_ARVIZ = "0.23.4"
+EXPECTED_NUMPY = "2.4.6"
+EXPECTED_BRIDGESTAN = "2.9.0"
+EXPECTED_POSTERIORDB = "0.2.0"
+EXPECTED_TOOLCHAIN = "1.88.0-x86_64-pc-windows-gnu"
+WORK_FIELDS = {
+    "transitions",
+    "momentum_refreshes",
+    "standard_normal_components",
+    "target_calls_initial",
+    "target_calls_forward",
+    "target_calls_reverse",
+    "target_calls_total",
+    "forward_refinement_attempts",
+    "forward_micro_steps_executed",
+    "reverse_coarsening_attempts",
+    "reverse_micro_steps_executed",
+    "leaves_attempted",
+    "leaves_built",
+    "direction_draws",
+    "uniform_draws",
+    "maximum_depth_stops",
+    "recoverable_target_failures",
+    "zero_density_evaluations",
+    "divergences",
+    "invalid_evaluation_stops",
+    "refinement_exhaustion_stops",
+    "reverse_coarser_stops",
+    "reverse_coarser_rejections",
+    "accepted_forward_micro_steps",
+    "refinement_level_built",
+}
+DIAGNOSTIC_FIELDS = {
+    "divergences",
+    "maximum_depth_stops",
+    "invalid_evaluation_stops",
+    "recoverable_target_failures",
+    "zero_density_evaluations",
+    "refinement_exhaustion_stops",
+    "reverse_coarser_stops",
+    "reverse_coarser_rejections",
+    "target_calls_total",
+}
 
 
 def sha256(path: Path) -> str:
@@ -89,6 +141,16 @@ def atomic_write_text(path: Path, text: str) -> None:
 
 def write_json(path: Path, value: Any) -> None:
     atomic_write_text(path, json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def exclusive_write_json(path: Path, value: Any) -> None:
+    """Create an immutable JSON marker; never replace an existing path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8", newline="\n") as stream:
+        json.dump(value, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def short(target: str) -> str:
@@ -138,6 +200,16 @@ def initial_position_sha256(position: Iterable[float]) -> str:
     return digest.hexdigest()
 
 
+def installed_position_sha256(position: Iterable[float]) -> str:
+    values = list(position)
+    digest = hashlib.sha256()
+    digest.update(INSTALLED_DOMAIN)
+    digest.update(struct.pack("<Q", len(values)))
+    for value in values:
+        digest.update(struct.pack("<d", float(value)))
+    return digest.hexdigest()
+
+
 def rust_retained_sha256(values: np.ndarray) -> str:
     array = np.asarray(values, dtype="<f8", order="C")
     if array.ndim != 2:
@@ -158,6 +230,18 @@ def array_sha256(values: np.ndarray) -> str:
     for extent in array.shape:
         digest.update(struct.pack("<Q", extent))
     digest.update(array.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def names_sha256(names: Iterable[str]) -> str:
+    names = list(names)
+    digest = hashlib.sha256()
+    digest.update(b"chain_rescue_v2.names.v1")
+    digest.update(struct.pack("<Q", len(names)))
+    for name in names:
+        encoded = name.encode("utf-8")
+        digest.update(struct.pack("<Q", len(encoded)))
+        digest.update(encoded)
     return digest.hexdigest()
 
 
@@ -223,7 +307,340 @@ def model_paths(target: str) -> tuple[Path, Path]:
     return MODEL_DIR / f"{stem}_model.so", MODEL_DIR / f"{stem}.data.json"
 
 
-def validate_environment(require_binaries: bool = True) -> dict[str, Any]:
+def git_output(repository: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(repository), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or f"git {' '.join(args)} failed")
+    return completed.stdout.strip()
+
+
+def package_versions() -> dict[str, str]:
+    import arviz
+    import bridgestan
+    import posteriordb
+
+    return {
+        "python": sys.version.split()[0],
+        "arviz": arviz.__version__,
+        "numpy": np.__version__,
+        "bridgestan": bridgestan.__version__,
+        "posteriordb": posteriordb.__version__,
+    }
+
+
+def file_record(path: Path) -> dict[str, Any]:
+    return {
+        "path": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "sha256": sha256(path),
+    }
+
+
+def file_matches_record(path: Path, record: dict[str, Any]) -> bool:
+    return (
+        path.is_file()
+        and path.stat().st_size == record.get("bytes")
+        and sha256(path) == record.get("sha256")
+    )
+
+
+def pe_sections(path: Path) -> dict[str, dict[str, Any]]:
+    data = path.read_bytes()
+    if data[:2] != b"MZ":
+        raise ValueError(f"{path} is not a PE executable")
+    pe_offset = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe_offset : pe_offset + 4] != b"PE\0\0":
+        raise ValueError(f"{path} has no PE signature")
+    section_count = struct.unpack_from("<H", data, pe_offset + 6)[0]
+    optional_size = struct.unpack_from("<H", data, pe_offset + 20)[0]
+    table = pe_offset + 24 + optional_size
+    result = {}
+    for index in range(section_count):
+        offset = table + index * 40
+        name = data[offset : offset + 8].rstrip(b"\0").decode("ascii", errors="replace")
+        raw_size = struct.unpack_from("<I", data, offset + 16)[0]
+        raw_offset = struct.unpack_from("<I", data, offset + 20)[0]
+        raw = data[raw_offset : raw_offset + raw_size]
+        result[name] = {
+            "bytes": raw_size,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        }
+    return result
+
+
+def source_file_records(repository: Path) -> list[dict[str, Any]]:
+    paths = git_output(
+        repository,
+        "ls-files",
+        "Cargo.toml",
+        "Cargo.lock",
+        "src/*.rs",
+        "src/**/*.rs",
+        "integrations/bridgestan/Cargo.toml",
+        "integrations/bridgestan/src/*.rs",
+        "STUDIES/chain_rescue_v2/Cargo.toml",
+        "STUDIES/chain_rescue_v2/Cargo.lock",
+        "STUDIES/chain_rescue_v2/src/*.rs",
+        "STUDIES/chain_rescue_v2/src/**/*.rs",
+        "STUDIES/chain_rescue_v2/run_rescue.py",
+        "STUDIES/chain_rescue_v2/checksums.py",
+        "STUDIES/chain_rescue_v2/test_run_rescue.py",
+        "STUDIES/chain_rescue_v2/protocol.json",
+        "STUDIES/chain_rescue_v2/PREREGISTRATION.md",
+        "STUDIES/chain_rescue_v2/AMENDMENT-1.md",
+        "STUDIES/chain_rescue_v2/AMENDMENT-2.md",
+    ).splitlines()
+    return [
+        {
+            "path": path.replace("\\", "/"),
+            "bytes": (repository / path).stat().st_size,
+            "sha256": sha256(repository / path),
+        }
+        for path in sorted(set(paths))
+    ]
+
+
+def inspect_external_inputs() -> dict[str, Any]:
+    errors = []
+    files = {}
+    for target in MODELS:
+        model, data = model_paths(target)
+        files[target] = {}
+        for kind, path in (("model", model), ("data", data)):
+            if not path.is_file():
+                errors.append(f"{kind} missing for {target}: {path}")
+            else:
+                files[target][kind] = file_record(path)
+    if not PDB_PATH.exists():
+        errors.append(f"posteriordb checkout missing: {PDB_PATH}")
+        pdb = {}
+    else:
+        pdb = {
+            "path": str(PDB_PATH.resolve()),
+            "head": git_output(PDB_PATH, "rev-parse", "HEAD"),
+            "tree": git_output(PDB_PATH, "rev-parse", "HEAD^{tree}"),
+            "status_porcelain": git_output(PDB_PATH, "status", "--porcelain=v1"),
+        }
+        if pdb["head"] != PROTOCOL["posteriordb"]["commit"]:
+            errors.append(
+                f"posteriordb HEAD {pdb['head']} != {PROTOCOL['posteriordb']['commit']}"
+            )
+        if pdb["status_porcelain"]:
+            errors.append("posteriordb checkout is not clean")
+    versions = package_versions()
+    expected_versions = {
+        "python": EXPECTED_PYTHON,
+        "arviz": EXPECTED_ARVIZ,
+        "numpy": EXPECTED_NUMPY,
+        "bridgestan": EXPECTED_BRIDGESTAN,
+        "posteriordb": EXPECTED_POSTERIORDB,
+    }
+    for name, expected in expected_versions.items():
+        if versions[name] != expected:
+            errors.append(f"{name} {versions[name]} != audited {expected}")
+    result = {
+        "schema": "chain-rescue-v2-external-inputs",
+        "protocol_sha256": sha256(PROTOCOL_PATH),
+        "amendment_1_sha256": sha256(AMENDMENT_1),
+        "amendment_2_sha256": sha256(AMENDMENT_2),
+        "assets": str(ASSETS.resolve()),
+        "model_dir": str(MODEL_DIR.resolve()),
+        "posteriordb": pdb,
+        "versions": versions,
+        "expected_versions": expected_versions,
+        "files": files,
+        "verified": not errors,
+        "errors": errors,
+    }
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    return result
+
+
+def prepare_provenance() -> None:
+    if INPUT_MANIFEST.exists() or BUILD_MANIFEST.exists():
+        raise RuntimeError("provenance manifests already exist; refusing replacement")
+    repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
+    if git_output(repository, "status", "--porcelain=v1"):
+        raise RuntimeError("source worktree must be clean before audited build")
+    external = inspect_external_inputs()
+    exclusive_write_json(INPUT_MANIFEST, external)
+    source_commit = git_output(repository, "rev-parse", "HEAD")
+    source_tree = git_output(repository, "rev-parse", "HEAD^{tree}")
+    manifest_path = HERE / "Cargo.toml"
+    build_command = [
+        "cargo",
+        f"+{EXPECTED_TOOLCHAIN}",
+        "build",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        str(manifest_path),
+    ]
+    subprocess.run(build_command, cwd=repository, check=True)
+    primary = {
+        "cell": HARNESS,
+        "funnel": FUNNEL,
+        "conformance": CONFORMANCE_BIN,
+    }
+    with tempfile.TemporaryDirectory(prefix="wp36-audited-rebuild-") as temporary:
+        rebuild_command = build_command + ["--target-dir", temporary]
+        subprocess.run(rebuild_command, cwd=repository, check=True)
+        rebuilt = {
+            name: Path(temporary) / "release" / path.name for name, path in primary.items()
+        }
+        executables = {}
+        for name in primary:
+            left = file_record(primary[name])
+            right = file_record(rebuilt[name])
+            left_sections = pe_sections(primary[name])
+            right_sections = pe_sections(rebuilt[name])
+            full_match = left["sha256"] == right["sha256"] and left["bytes"] == right["bytes"]
+            section_match = left_sections == right_sections
+            if not full_match and not section_match:
+                raise RuntimeError(
+                    f"isolated rebuild differs in PE sections for {name}"
+                )
+            executables[name] = {
+                "primary": left,
+                "isolated_rebuild": right,
+                "full_file_match": full_match,
+                "all_pe_sections_match": section_match,
+                "primary_pe_sections": left_sections,
+                "isolated_pe_sections": right_sections,
+            }
+    build = {
+        "schema": "chain-rescue-v2-build-manifest",
+        "source_commit": source_commit,
+        "source_tree": source_tree,
+        "source_files": source_file_records(repository),
+        "toolchain": EXPECTED_TOOLCHAIN,
+        "rustc": subprocess.run(
+            ["rustc", f"+{EXPECTED_TOOLCHAIN}", "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip(),
+        "cargo": subprocess.run(
+            ["cargo", f"+{EXPECTED_TOOLCHAIN}", "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip(),
+        "build_command": build_command,
+        "isolated_rebuild_command": rebuild_command,
+        "external_input_manifest_sha256": sha256(INPUT_MANIFEST),
+        "executables": executables,
+    }
+    exclusive_write_json(BUILD_MANIFEST, build)
+    print(f"wrote {INPUT_MANIFEST.relative_to(HERE)}")
+    print(f"wrote {BUILD_MANIFEST.relative_to(HERE)}")
+
+
+def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
+    errors = []
+    if not INPUT_MANIFEST.is_file() or not BUILD_MANIFEST.is_file():
+        raise RuntimeError("audited input/build manifests are missing")
+    frozen = json.loads(INPUT_MANIFEST.read_text(encoding="utf-8"))
+    build = json.loads(BUILD_MANIFEST.read_text(encoding="utf-8"))
+    current = inspect_external_inputs()
+    for key in (
+        "protocol_sha256",
+        "amendment_1_sha256",
+        "amendment_2_sha256",
+        "posteriordb",
+        "versions",
+        "files",
+    ):
+        if current[key] != frozen.get(key):
+            errors.append(f"external provenance mismatch: {key}")
+    if build.get("external_input_manifest_sha256") != sha256(INPUT_MANIFEST):
+        errors.append("build manifest input-manifest hash mismatch")
+    repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
+    for record in build.get("source_files", []):
+        path = repository / record["path"]
+        if not file_matches_record(path, record):
+            errors.append(f"audited source mismatch: {record['path']}")
+    if build.get("toolchain") != EXPECTED_TOOLCHAIN:
+        errors.append("build manifest toolchain mismatch")
+    if require_binaries:
+        for name, path in (
+            ("cell", HARNESS),
+            ("funnel", FUNNEL),
+            ("conformance", CONFORMANCE_BIN),
+        ):
+            expected = build.get("executables", {}).get(name, {}).get("primary", {})
+            if not file_matches_record(path, expected):
+                errors.append(f"release executable mismatch: {name}")
+    result = {
+        "verified": not errors,
+        "errors": errors,
+        "input_manifest_sha256": sha256(INPUT_MANIFEST),
+        "build_manifest_sha256": sha256(BUILD_MANIFEST),
+        "source_commit": build.get("source_commit"),
+        "source_tree": build.get("source_tree"),
+        "executables": build.get("executables"),
+    }
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    return result
+
+
+def validate_conformance_artifact() -> dict[str, Any]:
+    if not CONFORMANCE.is_file():
+        raise RuntimeError("current conformance artifact is missing")
+    result = json.loads(CONFORMANCE.read_text(encoding="utf-8"))
+    errors = []
+    comparison = result.get("comparison", {})
+    required = (
+        "bit_identical",
+        "retained_draw_bytes_equal",
+        "work_counters_equal",
+        "final_adaptation_hashes_equal",
+        "retained_diagnostics_equal",
+        "non_rescue_telemetry_equal",
+        "no_rescue_rng_mutation",
+        "observed_hit_path_exercised",
+    )
+    if result.get("status") != "pass" or result.get("evidence") is not False:
+        errors.append("conformance is not a non-evidence PASS")
+    if not all(comparison.get(field) is True for field in required):
+        errors.append("conformance identity/hit requirements are incomplete")
+    if int(result.get("observe_hits", 0)) <= 0:
+        errors.append("conformance did not exercise an observed hit")
+    if int(comparison.get("observe_forbidden_outcomes", -1)) != 0:
+        errors.append("conformance recorded forbidden observe outcomes")
+    if result.get("protocol_sha256") != sha256(PROTOCOL_PATH):
+        errors.append("conformance protocol hash mismatch")
+    if result.get("amendment_1_sha256") != sha256(AMENDMENT_1):
+        errors.append("conformance amendment-1 hash mismatch")
+    if result.get("amendment_2_sha256") != sha256(AMENDMENT_2):
+        errors.append("conformance amendment-2 hash mismatch")
+    if result.get("build_manifest_sha256") != sha256(BUILD_MANIFEST):
+        errors.append("conformance build-manifest hash mismatch")
+    expected_exe = json.loads(BUILD_MANIFEST.read_text(encoding="utf-8"))[
+        "executables"
+    ]["conformance"]["primary"]
+    if result.get("conformance_executable") != expected_exe:
+        errors.append("conformance executable provenance mismatch")
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    return {
+        "authenticated": True,
+        "artifact_sha256": sha256(CONFORMANCE),
+        "observe_hits": result["observe_hits"],
+        "build_manifest_sha256": result["build_manifest_sha256"],
+    }
+
+
+def validate_environment(
+    require_binaries: bool = True, require_conformance: bool = True
+) -> dict[str, Any]:
     errors: list[str] = []
     if len(planned_cells()) != 288:
         errors.append(f"planned cell count is {len(planned_cells())}, expected 288")
@@ -231,75 +648,175 @@ def validate_environment(require_binaries: bool = True) -> dict[str, Any]:
         errors.append("protocol must contain 12 unique evidence seeds")
     if TARGETS[-1] != "funnel-10d" or tuple(TARGETS[:-1]) != MODELS:
         errors.append("target order does not match the frozen model order plus funnel")
-    observed_models = {}
-    for target in MODELS:
-        model, data = model_paths(target)
-        observed_models[target] = {
-            "model": str(model),
-            "model_exists": model.is_file(),
-            "data": str(data),
-            "data_exists": data.is_file(),
-        }
-        if not model.is_file() or not data.is_file():
-            errors.append(f"external compiled model/data missing for {target}")
-    binaries = {
-        "cell": str(HARNESS),
-        "funnel": str(FUNNEL),
-        "conformance": str(CONFORMANCE_BIN),
-    }
-    if require_binaries:
-        for name, value in binaries.items():
-            if not Path(value).is_file():
-                errors.append(f"{name} binary missing: {value}")
-    pdb_commit = None
-    if PDB_PATH.exists():
-        try:
-            completed = subprocess.run(
-                ["git", "-C", str(PDB_PATH), "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if completed.returncode == 0:
-                pdb_commit = completed.stdout.strip()
-                if pdb_commit != PROTOCOL["posteriordb"]["commit"]:
-                    errors.append(
-                        f"posteriordb commit {pdb_commit} != frozen "
-                        f"{PROTOCOL['posteriordb']['commit']}"
-                    )
-        except OSError as error:
-            errors.append(f"could not inspect posteriordb checkout: {error}")
-    else:
-        errors.append(f"posteriordb checkout missing: {PDB_PATH}")
+    try:
+        provenance = verify_provenance(require_binaries=require_binaries)
+    except Exception as error:
+        provenance = None
+        errors.append(str(error))
+    try:
+        conformance = validate_conformance_artifact() if require_conformance else None
+    except Exception as error:
+        conformance = None
+        errors.append(str(error))
     result = {
         "verified": not errors,
         "errors": errors,
         "protocol_sha256": sha256(PROTOCOL_PATH),
-        "assets": str(ASSETS),
-        "model_dir": str(MODEL_DIR),
-        "posteriordb_path": str(PDB_PATH),
-        "posteriordb_commit": pdb_commit,
-        "models": observed_models,
-        "binaries": binaries,
+        "amendment_1_sha256": sha256(AMENDMENT_1),
+        "amendment_2_sha256": sha256(AMENDMENT_2),
+        "provenance": provenance,
+        "conformance": conformance,
     }
     if errors:
         raise RuntimeError("; ".join(errors))
     return result
 
 
-def validate_boundary(event: dict[str, Any], target: str, arm: str, seed: int) -> list[str]:
-    errors = [f"missing boundary field {name}" for name in sorted(BOUNDARY_FIELDS - event.keys())]
+def finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def canonical_criterion(step_hit: bool, density_hit: bool) -> str | None:
+    return "Step" if step_hit else "LogDensity" if density_hit else None
+
+
+def validate_boundary(
+    event: dict[str, Any],
+    target: str,
+    arm: str,
+    seed: int,
+    chain: int,
+    dimension: int,
+    expected_prior: tuple[str | None, int],
+) -> tuple[list[str], tuple[str | None, int]]:
+    errors = [
+        f"missing boundary field {name}"
+        for name in sorted(BOUNDARY_FIELDS - event.keys())
+    ]
+    errors.extend(
+        f"missing restart-schema field {name}" for name in sorted(RESTART_FIELDS - event.keys())
+    )
     if event.get("target") != target or event.get("arm") != arm or event.get("seed") != seed:
         errors.append("boundary target/arm/seed does not match its cell")
+    if event.get("chain") != chain:
+        errors.append(f"boundary chain is {event.get('chain')!r}, expected {chain}")
+    for name in ("window_index", "transition", "window_transitions", "prior_streak", "resulting_streak"):
+        if not isinstance(event.get(name), int) or event[name] < 0:
+            errors.append(f"{name} is not a nonnegative integer")
+    for name in ("eligible", "step_hit", "density_hit"):
+        if not isinstance(event.get(name), bool):
+            errors.append(f"{name} is not boolean")
+    position = event.get("pre_action_unconstrained_position")
+    if not isinstance(position, list) or len(position) != dimension or not all(
+        finite_number(value) for value in position
+    ):
+        errors.append("pre-action position has wrong shape or nonfinite values")
+    if event.get("initial_position_sha256") is None:
+        errors.append("boundary initial-position hash is missing")
+
     outcome = event.get("outcome")
     if outcome not in OUTCOMES:
         errors.append(f"invalid outcome {outcome!r}")
-    if outcome == "restarted":
-        errors.extend(
-            f"restart field {name} is missing/null"
-            for name in sorted(RESTART_FIELDS)
-            if event.get(name) is None
+    eligible = event.get("eligible") is True
+    if eligible and event.get("skip_reason") is not None:
+        errors.append("eligible boundary has a skip reason")
+    if not eligible and event.get("skip_reason") not in {
+        "ShortWindow",
+        "NoSource",
+        "NonFiniteScore",
+    }:
+        errors.append("ineligible boundary lacks an exact valid skip reason")
+    if not eligible and outcome != "skipped":
+        errors.append("ineligible boundary outcome is not skipped")
+
+    if not finite_number(event.get("current_step")):
+        errors.append("current_step is missing or nonfinite")
+    if eligible:
+        for name in (
+            "median_step",
+            "step_threshold",
+            "median_log_density",
+            "log_density_iqr",
+            "density_reference",
+            "density_spread",
+            "density_gap",
+            "density_threshold",
+        ):
+            if not finite_number(event.get(name)):
+                errors.append(f"eligible boundary {name} is missing or nonfinite")
+        if all(
+            finite_number(event.get(name))
+            for name in (
+                "median_step",
+                "step_threshold",
+                "median_log_density",
+                "density_reference",
+                "density_spread",
+                "density_gap",
+                "density_threshold",
+                "current_step",
+            )
+        ):
+            if event["step_threshold"] != 0.1 * event["median_step"]:
+                errors.append("step threshold does not equal 0.1 * median step")
+            if event["density_threshold"] != 3.0 * event["density_spread"]:
+                errors.append("density threshold does not equal 3.0 * spread")
+            if event["density_gap"] != event["density_reference"] - event["median_log_density"]:
+                errors.append("density gap is inconsistent")
+            if event["step_hit"] != (event["current_step"] < event["step_threshold"]):
+                errors.append("step_hit is inconsistent")
+            if event["density_hit"] != (
+                event["density_gap"] > event["density_threshold"]
+            ):
+                errors.append("density_hit is inconsistent")
+    criterion = canonical_criterion(
+        event.get("step_hit") is True, event.get("density_hit") is True
+    ) if eligible else None
+    if event.get("observed_canonical_criterion") != criterion:
+        errors.append("canonical criterion is inconsistent")
+    if event.get("outcome_criterion") != (
+        criterion if outcome in {"observed_hit", "pending_first_hit", "restarted"} else None
+    ):
+        errors.append("outcome criterion is inconsistent")
+
+    recorded_prior = (event.get("prior_criterion"), event.get("prior_streak"))
+    if recorded_prior != expected_prior:
+        errors.append(f"prior streak {recorded_prior!r} != expected {expected_prior!r}")
+    if arm in {"observe", "current"}:
+        expected_result = (None, 0)
+        expected_outcome = (
+            "skipped"
+            if not eligible
+            else ("observed_hit" if arm == "observe" else "restarted")
+            if criterion is not None
+            else "kept"
         )
+    elif not eligible or criterion is None:
+        expected_result = (None, 0)
+        expected_outcome = "skipped" if not eligible else "kept"
+    elif expected_prior == (criterion, 1):
+        expected_result = (None, 0)
+        expected_outcome = "restarted"
+    else:
+        expected_result = (criterion, 1)
+        expected_outcome = "pending_first_hit"
+    recorded_result = (event.get("resulting_criterion"), event.get("resulting_streak"))
+    if recorded_result != expected_result:
+        errors.append(f"resulting streak {recorded_result!r} != expected {expected_result!r}")
+    if outcome != expected_outcome:
+        errors.append(f"outcome {outcome!r} != expected {expected_outcome!r}")
+
+    if outcome == "restarted":
+        for name in RESTART_FIELDS:
+            if event.get(name) is None:
+                errors.append(f"restart field {name} is missing/null")
+        installed = event.get("installed_unconstrained_position")
+        if not isinstance(installed, list) or len(installed) != dimension or not all(
+            finite_number(value) for value in installed
+        ):
+            errors.append("installed position has wrong shape or nonfinite values")
+        elif installed_position_sha256(installed) != event.get("installed_position_sha256"):
+            errors.append("installed position hash mismatch")
     elif any(event.get(name) is not None for name in RESTART_FIELDS):
         errors.append("non-restart boundary contains restart-only fields")
     if arm == "observe" and (
@@ -308,10 +825,7 @@ def validate_boundary(event: dict[str, Any], target: str, arm: str, seed: int) -
         or event.get("installed_position_sha256") is not None
     ):
         errors.append("observe consumed or simulated rescue state")
-    if event.get("step_hit") and event.get("density_hit"):
-        if event.get("observed_canonical_criterion") != "Step":
-            errors.append("canonical criterion did not give Step priority")
-    return errors
+    return errors, expected_result
 
 
 def validate_raw(
@@ -325,12 +839,75 @@ def validate_raw(
     )
     if raw.get("schema") != expected_schema:
         errors.append(f"schema is {raw.get('schema')!r}, expected {expected_schema!r}")
+    if raw.get("schema_version") != 1:
+        errors.append("raw schema_version is not 1")
     if raw.get("complete") is not True:
         errors.append("raw result is not marked complete")
     if raw.get("target") != target or raw.get("arm") != arm or raw.get("seed") != seed:
         errors.append("raw target/arm/seed mismatch")
-    if raw.get("status") not in {"ok", "sampler_error"}:
+    status = raw.get("status")
+    if status not in {"ok", "sampler_error"}:
         errors.append(f"invalid raw status {raw.get('status')!r}")
+    expected_warmup = 2_000 if target == "funnel-10d" else 1_000
+    expected_retained = 20_000 if target == "funnel-10d" else 1_000
+    for name, expected in (
+        ("chains", 4),
+        ("warmup", expected_warmup),
+        ("retained", expected_retained),
+        ("threads", 4),
+    ):
+        if raw.get(name) != expected:
+            errors.append(f"{name} is {raw.get(name)!r}, expected {expected}")
+    dimension = raw.get("dimension")
+    if not isinstance(dimension, int) or dimension <= 0:
+        errors.append("dimension is missing or invalid")
+        dimension = 0
+    elif target == "funnel-10d" and dimension != 10:
+        errors.append("funnel dimension is not 10")
+    if status == "ok" and (
+        not isinstance(raw.get("target_calls_total"), int)
+        or raw["target_calls_total"] <= 0
+    ):
+        errors.append("successful cell target_calls_total is missing/nonpositive")
+    if status == "ok" and not isinstance(raw.get("tuning"), dict):
+        errors.append("successful cell tuning settings are missing")
+    if not isinstance(raw.get("algorithm_revision"), str) or not raw["algorithm_revision"]:
+        errors.append("algorithm revision is missing")
+    if target != "funnel-10d":
+        init = raw.get("init")
+        if (
+            not isinstance(init, dict)
+            or init.get("rule") != "owalnuts::sampler::Init::uniform()"
+            or init.get("radius") != 2.0
+            or init.get("max_attempts") != 100
+            or not isinstance(init.get("start_search_calls"), int)
+            or init.get("start_search_calls", -1) < 0
+        ):
+            errors.append("initialization settings/call count mismatch")
+    warmup = raw.get("warmup_config")
+    expected_policy = {"observe": "ObserveOnly", "current": "Immediate", "two_hit": "TwoHit"}[arm]
+    if not isinstance(warmup, dict):
+        errors.append("warmup_config is missing")
+    else:
+        rescue = warmup.get("chain_rescue")
+        if (
+            warmup.get("mode") != "dual_averaging"
+            or warmup.get("target_accept") != 0.8
+            or warmup.get("warmup_exhaustion_rule") != "AcceptUnlessDivergent"
+            or warmup.get("metric_regularization") != "Stan"
+            or warmup.get("mass_adaptation") is not True
+            or warmup.get("explicit_arm") is not True
+            or warmup.get("inherits_default_chain_rescue") is not False
+            or not isinstance(rescue, dict)
+            or rescue.get("mode") != "RestartFromBest"
+            or rescue.get("policy") != expected_policy
+            or rescue.get("step_ratio") != 0.1
+            or rescue.get("log_density_iqr_factor") != 3.0
+            or rescue.get("minimum_window_transitions") != 10
+            or rescue.get("source_tie_rule")
+            != "larger step, then larger median log density, then higher chain index"
+        ):
+            errors.append("explicit frozen arm/warmup configuration mismatch")
     starts = raw.get("initial_positions")
     hashes = raw.get("initial_position_sha256")
     if not isinstance(starts, list) or not isinstance(hashes, list):
@@ -339,49 +916,331 @@ def validate_raw(
         errors.append("initial position/hash lengths differ")
     else:
         for index, (start, recorded) in enumerate(zip(starts, hashes)):
+            if (
+                not isinstance(start, list)
+                or len(start) != dimension
+                or not all(finite_number(value) for value in start)
+            ):
+                errors.append(f"initial position {index} has wrong shape/nonfinite values")
+                continue
             try:
                 actual = initial_position_sha256(start)
                 if actual != recorded:
                     errors.append(f"initial position hash mismatch for chain {index}")
             except Exception as error:
                 errors.append(f"could not hash initial chain {index}: {error}")
-    if raw.get("status") == "sampler_error":
+    if status == "sampler_error":
         if not raw.get("error"):
             errors.append("sampler_error result lacks an error message")
+        stage = raw.get("stage")
+        if stage not in {"init", "run"}:
+            errors.append("sampler_error stage is not init or run")
+        expected_unknown = stage == "run"
+        if raw.get("telemetry_complete") is not False:
+            errors.append("sampler_error incorrectly claims complete telemetry")
+        if raw.get("telemetry_unknown") is not expected_unknown:
+            errors.append("sampler_error telemetry_unknown is inconsistent with stage")
+        if raw.get("rescue_history") != (
+            "unavailable" if expected_unknown else "known_zero"
+        ):
+            errors.append("sampler_error rescue_history is inconsistent with stage")
+        if expected_unknown:
+            if (
+                not isinstance(starts, list)
+                or not isinstance(hashes, list)
+                or len(starts) != 4
+                or len(hashes) != 4
+            ):
+                errors.append("run-stage sampler error lacks four initial hashes")
+            if raw.get("actions") is not None or raw.get("chains_data") is not None:
+                errors.append("unknown run telemetry must be represented as null")
+        elif raw.get("actions") != [] or raw.get("chains_data") != []:
+            errors.append("init-stage sampler error must record known empty rescue history")
         return not errors, errors
-    if len(starts or []) != 4 or len(hashes or []) != 4:
+    if (
+        raw.get("telemetry_complete") is not True
+        or raw.get("telemetry_unknown") is not False
+        or raw.get("rescue_history") != "complete"
+    ):
+        errors.append("successful raw result lacks complete rescue telemetry")
+    if (
+        not isinstance(starts, list)
+        or not isinstance(hashes, list)
+        or len(starts) != 4
+        or len(hashes) != 4
+    ):
         errors.append("successful cell does not contain four starts and hashes")
+        return not errors, errors
     chains = raw.get("chains_data")
     if not isinstance(chains, list) or len(chains) != 4:
         errors.append("successful cell does not contain four chain records")
         return not errors, errors
-    expected_draws = 20_000 if target == "funnel-10d" else 1_000
+    expected_draws = expected_retained
     restarts: list[dict[str, Any]] = []
+    chain_events: list[list[dict[str, Any]]] = []
+    chain_target_calls = 0
     for index, chain in enumerate(chains):
+        if not isinstance(chain, dict):
+            errors.append(f"chain record {index} is not an object")
+            chain = {}
         if chain.get("chain") != index:
             errors.append(f"chain record {index} has the wrong index")
         if chain.get("initial_position_sha256") != hashes[index]:
             errors.append(f"chain {index} repeats a different initial hash")
+        if chain.get("initial_position") != starts[index]:
+            errors.append(f"chain {index} initial position differs from top-level start")
+        for name in (
+            "retained_unconstrained_sha256",
+            "retained_diagnostics_sha256",
+            "non_rescue_telemetry_sha256",
+            "final_metric_sha256",
+            "final_tuning_sha256",
+        ):
+            value = chain.get(name)
+            if (
+                not isinstance(value, str)
+                or len(value) != 64
+                or any(character not in "0123456789abcdef" for character in value)
+            ):
+                errors.append(f"chain {index} {name} is not a lowercase SHA-256")
+        if not finite_number(chain.get("final_step_size")) or not finite_number(
+            chain.get("final_max_error")
+        ):
+            errors.append(f"chain {index} final tuning is missing/nonfinite")
+        if not isinstance(chain.get("mass_diagonal"), list) or len(
+            chain["mass_diagonal"]
+        ) != dimension or not all(
+            finite_number(value) and value > 0 for value in chain["mass_diagonal"]
+        ):
+            errors.append(f"chain {index} final metric has wrong dimension")
+        work = chain.get("work")
+        if not isinstance(work, dict):
+            errors.append(f"chain {index} work telemetry is missing")
+        else:
+            for phase in ("discarded", "retained", "total"):
+                values = work.get(phase)
+                if (
+                    not isinstance(values, dict)
+                    or set(values) != WORK_FIELDS
+                    or any(
+                        (
+                            not isinstance(value, list)
+                            or any(
+                                not isinstance(item, int) or item < 0 for item in value
+                            )
+                        )
+                        if name == "refinement_level_built"
+                        else (not isinstance(value, int) or value < 0)
+                        for name, value in values.items()
+                    )
+                ):
+                    errors.append(f"chain {index} {phase} work telemetry is invalid")
+            for name in ("adaptation_target_calls", "target_calls_including_adaptation"):
+                if not isinstance(work.get(name), int) or work[name] < 0:
+                    errors.append(f"chain {index} work {name} is invalid")
+            if all(
+                isinstance(work.get(phase), dict)
+                and set(work[phase]) == WORK_FIELDS
+                and isinstance(work[phase]["refinement_level_built"], list)
+                and all(
+                    isinstance(value, int) and value >= 0
+                    for value in work[phase]["refinement_level_built"]
+                )
+                and all(
+                    isinstance(value, int) and value >= 0
+                    for name, value in work[phase].items()
+                    if name != "refinement_level_built"
+                )
+                for phase in ("discarded", "retained", "total")
+            ):
+                for name in WORK_FIELDS:
+                    if name == "refinement_level_built":
+                        length = max(
+                            len(work["discarded"][name]),
+                            len(work["retained"][name]),
+                        )
+                        expected_total = [
+                            (
+                                work["discarded"][name][level]
+                                if level < len(work["discarded"][name])
+                                else 0
+                            )
+                            + (
+                                work["retained"][name][level]
+                                if level < len(work["retained"][name])
+                                else 0
+                            )
+                            for level in range(length)
+                        ]
+                    else:
+                        expected_total = (
+                            work["discarded"][name] + work["retained"][name]
+                        )
+                    if work["total"][name] != expected_total:
+                        errors.append(
+                            f"chain {index} total work does not add for {name}"
+                        )
+                if (
+                    work.get("target_calls_including_adaptation")
+                    != work["total"]["target_calls_total"]
+                    + work.get("adaptation_target_calls", -1)
+                ):
+                    errors.append(
+                        f"chain {index} target-call total excludes adaptation"
+                    )
+                else:
+                    chain_target_calls += work["target_calls_including_adaptation"]
+        retained_diagnostics = chain.get("retained_diagnostics")
+        if (
+            not isinstance(retained_diagnostics, dict)
+            or set(retained_diagnostics) != DIAGNOSTIC_FIELDS
+            or any(
+                not isinstance(value, int) or value < 0
+                for value in retained_diagnostics.values()
+            )
+        ):
+            errors.append(f"chain {index} retained diagnostics are missing")
+        elif isinstance(work, dict) and isinstance(work.get("retained"), dict):
+            for name, value in retained_diagnostics.items():
+                if value != work["retained"].get(name):
+                    errors.append(
+                        f"chain {index} retained diagnostic {name} disagrees with work"
+                    )
         samples = chain.get("samples")
         try:
             array = np.asarray(samples, dtype=np.float64)
-            if array.ndim != 2 or array.shape[0] != expected_draws:
+            if (
+                array.ndim != 2
+                or array.shape[0] != expected_draws
+                or array.shape[1] != dimension
+            ):
                 errors.append(f"chain {index} retained draw shape is {array.shape}")
             elif rust_retained_sha256(array) != chain.get("retained_unconstrained_sha256"):
                 errors.append(f"chain {index} retained hash mismatch")
         except Exception as error:
             errors.append(f"chain {index} retained draws are malformed: {error}")
-        for event_index, event in enumerate(chain.get("chain_rescues", [])):
-            event_errors = validate_boundary(event, target, arm, seed)
+        events = chain.get("chain_rescues")
+        if not isinstance(events, list) or not events:
+            errors.append(f"chain {index} has no successful-run boundary telemetry")
+            events = []
+        chain_events.append(events)
+        prior: tuple[str | None, int] = (None, 0)
+        previous_window = -1
+        previous_transition = -1
+        for event_index, event in enumerate(events):
+            if not isinstance(event, dict):
+                errors.append(f"chain {index} boundary {event_index}: record is not an object")
+                event = {}
+                events[event_index] = event
+            event_errors, prior = validate_boundary(
+                event, target, arm, seed, index, dimension, prior
+            )
             errors.extend(
                 f"chain {index} boundary {event_index}: {message}" for message in event_errors
             )
+            if event.get("window_index", -1) <= previous_window:
+                errors.append(f"chain {index} boundaries are not monotone by window")
+            if event.get("transition", -1) <= previous_transition:
+                errors.append(f"chain {index} boundaries are not monotone by transition")
+            previous_window = event.get("window_index", previous_window)
+            previous_transition = event.get("transition", previous_transition)
             if event.get("initial_position_sha256") != hashes[index]:
                 errors.append(f"chain {index} boundary {event_index}: wrong initial hash")
             if event.get("outcome") == "restarted":
                 restarts.append(event)
+    if chain_events and any(
+        [(event.get("window_index"), event.get("transition")) for event in events]
+        != [
+            (event.get("window_index"), event.get("transition"))
+            for event in chain_events[0]
+        ]
+        for events in chain_events[1:]
+    ):
+        errors.append("chains do not share common rescue windows")
+    for boundary_index in range(min((len(events) for events in chain_events), default=0)):
+        group = [events[boundary_index] for events in chain_events]
+        common_fields = (
+            "window_transitions",
+            "eligible",
+            "skip_reason",
+            "median_step",
+            "step_threshold",
+            "density_reference",
+            "density_spread",
+            "density_threshold",
+            "proposed_source_chain",
+        )
+        for name in common_fields:
+            if any(event.get(name) != group[0].get(name) for event in group[1:]):
+                errors.append(f"boundary {boundary_index} has inconsistent {name} across chains")
+        if group[0].get("eligible") is True and all(
+            finite_number(event.get("current_step"))
+            and finite_number(event.get("median_log_density"))
+            and event.get("observed_canonical_criterion") in {None, "Step", "LogDensity"}
+            for event in group
+        ):
+            candidates = [
+                index
+                for index, event in enumerate(group)
+                if event.get("observed_canonical_criterion") is None
+            ]
+            expected_source = (
+                max(
+                    candidates,
+                    key=lambda index: (
+                        group[index]["current_step"],
+                        group[index]["median_log_density"],
+                        index,
+                    ),
+                )
+                if candidates
+                else None
+            )
+            if group[0].get("proposed_source_chain") != expected_source:
+                errors.append(
+                    f"boundary {boundary_index} proposed source violates higher-index tie rule"
+                )
+            for event in group:
+                if event.get("outcome") == "restarted":
+                    if event.get("actual_source_chain") != expected_source:
+                        errors.append(
+                            f"boundary {boundary_index} proposed/actual source mismatch"
+                        )
+                    if expected_source is not None and event.get("installed_step") != group[
+                        expected_source
+                    ].get("current_step"):
+                        errors.append(
+                            f"boundary {boundary_index} installed step differs from source"
+                        )
+                    source_index = event.get("source_window_position_index")
+                    if (
+                        expected_source is None
+                        or not isinstance(source_index, int)
+                        or not (
+                            0 <= source_index
+                            < group[expected_source]["window_transitions"]
+                        )
+                    ):
+                        errors.append(
+                            f"boundary {boundary_index} source-window index is out of range"
+                        )
+        elif group[0].get("eligible") is True:
+            errors.append(
+                f"boundary {boundary_index} source cannot be authenticated from scores"
+            )
     if raw.get("actions") != restarts:
         errors.append("top-level actions are not exactly the ordered restart records")
+    initialization_calls = (
+        raw.get("init", {}).get("start_search_calls", 0)
+        if target != "funnel-10d"
+        else 0
+    )
+    if (
+        not isinstance(initialization_calls, int)
+        or initialization_calls < 0
+        or raw.get("target_calls_total") != chain_target_calls + initialization_calls
+    ):
+        errors.append("top-level target call total is inconsistent")
     return not errors, errors
 
 
@@ -392,6 +1251,10 @@ def interrupted_record(
         "launch marker exists without a process record; protocol forbids rerunning "
         "a potentially launched child"
     )
+    try:
+        launch = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception:
+        launch = {}
     return {
         "schema": "chain-rescue-v2-process",
         "cell_id": cell_id(target, arm, seed),
@@ -403,6 +1266,8 @@ def interrupted_record(
         "fault": True,
         "failure_reasons": [reason],
         "launch_marker": marker.relative_to(HERE).as_posix(),
+        "launch_marker_sha256": sha256(marker),
+        "command": launch.get("command"),
         "return_code": return_code_forms(None),
         "timed_out": None,
         "raw_output_exists": None,
@@ -442,11 +1307,22 @@ def run_case(target: str, seed: int, arm: str) -> dict[str, Any]:
     record_path = PROCESSES / f"{identifier}.json"
     marker = LAUNCHES / f"{identifier}.json"
     if record_path.exists():
-        return json.loads(record_path.read_text(encoding="utf-8"))
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        marker_errors = validate_process_marker(record, marker)
+        if marker_errors:
+            record = dict(record)
+            record["process_valid"] = False
+            record["fault"] = True
+            record["status"] = "process_fault"
+            record.setdefault("failure_reasons", []).extend(marker_errors)
+        return record
     if marker.exists():
         record = interrupted_record(target, seed, arm, marker)
-        write_json(record_path, record)
-        return record
+        try:
+            exclusive_write_json(record_path, record)
+            return record
+        except FileExistsError:
+            return json.loads(record_path.read_text(encoding="utf-8"))
 
     output = raw_path(target, arm, seed)
     heartbeat_dir = HEARTBEATS / identifier
@@ -473,18 +1349,21 @@ def run_case(target: str, seed: int, arm: str) -> dict[str, Any]:
             str(output),
             "4",
         ]
-    write_json(
-        marker,
-        {
-            "schema": "chain-rescue-v2-launch",
-            "cell_id": identifier,
-            "target": target,
-            "seed": seed,
-            "arm": arm,
-            "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "command": command,
-        },
-    )
+    launch = {
+        "schema": "chain-rescue-v2-launch",
+        "cell_id": identifier,
+        "target": target,
+        "seed": seed,
+        "arm": arm,
+        "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "command": command,
+    }
+    try:
+        exclusive_write_json(marker, launch)
+    except FileExistsError as error:
+        raise RuntimeError(
+            f"launch marker was claimed concurrently for {identifier}; child not launched"
+        ) from error
     begin = time.perf_counter()
     code: int | None = None
     timed_out = False
@@ -542,6 +1421,8 @@ def run_case(target: str, seed: int, arm: str) -> dict[str, Any]:
         "process_valid": process_valid,
         "fault": not process_valid,
         "failure_reasons": reasons,
+        "launch_marker": marker.relative_to(HERE).as_posix(),
+        "launch_marker_sha256": sha256(marker),
         "command": command,
         "return_code": return_code_forms(code),
         "duration_seconds": duration,
@@ -564,7 +1445,7 @@ def run_case(target: str, seed: int, arm: str) -> dict[str, Any]:
         "last_heartbeat": heartbeats[-1] if heartbeats else None,
         "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    write_json(record_path, record)
+    exclusive_write_json(record_path, record)
     return record
 
 
@@ -707,7 +1588,12 @@ def stable_separated_origins(
 
 
 def reference_z(mean: float, reference_mean: float, mcse: float, reference_mcse: float) -> float:
-    return (mean - reference_mean) / math.sqrt(mcse * mcse + reference_mcse * reference_mcse)
+    denominator = math.sqrt(mcse * mcse + reference_mcse * reference_mcse)
+    return (
+        (mean - reference_mean) / denominator
+        if denominator > 0 and math.isfinite(denominator)
+        else math.nan
+    )
 
 
 def reference_metrics(
@@ -718,59 +1604,90 @@ def reference_metrics(
     practical = np.abs(stats["mean"] - ref["mean"]) / ref["sd"]
     parameters = {}
     decisive = []
+    nonfinite_required = []
     for index, name in enumerate(names):
+        required_values = (
+            stats["mean"][index],
+            stats["sd"][index],
+            stats["mcse"][index],
+            stats["bulk_ess"][index],
+            stats["tail_ess"][index],
+            stats["rhat"][index],
+            ref["mean"][index],
+            ref["sd"][index],
+            ref["mcse"][index],
+            z[index],
+            practical[index],
+        )
+        required_finite = all(math.isfinite(float(value)) for value in required_values)
+        if not required_finite:
+            nonfinite_required.append(name)
         row = {
-            "mean": float(stats["mean"][index]),
-            "sd": float(stats["sd"][index]),
-            "mcse": float(stats["mcse"][index]),
-            "bulk_ess": float(stats["bulk_ess"][index]),
-            "tail_ess": float(stats["tail_ess"][index]),
-            "rank_folded_split_rhat": float(stats["rhat"][index]),
-            "reference_mean": float(ref["mean"][index]),
-            "reference_sd": float(ref["sd"][index]),
-            "reference_mcse": float(ref["mcse"][index]),
-            "z": float(z[index]),
-            "abs_dmean_over_reference_sd": float(practical[index]),
+            "mean": float(stats["mean"][index]) if math.isfinite(stats["mean"][index]) else None,
+            "sd": float(stats["sd"][index]) if math.isfinite(stats["sd"][index]) else None,
+            "mcse": float(stats["mcse"][index]) if math.isfinite(stats["mcse"][index]) else None,
+            "bulk_ess": float(stats["bulk_ess"][index]) if math.isfinite(stats["bulk_ess"][index]) else None,
+            "tail_ess": float(stats["tail_ess"][index]) if math.isfinite(stats["tail_ess"][index]) else None,
+            "rank_folded_split_rhat": float(stats["rhat"][index]) if math.isfinite(stats["rhat"][index]) else None,
+            "reference_mean": float(ref["mean"][index]) if math.isfinite(ref["mean"][index]) else None,
+            "reference_sd": float(ref["sd"][index]) if math.isfinite(ref["sd"][index]) else None,
+            "reference_mcse": float(ref["mcse"][index]) if math.isfinite(ref["mcse"][index]) else None,
+            "z": float(z[index]) if math.isfinite(z[index]) else None,
+            "abs_dmean_over_reference_sd": float(practical[index]) if math.isfinite(practical[index]) else None,
+            "required_metrics_finite": required_finite,
         }
-        row["decisive_reference_disagreement"] = decisive_reference_disagreement(
-            row["z"], row["abs_dmean_over_reference_sd"]
+        row["decisive_reference_disagreement"] = bool(
+            required_finite
+            and decisive_reference_disagreement(
+                row["z"], row["abs_dmean_over_reference_sd"]
+            )
         )
         if row["decisive_reference_disagreement"]:
             decisive.append(name)
         parameters[name] = row
+    all_required_finite = not nonfinite_required
     absolute_z = np.abs(z)
-    max_z_index = int(np.nanargmax(absolute_z))
-    max_d_index = int(np.nanargmax(practical))
+    max_z_index = int(np.argmax(absolute_z)) if all_required_finite else None
+    max_d_index = int(np.argmax(practical)) if all_required_finite else None
     return {
         "stats": stats,
         "parameters": parameters,
-        "min_bulk_ess": float(np.nanmin(stats["bulk_ess"])),
-        "min_tail_ess": float(np.nanmin(stats["tail_ess"])),
-        "max_rank_folded_split_rhat": float(np.nanmax(stats["rhat"])),
-        "max_abs_z": float(absolute_z[max_z_index]),
-        "argmax_abs_z": names[max_z_index],
-        "max_abs_dmean_over_reference_sd": float(practical[max_d_index]),
-        "argmax_abs_dmean_over_reference_sd": names[max_d_index],
+        "required_metrics_finite": all_required_finite,
+        "nonfinite_required_parameters": nonfinite_required,
+        "min_bulk_ess": float(np.min(stats["bulk_ess"])) if all_required_finite else None,
+        "min_tail_ess": float(np.min(stats["tail_ess"])) if all_required_finite else None,
+        "max_rank_folded_split_rhat": float(np.max(stats["rhat"])) if all_required_finite else None,
+        "max_abs_z": float(absolute_z[max_z_index]) if max_z_index is not None else None,
+        "argmax_abs_z": names[max_z_index] if max_z_index is not None else None,
+        "max_abs_dmean_over_reference_sd": float(practical[max_d_index]) if max_d_index is not None else None,
+        "argmax_abs_dmean_over_reference_sd": names[max_d_index] if max_d_index is not None else None,
         "decisive_reference_disagreements": decisive,
     }
 
 
 def decisive_reference_disagreement(z: float, practical_shift: float) -> bool:
-    return bool(abs(z) > 4.0 and practical_shift >= 0.10)
+    return bool(
+        math.isfinite(z)
+        and math.isfinite(practical_shift)
+        and abs(z) > 4.0
+        and practical_shift >= 0.10
+    )
 
 
 def diagnostic_pass(
-    max_rhat: float,
-    min_bulk: float,
-    min_tail: float,
+    max_rhat: float | None,
+    min_bulk: float | None,
+    min_tail: float | None,
     divergences: int,
     finite: bool,
     sampler_error: bool,
+    required_metrics_finite: bool = True,
 ) -> tuple[bool, dict[str, bool]]:
     gates = {
-        "max_rank_folded_split_rhat": max_rhat <= 1.01,
-        "min_bulk_ess": min_bulk >= 400,
-        "min_tail_ess": min_tail >= 400,
+        "required_parameter_metrics_finite": required_metrics_finite,
+        "max_rank_folded_split_rhat": finite_number(max_rhat) and max_rhat <= 1.01,
+        "min_bulk_ess": finite_number(min_bulk) and min_bulk >= 400,
+        "min_tail_ess": finite_number(min_tail) and min_tail >= 400,
         "zero_retained_divergences": divergences == 0,
         "finite_draws": finite,
         "no_sampler_error": not sampler_error,
@@ -779,6 +1696,15 @@ def diagnostic_pass(
 
 
 def action_summary(raw: dict[str, Any]) -> dict[str, Any]:
+    if raw.get("actions") is None:
+        return {
+            "restart_actions": None,
+            "restarted_chain_indices": None,
+            "unique_restarted_chains": None,
+            "actions_by_criterion": None,
+            "actions": None,
+            "telemetry_unknown": True,
+        }
     actions = list(raw.get("actions", []))
     by_criterion = {"Step": 0, "LogDensity": 0}
     for action in actions:
@@ -790,6 +1716,7 @@ def action_summary(raw: dict[str, Any]) -> dict[str, Any]:
         "unique_restarted_chains": len({int(action["chain"]) for action in actions}),
         "actions_by_criterion": by_criterion,
         "actions": actions,
+        "telemetry_unknown": False,
     }
 
 
@@ -803,10 +1730,15 @@ def base_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
         "process_record": process["cell_id"],
         "sampler_status": raw["status"],
         "sampler_error": raw.get("error"),
+        "sampler_error_stage": raw.get("stage"),
+        "rescue_history": raw.get("rescue_history"),
         "initial_position_sha256": raw.get("initial_position_sha256", []),
         "wall_seconds": raw.get("wall_seconds"),
         "target_calls_total": raw.get("target_calls_total"),
         "raw_output_sha256": process["raw_output_sha256"],
+        "unknown_run_error_safety_failure": (
+            raw.get("status") == "sampler_error" and raw.get("stage") == "run"
+        ),
         **action_summary(raw),
     }
 
@@ -822,6 +1754,7 @@ def sampler_error_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str
             "stable_separated_origins": None,
             "decisive_reference_disagreements": [],
             "efficiency": None,
+            "unknown_run_error_safety_failure": raw.get("stage") == "run",
         }
     )
     return cell
@@ -829,7 +1762,7 @@ def sampler_error_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str
 
 def transform_posteriordb(
     target: str, unconstrained: np.ndarray, names: list[str]
-) -> np.ndarray:
+) -> tuple[np.ndarray, list[str], list[str], np.ndarray]:
     import bridgestan as bs
 
     model_path, data_path = model_paths(target)
@@ -841,19 +1774,24 @@ def transform_posteriordb(
         bridgestan_name(name)
         for name in model.param_names(include_tp=True, include_gq=False)
     ]
+    unconstrained_names = list(model.param_unc_names())
+    if len(unconstrained_names) != unconstrained.shape[-1]:
+        raise RuntimeError("BridgeStan unconstrained names do not match draw dimension")
     index = {name: position for position, name in enumerate(constrained_names)}
     missing = [name for name in names if name not in index]
     if missing:
         raise RuntimeError(f"reference parameters missing after constrain: {missing[:5]}")
-    constrained = np.empty(unconstrained.shape[:2] + (len(names),), dtype=np.float64)
+    constrained = np.empty(
+        unconstrained.shape[:2] + (len(constrained_names),), dtype=np.float64
+    )
     columns = [index[name] for name in names]
     for chain in range(unconstrained.shape[0]):
         for draw in range(unconstrained.shape[1]):
             full = model.param_constrain(
                 unconstrained[chain, draw], include_tp=True, include_gq=False
             )
-            constrained[chain, draw] = np.asarray(full, dtype=np.float64)[columns]
-    return constrained
+            constrained[chain, draw] = np.asarray(full, dtype=np.float64)
+    return constrained, constrained_names, unconstrained_names, constrained[:, :, columns]
 
 
 def posteriordb_cell(
@@ -864,8 +1802,13 @@ def posteriordb_cell(
     unconstrained = np.asarray(
         [chain["samples"] for chain in raw["chains_data"]], dtype=np.float64
     )
-    constrained = transform_posteriordb(raw["target"], unconstrained, ref["names"])
-    metrics = reference_metrics(constrained, ref["names"], ref)
+    (
+        constrained,
+        constrained_names,
+        unconstrained_names,
+        reference_draws,
+    ) = transform_posteriordb(raw["target"], unconstrained, ref["names"])
+    metrics = reference_metrics(reference_draws, ref["names"], ref)
     finite = bool(np.isfinite(unconstrained).all() and np.isfinite(constrained).all())
     divergences = sum(
         int(chain["retained_diagnostics"]["divergences"])
@@ -878,11 +1821,16 @@ def posteriordb_cell(
         divergences,
         finite,
         False,
+        metrics["required_metrics_finite"],
     )
     calls = int(raw["target_calls_total"])
-    efficiency = min(metrics["min_bulk_ess"], metrics["min_tail_ess"]) / calls
+    efficiency = (
+        min(metrics["min_bulk_ess"], metrics["min_tail_ess"]) / calls
+        if metrics["required_metrics_finite"] and calls > 0
+        else None
+    )
     origins = stable_separated_origins(
-        constrained, ref["names"], ref["median"], ref["iqr"]
+        reference_draws, ref["names"], ref["median"], ref["iqr"]
     )
     draw_path = DRAWS / f"{cell_id(raw['target'], raw['arm'], raw['seed'])}.npz"
     draw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -890,7 +1838,10 @@ def posteriordb_cell(
         draw_path,
         unconstrained=unconstrained,
         constrained=constrained,
-        names=np.asarray(ref["names"]),
+        unconstrained_names=np.asarray(unconstrained_names),
+        constrained_names=np.asarray(constrained_names),
+        reference_draws=reference_draws,
+        reference_names=np.asarray(ref["names"]),
     )
     cell = base_cell(raw, process)
     cell.update(
@@ -915,6 +1866,8 @@ def posteriordb_cell(
             "decisive_reference_disagreements": metrics[
                 "decisive_reference_disagreements"
             ],
+            "required_metrics_finite": metrics["required_metrics_finite"],
+            "nonfinite_required_parameters": metrics["nonfinite_required_parameters"],
             "parameters": metrics["parameters"],
             "diagnostic_gates": gates,
             "raw_diagnostic_pass": raw_pass,
@@ -924,6 +1877,15 @@ def posteriordb_cell(
             "efficiency": efficiency,
             "unconstrained_sha256": array_sha256(unconstrained),
             "constrained_sha256": array_sha256(constrained),
+            "unconstrained_shape": list(unconstrained.shape),
+            "constrained_shape": list(constrained.shape),
+            "unconstrained_names": unconstrained_names,
+            "unconstrained_names_sha256": names_sha256(unconstrained_names),
+            "constrained_names": constrained_names,
+            "constrained_names_sha256": names_sha256(constrained_names),
+            "reference_draws_sha256": array_sha256(reference_draws),
+            "reference_names": ref["names"],
+            "reference_names_sha256": names_sha256(ref["names"]),
             "per_chain_unconstrained_sha256": [
                 chain["retained_unconstrained_sha256"] for chain in raw["chains_data"]
             ],
@@ -965,15 +1927,27 @@ def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
     indicator_stats = arviz_stats(indicator)
     estimate = float(indicator.mean())
     mcse = float(indicator_stats["mcse"][0])
-    z = (estimate - 0.0478) / mcse
+    z = (estimate - 0.0478) / mcse if math.isfinite(mcse) and mcse > 0 else None
     finite = bool(np.isfinite(unconstrained).all())
+    required_metrics_finite = all(
+        math.isfinite(float(value))
+        for value in (
+            stats["bulk_ess"][0],
+            stats["tail_ess"][0],
+            stats["rhat"][0],
+            mcse,
+        )
+    ) and z is not None and math.isfinite(z)
     divergences = sum(
         int(chain["retained_diagnostics"]["divergences"])
         for chain in raw["chains_data"]
     )
     full_gate_parts = {
-        "omega_rank_folded_split_rhat": float(stats["rhat"][0]) <= 1.01,
-        "omega_bulk_ess": float(stats["bulk_ess"][0]) >= 400,
+        "required_metrics_finite": required_metrics_finite,
+        "omega_rank_folded_split_rhat": required_metrics_finite
+        and float(stats["rhat"][0]) <= 1.01,
+        "omega_bulk_ess": required_metrics_finite
+        and float(stats["bulk_ess"][0]) >= 400,
         "zero_retained_divergences": divergences == 0,
         "finite_draws": finite,
         "no_sampler_error": True,
@@ -987,7 +1961,15 @@ def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
     )
     draw_path = DRAWS / f"{cell_id(raw['target'], raw['arm'], raw['seed'])}.npz"
     draw_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(draw_path, unconstrained=unconstrained, omega=omega)
+    funnel_names = ["omega"] + [f"x[{index}]" for index in range(1, 10)]
+    np.savez_compressed(
+        draw_path,
+        unconstrained=unconstrained,
+        constrained=unconstrained,
+        unconstrained_names=np.asarray(funnel_names),
+        constrained_names=np.asarray(funnel_names),
+        omega=omega,
+    )
     cell = base_cell(raw, process)
     cell.update(
         {
@@ -997,10 +1979,11 @@ def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
                 int(chain["retained_diagnostics"]["maximum_depth_stops"])
                 for chain in raw["chains_data"]
             ),
-            "tail_mass": {"estimate": estimate, "mcse": mcse, "z": z, "exact": 0.0478},
-            "omega_bulk_ess": float(stats["bulk_ess"][0]),
-            "omega_tail_ess": float(stats["tail_ess"][0]),
-            "omega_rank_folded_split_rhat": float(stats["rhat"][0]),
+            "tail_mass": {"estimate": estimate, "mcse": mcse if math.isfinite(mcse) else None, "z": z, "exact": 0.0478},
+            "omega_bulk_ess": float(stats["bulk_ess"][0]) if math.isfinite(stats["bulk_ess"][0]) else None,
+            "omega_tail_ess": float(stats["tail_ess"][0]) if math.isfinite(stats["tail_ess"][0]) else None,
+            "omega_rank_folded_split_rhat": float(stats["rhat"][0]) if math.isfinite(stats["rhat"][0]) else None,
+            "required_metrics_finite": required_metrics_finite,
             "funnel_full_gate_parts": full_gate_parts,
             "funnel_full_gate": all(full_gate_parts.values()),
             "raw_diagnostic_pass": all(full_gate_parts.values()),
@@ -1011,7 +1994,13 @@ def funnel_cell(raw: dict[str, Any], process: dict[str, Any]) -> dict[str, Any]:
             "decisive_reference_disagreements": [],
             "efficiency": None,
             "unconstrained_sha256": array_sha256(unconstrained),
-            "constrained_sha256": array_sha256(omega),
+            "constrained_sha256": array_sha256(unconstrained),
+            "unconstrained_shape": list(unconstrained.shape),
+            "constrained_shape": list(unconstrained.shape),
+            "unconstrained_names": funnel_names,
+            "constrained_names": funnel_names,
+            "unconstrained_names_sha256": names_sha256(funnel_names),
+            "constrained_names_sha256": names_sha256(funnel_names),
             "per_chain_unconstrained_sha256": [
                 chain["retained_unconstrained_sha256"] for chain in raw["chains_data"]
             ],
@@ -1042,6 +2031,10 @@ def identity_signature(cell: dict[str, Any]) -> tuple[Any, ...]:
     return (
         cell.get("unconstrained_sha256"),
         cell.get("constrained_sha256"),
+        tuple(cell.get("unconstrained_shape") or []),
+        tuple(cell.get("constrained_shape") or []),
+        cell.get("unconstrained_names_sha256"),
+        cell.get("constrained_names_sha256"),
         cell.get("target_calls_total"),
         tuple(cell.get("final_step_size") or []),
         tuple(cell.get("final_metric_sha256") or []),
@@ -1086,8 +2079,57 @@ def load_processes() -> dict[tuple[str, int, str], dict[str, Any]]:
     records = {}
     for path in sorted(PROCESSES.glob("*.json")):
         value = json.loads(path.read_text(encoding="utf-8"))
+        expected_marker = LAUNCHES / f"{value.get('cell_id')}.json"
+        marker_errors = validate_process_marker(value, expected_marker)
+        if marker_errors:
+            value["process_valid"] = False
+            value["fault"] = True
+            value["status"] = "process_fault"
+            value.setdefault("failure_reasons", []).extend(marker_errors)
         records[(value["target"], int(value["seed"]), value["arm"])] = value
     return records
+
+
+def validate_process_marker(
+    process: dict[str, Any], marker: Path
+) -> list[str]:
+    if not marker.is_file():
+        return ["process record exists without required launch marker"]
+    if process.get("launch_marker_sha256") != sha256(marker):
+        return ["launch marker hash does not authenticate against process record"]
+    try:
+        launch = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception as error:
+        return [f"launch marker is malformed: {error}"]
+    expected = {
+        "schema": "chain-rescue-v2-launch",
+        "cell_id": process.get("cell_id"),
+        "target": process.get("target"),
+        "seed": process.get("seed"),
+        "arm": process.get("arm"),
+        "command": process.get("command"),
+    }
+    if any(launch.get(name) != value for name, value in expected.items()):
+        return ["launch marker contents do not match process record"]
+    return []
+
+
+def authenticate_raw(
+    process: dict[str, Any], target: str, arm: str, seed: int
+) -> dict[str, Any]:
+    path = HERE / process["raw_output_path"]
+    if not path.is_file():
+        raise RuntimeError("authenticated raw file is missing")
+    if path.stat().st_size != process.get("raw_output_bytes"):
+        raise RuntimeError("raw file size differs from process record")
+    actual_hash = sha256(path)
+    if actual_hash != process.get("raw_output_sha256"):
+        raise RuntimeError("raw file SHA-256 differs from process record")
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    valid, errors = validate_raw(raw, target, arm, seed)
+    if not valid:
+        raise RuntimeError("strict raw validation failed: " + "; ".join(errors))
+    return raw
 
 
 def classify_triplets(
@@ -1107,13 +2149,9 @@ def classify_triplets(
             hashes = []
             for record in records:
                 if record and record.get("process_valid"):
-                    try:
-                        raw = json.loads(
-                            (HERE / record["raw_output_path"]).read_text(encoding="utf-8")
-                        )
-                        hashes.append(tuple(raw.get("initial_position_sha256", [])))
-                    except Exception as error:
-                        failures.append(f"could not inspect paired initial hashes: {error}")
+                    hashes.append(
+                        tuple(record.get("authenticated_initial_position_sha256", []))
+                    )
             if len(hashes) == 3 and not all(value == hashes[0] for value in hashes[1:]):
                 failures.append("initial-position hashes differ by arm")
             if len(hashes) == 3 and len(hashes[0]) != 4:
@@ -1129,30 +2167,46 @@ def apply_origin_credit_and_identity(
 ) -> None:
     for target in TARGETS:
         for seed in SEEDS:
-            if not triplet_valid[(target, seed)]:
+            observe = cells.get((target, seed, "observe"))
+            if observe is None:
                 continue
-            observe = cells[(target, seed, "observe")]
             origins = (observe.get("stable_separated_origins") or {}).get("chains", [])
             observe_hashes = observe.get("initial_position_sha256", [])
             for arm in ARMS:
-                cell = cells[(target, seed, arm)]
+                cell = cells.get((target, seed, arm))
+                if cell is None:
+                    continue
                 mapped = (
                     cell.get("initial_position_sha256") == observe_hashes
                     and len(observe_hashes) == 4
                 )
-                overwritten = bool(
-                    mapped
-                    and any(
-                        int(action["chain"]) in origins
-                        for action in cell.get("actions", [])
-                    )
+                overwrite_events = (
+                    [
+                        action
+                        for action in (cell.get("actions") or [])
+                        if int(action["chain"]) in origins
+                    ]
+                    if mapped
+                    else []
                 )
+                overwritten_chains = sorted(
+                    {int(action["chain"]) for action in overwrite_events}
+                )
+                overwritten = bool(overwrite_events)
                 cell["mapped_stable_separated_origin_chains"] = origins if mapped else []
                 cell["origin_overwritten"] = overwritten
+                cell["origin_overwrite_events"] = overwrite_events
+                cell["origin_overwrite_event_count"] = len(overwrite_events)
+                cell["origin_overwritten_chain_indices"] = overwritten_chains
+                cell["origin_overwritten_unique_chains"] = len(overwritten_chains)
                 cell["credited_diagnostic_pass"] = bool(
                     cell.get("raw_diagnostic_pass") and not overwritten
                 )
-                if arm in {"current", "two_hit"} and cell.get("restart_actions") == 0:
+                if (
+                    triplet_valid[(target, seed)]
+                    and arm in {"current", "two_hit"}
+                    and cell.get("restart_actions") == 0
+                ):
                     cell["zero_action_identity_to_observe"] = (
                         identity_signature(cell) == identity_signature(observe)
                     )
@@ -1170,6 +2224,77 @@ def count_passes(
         bool(cells[(target, seed, arm)].get("credited_diagnostic_pass"))
         for seed in SEEDS
         if valid[(target, seed)]
+    )
+
+
+def all_process_safety_findings(
+    cells: Iterable[dict[str, Any]], arm: str
+) -> dict[str, list[str]]:
+    arm_cells = [cell for cell in cells if cell.get("arm") == arm]
+    return {
+        "origin_overwritten": [
+            f"{cell['target']}/{cell['seed']}"
+            for cell in arm_cells
+            if cell.get("origin_overwritten")
+        ],
+        "reference": [
+            f"{cell['target']}/{cell['seed']}/{name}"
+            for cell in arm_cells
+            for name in cell.get("decisive_reference_disagreements", [])
+        ],
+        "unknown_run_error": [
+            f"{cell['target']}/{cell['seed']}"
+            for cell in arm_cells
+            if cell.get("unknown_run_error_safety_failure")
+        ],
+        "funnel": [
+            f"funnel-10d/{cell['seed']}"
+            for cell in arm_cells
+            if cell.get("target") == "funnel-10d"
+            and (
+                cell.get("sampler_status") != "ok"
+                or not cell.get("finite_draws", False)
+                or cell.get("tail_mass") is None
+                or not finite_number(cell["tail_mass"].get("z"))
+                or abs(cell["tail_mass"]["z"]) > 3.0
+            )
+        ],
+    }
+
+
+def prediction_p3_held(
+    observe_origin_chain_occurrences: int,
+    current: dict[str, Any],
+    two_hit: dict[str, Any],
+) -> bool:
+    return bool(
+        observe_origin_chain_occurrences > 0
+        and current["unique_chain_occurrences"] > 0
+        and two_hit["unique_chain_occurrences"] > 0
+        and two_hit["unique_chain_occurrences"] < current["unique_chain_occurrences"]
+        and two_hit["events"] <= current["events"]
+    )
+
+
+def prediction_p4_held(
+    two_hit_decisive: list[str],
+    current_decisive: list[str],
+    raw_over_4_small_shift: list[str],
+) -> bool:
+    return bool(
+        not two_hit_decisive
+        and not current_decisive
+        and raw_over_4_small_shift
+    )
+
+
+def prediction_p6_held(
+    mesquite_two_hit_zero_actions: int,
+    mesquite_two_hit_identity_failures: list[str],
+) -> bool:
+    return bool(
+        mesquite_two_hit_zero_actions >= 10
+        and not mesquite_two_hit_identity_failures
     )
 
 
@@ -1250,17 +2375,24 @@ def write_results_tables(summary: dict[str, Any]) -> None:
         "| target | seed | arm | parameter | mean | MCSE | bulk ESS | tail ESS | rank folded split R-hat | reference mean/SD/MCSE | z | d | decisive |",
         "|---|---:|---|---|---:|---:|---:|---:|---:|---|---:|---:|---|",
     ]
+    def number(value: Any, spec: str) -> str:
+        return "—" if value is None or not finite_number(value) else format(value, spec)
+
     for target in MODELS:
         for seed in SEEDS:
             for arm in ARMS:
                 cell = cells.get(target, {}).get(str(seed), {}).get(arm, {})
                 for name, row in cell.get("parameters", {}).items():
                     parameter_lines.append(
-                        f"| {target} | {seed} | {arm} | {name} | {row['mean']:.9g} | "
-                        f"{row['mcse']:.9g} | {row['bulk_ess']:.7g} | {row['tail_ess']:.7g} | "
-                        f"{row['rank_folded_split_rhat']:.7g} | {row['reference_mean']:.9g} / "
-                        f"{row['reference_sd']:.9g} / {row['reference_mcse']:.9g} | "
-                        f"{row['z']:.7g} | {row['abs_dmean_over_reference_sd']:.7g} | "
+                        f"| {target} | {seed} | {arm} | {name} | {number(row['mean'], '.9g')} | "
+                        f"{number(row['mcse'], '.9g')} | {number(row['bulk_ess'], '.7g')} | "
+                        f"{number(row['tail_ess'], '.7g')} | "
+                        f"{number(row['rank_folded_split_rhat'], '.7g')} | "
+                        f"{number(row['reference_mean'], '.9g')} / "
+                        f"{number(row['reference_sd'], '.9g')} / "
+                        f"{number(row['reference_mcse'], '.9g')} | "
+                        f"{number(row['z'], '.7g')} | "
+                        f"{number(row['abs_dmean_over_reference_sd'], '.7g')} | "
                         f"{row['decisive_reference_disagreement']} |"
                     )
     atomic_write_text(
@@ -1269,7 +2401,25 @@ def write_results_tables(summary: dict[str, Any]) -> None:
 
 
 def analyze() -> dict[str, Any]:
+    environment = validate_environment(require_binaries=True, require_conformance=True)
     processes = load_processes()
+    authenticated_raw: dict[tuple[str, int, str], dict[str, Any]] = {}
+    for key, process in processes.items():
+        if not process.get("process_valid"):
+            continue
+        target, seed, arm = key
+        try:
+            authenticated_raw[key] = authenticate_raw(process, target, arm, seed)
+            process["raw_authenticated"] = True
+            process["authenticated_initial_position_sha256"] = authenticated_raw[key].get(
+                "initial_position_sha256", []
+            )
+        except Exception as error:
+            process["process_valid"] = False
+            process["fault"] = True
+            process["status"] = "process_fault"
+            process["raw_authenticated"] = False
+            process.setdefault("failure_reasons", []).append(str(error))
     triplet_valid, triplet_reasons = classify_triplets(processes)
     refs: dict[str, dict[str, Any]] = {}
     flat_cells: dict[tuple[str, int, str], dict[str, Any]] = {}
@@ -1277,7 +2427,7 @@ def analyze() -> dict[str, Any]:
         process = processes.get((target, seed, arm))
         if not process or not process.get("process_valid"):
             continue
-        raw = json.loads((HERE / process["raw_output_path"]).read_text(encoding="utf-8"))
+        raw = authenticated_raw[(target, seed, arm)]
         if target == "funnel-10d":
             cell = funnel_cell(raw, process)
         else:
@@ -1301,6 +2451,12 @@ def analyze() -> dict[str, Any]:
         seed
         for seed in SEEDS
         if all(triplet_valid[(target, seed)] for target in nuisance_models)
+        and all(
+            flat_cells[(target, seed, arm)].get("unique_restarted_chains")
+            is not None
+            for target in nuisance_models
+            for arm in ARMS
+        )
     ]
     failure_scores = {
         arm: [
@@ -1315,7 +2471,7 @@ def analyze() -> dict[str, Any]:
     nuisance_scores = {
         arm: [
             sum(
-                int(flat_cells[(target, seed, arm)].get("restart_actions", 0))
+                int(flat_cells[(target, seed, arm)].get("unique_restarted_chains", 0))
                 for target in nuisance_models
             )
             for seed in nuisance_seeds
@@ -1329,9 +2485,14 @@ def analyze() -> dict[str, Any]:
         nuisance_scores["two_hit"], nuisance_scores["current"], False
     )
 
-    launch_complete = all(
+    process_records_complete = all(
         (target, seed, arm) in processes for target, seed, arm in planned_cells()
     )
+    launch_markers_complete = all(
+        (LAUNCHES / f"{cell_id(target, arm, seed)}.json").is_file()
+        for target, seed, arm in planned_cells()
+    )
+    launch_complete = process_records_complete and launch_markers_complete
     valid_by_target = {
         target: sum(triplet_valid[(target, seed)] for seed in SEEDS) for target in TARGETS
     }
@@ -1371,27 +2532,24 @@ def analyze() -> dict[str, Any]:
         flat_cells[(target, seed, "two_hit")]
         for target in TARGETS
         for seed in SEEDS
-        if triplet_valid[(target, seed)]
+        if (target, seed, "two_hit") in flat_cells
     ]
-    two_origin = [
-        f"{cell['target']}/{cell['seed']}"
-        for cell in two_cells
-        if cell.get("origin_overwritten")
-    ]
-    two_decisive = [
-        f"{cell['target']}/{cell['seed']}/{name}"
-        for cell in two_cells
-        for name in cell.get("decisive_reference_disagreements", [])
-    ]
+    two_findings = all_process_safety_findings(two_cells, "two_hit")
+    two_origin = two_findings["origin_overwritten"]
+    two_decisive = two_findings["reference"]
     two_legacy = [
         f"{cell['target']}/{cell['seed']}"
         for cell in two_cells
         if cell.get("credited_diagnostic_pass") and cell.get("max_abs_z", 0) > 4.0
     ]
+    two_unknown_run_errors = two_findings["unknown_run_error"]
+    two_funnel_redlines = two_findings["funnel"]
     safety = (
         not two_origin
         and not two_decisive
         and not two_legacy
+        and not two_unknown_run_errors
+        and not two_funnel_redlines
         and all(loss <= 1 for losses in safety_losses.values() for loss in losses.values())
         and all(sum(losses.values()) <= 2 for losses in safety_losses.values())
     )
@@ -1424,7 +2582,7 @@ def analyze() -> dict[str, Any]:
     ]
     funnel_tail = all(
         cell.get("tail_mass") is not None
-        and math.isfinite(cell["tail_mass"]["z"])
+        and finite_number(cell["tail_mass"].get("z"))
         and abs(cell["tail_mass"]["z"]) <= 2.0
         for cell in funnel_two
     )
@@ -1445,15 +2603,7 @@ def analyze() -> dict[str, Any]:
         )
     )
 
-    conformance = (
-        json.loads(CONFORMANCE.read_text(encoding="utf-8"))
-        if CONFORMANCE.is_file()
-        else {}
-    )
-    conformance_pass = (
-        conformance.get("status") == "pass"
-        and conformance.get("comparison", {}).get("bit_identical") is True
-    )
+    conformance_pass = environment["conformance"]["authenticated"]
     mesquite_zero = sum(
         triplet_valid[("mesquite-logmesquite_logvash", seed)]
         and flat_cells[("mesquite-logmesquite_logvash", seed, "two_hit")].get(
@@ -1476,7 +2626,7 @@ def analyze() -> dict[str, Any]:
         for target in TARGETS
         for seed in SEEDS
         if triplet_valid[(target, seed)]
-        and flat_cells[(target, seed, "observe")].get("restart_actions", 0) != 0
+        and flat_cells[(target, seed, "observe")].get("restart_actions") not in {0, None}
     ]
     no_fire = (
         conformance_pass
@@ -1526,6 +2676,8 @@ def analyze() -> dict[str, Any]:
         "completeness": {
             "passed": completeness,
             "all_288_launch_records": launch_complete,
+            "all_288_launch_markers": launch_markers_complete,
+            "all_288_process_records": process_records_complete,
             "valid_triplets_by_target": valid_by_target,
         },
         "safety": {
@@ -1533,6 +2685,8 @@ def analyze() -> dict[str, Any]:
             "origin_overwritten": two_origin,
             "decisive_reference_disagreements": two_decisive,
             "legacy_reference_gate_violations": two_legacy,
+            "unknown_run_errors": two_unknown_run_errors,
+            "funnel_gross_red_lines": two_funnel_redlines,
             "credited_pass_losses": safety_losses,
         },
         "efficacy": {
@@ -1572,30 +2726,14 @@ def analyze() -> dict[str, Any]:
         flat_cells[(target, seed, "current")]
         for target in TARGETS
         for seed in SEEDS
-        if triplet_valid[(target, seed)]
+        if (target, seed, "current") in flat_cells
     ]
+    current_findings = all_process_safety_findings(current_cells, "current")
     current_red_lines = {
-        "origin_overwritten": [
-            f"{cell['target']}/{cell['seed']}"
-            for cell in current_cells
-            if cell.get("origin_overwritten")
-        ],
-        "reference": [
-            f"{cell['target']}/{cell['seed']}/{name}"
-            for cell in current_cells
-            for name in cell.get("decisive_reference_disagreements", [])
-        ],
-        "funnel": [
-            f"funnel-10d/{cell['seed']}"
-            for cell in current_cells
-            if cell["target"] == "funnel-10d"
-            and (
-                cell.get("sampler_status") != "ok"
-                or not cell.get("finite_draws", False)
-                or cell.get("tail_mass") is None
-                or abs(cell["tail_mass"]["z"]) > 3.0
-            )
-        ],
+        "origin_overwritten": current_findings["origin_overwritten"],
+        "reference": current_findings["reference"],
+        "funnel": current_findings["funnel"],
+        "unknown_run_error": current_findings["unknown_run_error"],
         "no_fire": [
             item for item in no_fire_failures if item.endswith("/current")
         ]
@@ -1610,6 +2748,55 @@ def analyze() -> dict[str, Any]:
         if any_current_red_line
         else "current"
     )
+    hmm = "bball_drive_event_0-hmm_drive_0"
+    hmm_observe_origins = sum(
+        len(
+            (flat_cells.get((hmm, seed, "observe"), {}).get("stable_separated_origins") or {}).get(
+                "chains", []
+            )
+        )
+        for seed in SEEDS
+    )
+    hmm_overwrites = {}
+    for arm in ("current", "two_hit"):
+        arm_cells = [
+            flat_cells[(hmm, seed, arm)]
+            for seed in SEEDS
+            if (hmm, seed, arm) in flat_cells
+        ]
+        hmm_overwrites[arm] = {
+            "unique_chain_occurrences": sum(
+                cell.get("origin_overwritten_unique_chains", 0) for cell in arm_cells
+            ),
+            "events": sum(
+                cell.get("origin_overwrite_event_count", 0) for cell in arm_cells
+            ),
+            "cells": [
+                cell["seed"] for cell in arm_cells if cell.get("origin_overwritten")
+            ],
+        }
+    mutating_raw_over_4_small_shift = [
+        f"{cell['target']}/{cell['seed']}/{cell['arm']}/{name}"
+        for cell in [*current_cells, *two_cells]
+        for name, parameter in cell.get("parameters", {}).items()
+        if parameter.get("z") is not None
+        and abs(parameter["z"]) > 4.0
+        and parameter.get("abs_dmean_over_reference_sd") is not None
+        and parameter["abs_dmean_over_reference_sd"] < 0.10
+    ]
+    mesquite_two_hit_identity_failures = [
+        f"mesquite-logmesquite_logvash/{seed}/two_hit"
+        for seed in SEEDS
+        if triplet_valid[("mesquite-logmesquite_logvash", seed)]
+        and flat_cells[("mesquite-logmesquite_logvash", seed, "two_hit")].get(
+            "restart_actions"
+        )
+        == 0
+        and flat_cells[("mesquite-logmesquite_logvash", seed, "two_hit")].get(
+            "zero_action_identity_to_observe"
+        )
+        is not True
+    ]
     predictions = {
         "P1": {
             "held": nuisance if completeness else None,
@@ -1620,45 +2807,30 @@ def analyze() -> dict[str, Any]:
             "value": {"sign_test": efficacy_sign, "losses": current_failure_losses},
         },
         "P3": {
-            "held": (
-                any(
-                    flat_cells[("bball_drive_event_0-hmm_drive_0", seed, "observe")]
-                    .get("stable_separated_origins", {})
-                    .get("chains", [])
-                    for seed in SEEDS
-                    if triplet_valid[("bball_drive_event_0-hmm_drive_0", seed)]
-                )
-                and any(
-                    item.startswith("bball_drive_event_0-hmm_drive_0/")
-                    for item in current_red_lines["origin_overwritten"]
-                )
-                and any(
-                    item.startswith("bball_drive_event_0-hmm_drive_0/")
-                    for item in two_origin
-                )
-                and sum(
-                    item.startswith("bball_drive_event_0-hmm_drive_0/")
-                    for item in two_origin
-                )
-                < sum(
-                    item.startswith("bball_drive_event_0-hmm_drive_0/")
-                    for item in current_red_lines["origin_overwritten"]
-                )
+            "held": prediction_p3_held(
+                hmm_observe_origins,
+                hmm_overwrites["current"],
+                hmm_overwrites["two_hit"],
             )
             if completeness
             else None,
             "value": {
-                "current_origin_overwrites": current_red_lines["origin_overwritten"],
-                "two_hit_origin_overwrites": two_origin,
+                "observe_origin_chain_occurrences": hmm_observe_origins,
+                "overwrites": hmm_overwrites,
             },
         },
         "P4": {
-            "held": not two_decisive and not current_red_lines["reference"]
+            "held": prediction_p4_held(
+                two_decisive,
+                current_red_lines["reference"],
+                mutating_raw_over_4_small_shift,
+            )
             if completeness
             else None,
             "value": {
                 "two_hit": two_decisive,
                 "current": current_red_lines["reference"],
+                "raw_abs_z_over_4_with_shift_below_0_10": mutating_raw_over_4_small_shift,
             },
         },
         "P5": {
@@ -1666,10 +2838,15 @@ def analyze() -> dict[str, Any]:
             "value": gates["funnel"],
         },
         "P6": {
-            "held": mesquite_zero >= 10 and not no_fire_failures
+            "held": prediction_p6_held(
+                mesquite_zero, mesquite_two_hit_identity_failures
+            )
             if completeness
             else None,
-            "value": mesquite_zero,
+            "value": {
+                "zero_action_cells": mesquite_zero,
+                "identity_failures": mesquite_two_hit_identity_failures,
+            },
         },
         "P7": {
             "held": efficiency_geomean is not None and efficiency_geomean >= 0.95
@@ -1699,7 +2876,11 @@ def analyze() -> dict[str, Any]:
         "schema": "chain-rescue-v2-summary",
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "protocol_sha256": sha256(PROTOCOL_PATH),
-        "amendment_1_sha256": sha256(HERE / "AMENDMENT-1.md"),
+        "amendment_1_sha256": sha256(AMENDMENT_1),
+        "amendment_2_sha256": sha256(AMENDMENT_2),
+        "input_manifest_sha256": sha256(INPUT_MANIFEST),
+        "build_manifest_sha256": sha256(BUILD_MANIFEST),
+        "conformance_sha256": sha256(CONFORMANCE),
         "mechanical_decision": decision,
         "current_red_lines": current_red_lines,
         "decision_gates": gates,
@@ -1728,35 +2909,77 @@ def analyze() -> dict[str, Any]:
 
 
 def run_conformance() -> None:
-    if CONFORMANCE.exists():
-        raise RuntimeError(f"conformance output already exists: {CONFORMANCE}")
-    if not CONFORMANCE_BIN.is_file():
-        raise RuntimeError(f"conformance binary is missing: {CONFORMANCE_BIN}")
-    completed = subprocess.run(
-        [str(CONFORMANCE_BIN), str(CONFORMANCE)],
-        cwd=HERE,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.stdout:
-        print(completed.stdout, end="")
-    if completed.stderr:
-        print(completed.stderr, file=sys.stderr, end="")
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"conformance failed with {return_code_forms(completed.returncode)['hex_32']}"
+    provenance = verify_provenance(require_binaries=True)
+    candidate = HERE / "target" / f"conformance-candidate-{os.getpid()}.json"
+    if candidate.exists():
+        raise RuntimeError(f"temporary conformance path already exists: {candidate}")
+    try:
+        completed = subprocess.run(
+            [str(CONFORMANCE_BIN), str(candidate)],
+            cwd=HERE,
+            capture_output=True,
+            text=True,
+            check=False,
         )
-    result = json.loads(CONFORMANCE.read_text(encoding="utf-8"))
-    if result.get("comparison", {}).get("bit_identical") is not True:
-        raise RuntimeError("conformance result did not record bit identity")
-    print("pre-evidence conformance: PASS (observe is bit-identical to disabled)")
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, file=sys.stderr, end="")
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"conformance failed with {return_code_forms(completed.returncode)['hex_32']}"
+            )
+        result = json.loads(candidate.read_text(encoding="utf-8"))
+        comparison = result.get("comparison", {})
+        if (
+            result.get("status") != "pass"
+            or comparison.get("bit_identical") is not True
+            or comparison.get("observed_hit_path_exercised") is not True
+            or int(result.get("observe_hits", 0)) <= 0
+        ):
+            raise RuntimeError("candidate conformance did not prove hit-path bit identity")
+        result.update(
+            {
+                "protocol_sha256": sha256(PROTOCOL_PATH),
+                "amendment_1_sha256": sha256(AMENDMENT_1),
+                "amendment_2_sha256": sha256(AMENDMENT_2),
+                "input_manifest_sha256": provenance["input_manifest_sha256"],
+                "build_manifest_sha256": provenance["build_manifest_sha256"],
+                "conformance_executable": json.loads(
+                    BUILD_MANIFEST.read_text(encoding="utf-8")
+                )["executables"]["conformance"]["primary"],
+                "authenticated_utc": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+                ),
+            }
+        )
+        if CONFORMANCE.exists():
+            previous = CONFORMANCE.read_bytes()
+            history = CONFORMANCE_HISTORY / (
+                f"observe-vs-disabled-{hashlib.sha256(previous).hexdigest()[:16]}.json"
+            )
+            history.parent.mkdir(parents=True, exist_ok=True)
+            with history.open("xb") as stream:
+                stream.write(previous)
+                stream.flush()
+                os.fsync(stream.fileno())
+        write_json(CONFORMANCE, result)
+        authenticated = validate_conformance_artifact()
+        print(
+            "pre-evidence conformance: PASS "
+            f"({authenticated['observe_hits']} observed hits; authenticated)"
+        )
+    finally:
+        if candidate.exists():
+            candidate.unlink()
 
 
 def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "verify"
     if command == "verify":
         print(json.dumps(validate_environment(require_binaries=True), indent=2, sort_keys=True))
+    elif command == "prepare-provenance":
+        prepare_provenance()
     elif command == "run":
         run_all()
     elif command == "analyze":

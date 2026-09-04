@@ -286,6 +286,7 @@ pub fn rescues_json(
                 "actual_source_chain": actual_source,
                 "source_window_position_index": source_position,
                 "installed_step": installed_step,
+                "installed_unconstrained_position": installed,
                 "installed_position_sha256": installed.map(installed_position_sha256),
             })
         })

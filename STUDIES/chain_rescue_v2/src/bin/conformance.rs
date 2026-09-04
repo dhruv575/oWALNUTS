@@ -15,9 +15,9 @@ const WARMUP: usize = 150;
 const RETAINED: usize = 64;
 const CHAINS: usize = 4;
 
-struct Gaussian;
+struct DisconnectedTrap;
 
-impl Target for Gaussian {
+impl Target for DisconnectedTrap {
     fn dimension(&self) -> usize {
         3
     }
@@ -27,9 +27,23 @@ impl Target for Gaussian {
         position: &[f64],
         gradient: &mut [f64],
     ) -> Result<f64, TargetError> {
-        let mut logp = 0.0;
-        for ((entry, value), scale) in gradient.iter_mut().zip(position).zip([1.0_f64, 2.0, 0.5]) {
-            *entry = -*value / (scale * scale);
+        let x = position[0];
+        let mut logp = if x < -50.0 {
+            let centered = x + 60.0;
+            gradient[0] = -centered;
+            -100.0 - 0.5 * centered * centered
+        } else if x > 50.0 {
+            let centered = x - 60.0;
+            gradient[0] = -centered;
+            -0.5 * centered * centered
+        } else {
+            return Err(TargetError::recoverable(
+                "disconnected conformance trap gap",
+            ));
+        };
+        for (index, scale) in [(1, 2.0_f64), (2, 0.5_f64)] {
+            let value = position[index];
+            gradient[index] = -value / (scale * scale);
             logp -= 0.5 * value * value / (scale * scale);
         }
         Ok(logp)
@@ -38,10 +52,10 @@ impl Target for Gaussian {
 
 fn fixture_starts() -> Vec<Vec<f64>> {
     vec![
-        vec![12.0, -9.0, 6.0],
-        vec![0.25, -0.5, 0.75],
-        vec![-0.75, 0.25, -0.5],
-        vec![0.5, 0.75, -0.25],
+        vec![-60.0, 0.0, 0.0],
+        vec![60.0, -0.5, 0.75],
+        vec![60.5, 0.25, -0.5],
+        vec![59.5, 0.75, -0.25],
     ]
 }
 
@@ -56,7 +70,9 @@ fn run_arm(arm: Arm) -> Result<MultiChainOutput, Box<dyn Error>> {
         .adaptation(arms::adaptation(arm)?)
         .tuning(Tuning::default())
         .limits(Limits::new().admit_worst_case());
-    Ok(sampler.run(&Gaussian, &fixture_starts())?.into_inner())
+    Ok(sampler
+        .run(&DisconnectedTrap, &fixture_starts())?
+        .into_inner())
 }
 
 fn snapshot(output: &MultiChainOutput) -> Vec<Value> {
@@ -84,11 +100,21 @@ fn compare() -> Result<Value, Box<dyn Error>> {
     let observe = run_arm(Arm::Observe)?;
     let disabled_snapshot = snapshot(&disabled);
     let observe_snapshot = snapshot(&observe);
-    let retained_bytes_equal = disabled
-        .chains()
-        .iter()
-        .zip(observe.chains())
-        .all(|(left, right)| left.samples() == right.samples());
+    let retained_bytes_equal =
+        disabled
+            .chains()
+            .iter()
+            .zip(observe.chains())
+            .all(|(left, right)| {
+                left.samples().len() == right.samples().len()
+                    && left
+                        .samples()
+                        .iter()
+                        .zip(right.samples())
+                        .all(|(a, b)| a.to_bits() == b.to_bits())
+                    && arms::retained_unconstrained_sha256(left)
+                        == arms::retained_unconstrained_sha256(right)
+            });
     let work_equal = disabled_snapshot
         .iter()
         .zip(&observe_snapshot)
@@ -138,18 +164,24 @@ fn compare() -> Result<Value, Box<dyn Error>> {
                 )
         })
         .count();
+    let no_rescue_rng_mutation = retained_bytes_equal
+        && work_equal
+        && final_adaptation_equal
+        && diagnostics_equal
+        && non_rescue_telemetry_equal;
     let bit_identical = retained_bytes_equal
         && work_equal
         && final_adaptation_equal
         && diagnostics_equal
         && non_rescue_telemetry_equal
+        && observe_hits > 0
         && observe_forbidden_outcomes == 0;
     Ok(json!({
         "schema": "chain-rescue-v2-conformance",
         "schema_version": 1,
         "status": if bit_identical { "pass" } else { "fail" },
         "evidence": false,
-        "fixture": "deterministic-anisotropic-gaussian-v1",
+        "fixture": "deterministic-disconnected-log-density-trap-v2",
         "seed": FIXTURE_SEED,
         "warmup": WARMUP,
         "retained": RETAINED,
@@ -162,6 +194,8 @@ fn compare() -> Result<Value, Box<dyn Error>> {
             "final_adaptation_hashes_equal": final_adaptation_equal,
             "retained_diagnostics_equal": diagnostics_equal,
             "non_rescue_telemetry_equal": non_rescue_telemetry_equal,
+            "no_rescue_rng_mutation": no_rescue_rng_mutation,
+            "observed_hit_path_exercised": observe_hits > 0,
             "observe_forbidden_outcomes": observe_forbidden_outcomes,
             "bit_identical": bit_identical,
         },
@@ -200,6 +234,9 @@ mod tests {
     fn observe_is_bit_identical_to_disabled_on_non_evidence_fixture() {
         let result = compare().expect("conformance fixture runs");
         assert_eq!(result["comparison"]["bit_identical"], true);
+        assert_eq!(result["comparison"]["observed_hit_path_exercised"], true);
+        assert_eq!(result["comparison"]["no_rescue_rng_mutation"], true);
+        assert!(result["observe_hits"].as_u64().unwrap() > 0);
         assert_eq!(result["comparison"]["observe_forbidden_outcomes"], 0);
         assert_ne!(result["seed"], 92_101);
     }

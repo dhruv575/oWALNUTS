@@ -9,6 +9,7 @@ SOURCE_FILES = [
     "PREREGISTRATION.md",
     "protocol.json",
     "AMENDMENT-1.md",
+    "AMENDMENT-2.md",
     "README.md",
     ".gitignore",
     "Cargo.toml",

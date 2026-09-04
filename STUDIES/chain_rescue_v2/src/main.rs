@@ -79,22 +79,33 @@ fn write_result(path: &Path, payload: &Value) -> Result<(), Box<dyn Error>> {
     arms::write_new_atomically(path, &serde_json::to_vec_pretty(payload)?)
 }
 
+struct SamplerErrorContext<'a> {
+    stage: &'a str,
+    error: &'a str,
+    starts: &'a [Vec<f64>],
+    initial_hashes: &'a [String],
+    wall_seconds: f64,
+    radius: f64,
+    max_attempts: usize,
+    start_search_calls: usize,
+}
+
 fn sampler_error_payload(
     cfg: &Config,
-    stage: &str,
-    error: &str,
-    starts: &[Vec<f64>],
-    initial_hashes: &[String],
     target: &ReplicatedStanTarget,
-    wall_seconds: f64,
+    context: &SamplerErrorContext<'_>,
 ) -> Value {
+    let telemetry_unknown = context.stage == "run";
     json!({
         "schema": "chain-rescue-v2-cell-raw",
         "schema_version": 1,
         "complete": true,
+        "telemetry_complete": false,
+        "telemetry_unknown": telemetry_unknown,
+        "rescue_history": if telemetry_unknown { "unavailable" } else { "known_zero" },
         "status": "sampler_error",
-        "stage": stage,
-        "error": error,
+        "stage": context.stage,
+        "error": context.error,
         "target": cfg.target,
         "arm": cfg.arm.as_str(),
         "seed": cfg.seed,
@@ -102,15 +113,22 @@ fn sampler_error_payload(
         "warmup": WARMUP,
         "retained": RETAINED,
         "threads": cfg.threads,
-        "initial_positions": starts,
-        "initial_position_sha256": initial_hashes,
-        "wall_seconds": wall_seconds,
+        "dimension": target.dimension(),
+        "initial_positions": context.starts,
+        "initial_position_sha256": context.initial_hashes,
+        "wall_seconds": context.wall_seconds,
         "target_calls_total": target.calls(),
         "recoverable_failures_total": target.recoverable_failures(),
+        "init": {
+            "rule": "owalnuts::sampler::Init::uniform()",
+            "radius": context.radius,
+            "max_attempts": context.max_attempts,
+            "start_search_calls": context.start_search_calls,
+        },
         "warmup_config": arms::warmup_json(cfg.arm),
         "algorithm_revision": ALGORITHM_REVISION,
-        "chains_data": [],
-        "actions": [],
+        "chains_data": if telemetry_unknown { Value::Null } else { json!([]) },
+        "actions": if telemetry_unknown { Value::Null } else { json!([]) },
     })
 }
 
@@ -146,14 +164,20 @@ fn run(cfg: &Config) -> Result<(), Box<dyn Error>> {
             heartbeat.event("initialization", "after")?;
             heartbeat.event("sampling", "before")?;
             heartbeat.event("sampling", "after")?;
+            let error = error.to_string();
             let payload = sampler_error_payload(
                 cfg,
-                "initialization",
-                &error.to_string(),
-                &[],
-                &[],
                 &target,
-                0.0,
+                &SamplerErrorContext {
+                    stage: "init",
+                    error: &error,
+                    starts: &[],
+                    initial_hashes: &[],
+                    wall_seconds: 0.0,
+                    radius,
+                    max_attempts,
+                    start_search_calls: target.calls(),
+                },
             );
             heartbeat.event("result", "before")?;
             write_result(&cfg.output, &payload)?;
@@ -195,14 +219,20 @@ fn run(cfg: &Config) -> Result<(), Box<dyn Error>> {
     let posterior = match result {
         Ok(posterior) => posterior,
         Err(error) => {
+            let error = error.to_string();
             let payload = sampler_error_payload(
                 cfg,
-                "sampling",
-                &error.to_string(),
-                &starts,
-                &initial_hashes,
                 &target,
-                wall_seconds,
+                &SamplerErrorContext {
+                    stage: "run",
+                    error: &error,
+                    starts: &starts,
+                    initial_hashes: &initial_hashes,
+                    wall_seconds,
+                    radius,
+                    max_attempts,
+                    start_search_calls,
+                },
             );
             heartbeat.event("result", "before")?;
             write_result(&cfg.output, &payload)?;
@@ -251,6 +281,9 @@ fn run(cfg: &Config) -> Result<(), Box<dyn Error>> {
         "schema": "chain-rescue-v2-cell-raw",
         "schema_version": 1,
         "complete": true,
+        "telemetry_complete": true,
+        "telemetry_unknown": false,
+        "rescue_history": "complete",
         "status": "ok",
         "target": cfg.target,
         "arm": cfg.arm.as_str(),
