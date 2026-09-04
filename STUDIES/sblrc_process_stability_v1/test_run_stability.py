@@ -55,6 +55,23 @@ class ProtocolTests(unittest.TestCase):
             self.assertIn(("drop", "before", cycle), sequence)
             self.assertIn(("drop", "after", cycle), sequence)
 
+    def test_every_planned_child_has_an_archived_launch_marker(self):
+        markers = sorted(study.LAUNCHES.glob("*.json"))
+        self.assertEqual(len(markers), study.PROTOCOL["execution"]["expected_child_count"])
+        expected = {
+            f"{study.case_id(row, seed)}.json" for row, seed in study.all_cases()
+        }
+        self.assertEqual({path.name for path in markers}, expected)
+
+    def test_harness_manifest_discloses_nonidentical_full_hashes(self):
+        manifest = study.json.loads(
+            study.HARNESS_MANIFEST.read_text(encoding="utf-8")
+        )
+        comparison = manifest["comparison"]
+        self.assertFalse(comparison["full_file_sha256_match"])
+        self.assertTrue(comparison["size_match"])
+        self.assertTrue(comparison["all_pe_section_sha256_match"])
+
 
 if __name__ == "__main__":
     unittest.main()

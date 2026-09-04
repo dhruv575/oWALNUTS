@@ -1,0 +1,78 @@
+{
+  "schema": "sblrc-process-stability-v1-executed-harness-manifest",
+  "created_utc": "2026-09-04T04:37:15Z",
+  "capture_timing": {
+    "executed_binary_hashed_after_diagnostic_execution": true,
+    "executed_binary_hashed_before_requested_verification_rebuild": true,
+    "limitation": "The executable was not hashed before the 46 children ran. The archived launch markers and process records all name this executable path, and the file was hashed before any review-requested rebuild, but those facts cannot cryptographically prove that the bytes were unchanged since execution."
+  },
+  "source_identity": {
+    "implementation_commit_before_execution": "8e18e500cc840125e7be03d3e1b42a625242a800",
+    "clean_commit_rebuilt": "51a6d298169753f1c21382b6331d81e53d471933",
+    "rust_source_changes_between_commits": [],
+    "src_main_git_blob_at_implementation_commit": "564b93ba9ea84ff904dbf026f87b7f3487a2d93f",
+    "src_main_git_blob_at_rebuild_commit": "564b93ba9ea84ff904dbf026f87b7f3487a2d93f",
+    "cargo_lock_git_blob_at_implementation_commit": "4f1d1e987bc3ec7ae026bc53edbc590c62d7443e",
+    "cargo_lock_git_blob_at_rebuild_commit": "4f1d1e987bc3ec7ae026bc53edbc590c62d7443e",
+    "cargo_toml_git_blob_at_implementation_commit": "f2040427f2b5e7e9192060660583ca1a2d2e49ca",
+    "cargo_toml_git_blob_at_rebuild_commit": "f2040427f2b5e7e9192060660583ca1a2d2e49ca",
+    "src_main_sha256": "07ffd1f272d20baa67e48618481351a2b045c4cc0f444205bcb81407faf09379",
+    "cargo_toml_sha256": "02394263af270e2e180e5554d4d14e52187ca796434ab4d2729756f087b90fce",
+    "cargo_lock_sha256": "c75ae1fee20957fef4317b2bf8bac12495627b973efdae0548772d42c8f90bcc",
+    "protocol_sha256": "0ae15b235c35b73932160e453656da903247dbdd6a1b2daea0e4666f78e8cb88",
+    "preregistration_sha256": "8da54cd3ba915a71d6860d4566b53390d9e0f418930c43f2df3729b893d47450"
+  },
+  "toolchain": {
+    "selector": "+1.88.0-x86_64-pc-windows-gnu",
+    "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "rustc_commit": "6b00bc3880198600130e1cf62b8f8a93494488cc",
+    "host": "x86_64-pc-windows-gnu",
+    "llvm": "20.1.5"
+  },
+  "executed_binary": {
+    "path": "target/release/sblrc-process-stability-v1.exe",
+    "bytes": 3826944,
+    "sha256": "7f0c610b5904dc1a57cfbc0acb7e209496882e01bbfaaab86194806e1a90b95f",
+    "coff_timestamp": 1788496142,
+    "original_build_command_recorded_in_checks_log": "cargo +1.88.0-x86_64-pc-windows-gnu build --release --locked"
+  },
+  "verification_rebuild": {
+    "working_tree_clean_before_build": true,
+    "command": "$env:CARGO_TARGET_DIR='target\\committed-rebuild-51a6d29'; cargo +1.88.0-x86_64-pc-windows-gnu build --release --locked --bin sblrc-process-stability-v1",
+    "path": "target/committed-rebuild-51a6d29/release/sblrc-process-stability-v1.exe",
+    "bytes": 3826944,
+    "sha256": "7b794659f65c47d091c9a388d8414e8d3639876c2196f2fa7225cdb113edfd7b",
+    "coff_timestamp": 1788496582
+  },
+  "comparison": {
+    "full_file_sha256_match": false,
+    "size_match": true,
+    "different_bytes": 27803,
+    "pe_section_layout_match": true,
+    "all_pe_section_sha256_match": true,
+    "header_differences_include": [
+      "COFF timestamp",
+      "PE checksum"
+    ],
+    "remaining_differences_location": "trailing data outside the PE sections",
+    "shared_pe_section_sha256": {
+      ".text": "654283ac449e429e5894f1567e56141d38024ff8b071e832f58cbeef29ac62ab",
+      ".data": "11a84b5f8a3418b60a1ae9770cb599ba958ec66d6c0f65d1fe3cec74757e299a",
+      ".rdata": "4c5ee6ad4eff3ee39bc323fa22404f23352d262a1948401fbfb836a17277f7d6",
+      ".eh_fram": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+      ".pdata": "f4c40e3aae0c55e34d015f1644a2dc1e5ef0b21211e384999fc1d6247e4c567b",
+      ".xdata": "bc3fd84ae1d336887738f70497d72dfefc50c44b15f602c64f8545861b58341d",
+      ".bss": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      ".idata": "e72e3f4f2e57d899ac0bf1c1a5cde0f7d27725c3bb3ce25cc32ad22f38857a57",
+      ".tls": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+      ".rsrc": "14f46337cf6ecdd449f4a74460854d26ad050fef86713ac00a58489feaefdbf5",
+      ".reloc": "94427a6a608c967663c927000cc4d3464b95d7162e36f073beb1e2445c66a14d"
+    },
+    "conclusion": "The full executable hashes differ, so byte-for-byte identity is not claimed. The files have equal size and every PE section has the same layout and SHA-256; observed differences are in PE header metadata and trailing non-section data. This strongly ties the loadable image to the committed source rebuild but does not remove the post-execution-capture limitation."
+  },
+  "launch_record_linkage": {
+    "launch_markers_archived": 46,
+    "process_records_archived": 46,
+    "all_launch_markers_name_executed_binary_path": true
+  }
+}

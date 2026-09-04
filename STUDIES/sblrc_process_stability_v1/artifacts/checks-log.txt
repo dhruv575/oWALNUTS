@@ -26,3 +26,41 @@ Study execution:
 - silent faults: 1
 - seed 90101 run: no
 - result-driven reruns: none
+
+Post-review provenance verification (no diagnostic child launched):
+- executed-path binary was hashed before any review rebuild:
+  - bytes: 3,826,944
+  - SHA-256: 7f0c610b5904dc1a57cfbc0acb7e209496882e01bbfaaab86194806e1a90b95f
+- clean commit rebuilt: 51a6d298169753f1c21382b6331d81e53d471933
+- isolated build command:
+  `$env:CARGO_TARGET_DIR='target\committed-rebuild-51a6d29'; cargo +1.88.0-x86_64-pc-windows-gnu build --release --locked --bin sblrc-process-stability-v1`
+- verification-rebuild binary:
+  - bytes: 3,826,944
+  - SHA-256: 7b794659f65c47d091c9a388d8414e8d3639876c2196f2fa7225cdb113edfd7b
+- exact executable SHA-256 match: NO
+- PE section layout and every per-section SHA-256 match: YES
+- observed differences: COFF timestamp, PE checksum, and trailing data outside
+  the PE sections
+- limitation: the executed-path binary was first hashed after execution, and
+  its full-file hash differs from the clean rebuild; byte-for-byte identity is
+  not claimed
+- implementation and rebuild commits have identical harness Rust source,
+  Cargo.toml, and Cargo.lock Git blobs
+- all 46 pre-launch markers were found and archived
+- updated `run_stability.py verify` captured 3,826,944 bytes and SHA-256
+  7f0c610b5904dc1a57cfbc0acb7e209496882e01bbfaaab86194806e1a90b95f
+  for the current executed-path harness and matched the archived manifest
+- summaries and verdict were regenerated from archived process records only;
+  no diagnostic child was launched
+
+Post-review final checks:
+- `cargo +1.88.0-x86_64-pc-windows-gnu fmt -- --check`: PASS
+- `cargo +1.88.0-x86_64-pc-windows-gnu check --locked`: PASS
+- `cargo +1.88.0-x86_64-pc-windows-gnu test --locked`: PASS
+  (3 Rust unit tests passed)
+- `python -m unittest -v test_run_stability.py`: PASS
+  (7 Python unit tests passed, including launch-marker completeness and honest
+  nonidentical executable-hash disclosure)
+- executed-path harness SHA-256 after checks:
+  7f0c610b5904dc1a57cfbc0acb7e209496882e01bbfaaab86194806e1a90b95f
+  (unchanged)

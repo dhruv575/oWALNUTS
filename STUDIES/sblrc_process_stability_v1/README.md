@@ -1,4 +1,4 @@
-# sblrc process stability diagnostic v1 — silent fault reproduced during drop
+# sblrc process stability diagnostic v1 — silent post-sampling fault reproduced
 
 Status: preregistered in commit `44e42e9` before implementation or execution;
 the instrumented harness was committed as `8e18e50` before execution. The
@@ -23,8 +23,9 @@ children.** The failing child was `sample-r4-t4-990603`: four replicas, four
 threads, four chains, and exactly 1,000 warmup plus 1,000 retained transitions
 per chain.
 
-- Sampling completed and the raw result was durably written. It contains all
-  4,000 retained draws as observed, all finite, after 146,627 target calls.
+- Sampling completed and the raw result was durably written. It records a
+  retained-sample count of 4,000, an all-finite aggregate, and a diagnostic
+  checksum after 146,627 target calls; it does not contain the raw draws.
 - Atomic heartbeats completed through `sampling/after` and
   `result_write/after`. The final event was `drop/before`; `drop/after` and
   `process/complete` were absent.
@@ -37,13 +38,15 @@ per chain.
   one-replica/thread sampling children, and two of three four-replica/thread
   sampling children.
 
-The heartbeat narrows the observed failure to the explicit target
-destruction/unload span after completed sampling and result publication. It
-does not establish which destructor, library, or prior operation corrupted
-the heap, so the root cause remains **not established**. No child was rerun.
+The last durable event bounds an uninstrumented interval spanning the explicit
+target drop plus the attempted `drop/after` heartbeat write. This is consistent
+with teardown, but it is not proof that target destruction, library unload, or
+any particular prior operation caused the fault. The root cause remains **not
+established**. No child was rerun.
 
 Full process records, immutable heartbeat events, raw outputs, stdout/stderr,
-the matrix table, and the machine-readable verdict are under `artifacts/`.
+all 46 pre-launch markers, the matrix table, and the machine-readable verdict
+are under `artifacts/`.
 
 ## Matrix result
 
@@ -54,14 +57,36 @@ the matrix table, and the machine-readable verdict are under `artifacts/`.
 | evaluation | 1 replica / 1 thread | 6/6 succeeded |
 | evaluation | 4 replicas / 4 threads | 6/6 succeeded |
 | exact sampling | 1 replica / 1 thread / 1 chain | 3/3 succeeded |
-| exact sampling | 4 replicas / 4 threads / 4 chains | 2/3 succeeded; 1 silent drop-span fault |
+| exact sampling | 4 replicas / 4 threads / 4 chains | 2/3 succeeded; 1 silent post-result fault |
 | 20 in-process load/drop cycles | 1 replica / 1 thread | 2/2 succeeded |
 | 20 in-process load/drop cycles | 4 replicas / 4 threads | 2/2 succeeded |
 
 Durations are retained only as hang/timeout diagnostics, not performance
 evidence. No child timed out and no raw output was missing.
 
-## Reproduce
+## Executed-harness provenance
+
+The binary left at the path named by every launch marker was hashed after the
+study and before any review rebuild:
+
+- executed-path SHA-256:
+  `7f0c610b5904dc1a57cfbc0acb7e209496882e01bbfaaab86194806e1a90b95f`
+  (3,826,944 bytes);
+- clean committed-source rebuild SHA-256:
+  `7b794659f65c47d091c9a388d8414e8d3639876c2196f2fa7225cdb113edfd7b`
+  (3,826,944 bytes).
+
+The full hashes differ, so byte-for-byte identity is not claimed. The
+implementation commit and rebuild commit have identical Rust harness,
+`Cargo.toml`, and `Cargo.lock` Git blobs, and every PE section in the two
+executables has identical layout and SHA-256. The observed differences are in
+the PE timestamp/checksum and trailing non-section data. This strongly ties the
+loadable image to the committed source, but the binary was not hashed before
+the children ran, so the post-execution capture remains a limitation. Full
+commands, hashes, source identities, section hashes, and that limitation are
+archived in `artifacts/executed-harness-manifest.json`.
+
+## Verify the archived study
 
 ```powershell
 cd STUDIES\sblrc_process_stability_v1
@@ -69,16 +94,20 @@ cargo +1.88.0-x86_64-pc-windows-gnu fmt -- --check
 cargo +1.88.0-x86_64-pc-windows-gnu check --locked
 cargo +1.88.0-x86_64-pc-windows-gnu test --locked
 python -m unittest -v test_run_stability.py
-cargo +1.88.0-x86_64-pc-windows-gnu build --release --locked
-& 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\run_stability.py run
+& 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\run_stability.py verify
 & 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\run_stability.py analyze
 & 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\checksums.py
 ```
 
-The orchestrator verifies the frozen input hashes and forbidden seed before
-launching children. It records every child once, including Windows return-code
-forms, stdout/stderr, duration, raw-output existence, and durable heartbeat
-history. Existing launch markers prevent result-driven reruns.
+`verify` reports the current harness size/hash and checks it against the
+archived executed-binary manifest. `analyze` only regenerates summaries from
+the 46 archived process records; it launches no child.
+
+The archived records prevent reruns in two layers. An existing process record
+is returned without launching anything. If a process record were absent but
+its archived pre-launch marker remained, the orchestrator would record an
+interrupted case rather than relaunch that child. The `run` command is
+therefore unnecessary for verification and is intentionally omitted above.
 
 The machine's default MSVC Rust target could not link because `link.exe` is
 not installed. This was a build-environment issue, not a diagnostic result;

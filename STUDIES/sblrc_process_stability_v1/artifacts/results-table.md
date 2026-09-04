@@ -1,6 +1,6 @@
 # sblrc process stability diagnostic v1 — results
 
-A process-stability fault reproduced in 1/46 diagnostic children: sample-r4-t4-990603 exited 0xC0000374 (STATUS_HEAP_CORRUPTION), silently, after the last durable heartbeat drop/before. Heartbeat localization is descriptive and does not establish root cause.
+A process-stability fault reproduced in 1/46 diagnostic children: sample-r4-t4-990603 exited 0xC0000374 (STATUS_HEAP_CORRUPTION), silently, after the last durable heartbeat drop/before. The uninstrumented interval spans target drop plus the attempted next heartbeat; it is consistent with teardown but does not prove that teardown caused the fault.
 
 These are process-lifecycle diagnostics, not posterior-performance evidence. Durations are reported only to identify hangs/timeouts.
 
@@ -24,4 +24,4 @@ These are process-lifecycle diagnostics, not posterior-performance evidence. Dur
 
 ## Fault records
 
-- `sample-r4-t4-990603`: child return code was 3221226356, not zero, required heartbeat sequence is incomplete; return `0xC0000374`; last heartbeat `drop/before`.
+- `sample-r4-t4-990603`: child return code was 3221226356, not zero, required heartbeat sequence is incomplete; return `0xC0000374`; last heartbeat `drop/before`. The following interval includes target drop and the attempted next heartbeat; this is consistent with teardown, not proof of causation.

@@ -26,6 +26,7 @@ HEARTBEATS = ARTIFACTS / "heartbeats"
 STDOUT = ARTIFACTS / "stdout"
 STDERR = ARTIFACTS / "stderr"
 LAUNCHES = ARTIFACTS / "launches"
+HARNESS_MANIFEST = ARTIFACTS / "executed-harness-manifest.json"
 HARNESS = HERE / "target" / "release" / (
     "sblrc-process-stability-v1.exe" if os.name == "nt" else "sblrc-process-stability-v1"
 )
@@ -136,8 +137,33 @@ def verify_inputs(require_harness: bool = True) -> dict[str, Any]:
         if not entry["matches_protocol"]:
             errors.append(f"{name} does not match frozen path/size/hash")
         observed[name] = entry
-    observed["harness"] = {"path": str(HARNESS), "exists": HARNESS.is_file()}
-    if require_harness and not HARNESS.is_file():
+    harness_exists = HARNESS.is_file()
+    harness = {
+        "path": str(HARNESS),
+        "exists": harness_exists,
+        "bytes": HARNESS.stat().st_size if harness_exists else None,
+        "sha256": sha256(HARNESS) if harness_exists else None,
+        "archive_manifest_path": str(HARNESS_MANIFEST),
+        "archive_manifest_exists": HARNESS_MANIFEST.is_file(),
+    }
+    if HARNESS_MANIFEST.is_file():
+        try:
+            manifest = json.loads(HARNESS_MANIFEST.read_text(encoding="utf-8"))
+            archived = manifest["executed_binary"]
+            harness["archived_executed_bytes"] = archived["bytes"]
+            harness["archived_executed_sha256"] = archived["sha256"]
+            harness["matches_archived_executed_harness"] = (
+                harness_exists
+                and harness["bytes"] == archived["bytes"]
+                and harness["sha256"] == archived["sha256"]
+            )
+            if require_harness and not harness["matches_archived_executed_harness"]:
+                errors.append("current harness does not match archived executed harness")
+        except Exception as error:  # noqa: BLE001 - malformed evidence is a verification error
+            harness["archive_manifest_error"] = str(error)
+            errors.append(f"cannot read executed harness manifest: {error}")
+    observed["harness"] = harness
+    if require_harness and not harness_exists:
         errors.append(f"release harness is missing: {HARNESS}")
     observed["protocol_sha256"] = sha256(PROTOCOL_PATH)
     observed["verified"] = not errors
@@ -526,14 +552,16 @@ def analyze() -> dict[str, Any]:
                 f"A process-stability fault reproduced in 1/{len(ordered)} diagnostic "
                 f"children: {fault['case_id']} exited {code}{label}, "
                 f"{'silently' if fault.get('silent_failure') else 'with output'}, after "
-                f"the last durable heartbeat {location}. Heartbeat localization is "
-                "descriptive and does not establish root cause."
+                f"the last durable heartbeat {location}. The uninstrumented interval "
+                "spans target drop plus the attempted next heartbeat; it is consistent "
+                "with teardown but does not prove that teardown caused the fault."
             )
         else:
             verdict_text = (
                 f"Process-stability faults reproduced in {len(faults)}/{len(ordered)} "
                 f"diagnostic children; {len(silent)} were silent by the frozen rule. "
-                "Heartbeat localization is descriptive and does not establish root cause."
+                "A last heartbeat bounds an interval that also includes attempting the "
+                "next heartbeat; it does not establish root cause."
             )
     else:
         verdict = "fault_not_reproduced"
@@ -626,7 +654,9 @@ def analyze() -> dict[str, Any]:
             )
             lines.append(
                 f"- `{fault['case_id']}`: {', '.join(fault['reasons'])}; "
-                f"return `{fault['return_code']['hex_32']}`; last heartbeat `{location}`."
+                f"return `{fault['return_code']['hex_32']}`; last heartbeat `{location}`. "
+                "The following interval includes target drop and the attempted next "
+                "heartbeat; this is consistent with teardown, not proof of causation."
             )
     atomic_write_text(ARTIFACTS / "results-table.md", "\n".join(lines) + "\n")
     atomic_write_text(

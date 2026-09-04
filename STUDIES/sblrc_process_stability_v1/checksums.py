@@ -30,7 +30,7 @@ if artifacts.exists():
     paths.extend(
         path
         for path in sorted(artifacts.rglob("*"))
-        if path.is_file() and "launches" not in path.parts
+        if path.is_file()
     )
 missing = [path for path in paths if not path.is_file()]
 if missing:
