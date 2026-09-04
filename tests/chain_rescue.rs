@@ -8,8 +8,8 @@ use std::num::NonZeroUsize;
 use owalnuts::sampler::{Adaptation, Metric, Sampler, WarmupConfig};
 use owalnuts::walnutpie::{
     ChainRescueConfig, ChainRescueCriterion, ChainRescueMode, ChainRescueOutcome,
-    ChainRescuePolicy, ChainRescueSkip, DiagonalMass, KernelTuning, RunConfig, Target, TargetError,
-    sample_chains,
+    ChainRescuePolicy, ChainRescueSkip, DiagonalMass, ErrorKind, KernelTuning, ResourceLimits,
+    RunConfig, Target, TargetError, preflight_chains, sample_chains,
 };
 
 struct Gaussian(usize);
@@ -95,6 +95,64 @@ fn starts(dimension: usize, scale: f64) -> Vec<Vec<f64>> {
                 .collect()
         })
         .collect()
+}
+
+#[derive(Clone, Copy)]
+enum MemoryCeiling {
+    Result,
+    Working,
+}
+
+fn limits_with(ceiling: MemoryCeiling, bytes: usize) -> ResourceLimits {
+    let defaults = ResourceLimits::default();
+    ResourceLimits::new(
+        NonZeroUsize::new(defaults.max_dimension()).unwrap(),
+        NonZeroUsize::new(defaults.max_chains()).unwrap(),
+        NonZeroUsize::new(defaults.max_total_transitions()).unwrap(),
+        NonZeroUsize::new(defaults.max_target_evaluations()).unwrap(),
+        NonZeroUsize::new(match ceiling {
+            MemoryCeiling::Result => bytes,
+            MemoryCeiling::Working => defaults.max_result_bytes(),
+        })
+        .unwrap(),
+        NonZeroUsize::new(match ceiling {
+            MemoryCeiling::Result => defaults.max_working_bytes(),
+            MemoryCeiling::Working => bytes,
+        })
+        .unwrap(),
+    )
+    .unwrap()
+}
+
+fn memory_admitted(
+    ceiling: MemoryCeiling,
+    bytes: usize,
+    rescue: Option<ChainRescueConfig>,
+) -> bool {
+    let target = Gaussian(16);
+    let starts = starts(16, 1.0);
+    let mass = DiagonalMass::identity(NonZeroUsize::new(16).unwrap());
+    let run = config(400, 20, rescue).with_limits(limits_with(ceiling, bytes));
+    preflight_chains(&target, &starts, &mass, &run).is_ok()
+}
+
+fn minimum_admitted_memory(ceiling: MemoryCeiling, rescue: Option<ChainRescueConfig>) -> usize {
+    let defaults = ResourceLimits::default();
+    let mut low = 1usize;
+    let mut high = match ceiling {
+        MemoryCeiling::Result => defaults.max_result_bytes(),
+        MemoryCeiling::Working => defaults.max_working_bytes(),
+    };
+    assert!(memory_admitted(ceiling, high, rescue.clone()));
+    while low < high {
+        let middle = low + (high - low) / 2;
+        if memory_admitted(ceiling, middle, rescue.clone()) {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    low
 }
 
 fn assert_execution_identical(
@@ -417,6 +475,22 @@ fn restart_rescues_a_chain_started_in_a_trap_by_the_density_rule() {
         assert!(*source_position < first_restart.window_transitions());
         assert!(step_after.is_finite() && *step_after > 0.0);
         assert_eq!(first_restart.pre_action_unconstrained_position().len(), 2);
+        let installed = first_restart
+            .installed_unconstrained_position()
+            .expect("restart records the exact installed source-window draw");
+        assert_eq!(installed.len(), 2);
+        assert_ne!(
+            installed
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            first_restart
+                .pre_action_unconstrained_position()
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            "pre-action and installed positions have distinct semantics"
+        );
     }
     assert_eq!(
         first_restart.window_index(),
@@ -497,6 +571,7 @@ fn two_hit_waits_for_the_second_same_hit_and_then_resets() {
         Some(ChainRescueCriterion::LogDensity)
     );
     assert_eq!(first.resulting_streak(), 1);
+    assert_eq!(first.installed_unconstrained_position(), None);
     assert!(!matches!(
         first.outcome(),
         ChainRescueOutcome::Restarted { .. }
@@ -516,6 +591,13 @@ fn two_hit_waits_for_the_second_same_hit_and_then_resets() {
     assert_eq!(second.proposed_source_chain(), Some(*source));
     assert!(*source_position < second.window_transitions());
     assert!(step_after.is_finite() && *step_after > 0.0);
+    assert_eq!(
+        second
+            .installed_unconstrained_position()
+            .expect("restart position")
+            .len(),
+        2
+    );
     assert_eq!(
         second.prior_criterion(),
         Some(ChainRescueCriterion::LogDensity)
@@ -602,6 +684,7 @@ fn rescue_telemetry_obeys_score_and_state_invariants() {
             assert_eq!(update.prior_streak(), 0);
             assert_eq!(update.resulting_criterion(), None);
             assert_eq!(update.resulting_streak(), 0);
+            assert_eq!(update.installed_unconstrained_position(), None);
             match (canonical, update.outcome()) {
                 (Some(expected), ChainRescueOutcome::ObservedHit { criterion }) => {
                     assert_eq!(*criterion, expected)
@@ -611,6 +694,75 @@ fn rescue_telemetry_obeys_score_and_state_invariants() {
             }
         }
     }
+}
+
+#[test]
+fn rescue_result_and_working_memory_are_preflight_accounted() {
+    let plain_result = minimum_admitted_memory(MemoryCeiling::Result, None);
+    let observe_result = minimum_admitted_memory(
+        MemoryCeiling::Result,
+        Some(ChainRescueConfig::observe_only()),
+    );
+    let restart_result = minimum_admitted_memory(
+        MemoryCeiling::Result,
+        Some(ChainRescueConfig::restart_from_best()),
+    );
+    assert!(plain_result < observe_result);
+    assert!(observe_result < restart_result);
+    assert!(memory_admitted(
+        MemoryCeiling::Result,
+        observe_result,
+        Some(ChainRescueConfig::observe_only())
+    ));
+    assert!(!memory_admitted(
+        MemoryCeiling::Result,
+        observe_result - 1,
+        Some(ChainRescueConfig::observe_only())
+    ));
+    assert!(memory_admitted(
+        MemoryCeiling::Result,
+        observe_result - 1,
+        None
+    ));
+
+    let plain_working = minimum_admitted_memory(MemoryCeiling::Working, None);
+    let observe_working = minimum_admitted_memory(
+        MemoryCeiling::Working,
+        Some(ChainRescueConfig::observe_only()),
+    );
+    let restart_working = minimum_admitted_memory(
+        MemoryCeiling::Working,
+        Some(ChainRescueConfig::restart_from_best()),
+    );
+    assert!(plain_working < observe_working);
+    assert!(observe_working < restart_working);
+    assert!(memory_admitted(
+        MemoryCeiling::Working,
+        restart_working,
+        Some(ChainRescueConfig::restart_from_best())
+    ));
+    assert!(!memory_admitted(
+        MemoryCeiling::Working,
+        restart_working - 1,
+        Some(ChainRescueConfig::restart_from_best())
+    ));
+    assert!(memory_admitted(
+        MemoryCeiling::Working,
+        restart_working - 1,
+        Some(ChainRescueConfig::observe_only())
+    ));
+
+    let target = Gaussian(16);
+    let starts = starts(16, 1.0);
+    let mass = DiagonalMass::identity(NonZeroUsize::new(16).unwrap());
+    let rejected = config(400, 20, Some(ChainRescueConfig::restart_from_best()))
+        .with_limits(limits_with(MemoryCeiling::Working, restart_working - 1));
+    assert_eq!(
+        preflight_chains(&target, &starts, &mass, &rejected)
+            .unwrap_err()
+            .kind(),
+        ErrorKind::ResourceLimit
+    );
 }
 
 #[test]

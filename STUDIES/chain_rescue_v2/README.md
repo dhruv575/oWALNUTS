@@ -19,7 +19,11 @@ The core opt-in APIs are `ChainRescueConfig::observe_only()` and
 `restart_from_best`. Observe-only synchronizes chains and retains each
 window's log densities plus one pre-action position per boundary; restart
 policies additionally retain source-window positions until that boundary.
-No full source window is copied into telemetry.
+No full source window is copied into telemetry. A restart update exposes the
+one exact installed unconstrained position so the harness can compute its
+preregistered SHA-256. Conservative result and working-memory preflight
+estimates include the rescue updates, position payloads, score buffers and
+source-window storage.
 
 There is still no study harness, study Cargo manifest, or evidence artifact,
 and none of the registered evidence seeds has been run.

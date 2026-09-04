@@ -184,9 +184,11 @@
 //! accounted by this API, not process RSS, address-space, stack, allocator, or
 //! operating-system limits. Result accounting covers sample scalar storage,
 //! transition diagnostic storage, per-chain mass metadata, output containers,
-//! and telemetry containers. Working accounting conservatively covers copied
-//! initial positions, inverse mass, momentum, gradients, kernel states/spans,
-//! and transition workspaces for all chains live at once. It excludes the
+//! and telemetry containers, including per-boundary chain-rescue positions.
+//! Working accounting conservatively covers copied initial positions, inverse
+//! mass, momentum, gradients, kernel states/spans, transition workspaces,
+//! rescue log-density buffers, and restart source windows for all chains live
+//! at once. It excludes the
 //! target and its allocations, callback stack/temporaries, Rayon and thread
 //! stacks, RNG/dependency/allocator overhead, code and shared libraries,
 //! caller-owned inputs, panic payloads, and unrelated process memory. Actual
@@ -1574,7 +1576,10 @@ pub enum ChainRescuePolicy {
 /// retain the current window's unconstrained positions until its boundary so
 /// that an acted-on chain can draw one uniformly. Observe-only and pooling do
 /// not retain those source windows. Telemetry stores one full unconstrained
-/// pre-action position per chain and boundary, never a full source window.
+/// pre-action position per chain and boundary and, on restart only, the exact
+/// installed position; it never stores a full source window. Both result
+/// payloads and transient score/source-window buffers are included in
+/// [`ResourceLimits`] preflight accounting.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChainRescueConfig {
     mode: ChainRescueMode,
@@ -1783,6 +1788,7 @@ pub struct ChainRescueUpdate {
     resulting_streak: usize,
     proposed_source_chain: Option<usize>,
     pre_action_unconstrained_position: Vec<f64>,
+    installed_unconstrained_position: Option<Vec<f64>>,
     outcome: ChainRescueOutcome,
 }
 
@@ -1876,6 +1882,14 @@ impl ChainRescueUpdate {
     /// action.
     pub fn pre_action_unconstrained_position(&self) -> &[f64] {
         &self.pre_action_unconstrained_position
+    }
+    /// Exact unconstrained source-window position installed by a restart.
+    ///
+    /// This is `None` for every non-restart outcome. It is deliberately
+    /// separate from [`Self::pre_action_unconstrained_position`], which always
+    /// records the rescued chain's position before the boundary action.
+    pub fn installed_unconstrained_position(&self) -> Option<&[f64]> {
+        self.installed_unconstrained_position.as_deref()
     }
     pub fn outcome(&self) -> &ChainRescueOutcome {
         &self.outcome
@@ -4034,9 +4048,11 @@ fn inverse_from_cholesky(lower: &[f64], n: usize) -> Option<Vec<f64>> {
 /// Checked production resource ceilings. Values can only be tightened.
 ///
 /// `max_result_bytes` covers retained samples, mandatory transition
-/// diagnostics, telemetry and output containers. `max_working_bytes` covers a
-/// conservative all-chains-live bound for copied initial positions, inverse
-/// mass, momentum, gradients, states, spans, and transition workspaces.
+/// diagnostics, telemetry (including rescue position payloads) and output
+/// containers. `max_working_bytes` covers a conservative all-chains-live bound
+/// for copied initial positions, inverse mass, momentum, gradients, states,
+/// spans, transition workspaces, rescue score buffers and restart source
+/// windows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceLimits {
     max_dimension: usize,
@@ -5538,6 +5554,107 @@ fn inverse_mass(mass: &DiagonalMass) -> Result<Vec<f64>, Error> {
         .collect()
 }
 
+/// Additional heap payload admitted by the synchronized rescue driver.
+///
+/// Result accounting includes the rescue-update vector's conservative growth
+/// capacity, every pre-action position, and (for mutating restart policies) an
+/// installed position at every boundary. Working accounting includes growing
+/// log-density buffers plus one sorting copy, copied variance state and
+/// boundary snapshots, and source-window positions plus their `Vec` headers.
+fn chain_rescue_memory_bytes(
+    config: &RunConfig,
+    schedule: Option<&WarmupScheduleMetadata>,
+    chain_count: usize,
+    dimension: usize,
+) -> Result<(usize, usize), Error> {
+    let Some(rescue) = config
+        .warmup
+        .as_ref()
+        .and_then(|warmup| warmup.chain_rescue.as_ref())
+        .filter(|_| chain_count >= 2)
+    else {
+        return Ok((0, 0));
+    };
+    let Some(schedule) = schedule else {
+        return Ok((0, 0));
+    };
+    let (boundary_count, longest_window) = schedule
+        .windows
+        .iter()
+        .filter(|window| !window.is_empty() && window.end <= config.discarded)
+        .fold((0usize, 0usize), |(count, longest), window| {
+            (count + 1, longest.max(window.len()))
+        });
+    if boundary_count == 0 {
+        return Ok((0, 0));
+    }
+    let stores_installed_position = rescue.mode == ChainRescueMode::RestartFromBest
+        && rescue.policy != ChainRescuePolicy::ObserveOnly;
+
+    // `Vec` currently grows geometrically. Four elements is a conservative
+    // minimum allocation for this non-zero-sized update type, and twice the
+    // final length overbounds later growth capacities.
+    let update_capacity = boundary_count
+        .checked_mul(2)
+        .ok_or_else(Error::overflow)?
+        .max(4);
+    let update_storage = chain_count
+        .checked_mul(update_capacity)
+        .and_then(|value| value.checked_mul(size_of::<ChainRescueUpdate>()))
+        .ok_or_else(Error::overflow)?;
+    let update_count = chain_count
+        .checked_mul(boundary_count)
+        .ok_or_else(Error::overflow)?;
+    let position_payloads = 1usize + usize::from(stores_installed_position);
+    let result_position_bytes = update_count
+        .checked_mul(position_payloads)
+        .and_then(|value| value.checked_mul(dimension))
+        .and_then(|value| value.checked_mul(size_of::<f64>()))
+        .ok_or_else(Error::overflow)?;
+    let result_bytes = update_storage
+        .checked_add(result_position_bytes)
+        .ok_or_else(Error::overflow)?;
+
+    let growing_window_capacity = longest_window
+        .checked_mul(2)
+        .ok_or_else(Error::overflow)?
+        .max(4);
+    let log_density_bytes = growing_window_capacity
+        .checked_add(longest_window)
+        .and_then(|value| value.checked_mul(size_of::<f64>()))
+        .ok_or_else(Error::overflow)?;
+    let source_window_bytes = if stores_installed_position {
+        growing_window_capacity
+            .checked_mul(size_of::<Vec<f64>>())
+            .and_then(|value| {
+                value.checked_add(
+                    longest_window
+                        .checked_mul(dimension)?
+                        .checked_mul(size_of::<f64>())?,
+                )
+            })
+            .ok_or_else(Error::overflow)?
+    } else {
+        0
+    };
+    // One pre-action snapshot, the copied Welford mean/m2, and a fixed
+    // overbound for per-chain score vectors and local `Vec`/`Option` headers.
+    // Eight coordinate vectors per chain overbound the copied Welford state,
+    // pre-action/installed snapshots, source adaptation state and pooled
+    // variance/mass candidates that can coexist at a boundary.
+    let boundary_position_copies = 8usize;
+    let boundary_bytes = dimension
+        .checked_mul(size_of::<f64>() * boundary_position_copies)
+        .and_then(|value| value.checked_add(2 * 1024))
+        .ok_or_else(Error::overflow)?;
+    let working_bytes = log_density_bytes
+        .checked_add(source_window_bytes)
+        .and_then(|value| value.checked_add(boundary_bytes))
+        .and_then(|value| value.checked_mul(chain_count))
+        .ok_or_else(Error::overflow)?;
+    Ok((result_bytes, working_bytes))
+}
+
 fn validate<'a, T, I>(
     target: &T,
     chain_count: usize,
@@ -5725,6 +5842,8 @@ where
                 .ok_or_else(Error::overflow)?,
         )
         .ok_or_else(Error::overflow)?;
+    let (rescue_result_bytes, rescue_working_bytes) =
+        chain_rescue_memory_bytes(config, schedule.as_ref(), chain_count, dimension)?;
     let result_bytes = sample_bytes
         .checked_add(diagnostics_bytes)
         .and_then(|value| value.checked_add(metadata_vector_bytes))
@@ -5732,6 +5851,7 @@ where
         .and_then(|value| value.checked_add(size_of::<MultiChainOutput>()))
         .and_then(|value| value.checked_add(chain_count.checked_mul(size_of::<RunTelemetry>())?))
         .and_then(|value| value.checked_add(adaptation_vector_bytes))
+        .and_then(|value| value.checked_add(rescue_result_bytes))
         .ok_or_else(Error::overflow)?;
     if result_bytes > config.limits.max_result_bytes {
         return Err(Error::resource("result data exceeds its resource limit"));
@@ -5756,6 +5876,7 @@ where
         .and_then(|value| value.checked_add(16 * 1024))
         .and_then(|value| value.checked_add(paper_buffer_bytes))
         .and_then(|value| value.checked_mul(chain_count))
+        .and_then(|value| value.checked_add(rescue_working_bytes))
         .ok_or_else(Error::overflow)?;
     if working_bytes > config.limits.max_working_bytes {
         return Err(Error::resource(
@@ -7608,6 +7729,10 @@ fn run_chain<T: Target>(
         shared_initial_step_search,
         persistent,
     )?;
+    // Only `sample_chains_rescued` consumes these synchronized window
+    // records. Single-chain and otherwise unsynchronized paths ignore chain
+    // rescue without retaining unused warmup windows.
+    run.rescue_record = None;
     run.advance(run.transitions)?;
     run.finish()
 }
@@ -9953,6 +10078,47 @@ const fn canonical_rescue_criterion(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn required_rescue_scores_are_finite(
+    steps: &[f64],
+    density_scores: &[Option<(f64, f64)>],
+    median_step: Option<f64>,
+    step_threshold: Option<f64>,
+    density_reference: Option<f64>,
+    density_spread: Option<f64>,
+    density_threshold: Option<f64>,
+    density_gaps: &[Option<f64>],
+) -> bool {
+    steps.iter().all(|value| value.is_finite())
+        && density_scores
+            .iter()
+            .all(|score| score.is_some_and(|(median, iqr)| median.is_finite() && iqr.is_finite()))
+        && median_step.is_some_and(f64::is_finite)
+        && step_threshold.is_some_and(f64::is_finite)
+        && density_reference.is_some_and(f64::is_finite)
+        && density_spread.is_some_and(f64::is_finite)
+        && density_threshold.is_some_and(f64::is_finite)
+        && density_gaps
+            .iter()
+            .all(|gap| gap.is_some_and(f64::is_finite))
+}
+
+fn select_rescue_source(
+    steps: &[f64],
+    medians: &[f64],
+    criteria: &[Option<ChainRescueCriterion>],
+    finite: bool,
+) -> Option<usize> {
+    finite.then_some(())?;
+    (0..steps.len())
+        .filter(|chain| criteria[*chain].is_none())
+        .max_by(|a, b| {
+            steps[*a]
+                .total_cmp(&steps[*b])
+                .then(medians[*a].total_cmp(&medians[*b]))
+        })
+}
+
 struct RescueBoundaryScores {
     window_index: usize,
     transition: usize,
@@ -9980,6 +10146,7 @@ struct RescueBoundaryDecision {
     prior: Vec<ChainRescueStreak>,
     resulting: Vec<ChainRescueStreak>,
     proposed_source: Option<usize>,
+    installed_positions: Vec<Option<Vec<f64>>>,
     outcomes: Vec<ChainRescueOutcome>,
 }
 
@@ -10015,9 +10182,25 @@ fn record_rescue_boundary<T: Target>(
             resulting_streak: decision.resulting[chain].streak,
             proposed_source_chain: decision.proposed_source,
             pre_action_unconstrained_position: scores.pre_action_positions[chain].clone(),
+            installed_unconstrained_position: decision.installed_positions[chain].clone(),
             outcome: decision.outcomes[chain].clone(),
         });
     }
+}
+
+struct RestartChainsResult {
+    outcomes: Vec<ChainRescueOutcome>,
+    installed_positions: Vec<Option<Vec<f64>>>,
+}
+
+fn adopt_source_window_position(
+    destination: &mut [f64],
+    source_positions: &[Vec<f64>],
+    source_position: usize,
+) -> Vec<f64> {
+    let installed = source_positions[source_position].clone();
+    destination.copy_from_slice(&installed);
+    installed
 }
 
 fn restart_chains<T: Target>(
@@ -10025,7 +10208,7 @@ fn restart_chains<T: Target>(
     positions: &mut [Vec<Vec<f64>>],
     source: usize,
     criteria: &[Option<ChainRescueCriterion>],
-) -> Vec<ChainRescueOutcome> {
+) -> RestartChainsResult {
     let source_state = {
         let run = slots[source].run.as_ref().expect("started");
         RescueSourceState {
@@ -10040,16 +10223,21 @@ fn restart_chains<T: Target>(
     };
     debug_assert!(!source_state.positions.is_empty());
     let mut outcomes = Vec::with_capacity(slots.len());
+    let mut installed_positions = Vec::with_capacity(slots.len());
     for (chain, slot) in slots.iter_mut().enumerate() {
         let Some(criterion) = criteria[chain] else {
             outcomes.push(ChainRescueOutcome::Kept);
+            installed_positions.push(None);
             continue;
         };
         let run = slot.run.as_mut().expect("started");
         let (rng, cached_state) = run.rng_slot.parts();
         let source_position = rng.random_range(0..source_state.positions.len());
-        run.position
-            .copy_from_slice(&source_state.positions[source_position]);
+        let installed = adopt_source_window_position(
+            &mut run.position,
+            &source_state.positions,
+            source_position,
+        );
         *cached_state = None;
         run.active_mass = source_state.active_mass.clone();
         run.inverse_mass = source_state.inverse_mass.clone();
@@ -10063,8 +10251,12 @@ fn restart_chains<T: Target>(
             source_position,
             step_after: source_state.active_tuning.step_size,
         });
+        installed_positions.push(Some(installed));
     }
-    outcomes
+    RestartChainsResult {
+        outcomes,
+        installed_positions,
+    }
 }
 
 /// The boundary action of [`ChainRescueConfig`] on every started chain.
@@ -10138,25 +10330,17 @@ fn rescue_boundary<T: Target>(
     let raw_criteria: Vec<Option<ChainRescueCriterion>> = (0..chains)
         .map(|chain| canonical_rescue_criterion(step_hits[chain], density_hits[chain]))
         .collect();
-    let finite = inputs_finite
-        && median_step.is_some_and(f64::is_finite)
-        && step_threshold.is_some_and(f64::is_finite)
-        && density_reference.is_some_and(f64::is_finite)
-        && density_spread.is_some_and(f64::is_finite)
-        && density_threshold.is_some_and(f64::is_finite)
-        && density_gaps
-            .iter()
-            .all(|gap| gap.is_some_and(f64::is_finite));
-    let proposed_source = finite.then(|| {
-        (0..chains)
-            .filter(|chain| raw_criteria[*chain].is_none())
-            .max_by(|a, b| {
-                steps[*a]
-                    .total_cmp(&steps[*b])
-                    .then(medians[*a].total_cmp(&medians[*b]))
-                    .then_with(|| b.cmp(a))
-            })
-    });
+    let finite = required_rescue_scores_are_finite(
+        &steps,
+        &scores,
+        median_step,
+        step_threshold,
+        density_reference,
+        density_spread,
+        density_threshold,
+        &density_gaps,
+    );
+    let proposed_source = select_rescue_source(&steps, &medians, &raw_criteria, finite);
     let boundary_scores = RescueBoundaryScores {
         window_index,
         transition,
@@ -10173,7 +10357,7 @@ fn rescue_boundary<T: Target>(
         density_hits,
         raw_criteria,
         finite,
-        proposed_source: proposed_source.flatten(),
+        proposed_source,
         pre_action_positions: slots
             .iter()
             .map(|slot| slot.run.as_ref().expect("started").position.clone())
@@ -10196,6 +10380,7 @@ fn rescue_boundary<T: Target>(
                 prior,
                 resulting: streaks.to_vec(),
                 proposed_source: None,
+                installed_positions: vec![None; chains],
                 outcomes: vec![ChainRescueOutcome::Skipped(ChainRescueSkip::ShortWindow); chains],
             },
         );
@@ -10226,6 +10411,7 @@ fn rescue_boundary<T: Target>(
                         prior,
                         resulting: streaks.to_vec(),
                         proposed_source: None,
+                        installed_positions: vec![None; chains],
                         outcomes: vec![ChainRescueOutcome::Skipped(reason); chains],
                     },
                 );
@@ -10235,10 +10421,13 @@ fn rescue_boundary<T: Target>(
             match rescue.policy {
                 ChainRescuePolicy::Immediate => {
                     streaks.fill(ChainRescueStreak::default());
-                    let outcomes = if observed.iter().any(Option::is_some) {
+                    let restarted = if observed.iter().any(Option::is_some) {
                         restart_chains(slots, &mut positions, source, &observed)
                     } else {
-                        vec![ChainRescueOutcome::Kept; chains]
+                        RestartChainsResult {
+                            outcomes: vec![ChainRescueOutcome::Kept; chains],
+                            installed_positions: vec![None; chains],
+                        }
                     };
                     record_rescue_boundary(
                         slots,
@@ -10250,7 +10439,8 @@ fn rescue_boundary<T: Target>(
                             prior,
                             resulting: streaks.to_vec(),
                             proposed_source: Some(source),
-                            outcomes,
+                            installed_positions: restarted.installed_positions,
+                            outcomes: restarted.outcomes,
                         },
                     );
                 }
@@ -10275,6 +10465,7 @@ fn rescue_boundary<T: Target>(
                             prior,
                             resulting: streaks.to_vec(),
                             proposed_source: Some(source),
+                            installed_positions: vec![None; chains],
                             outcomes,
                         },
                     );
@@ -10299,11 +10490,15 @@ fn rescue_boundary<T: Target>(
                         *streak = state.resulting;
                     }
                     let restarted = action_criteria.iter().any(Option::is_some);
-                    let mut outcomes = if restarted {
+                    let restart_result = if restarted {
                         restart_chains(slots, &mut positions, source, &action_criteria)
                     } else {
-                        vec![ChainRescueOutcome::Kept; chains]
+                        RestartChainsResult {
+                            outcomes: vec![ChainRescueOutcome::Kept; chains],
+                            installed_positions: vec![None; chains],
+                        }
                     };
+                    let mut outcomes = restart_result.outcomes;
                     if !restarted {
                         for (chain, criterion) in observed.iter().enumerate() {
                             if let Some(criterion) = criterion {
@@ -10331,6 +10526,7 @@ fn rescue_boundary<T: Target>(
                             prior: transitions.iter().map(|state| state.prior).collect(),
                             resulting: streaks.to_vec(),
                             proposed_source: Some(source),
+                            installed_positions: restart_result.installed_positions,
                             outcomes,
                         },
                     );
@@ -10360,6 +10556,7 @@ fn rescue_boundary<T: Target>(
                             prior,
                             resulting: streaks.to_vec(),
                             proposed_source: None,
+                            installed_positions: vec![None; chains],
                             outcomes: vec![
                                 ChainRescueOutcome::Skipped(
                                     ChainRescueSkip::NothingToPool,
@@ -10412,6 +10609,7 @@ fn rescue_boundary<T: Target>(
                     prior,
                     resulting: streaks.to_vec(),
                     proposed_source: None,
+                    installed_positions: vec![None; chains],
                     outcomes: vec![
                         ChainRescueOutcome::Pooled {
                             step_after: step,
@@ -10743,6 +10941,73 @@ mod tests {
         );
         assert!(!after_restart.restart);
         assert_eq!(after_restart.resulting, first.resulting);
+    }
+
+    #[test]
+    fn rescue_source_exact_ties_keep_parent_higher_index_behavior() {
+        let steps = [1.0, 2.0, 2.0, 0.01];
+        let medians = [0.0, 5.0, 5.0, -100.0];
+        let criteria = [None, None, None, Some(ChainRescueCriterion::LogDensity)];
+        assert_eq!(
+            select_rescue_source(&steps, &medians, &criteria, true),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn nonfinite_rescue_scores_are_ineligible_and_have_no_source() {
+        let density_scores = [Some((0.0, 1.0)), Some((1.0, 1.0))];
+        let density_gaps = [Some(1.0), Some(0.0)];
+        let criteria = [Some(ChainRescueCriterion::LogDensity), None];
+        let steps = [f64::NAN, 1.0];
+        let finite = required_rescue_scores_are_finite(
+            &steps,
+            &density_scores,
+            Some(1.0),
+            Some(0.1),
+            Some(1.0),
+            Some(1.0),
+            Some(3.0),
+            &density_gaps,
+        );
+        assert!(!finite);
+        assert_eq!(
+            select_rescue_source(&steps, &[0.0, 1.0], &criteria, finite),
+            None
+        );
+
+        let nonfinite_density = [Some((f64::INFINITY, 1.0)), Some((1.0, 1.0))];
+        assert!(!required_rescue_scores_are_finite(
+            &[1.0, 1.0],
+            &nonfinite_density,
+            Some(1.0),
+            Some(0.1),
+            Some(1.0),
+            Some(1.0),
+            Some(3.0),
+            &density_gaps,
+        ));
+    }
+
+    #[test]
+    fn adopted_position_is_the_exact_selected_source_window_draw() {
+        let source_positions = vec![
+            vec![1.0, -2.0],
+            vec![f64::from_bits(0x3ff0_0000_0000_0001), -0.0],
+        ];
+        let mut destination = vec![9.0, 9.0];
+        let installed = adopt_source_window_position(&mut destination, &source_positions, 1);
+        assert_eq!(
+            installed.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+            source_positions[1]
+                .iter()
+                .map(|x| x.to_bits())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            destination.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+            installed.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+        );
     }
 
     #[test]
