@@ -188,7 +188,7 @@ Clean-room reference NUTS harness, ESS per gradient (seed medians):
 | reference NUTS | 1.00x | 1.00x | 1.00x |
 | oWALNUTS default kernel | 0.81x | 0.75x | 1.03x |
 | + initial-evaluation cache (now the `Sampler` default; draws bit-identical) | 0.91x | 0.81x | 1.06x |
-| + `UTurnRule::MomentumSum` (opt-in) | 0.86x | 1.09x | 1.07x |
+| + `UTurnRule::MomentumSum` (then opt-in; now the sampler default) | 0.86x | 1.09x | 1.07x |
 
 The cause of the gap is a wasted re-evaluation of the current state at the
 start of every transition (one gradient per transition, 11 % at 8-9 leaves
@@ -196,9 +196,9 @@ per orbit; exact to cache) plus the endpoint U-turn rule, which stops 3.4
 leaves later per orbit than Stan's momentum sum on the isotropic Gaussian
 for no ESS gain (neutral within noise elsewhere). The exhaustion rule never
 triggers on these targets; the funnel tail mass is preserved under every
-option (`examples/funnel_kernel_options.rs`). The momentum-sum rule stays
-opt-in: the preregistered posteriordb decision (WP26, below) rejected it as
-the default.
+option (`examples/funnel_kernel_options.rs`). WP26 initially kept the
+momentum-sum rule opt-in; WP31 later made it the sampler default only in
+combination with Stan metric regularisation, and WP32 validated that pair.
 
 ### U-turn rule default decision (WP26)
 
