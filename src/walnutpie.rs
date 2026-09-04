@@ -10873,7 +10873,10 @@ mod tests {
         }
     }
 
+    // Lazy TLS is deliberate: the Windows-GNU const-TLS path does not run
+    // this test probe's destructor reliably on every scoped worker.
     thread_local! {
+        #[allow(clippy::missing_const_for_thread_local)]
         static SCOPED_POOL_TLS_PROBE: std::cell::RefCell<Option<TlsDropProbe>> =
             std::cell::RefCell::new(None);
     }
