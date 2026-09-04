@@ -122,8 +122,8 @@ committed artifacts must never be overwritten.
    conformance indexes. Do not check out only the recorded implementation
    commit. The selected provenance index authenticates that implementation
    source commit/tree from within the complete publication revision.
-   `current-post-run.json` is the active provenance index; prior immutable
-   indexes remain historical records.
+   `current-post-run-0002.json` is the final active provenance index; prior
+   immutable indexes remain historical records.
 2. Check out posteriordb commit
    `28f8d3d6e975315f42aa274a8399f21e07a43b30` cleanly. Set
    `WP36_POSTERIORDB_PATH` to that checkout.

@@ -9,6 +9,7 @@ Commands:
   run_rescue.py prepare-provenance  # curator-only, create-new
   run_rescue.py rebind-amendment-3-provenance  # curator-only, create-new
   run_rescue.py rebind-post-run-provenance  # curator-only, create-new
+  run_rescue.py rebind-final-publication-provenance  # curator-only, create-new
   run_rescue.py conformance         # curator-only, create-new
 
 `run` is the only command that launches evidence cells. It follows the frozen
@@ -59,6 +60,9 @@ AMENDMENT_3_PROVENANCE_INDEX = (
     ARTIFACTS / "provenance" / "current-amendment-3.json"
 )
 POST_RUN_PROVENANCE_INDEX = ARTIFACTS / "provenance" / "current-post-run.json"
+FINAL_PUBLICATION_PROVENANCE_INDEX = (
+    ARTIFACTS / "provenance" / "current-post-run-0002.json"
+)
 
 DEFAULT_ASSETS = Path(
     r"C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6"
@@ -195,12 +199,16 @@ def authenticated_pointer_path(index: Path, field: str, legacy: Path) -> Path:
 
 def provenance_paths() -> tuple[Path, Path]:
     index = (
-        POST_RUN_PROVENANCE_INDEX
-        if POST_RUN_PROVENANCE_INDEX.is_file()
+        FINAL_PUBLICATION_PROVENANCE_INDEX
+        if FINAL_PUBLICATION_PROVENANCE_INDEX.is_file()
         else (
-            AMENDMENT_3_PROVENANCE_INDEX
-            if AMENDMENT_3_PROVENANCE_INDEX.is_file()
-            else PROVENANCE_INDEX
+            POST_RUN_PROVENANCE_INDEX
+            if POST_RUN_PROVENANCE_INDEX.is_file()
+            else (
+                AMENDMENT_3_PROVENANCE_INDEX
+                if AMENDMENT_3_PROVENANCE_INDEX.is_file()
+                else PROVENANCE_INDEX
+            )
         )
     )
     return (
@@ -932,6 +940,100 @@ def rebind_post_run_provenance() -> None:
     print(f"wrote {input_manifest.relative_to(HERE)}")
     print(f"wrote {build_manifest.relative_to(HERE)}")
     print(f"wrote {POST_RUN_PROVENANCE_INDEX.relative_to(HERE)}")
+
+
+def rebind_final_publication_provenance() -> None:
+    if FINAL_PUBLICATION_PROVENANCE_INDEX.exists():
+        raise RuntimeError("final publication provenance already exists; refusing replacement")
+    repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
+    if git_output(repository, "status", "--porcelain=v1"):
+        raise RuntimeError("source worktree must be clean before final provenance rebind")
+    old_input, old_build_path = provenance_paths()
+    old_build = json.loads(old_build_path.read_text(encoding="utf-8"))
+    rust_source_files = old_build.get("rust_binary_source_files") or [
+        record
+        for record in old_build.get("source_files", [])
+        if is_rust_binary_source(record["path"])
+    ]
+    changed_rust = [
+        record["path"]
+        for record in rust_source_files
+        if not canonical_source_matches(repository, record)
+    ]
+    if changed_rust:
+        raise RuntimeError(
+            f"Rust binary sources changed; audited rebuild is required: {changed_rust}"
+        )
+    for name, path in (
+        ("cell", HARNESS),
+        ("funnel", FUNNEL),
+        ("conformance", CONFORMANCE_BIN),
+    ):
+        if not file_matches_record(path, old_build["executables"][name]["primary"]):
+            raise RuntimeError(f"prepared executable changed before final rebind: {name}")
+    source_commit = git_output(repository, "rev-parse", "HEAD")
+    source_tree = git_output(repository, "rev-parse", "HEAD^{tree}")
+    suffix = source_commit[:12]
+    input_manifest = (
+        ARTIFACTS / "provenance" / f"external-inputs-final-{suffix}.json"
+    )
+    build_manifest = (
+        ARTIFACTS / "provenance" / f"build-manifest-final-{suffix}.json"
+    )
+    if input_manifest.exists() or build_manifest.exists():
+        raise RuntimeError("versioned final provenance path already exists")
+    external = inspect_external_inputs()
+    external["implementation_source_commit"] = source_commit
+    external["implementation_source_tree"] = source_tree
+    exclusive_write_json(input_manifest, external)
+    build = {
+        **old_build,
+        "schema": "chain-rescue-v2-build-manifest-final-publication-rebind",
+        "provenance_revision": "final-readme-correction-v1",
+        "source_commit": source_commit,
+        "source_tree": source_tree,
+        "source_files": source_file_records(repository),
+        "external_input_manifest_sha256": sha256(input_manifest),
+        "build_performed_for_rebind": False,
+        "rust_binary_source_files": rust_source_files,
+        "prior_analysis_provenance": {
+            "build_manifest": {
+                **file_record(old_build_path),
+                "path": old_build_path.relative_to(HERE).as_posix(),
+            },
+            "external_inputs": {
+                **file_record(old_input),
+                "path": old_input.relative_to(HERE).as_posix(),
+            },
+        },
+    }
+    exclusive_write_json(build_manifest, build)
+    exclusive_write_json(
+        FINAL_PUBLICATION_PROVENANCE_INDEX,
+        {
+            "schema": "chain-rescue-v2-provenance-index-final-publication",
+            "immutable": True,
+            "analysis_only": True,
+            "publication_sequence": 2,
+            "implementation_source_commit": source_commit,
+            "implementation_source_tree": source_tree,
+            "external_inputs": {
+                **file_record(input_manifest),
+                "path": input_manifest.relative_to(HERE).as_posix(),
+            },
+            "build_manifest": {
+                **file_record(build_manifest),
+                "path": build_manifest.relative_to(HERE).as_posix(),
+            },
+            "supersedes_without_replacement": {
+                "index": POST_RUN_PROVENANCE_INDEX.relative_to(HERE).as_posix(),
+                **file_record(POST_RUN_PROVENANCE_INDEX),
+            },
+        },
+    )
+    print(f"wrote {input_manifest.relative_to(HERE)}")
+    print(f"wrote {build_manifest.relative_to(HERE)}")
+    print(f"wrote {FINAL_PUBLICATION_PROVENANCE_INDEX.relative_to(HERE)}")
 
 
 def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
@@ -4138,6 +4240,8 @@ def main() -> None:
         rebind_amendment_3_provenance()
     elif command == "rebind-post-run-provenance":
         rebind_post_run_provenance()
+    elif command == "rebind-final-publication-provenance":
+        rebind_final_publication_provenance()
     elif command == "run":
         run_all()
     elif command == "analyze":
