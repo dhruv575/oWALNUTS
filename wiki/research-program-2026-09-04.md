@@ -1,11 +1,14 @@
 # Research program 2026-09-04: the 0.2 program — make it usable, then make it competitive
 
-Status: **resumed on 2026-09-04 for WP35; the run is complete and no sampling
-is running.** Everything described here is merged into `main` at `0.2.0`;
-nothing is pushed, tagged or published. Companion documents:
+Status: **complete through WP36; no sampling is running.** Everything described
+here is committed in the current `0.2.0` release tree; nothing is pushed,
+tagged or published. Publication remains blocked on the Windows native
+BridgeStan process-lifecycle fault and release-platform verification. Companion
+documents:
 `research-program-2026-08-31.md`
 (the programme that produced `0.1.0-beta.2`), `research-ledger-2026-08-31.md`
-(one checksummed entry per study, WP22–WP35), `release-0.2.0.md`.
+(one checksummed entry per study, WP22–WP36, including subordinate WP35A),
+`release-0.2.0.md`.
 
 ## What this programme was
 
@@ -22,19 +25,21 @@ work, diagnostics and export, and a README rewrite.
 
 Items 1, 4, 5, 6 and 7 were engineering and are done. Item 2 turned out to be
 the programme: the benchmark falsified far more than it confirmed, and every
-subsequent study (WP24–WP34) exists because of something it found. Item 3 was
+subsequent study (WP24–WP36) exists because of something it found. Item 3 was
 answered **no** by its own evidence.
 
-## What shipped
+## What is in the release tree
 
-**A small API.** `owalnuts::sampler` is 21 public items: one `Sampler` builder,
-one `Posterior`, and `Metric` / `Adaptation` / `Tuning` / `Limits` / `Init`.
-Every path is a thin wrapper over one `walnutpie` entry point and is tested to
-produce bit-identical draws to calling that facade directly. The research-only
-facades (projected and pooled arrowhead, the `direct_original_q` family, the
-research evaluation limit) moved behind a `research` Cargo feature, off by
-default. `walnutpie` remains public and frozen; `ALGORITHM_REVISION` never
-changed during this programme.
+**A small API.** `owalnuts::sampler` exposes 30 top-level public names/items
+across its builder, posterior/result, configuration, target, diagnostic and
+control surfaces. `Sampler`, `Posterior`, `Metric`, `Adaptation`, `Tuning`,
+`Limits` and `Init` remain the primary user-facing path, rather than an
+exhaustive inventory. Every sampling path is a thin wrapper over one
+`walnutpie` entry point and is tested to produce bit-identical draws to calling
+that facade directly. The research-only facades (projected and pooled
+arrowhead, the `direct_original_q` family, the research evaluation limit)
+moved behind a `research` Cargo feature, off by default. `walnutpie` remains
+public and frozen; `ALGORITHM_REVISION` never changed during this programme.
 
 **Diagnostics and export in the crate.** `owalnuts::diagnostics` computes
 rank-normalised folded split R-hat, bulk, tail, quantile and mean ESS, MCSE and
@@ -70,7 +75,7 @@ with an sdist that vendors the path-dependency crates and PyPI trusted
 publishing gated on a tag. The name `owalnuts` is available on PyPI. The
 non-Windows legs have not been exercised.
 
-## The defaults changed eight times, each behind evidence
+## The defaults changed nine times, each behind evidence
 
 `walnutpie::RunConfig`, `WarmupConfig` and `KernelTuning` defaults are frozen for
 the oracles; every change below is in `owalnuts::sampler` only.
@@ -85,6 +90,7 @@ the oracles; every change below is in `owalnuts::sampler` only.
 | refinement levels 4 → 8 | WP28 `funnel_defaults_v1` | four levels halved the funnel's tail mass at the adapted step; eight are exact and never engage elsewhere |
 | `UTurnRule::MomentumSum` + `DiagonalMetricRegularization::Stan` | WP31 `joint_default_v1`, validated by WP32 | 1.508x ESS per gradient, 41/51 gates; neither works alone |
 | chain rescue `restart_from_best` | WP33 `chain_rescue_v1` | 25 of 27 cells against the plain driver's 21; `lotka_volterra` 0/3 → 3/3 |
+| chain rescue `restart_from_best` → none | WP36 `chain_rescue_v2` | `two_hit` failed its conjunctive gates and the registered fallback selected `no_rescue`; explicit rescue policies remain available |
 
 ## What the benchmark did to us
 
@@ -100,11 +106,22 @@ posteriors, 4 chains, 1,000 warmup and 1,000 retained, defaults on every sampler
 | v5 | WP32 | **42** | 36 | 28 | 1.069x all / **0.822x** healthy | **0.80x** |
 | v6 | WP35 | **45** | 34 | 29 | 0.848x on 15/16 fixed non-`arma11` models; one `sblrc` error | **0.825x** on those 15 |
 
-v6 is the full-current-default run after WP33. It has the strongest gate count
-but did **not** meet its preregistered release rule: a passing `one_comp` cell
-has max |z| 4.023 and one `sblrc` oWALNUTS subprocess exited without a result,
-so the fixed-16 efficiency criteria are unevaluable. v5 remains the last
-headline admitted by its own rule; v6 must be reported beside it.
+v6 is the historical full-default run during the temporary WP33
+`restart_from_best` default. It has the strongest gate count but did **not**
+meet its preregistered release rule: a passing `one_comp` cell has max |z|
+4.023 and one `sblrc` oWALNUTS subprocess exited without a result, so the
+fixed-16 efficiency criteria are unevaluable. WP36 subsequently selected
+`no_rescue`, and commit `87d8817` restored that default. v5 therefore again
+matches current sampler behavior and remains the release headline admitted by
+its own rule; v6 must be reported beside it as the record of the temporary
+WP33 default.
+
+No posteriordb v7 is required before release. This is not result-driven
+benchmark substitution: the final sampler restores v5's no-rescue defaults,
+and tests directly compare default output with an otherwise identical explicit
+custom no-rescue warmup, including empty rescue telemetry. A future v7 becomes
+necessary if an automatic cross-chain action is reintroduced, because that
+would again change the behavior measured by v5.
 
 v1 was the falsification that mattered: at defaults the sampler lost to CmdStan
 on every model, ran ten times slower per gradient, and the Appendix C adaptation
@@ -166,19 +183,29 @@ oWALNUTS finishes cleanly where CmdStan and nutpie leave a chain stuck or
 divergent, while still spending more gradients per effective sample on healthy
 models (0.67–0.95x).
 
-## Open lines after WP35
+## Open investigations after WP36, in priority order
 
-1. **Chain-rescue safety and timing.** WP35 records 30 restarts in 21 cells:
-   21 log-density and nine step events, including one log-density restart on
-   every `hmm_drive_0` seed and two step restarts as late as transition 249.
-   The next decision study should pair the current rule with a second-window
-   or two-consecutive-boundary score and a no-rescue control. It must gate
-   reference agreement and make the original mode assignment visible.
-2. **The unexplained `sblrc` process exit.** Seed 90101 exited without stderr
-   or raw JSON while 90102/90103 passed. Diagnose library load/unload and
-   process stability with synthetic or non-evidence seeds before another
-   breadth run; do not post-hoc rerun the WP35 cell.
-3. **`delta = 2`, the strongest unexploited efficiency lead.** WP34's near-miss arm is
+1. **Windows DLL/thread teardown fault.** WP35A reproduced the process-fault
+   class in one of 46 diagnostic children: a four-replica sampling child
+   durably published its result, reached `drop/before`, and then exited
+   `0xC0000374`; the other 45 children succeeded. WP36 independently recorded
+   six `0xC0000374` exits and one post-result timeout in the same Windows
+   native replicated-target path. The root cause is not established. Localise
+   or mitigate the BridgeStan DLL/thread lifecycle defect with diagnostic-only
+   inputs; keep the WP35 `sblrc` evidence cell and all WP36 cells immutable.
+   Nothing here identifies a fault in the core Rust sampler.
+2. **Release-platform verification.** After the native lifecycle defect is
+   addressed, exercise the core crate on Windows MSVC and the Linux backends,
+   and exercise the Python/BridgeStan package jobs across Windows, manylinux
+   x86_64/aarch64 and macOS x86_64/arm64, including the sdist. Publication
+   remains blocked until both this matrix and item 1 are complete.
+3. **Optional rescue research, not a default.** WP36 resolves the 0.2 default:
+   no automatic cross-chain action. A future study may test an observe-only
+   warning or a narrowly scoped step-only action. It must preserve original
+   chain attribution and retain the origin classifier limitation: WP36 found
+   only pathological/frozen ARMA and `lotka_volterra` origins and zero HMM
+   origins, so it provides no proof of genuine mode destruction.
+4. **Adaptive `delta`.** WP34's near-miss arm is
    1.070x over 17 models and 1.077x on the healthy ones at the *same* step and
    the same 42 gates, taking the CmdStan ratio from 0.850x to 0.915x;
    `da06-d2` reaches 1.122x on the healthy models. Both fail the preregistered
@@ -187,33 +214,19 @@ models (0.67–0.95x).
    The right experiment is `delta` adapted per target from the observed `|dH|`
    distribution rather than a fixed constant, with the funnel and Eight Schools
    side checks that WP34 did not get to run.
-4. **A cheaper reverse-coarsening check.** This is now the named residual on the
+5. **A cheaper reverse-coarsening check.** This is now the named residual on the
    hard models: WP30 measured it at 3–7% of orbits on regressions and WP34 at
    10–54% on the four worst models, and it is the difference between 0.90x and
    0.95x of reference NUTS.
-5. **The funnel at the sampler defaults is unbiased but not efficient.** Eight
-   levels fixed the tail mass (v5 per-seed z of +1.02, −0.05, +0.93), but one
-   chain per seed still adapts to `h` between 0.001 and 0.02 and contributes
-   almost no ESS. Eight levels with `delta = 0.5` mixes far better at a 21% cost
-   on a 100-D Gaussian and remains a documented opt-in. WP35 again has exact
-   per-seed tail mass, but omega bulk ESS 388/539/356 and two divergences on
-   seed 90103.
-6. **Targets nothing samples.** The centered eight schools and `accel_gp` fail
-   almost every gate for every sampler (`accel_gp` is oWALNUTS 1/3 in WP35),
-   and `hmm_drive_0` remains a start-draw mode question even though density
-   rescue makes it 3/3 by moving the outlying chain. These belong in a
-   known-hard list rather than in an ordinary tuning loop.
-7. **Publishing.** crates.io and PyPI are both untouched. The wheel matrix has
-   only been exercised on Windows; the manylinux and macOS legs, the MSVC
-   toolchain and the Linux backends job are unverified.
 
 ## Method notes worth keeping
 
-- Every study was preregistered with a frozen `protocol.json` and fresh
+- Every evidence study was preregistered with a frozen `protocol.json` and fresh
   grep-verified seeds before the first cell, and several were decided *against*
   the hypothesis that motivated them (WP26, WP27's default, WP29's stanreg arm,
-  WP34). Two preregistered decision rules were met and applied (WP31 and WP32 as
-  a labelled post-hoc flip, and WP33); the rest left the defaults alone.
+  WP34, WP36's candidate). The WP31 pair was a labelled post-hoc flip validated
+  by WP32; WP33's preregistered rule temporarily enabled rescue, and WP36's
+  frozen fallback restored no rescue.
 - Bit-identity was the safety rail throughout. `tests/kernel_fingerprint.rs`
   pins the `walnutpie` defaults, and every performance or refactoring change had
   to reproduce it; two changes (WP30's cache, WP33's driver refactor) were

@@ -1,0 +1,369 @@
+{
+  "schema": "chain-rescue-v2",
+  "work_package": "WP36",
+  "status": "FROZEN_BEFORE_IMPLEMENTATION_OR_EXECUTION",
+  "frozen_utc": "2026-09-04",
+  "source_baseline": "17f1d97",
+  "purpose": "Decision study of observe-only current-rule scoring, explicit immediate restart_from_best, and a two-consecutive-hit restart rule. The study tests mode-origin safety, nuisance-action reduction, retained efficacy, funnel behavior, no-fire identity, completeness, and efficiency.",
+  "evidence_basis": {
+    "chain_rescue_v1": "WP33 made restart_from_best the default after 25/27 gates versus 21/27 for no rescue, but documented that moving a second-mode chain can make R-hat blind.",
+    "posteriordb_bench_v6": "WP35 recorded 30 restarts in 21 cells: 21 log-density and 9 step events, including hmm_drive_0 on every seed and nuisance actions on kidiq, earnings, and diamonds.",
+    "process_stability": "The merged WP35 follow-up reproduced a four-replica STATUS_HEAP_CORRUPTION after a durable sampling result during the teardown span; a durable result followed by abnormal process exit is therefore a process fault."
+  },
+  "preregistration_scope": {
+    "candidate_implemented": false,
+    "harness_implemented": false,
+    "evidence_run": false,
+    "sampling_run": false
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "estimators": "ArviZ 0.23.4",
+    "models": [
+      "bball_drive_event_0-hmm_drive_0",
+      "kidiq-kidscore_momhsiq",
+      "earnings-logearn_interaction",
+      "diamonds-diamonds",
+      "arma-arma11",
+      "hudson_lynx_hare-lotka_volterra",
+      "mesquite-logmesquite_logvash"
+    ],
+    "failure_class_models": [
+      "bball_drive_event_0-hmm_drive_0",
+      "arma-arma11",
+      "hudson_lynx_hare-lotka_volterra"
+    ],
+    "nuisance_action_models": [
+      "kidiq-kidscore_momhsiq",
+      "earnings-logearn_interaction",
+      "diamonds-diamonds"
+    ],
+    "no_fire_control": "mesquite-logmesquite_logvash",
+    "chains": 4,
+    "warmup": 1000,
+    "retained": 1000,
+    "initialization": "Init::uniform()",
+    "metric": "adapted diagonal",
+    "target_replicas": 4,
+    "threads": 4
+  },
+  "funnel": {
+    "target": "Neal's 10-dimensional funnel",
+    "exact_tail_probability": {
+      "event": "omega < -5",
+      "probability": 0.0478
+    },
+    "chains": 4,
+    "warmup": 2000,
+    "retained": 20000,
+    "starts": {
+      "omega": [-3, -1, 1, 3],
+      "other_coordinates": 0
+    }
+  },
+  "seeds": [
+    92101,
+    92102,
+    92103,
+    92104,
+    92105,
+    92106,
+    92107,
+    92108,
+    92109,
+    92110,
+    92111,
+    92112
+  ],
+  "seed_policy": {
+    "contiguous": true,
+    "skipped_numbers": [],
+    "search_baseline": "17f1d97",
+    "search_command": "git grep -n -P '(?<![0-9.eE])(?:92101|92102|92103|92104|92105|92106|92107|92108|92109|92110|92111|92112)(?![0-9.eE])' -- . ':(exclude)**/artifacts/**'",
+    "search_result": "NO_MATCHES",
+    "interpretation": "No seed appeared as a standalone integer token in tracked files outside artifact directories before this scaffold was created; occurrences embedded in longer integers, decimals, or exponents were excluded."
+  },
+  "scoring": {
+    "boundary": "End of each completed slow metric window, after metric update and dual-averaging restart.",
+    "minimum_window_transitions": 10,
+    "minimum_chains": 2,
+    "step": {
+      "score": "chain post-boundary step",
+      "threshold": "0.1 * across-chain median post-boundary step",
+      "hit": "score < threshold",
+      "ratio": 0.1
+    },
+    "density": {
+      "chain_score": "median selected-state log density over the completed window",
+      "reference": "across-chain median of chain window median log densities",
+      "spread": "across-chain median of chain window log-density IQRs",
+      "threshold": "3.0 * spread",
+      "hit": "reference - chain_score > threshold",
+      "iqr_factor": 3.0
+    },
+    "eligibility": "At least the current-rule minimum chains and transitions, all required scores finite, and at least one non-outlier source.",
+    "canonical_criterion": "Step when step_hit is true, including when both booleans are true; otherwise LogDensity when density_hit is true; otherwise null.",
+    "source": "Largest-step non-outlier chain; ties by larger median log density, then lower chain index.",
+    "source_position": "Uniform source-window index drawn with the rescued chain's own RNG only when a restart is actually performed."
+  },
+  "arms": {
+    "observe": {
+      "behavior": "Compute current-rule scores, booleans, canonical criterion, and deterministic proposed source; never mutate chain state.",
+      "rescue_rng_draws": 0,
+      "source_window_index_selected": false,
+      "required_identity": "Bit-identical to rescue disabled apart from added telemetry."
+    },
+    "current": {
+      "behavior": "Explicit immediate ChainRescueConfig::restart_from_best; do not inherit the process default.",
+      "action": "Restart on every eligible non-null canonical criterion using current source-window and state-transfer semantics."
+    },
+    "two_hit": {
+      "behavior": "Restart only on the same chain and same non-null canonical criterion at two consecutive eligible slow-window boundaries.",
+      "step_priority": true,
+      "first_hit": "Set prior criterion to the canonical criterion and streak to 1; do not mutate or consume rescue RNG.",
+      "second_same_hit": "Recompute the source, restart, then reset prior criterion and streak.",
+      "criterion_change": "Reset the old streak and start the new criterion at streak 1.",
+      "clean_boundary": "Reset criterion and streak.",
+      "skipped_boundary": "Reset criterion and streak.",
+      "restart": "Reset criterion and streak to zero after the action.",
+      "consecutive_definition": "Adjacent slow-window boundaries in that chain's telemetry; a skipped boundary breaks the sequence."
+    }
+  },
+  "telemetry": {
+    "required_per_boundary_per_chain": [
+      "target",
+      "seed",
+      "arm",
+      "chain",
+      "window_index",
+      "transition",
+      "window_transitions",
+      "eligible",
+      "skip_reason",
+      "current_step",
+      "median_step",
+      "step_threshold",
+      "step_hit",
+      "median_log_density",
+      "log_density_iqr",
+      "density_reference",
+      "density_spread",
+      "density_gap",
+      "density_threshold",
+      "density_hit",
+      "observed_canonical_criterion",
+      "prior_criterion",
+      "prior_streak",
+      "resulting_criterion",
+      "resulting_streak",
+      "proposed_source_chain",
+      "outcome",
+      "pre_action_unconstrained_position",
+      "initial_position_sha256"
+    ],
+    "required_on_restart": [
+      "actual_source_chain",
+      "source_window_position_index",
+      "installed_step",
+      "installed_position_sha256"
+    ],
+    "outcomes": [
+      "skipped",
+      "kept",
+      "observed_hit",
+      "pending_first_hit",
+      "restarted"
+    ],
+    "observe_constraint": "Observe may record a deterministic source chain but must not select or simulate a source-window position."
+  },
+  "initial_position_hash": {
+    "algorithm": "SHA-256",
+    "domain_separator_ascii": "chain_rescue_v2.initial_position.v1",
+    "encoding": "domain separator bytes, dimension as little-endian u64, then each unconstrained coordinate's IEEE-754 f64::to_bits() as little-endian u64 in coordinate order",
+    "pairing_requirement": "All four per-chain hashes must match across the three arms for a model/seed triplet."
+  },
+  "stable_separated_origin": {
+    "assignment_arm": "observe",
+    "posteriordb_parameter_set": "Every scalar posteriordb reference parameter.",
+    "retained_halves": [
+      "draws 1-500",
+      "draws 501-1000"
+    ],
+    "definitions": {
+      "a1_a2": "Means of the subject chain in the two retained halves.",
+      "b1_b2": "Means over the 1500 matching-half draws from the other three chains.",
+      "m": "Type-7 median over all posteriordb reference draws.",
+      "I": "Type-7 IQR over all posteriordb reference draws."
+    },
+    "parameter_rule": [
+      "All values finite and I > 0.",
+      "|a1-a2| <= 0.25*I.",
+      "|b1-b2| <= 0.25*I.",
+      "|b1-m| <= 0.50*I and |b2-m| <= 0.50*I.",
+      "For one common sign s in {-1,+1}, s*(a1-b1) >= 1.50*I and s*(a2-b2) >= 1.50*I."
+    ],
+    "chain_rule": "A chain is a stable separated origin when at least one scalar parameter satisfies the parameter rule.",
+    "paired_mapping": "Map by target, seed, chain index, and identical initial_position_sha256.",
+    "origin_overwritten": "Any current or two_hit restart of a mapped stable separated origin.",
+    "rhat_credit": "Raw post-action R-hat is reported, but an origin_overwritten cell has its credited diagnostic gate forced to fail and cannot count as a rescued convergence win.",
+    "funnel_reference": "Apply the same rule to omega using the analytic N(0,3) median and IQR."
+  },
+  "posteriordb_diagnostic_gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "retained_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true,
+    "credit_override": "origin_overwritten forces credited failure while preserving raw metrics."
+  },
+  "reference_agreement": {
+    "z": "(mean - reference_mean) / sqrt(mcse^2 + reference_mcse^2)",
+    "practical_shift": "abs(mean - reference_mean) / reference_sd",
+    "raw_reporting": [
+      "Every parameter z and practical shift.",
+      "Maximum absolute z and its parameter.",
+      "Maximum practical shift and its parameter."
+    ],
+    "legacy_gate": "No credited diagnostic-passing cell has raw maximum |z| > 4.0.",
+    "decisive_disagreement": "For the same parameter, |z| > 4.0 and practical_shift >= 0.10.",
+    "decisive_scope": "Every process-valid cell, including a diagnostic-failing cell.",
+    "multiplicity": "No global Holm adjustment. Only two named paired sign tests are inferential; all fixed gates are conjunctive and no universal model-family claim is made."
+  },
+  "process_protocol": {
+    "fresh_child_per_cell": true,
+    "atomic_result": "Write temporary raw result, flush, and atomically rename before teardown.",
+    "parent_capture": [
+      "raw artifact state",
+      "stdout",
+      "stderr",
+      "timeout state",
+      "raw process exit code",
+      "signed 32-bit exit code",
+      "unsigned 32-bit exit code",
+      "hex exit code"
+    ],
+    "valid_cell": "Child exits successfully and durable result is complete and schema-valid.",
+    "post_result_crash": "A nonzero or abnormal process exit after a durable result is a process fault.",
+    "triplet_exclusion": "Any timeout, abnormal exit, missing or malformed result, initial-position hash mismatch, or process-protocol failure invalidates the entire three-arm target/seed triplet for paired analysis.",
+    "sampler_error": "A sampler-level error returned by a successful schema-valid child is a valid failing result.",
+    "reruns": "No planned child is launched more than once, including after a process fault.",
+    "minimum_valid_triplets_per_target": 10,
+    "below_minimum": "Study inconclusive; no default change."
+  },
+  "execution_order": {
+    "target_order": [
+      "bball_drive_event_0-hmm_drive_0",
+      "kidiq-kidscore_momhsiq",
+      "earnings-logearn_interaction",
+      "diamonds-diamonds",
+      "arma-arma11",
+      "hudson_lynx_hare-lotka_volterra",
+      "mesquite-logmesquite_logvash",
+      "funnel-10d"
+    ],
+    "seed_order": "ascending",
+    "arm_rotation_by_zero_based_seed_index": {
+      "0_mod_3": ["observe", "current", "two_hit"],
+      "1_mod_3": ["current", "two_hit", "observe"],
+      "2_mod_3": ["two_hit", "observe", "current"]
+    },
+    "planned_cells": 288,
+    "planned_posteriordb_cells": 252,
+    "planned_funnel_cells": 36
+  },
+  "paired_inference": {
+    "unit": "seed-level complete block",
+    "ties": "Exact zero differences are omitted from the named sign test only.",
+    "one_sided_exact_sign_p": "2^-n * sum(binomial(n,j), j=w..n)",
+    "minimum_non_tied_blocks": 10,
+    "alpha": 0.05,
+    "equivalent_win_counts": {
+      "n_10": 9,
+      "n_11": 9,
+      "n_12": 10
+    },
+    "failure_class_seed_score": "Number from 0 to 3 of credited standard diagnostic passes over hmm_drive_0, arma11, and lotka_volterra.",
+    "nuisance_seed_score": "Total restarted chains over kidiq, earnings, and diamonds.",
+    "efficiency": "Minimum over reference parameters of min(bulk ESS, tail ESS) divided by total target calls including warmup and retention. A missing, nonfinite, or nonpositive value in a process-valid triplet fails the efficiency gate rather than creating a process exclusion.",
+    "wall_time": "Reported, not gated on the shared machine."
+  },
+  "decision_gates": {
+    "completeness": [
+      "All 288 launch records exist.",
+      "Every target has at least 10 process-valid paired triplets.",
+      "Each named sign test has at least 10 complete and at least 10 non-tied seed blocks."
+    ],
+    "safety": [
+      "two_hit has zero origin_overwritten events.",
+      "two_hit has zero decisive reference disagreements.",
+      "The WP35 legacy reference gate holds for two_hit.",
+      "On each of kidiq, earnings, diamonds, and mesquite, two_hit credited pass count is no more than one below either paired observe or current.",
+      "For each comparator separately, sum max(0, comparator_passes - two_hit_passes) over those four models; each sum is at most two."
+    ],
+    "efficacy": [
+      "two_hit beats observe by the one-sided exact sign test on failure-class seed scores.",
+      "Against current, two_hit credited pass count is no more than one lower on each failure-class model.",
+      "Against current, two_hit credited pass count is no more than two lower over the failure-class models combined."
+    ],
+    "nuisance_action_reduction": [
+      "two_hit beats current by the one-sided exact sign test for fewer nuisance actions.",
+      "two_hit total nuisance actions are at most 60 percent of current over complete nuisance seed blocks."
+    ],
+    "funnel": [
+      "Every process-valid two_hit seed has absolute tail-mass z <= 2.0.",
+      "At least half of process-valid two_hit seeds pass omega R-hat <= 1.01, omega bulk ESS >= 400, zero retained divergences, finite draws, and no sampler error: at least 5/10, 6/11, or 6/12.",
+      "two_hit full-funnel pass count is no more than one below either paired observe or current."
+    ],
+    "no_fire": [
+      "Pre-evidence observe-versus-disabled conformance is bit-identical.",
+      "At least 10 valid mesquite two_hit cells have zero restart actions.",
+      "Every valid zero-action current or two_hit cell on any target is bit-identical to observe in retained unconstrained and constrained draw bytes, total target calls, final step and metric hashes, and retained diagnostics; rescue telemetry is excepted."
+    ],
+    "efficiency": [
+      "Every posteriordb model median paired two_hit/current efficiency ratio is at least 0.90.",
+      "The geometric mean over all valid posteriordb model/seed two_hit/current efficiency ratios is at least 0.95."
+    ]
+  },
+  "pre_evidence_conformance": {
+    "fixtures": "Fixed non-evidence deterministic fixtures.",
+    "required_identity": [
+      "retained draw bytes",
+      "work counters",
+      "final adaptation hashes",
+      "non-rescue telemetry"
+    ],
+    "comparison": "observe versus rescue disabled",
+    "failure_policy": "Stop before evidence. A fix is allowed only before the first evidence cell and must be recorded."
+  },
+  "red_lines": {
+    "origin_overwritten": "Any restart of an observe-defined stable separated origin.",
+    "reference": "Any decisive reference disagreement.",
+    "funnel": "Any process-valid seed with absolute tail-mass z > 3.0, nonfinite retained draws, or sampler error.",
+    "no_fire": "Any zero-action cell not bit-identical to observe, or evidence that observe consumed rescue RNG or mutated state."
+  },
+  "decision": [
+    "If all completeness, safety, efficacy, nuisance-action reduction, funnel, no-fire, and efficiency gates pass, make two_hit the default.",
+    "Otherwise, if current has any origin_overwritten, reference, funnel, or no-fire red-line failure, make rescue disabled/no rescue the default.",
+    "Otherwise retain explicit immediate current.",
+    "An incomplete or inconclusive analysis makes two_hit fail but does not itself create a current red line."
+  ],
+  "predictions": {
+    "P1": "two_hit reduces nuisance actions by at least 40 percent and meets the exact sign gate.",
+    "P2": "two_hit preserves current efficacy within the fixed count margins and beats observe on the failure-class exact sign test.",
+    "P3": "observe identifies at least one stable separated hmm_drive_0 origin; current overwrites at least one; two_hit overwrites fewer but at least one.",
+    "P4": "Neither mutating arm has a decisive reference disagreement; raw max |z| occasionally exceeds 4 only with practical shift below 0.10 reference SD.",
+    "P5": "Every process-valid two_hit funnel seed has absolute tail-mass z <= 2, at least half pass the full funnel diagnostic gate, and two_hit is no more than one pass below either paired arm.",
+    "P6": "At least 10 mesquite two_hit cells have no action and are bit-identical to observe.",
+    "P7": "two_hit geometric-mean efficiency versus current is at least 0.95.",
+    "P8": "The final decision is no rescue because two_hit is predicted to fail origin safety and current is predicted to have an origin_overwritten red line."
+  },
+  "execution_rules": [
+    "Report every planned cell and exclusion.",
+    "Report raw and credited diagnostics separately.",
+    "Do not tune, substitute targets or seeds, omit registered reference parameters, or pool across invalid triplets.",
+    "Do not rerun a child after observing any output.",
+    "An implementation bug found after the first evidence launch makes the study inconclusive and does not authorize restarting the evidence."
+  ]
+}

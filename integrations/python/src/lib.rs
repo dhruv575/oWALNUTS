@@ -21,8 +21,8 @@ use numpy::{
 };
 use owalnuts::diagnostics::ParameterSummary;
 use owalnuts::sampler::{
-    Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric,
-    Posterior, Sampler, Tuning, uniform_starts,
+    Adaptation, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION,
+    Init, Limits, Metric, Posterior, Sampler, Tuning, uniform_starts,
 };
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput,
@@ -1331,9 +1331,9 @@ fn reference_gaussian_sampler_run<'py>(
 /// The `owalnuts::sampler` defaults the package inherits, read from the Rust
 /// values (not restated): `Tuning::default()` through its validated kernel
 /// tuning, the sampler's warmup exhaustion rule and metric regularisation,
-/// `Adaptation::default()`, `Metric::default()`, `Init::default()`, and the
-/// `Sampler` / `Limits` defaults (read from their `Debug` output, which is
-/// the only public view of those two flags).
+/// disabled chain-rescue default, `Adaptation::default()`, `Metric::default()`,
+/// `Init::default()`, and the `Sampler` / `Limits` defaults (read from their
+/// `Debug` output, which is the only public view of those two flags).
 fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
     let tuning = Tuning::default().to_kernel().map_err(facade_error)?;
     let d = PyDict::new(py);
@@ -1358,6 +1358,14 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         "metric_regularization",
         regularization_name(DEFAULT_METRIC_REGULARIZATION),
     )?;
+    match DEFAULT_CHAIN_RESCUE {
+        None => d.set_item("chain_rescue", py.None())?,
+        Some(_) => {
+            return Err(PyRuntimeError::new_err(
+                "unsupported nonempty Rust sampler chain-rescue default",
+            ));
+        }
+    }
     d.set_item("target_accept", default_target_accept()?)?;
     d.set_item(
         "adapt_mass",

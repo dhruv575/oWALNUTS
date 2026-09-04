@@ -86,6 +86,22 @@ the children ran, so the post-execution capture remains a limitation. Full
 commands, hashes, source identities, section hashes, and that limitation are
 archived in `artifacts/executed-harness-manifest.json`.
 
+## Checkout-portable checksums
+
+The study-local `.gitattributes` requires LF for every tracked text file.
+`checksums.py` also canonicalizes CRLF or lone-CR checkout bytes to LF in
+memory before hashing. `CHECKSUMS.sha256` therefore records canonical Git
+content rather than a platform-specific checkout representation; checksum
+generation and verification never rewrite an input file.
+
+`python checksums.py write` regenerates the manifest,
+`python checksums.py verify` checks the current worktree, and
+`python checksums.py verify-git HEAD` checks canonical blobs at a committed
+revision. The manifest includes `.gitattributes` and `checksums.py` themselves.
+Hashes for unchanged protocol and artifact content are preserved from the
+original manifest; this portability update changes only control/documentation
+metadata and the manifest that records it.
+
 ## Verify the archived study
 
 ```powershell
@@ -96,7 +112,8 @@ cargo +1.88.0-x86_64-pc-windows-gnu test --locked
 python -m unittest -v test_run_stability.py
 & 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\run_stability.py verify
 & 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\run_stability.py analyze
-& 'C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6\.venv\Scripts\python.exe' .\checksums.py
+python .\checksums.py verify
+python .\checksums.py verify-git HEAD
 ```
 
 `verify` reports the current harness size/hash and checks it against the

@@ -398,6 +398,7 @@ def test_default_tuning_matches_rust_sampler_defaults():
     assert d["u_turn_rule"] == "momentum_sum"
     assert d["metric_regularization"] == "stan"
     assert d["warmup_exhaustion_rule"] == "accept_unless_divergent"
+    assert d["chain_rescue"] is None
     assert d["cache_initial_evaluation"] is True and d["admit_worst_case"] is True
     assert d["algorithm_revision"] == owalnuts.ALGORITHM_REVISION
     assert (d["init_radius"], d["init_max_attempts"]) == (2.0, 100)

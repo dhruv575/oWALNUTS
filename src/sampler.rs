@@ -51,9 +51,10 @@
 //! rules (`WarmupConfig::default().with_paper_adaptation(..)`), or none. The
 //! metric decides `WarmupConfig::with_mass_adaptation`. The sampler's own
 //! modes apply [`DEFAULT_WARMUP_EXHAUSTION`],
-//! [`DEFAULT_METRIC_REGULARIZATION`] and, on the identity and diagonal
-//! metrics, [`DEFAULT_CHAIN_RESCUE`] to the configuration they build;
-//! [`Adaptation::Custom`] is used as given.
+//! [`DEFAULT_METRIC_REGULARIZATION`], and the disabled
+//! [`DEFAULT_CHAIN_RESCUE`] to the configuration they build;
+//! [`Adaptation::Custom`] is used as given and is the explicit chain-rescue
+//! opt-in.
 //!
 //! [`TargetEvaluationBudget`]: crate::walnutpie::TargetEvaluationBudget
 
@@ -173,9 +174,8 @@ impl Metric {
         }
     }
 
-    /// The identity and diagonal metrics run the multi-chain diagonal
-    /// driver, the only one with the warmup-time chain rescue
-    /// ([`DEFAULT_CHAIN_RESCUE`]).
+    /// Only the identity and diagonal metrics use the multi-chain driver that
+    /// supports an optional warmup-time chain rescue.
     fn supports_chain_rescue(&self) -> bool {
         matches!(self, Self::Identity | Self::Diagonal { .. })
     }
@@ -218,9 +218,9 @@ impl fmt::Debug for Metric {
 /// The default is dual averaging (`WarmupConfig::new(target)`) with the
 /// sampler's warmup exhaustion rule ([`DEFAULT_WARMUP_EXHAUSTION`]),
 /// diagonal-metric regularisation ([`DEFAULT_METRIC_REGULARIZATION`], Stan's
-/// prior since the post-WP31 default change) and, on the identity and
-/// diagonal metrics with at least two chains, the warmup-time chain rescue
-/// ([`DEFAULT_CHAIN_RESCUE`], WP33). The Stan-parity warmup (`WarmupConfig::stan_style`) is opt-in through
+/// prior since the post-WP31 default change), and no automatic warmup-time
+/// chain rescue ([`DEFAULT_CHAIN_RESCUE`], the post-WP36 decision). The
+/// Stan-parity warmup (`WarmupConfig::stan_style`) is opt-in through
 /// [`Adaptation::Custom`]: in `STUDIES/adaptation_parity_v1` it reached a
 /// 2.0x geometric-mean ESS-per-gradient gain over the default on nine
 /// posteriordb models but lost 12-16 % on three of them and failed the
@@ -247,7 +247,7 @@ pub enum Adaptation {
     /// Any `walnutpie::WarmupConfig`; its mass-adaptation flag is replaced by
     /// what the metric requires. This is also where the opt-in warmup-time
     /// chain rescue lives (`WarmupConfig::with_chain_rescue`,
-    /// `STUDIES/chain_rescue_v1`): on the diagonal and identity metrics with
+    /// `STUDIES/chain_rescue_v1` and `chain_rescue_v2`): on the diagonal and identity metrics with
     /// at least two chains it synchronises warmup at slow-window boundaries
     /// and re-seeds or pools outlier chains; retained draws are untouched.
     Custom(WarmupConfig),
@@ -294,44 +294,47 @@ pub const DEFAULT_METRIC_REGULARIZATION: DiagonalMetricRegularization =
 /// are unchanged.
 pub const DEFAULT_U_TURN_RULE: UTurnRule = UTurnRule::MomentumSum;
 
-/// The warmup-time chain rescue the sampler's own adaptation modes
-/// ([`Adaptation::DualAveraging`], [`Adaptation::Paper`]) apply on the
-/// identity and diagonal metrics with at least two chains:
-/// [`ChainRescueConfig::restart_from_best`]. **Default change, by the
-/// preregistered rule of `STUDIES/chain_rescue_v1` (WP33)**: at the end of
-/// every slow metric window a chain whose step is below 0.1x the chains'
-/// median, or whose median window log density is more than three
-/// within-chain IQRs below the chains' median, is re-seeded from the
-/// largest-step chain's window (its position, metric, step and dual
-/// averaging state); retained draws are never touched. On the eight
-/// posteriordb models of that study plus the funnel it passed 25 of 27
-/// cells against the plain driver's 21 (`arma11` and `lotka_volterra` 3/3
-/// against 2/3 and 0/3, one frozen `lotka_volterra` start 25 min -> 5 min),
-/// at 1.00–289x the ESS per gradient per model and no change in reference
-/// agreement. The cost is independence: a chain the density rule merges
-/// into the others no longer carries its mode into R-hat, and every such
-/// decision is in [`RunTelemetry::chain_rescues`]. Dense and structured
-/// metrics never apply it; [`Adaptation::Custom`] is used as given (a
-/// `WarmupConfig` without `with_chain_rescue` is the opt-out). Single-chain
-/// runs are unaffected. `walnutpie::WarmupConfig::default()` stays without
-/// a rescue, so `RunConfig` runs and the kernel fingerprints are unchanged.
-pub const DEFAULT_CHAIN_RESCUE: ChainRescueConfig = ChainRescueConfig::restart_from_best();
+/// The warmup-time chain rescue installed by the sampler's own adaptation
+/// modes ([`Adaptation::DualAveraging`], [`Adaptation::Paper`]): none.
+///
+/// **Post-study default decision after `STUDIES/chain_rescue_v2` (WP36).**
+/// WP33 had temporarily made [`ChainRescueConfig::restart_from_best`] the
+/// identity/diagonal multi-chain default after strong bad-start efficacy.
+/// In WP36, `two_hit` failed its conjunctive gates, which advanced the frozen
+/// rule to the `current` fallback check but did not itself select no rescue.
+/// `current` then had registered red lines in four origin-overwrite cells
+/// (five events) plus unknown HMM/92104 run history, selecting no rescue. The
+/// classifier found pathological/frozen ARMA and Lotka-Volterra origins and
+/// zero HMM origins, so WP36 does not establish genuine posterior-mode
+/// destruction.
+///
+/// Rescue remains fully supported as an explicit opt-in through
+/// [`Adaptation::Custom`] and [`WarmupConfig::with_chain_rescue`], including
+/// immediate restart, observe-only, two-hit, and metric pooling. If a restart
+/// acts, it copies state from another chain, so the resulting chains no longer
+/// represent independent starts and ordinary independent-chain R-hat is not
+/// valid for that run. Every boundary decision is available through
+/// [`RunTelemetry::chain_rescues`].
+///
+/// This sampler-default reversal does not change
+/// `walnutpie::WarmupConfig::default()`, `RunConfig`, the retained kernel, or
+/// its fingerprints, so it does not advance `ALGORITHM_REVISION`.
+pub const DEFAULT_CHAIN_RESCUE: Option<ChainRescueConfig> = None;
 
 impl Adaptation {
     fn warmup_config(
         &self,
         adapt_mass: bool,
-        chain_rescue: bool,
+        supports_chain_rescue: bool,
     ) -> Result<Option<WarmupConfig>, Error> {
         let with_defaults = |warmup: WarmupConfig| {
             let warmup = warmup
                 .with_mass_adaptation(adapt_mass)
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
                 .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION);
-            if chain_rescue {
-                warmup.with_chain_rescue(DEFAULT_CHAIN_RESCUE)
-            } else {
-                warmup
+            match (supports_chain_rescue, DEFAULT_CHAIN_RESCUE) {
+                (true, Some(rescue)) => warmup.with_chain_rescue(rescue),
+                _ => warmup,
             }
         };
         Ok(match self {

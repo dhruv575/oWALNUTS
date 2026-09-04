@@ -1,0 +1,26 @@
+[package]
+name = "chain-rescue-v2"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Pre-registered WP36 observe/current/two-hit chain-rescue study harness"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+sha2 = "0.10"
+
+[[bin]]
+name = "chain-rescue-v2"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[[bin]]
+name = "conformance"
+path = "src/bin/conformance.rs"
+
+[workspace]

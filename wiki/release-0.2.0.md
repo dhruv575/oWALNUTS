@@ -1,10 +1,17 @@
-# Release 0.2.0 (2026-09-02)
+# Release 0.2.0 (unpublished; record updated 2026-09-04)
 
 First non-beta release of `owalnuts`. Kernel revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10` (unchanged since
 0.1.0-beta.2; every pinned fingerprint and oracle still holds); paper
 adaptation `walnutpie-paper-adaptation-kquantile-gamma-v4`; structured
 refresh `walnutpie-structured-metric-refresh-v1`.
+
+**Publication status (updated 2026-09-04): blocked.** WP36 resolves the
+default-safety decision: the 0.2 sampler default is **no chain rescue**, while
+explicit rescue policies remain available. A separate Windows native
+process-lifecycle defect remains in the BridgeStan replicated-target path.
+Do not tag or publish until it is localised or mitigated and the
+cross-platform release/package matrix has been exercised.
 
 ## What changed since 0.1.0-beta.2
 
@@ -13,7 +20,7 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `0eafc49` | `owalnuts::diagnostics` (rank-normalised R-hat, bulk/tail/quantile ESS, MCSE, Stan-style `Summary`) and `owalnuts::export::CmdStanCsv` | ArviZ fixture `tests/data/arviz_fixture.json` (1e-6 relative); `tests/export_cmdstan.rs` |
 | `00e55a7` | `owalnuts::sampler` builder API; `research` Cargo feature gate | `tests/sampler_api.rs` (bit-identical to the `walnutpie` entry points) |
 | `97c593b` | Allocation-free kernel hot path, bit-identical | `tests/kernel_fingerprint.rs`; `examples/kernel_bench.rs` |
-| `e79cb0f` | `owalnuts-autodiff` fused-primitive tape crate (`integrations/autodiff`) | `integrations/AUTODIFF-RESEARCH.md` Â§Route (e) |
+| `e79cb0f` | `owalnuts-autodiff` fused-primitive tape crate (`integrations/autodiff`) | `integrations/AUTODIFF-RESEARCH.md` § Route (e) |
 | `52be19e` | posteriordb benchmark against CmdStan and nutpie | WP22-POSTERIORDB-BENCH-V1 |
 | `be2325c` | BridgeStan: non-threaded build, `ReplicatedStanTarget`, NaN/inf mapped to the recoverable path | `STUDIES/posteriordb_bench_v1/artifacts/wall-gap` |
 | `5417e0c` | `sampler::Init` uniform starts with retries; Appendix C v4 defaults and guards | `STUDIES/paper_adaptation_robust_v1` |
@@ -21,11 +28,13 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
 | this release | `sampler::Tuning` default refinement levels 4 -> 8: the four-level default halved the funnel's tail mass; eight levels are exact on three seeds at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D Gaussian | `STUDIES/funnel_defaults_v1` (WP28) |
 | this release | **DEFAULT CHANGE (post-hoc after WP31)**: `sampler::Tuning::default()` U-turn rule `Endpoints` -> `MomentumSum`; `Adaptation::DualAveraging` / `Paper` regularise the diagonal metric with Stan's prior (`DEFAULT_U_TURN_RULE`, `DEFAULT_METRIC_REGULARIZATION`) | `STUDIES/joint_default_v1` (WP31, rule not met, decided post hoc), validated by `STUDIES/posteriordb_bench_v5` (WP32) |
-| this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
+| `87d8817` | **FINAL DEFAULT CHANGE (WP36):** `sampler::DEFAULT_CHAIN_RESCUE = None`; default output is directly tested against explicit custom no-rescue warmup, while observe-only, `restart_from_best`, `two_hit` and pooling remain explicit policies | `STUDIES/chain_rescue_v2` (WP36) |
+| this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | — |
 
 The upgrade notes (facade unchanged, research items behind the feature,
 sampler defaults `h = 0.5`, depth 10, eight levels, `delta = 1` versus the frozen
-`RunConfig`/`KernelTuning` defaults) are in `CHANGELOG.md`.
+`RunConfig`/`KernelTuning` defaults, and no automatic chain rescue) are in
+`CHANGELOG.md`.
 
 ## Validation evidence
 
@@ -179,7 +188,7 @@ Clean-room reference NUTS harness, ESS per gradient (seed medians):
 | reference NUTS | 1.00x | 1.00x | 1.00x |
 | oWALNUTS default kernel | 0.81x | 0.75x | 1.03x |
 | + initial-evaluation cache (now the `Sampler` default; draws bit-identical) | 0.91x | 0.81x | 1.06x |
-| + `UTurnRule::MomentumSum` (opt-in) | 0.86x | 1.09x | 1.07x |
+| + `UTurnRule::MomentumSum` (then opt-in; now the sampler default) | 0.86x | 1.09x | 1.07x |
 
 The cause of the gap is a wasted re-evaluation of the current state at the
 start of every transition (one gradient per transition, 11 % at 8-9 leaves
@@ -187,9 +196,9 @@ per orbit; exact to cache) plus the endpoint U-turn rule, which stops 3.4
 leaves later per orbit than Stan's momentum sum on the isotropic Gaussian
 for no ESS gain (neutral within noise elsewhere). The exhaustion rule never
 triggers on these targets; the funnel tail mass is preserved under every
-option (`examples/funnel_kernel_options.rs`). The momentum-sum rule stays
-opt-in: the preregistered posteriordb decision (WP26, below) rejected it as
-the default.
+option (`examples/funnel_kernel_options.rs`). WP26 initially kept the
+momentum-sum rule opt-in; WP31 later made it the sampler default only in
+combination with Stan metric regularisation, and WP32 validated that pair.
 
 ### U-turn rule default decision (WP26)
 
@@ -281,10 +290,10 @@ WP28). No oWALNUTS cell errored, froze or diverged.
 gradient cost relative to the hand-written gradient is 7.6x / 4.1x on the
 fused Eight Schools form (206 ns), 13.7x on Neal's 10-D funnel (104 ns),
 3.0x / 2.8x on the local level `lupdf` at T = 100 / 1,000 (435 ns /
-3.93 Âµs) and 4.6-4.8x on the noncentered local level; gradients agree with
+3.93 µs) and 4.6-4.8x on the noncentered local level; gradients agree with
 the hand oracles to 1e-14 or better. For comparison, BridgeStan's Stan Math
-gradient is 6.7 Âµs on Eight Schools with `STAN_THREADS` (0.59 Âµs without)
-and 38 Âµs at T = 1,000; the Enzyme route needs a from-source rustc and is
+gradient is 6.7 µs on Eight Schools with `STAN_THREADS` (0.59 µs without)
+and 38 µs at T = 1,000; the Enzyme route needs a from-source rustc and is
 parked (`integrations/enzyme`). The Python GIL-free transport
 (`from_cfunc`, `from_pymc(gil_free=True)`) reaches ~31,000 min-bulk ESS/s
 on Eight Schools at four threads, parity with nutpie.
@@ -294,14 +303,17 @@ on Eight Schools at four threads, parity with nutpie.
 - **ESS per gradient on easy posteriors is 0.7-0.8x CmdStan** at matched
   step, depth histogram and gradient count (eight schools, arK, garch11,
   mesquite in `adaptation_parity_v1`). `kernel_efficiency_v1` accounts for
-  it: the default kernel is 0.75-0.81x reference NUTS on Gaussians and Eight
-  Schools (1.03x on the correlated Gaussian) because of the wasted
-  re-evaluation per transition (0.9x at depth 3, 0.97x at depth 5) and the
-  endpoint U-turn rule (0.75x on the isotropic Gaussian, 1.0x on the
+  it: the then-default endpoint-rule kernel was 0.75-0.81x reference NUTS on
+  Gaussians and Eight Schools (1.03x on the correlated Gaussian) because of
+  the wasted re-evaluation per transition (0.9x at depth 3, 0.97x at depth 5)
+  and the endpoint U-turn rule (0.75x on the isotropic Gaussian, 1.0x on the
   correlated one), with refinement rejections at 0.85-0.95x where refinement
-  engages. The cache is now the `Sampler` default; Stan's momentum-sum
-  U-turn rule stays opt-in (`KernelOptions`): on posteriordb it is 1.06x
-  geomean and 0.78–2.14x per model (WP26), not the gap.
+  engages. The cache and `UTurnRule::MomentumSum` are now `Sampler` defaults
+  after the joint WP31 change and WP32 validation. Historically, WP26 tested
+  `MomentumSum` in isolation: it was 1.064x geomean and 0.78–2.14x per model
+  but missed that study's flip rule, so it correctly remained opt-in at that
+  point. `UTurnRule::Endpoints` is now the explicit opt-in alternative and the
+  frozen `walnutpie::KernelOptions::default()` behavior.
 - **Refinement rarely engages on posteriordb models**: ~1 % of retained
   leaves refine (99 % at level 0), so on those targets oWALNUTS is NUTS with
   a slightly shorter step paying the reverse-check cost; the wins measured
@@ -315,47 +327,79 @@ on Eight Schools at four threads, parity with nutpie.
 - The `stan_style` warmup preset is opt-in because it regresses four models
   and fails R-hat on two.
 - Paper adaptation is supported by the diagonal and fixed-operator facades
-  only; the Ïƒ_x -> 0 state-space funnel (`sspd-10`) is not sampled by any
+  only; the σ_x -> 0 state-space funnel (`sspd-10`) is not sampled by any
   Euclidean sampler tested; there is no step-jitter option; seeds are not
   portable across kernel revisions; cancellation and deadlines are
   cooperative (all carried from 0.1.0-beta.2).
-- The BridgeStan crate's sampling tests need a locally compiled model and
-  skip in CI; only its pure-Rust nonfinite-mapping tests run there.
+- **Windows native BridgeStan process lifecycle is a release blocker.**
+  WP35A reproduced one silent `0xC0000374` exit in 46 diagnostic children
+  after a four-replica sampling result was durably published and the child
+  reached `drop/before`; WP36 recorded six more heap-corruption exits and one
+  post-result timeout. The root cause is not established. This evidence is
+  specific to the BridgeStan replicated-target/DLL/thread integration path and
+  does not identify a fault in the core Rust sampler, whose fingerprints and
+  direct tests remain green. It nevertheless blocks the Python `from_stan`
+  integration and therefore blocks publication of the combined release.
+- The BridgeStan crate's sampling tests need a locally compiled model and skip
+  in CI; only its pure-Rust nonfinite-mapping tests run there.
 - The Python package is not published; `maturin develop` from the tree.
 
 ## Release checklist
 
 - [x] `cargo fmt --check`, `cargo clippy --all-targets --all-features -D
       warnings`, `-D warnings` rustdoc (GNU 1.88)
-- [x] `cargo test --release` without (189) and with (204) the `research`
+- [x] `cargo test --release` without (218) and with (234) the `research`
       feature
 - [x] `owalnuts-autodiff` (16 tests) and `owalnuts-bridgestan` (12 tests,
       model tests run locally) green, fmt and clippy clean
 - [x] Python package rebuilt and its pytest suite green
 - [x] `cargo package --allow-dirty` verify build
-- [ ] `git tag v0.2.0` and `cargo publish` - left to the maintainer
-- [ ] PyPI wheels: the `wheels.yml` matrix has only been exercised on Windows;
-      the manylinux, macOS and MSVC legs are unverified
-- [x] WP23 posteriordb v2 numbers above
+- [x] WP36 default-safety decision applied: no rescue by default; explicit
+      policies remain available; default/no-rescue parity is tested
+- [ ] Localise or mitigate the Windows `0xC0000374`/post-result teardown fault
+      in the BridgeStan replicated-target path and add a regression check; do
+      not rerun the immutable WP35 `sblrc` evidence cell
+- [ ] Exercise the core crate on Windows MSVC and the Linux backends, and
+      exercise package jobs for Windows, manylinux x86_64/aarch64, macOS
+      x86_64/arm64 and the sdist
+- [ ] `git tag v0.2.0`, `cargo publish` and PyPI publish — blocked on the two
+      preceding items
 
-### Outstanding before the release numbers are final
+### Final default and benchmark status
 
-The validation tables above end at **WP32 (posteriordb v5, 42/51 gates)**.
-Three later studies changed, characterised and remeasured the shipped defaults:
+The admitted release headline remains **WP32/posteriordb v5: 42/51 gates**.
+Its no-rescue multi-chain warmup again matches the current sampler behavior
+after the final WP36 default commit `87d8817`.
 
-- **WP33 `chain_rescue_v1`** made warmup chain rescue a default *after* v5.
-- **WP34 `refinement_role_v1`** established that refinement does not pay on
-  ordinary posteriors and that `delta = 2` is worth 1.07x per gradient at the
-  same gates, pending a decision study.
-- **WP35 `posteriordb_bench_v6`** measured the complete current defaults on
-  fresh seeds: **45/51** gates against CmdStan 34 and nutpie 29, no frozen
-  chain, and funnel tail-mass |z| <= 2 on every seed. It did **not** meet its
+- **WP35 `posteriordb_bench_v6`** measured the temporary WP33
+  `restart_from_best` default on fresh seeds: **45/51** gates against CmdStan
+  34 and nutpie 29, no frozen chain, and funnel tail-mass |z| <= 2 on every
+  seed. It did **not** meet its
   preregistered release rule: one passing `one_comp` cell has max |z| 4.023,
   and one `sblrc` oWALNUTS subprocess exited without a result, leaving the
   fixed-16 efficiency gates unevaluable (observed 0.848x CmdStan per gradient
   and 0.825x wall per gradient over the 15 complete models). The v5 table
   remains the last headline admitted by its own rule; WP35 must be reported
-  beside it rather than substituted silently.
+  beside it as historical evidence, not substituted silently.
+- **WP35A `sblrc_process_stability_v1`** used 46 diagnostic-only children and
+  reproduced one silent four-replica `0xC0000374` fault after durable result
+  publication at `drop/before`; 45 children succeeded. Root cause is not
+  established, and evidence seed 90101 was neither rerun nor used.
+- **WP36 `chain_rescue_v2`** completed 288 launches: 281 process-valid, six
+  heap-corruption exits, one post-result timeout and six invalid triplets.
+  `two_hit` reduced nuisance unique-chain actions 35→14, but had only nine
+  complete blocks and failed its registered efficacy, funnel, origin and
+  efficiency gates. The registered fallback then found mapped-origin overwrite
+  red lines in four `current` cells (five events) and selected `no_rescue`.
+  The frozen classifier found pathological/frozen ARMA and Lotka-Volterra
+  origins and zero HMM origins, so the study does **not** prove genuine
+  posterior-mode destruction.
+
+No posteriordb v7 is required before release. This is a reasoned update to the
+earlier plan, not result-driven benchmark substitution: the final sampler
+restores v5's no-rescue defaults, and parity with explicit no rescue is tested
+directly. A future v7 is required if an automatic cross-chain action is
+reintroduced.
 
 See [`research-program-2026-09-04.md`](research-program-2026-09-04.md) for the
 full state and the open lines.
