@@ -149,6 +149,6 @@ evidence unless all prepared-worktree hashes and the hit-path PASS match.
 
 Every versioned conformance JSON is immutable; its index authenticates the one
 bound to the audited Rust binary source and build manifest. The selected
-The post-run provenance index separately authenticates the corrected analysis
+post-run provenance index separately authenticates the corrected analysis
 source and its reuse of those unchanged binaries. Earlier fixtures and indexes
 remain untouched historical artifacts.
