@@ -1,6 +1,6 @@
 # chain_rescue_v2 — pre-evidence amendment 1
 
-Date: 2026-09-04  
+Date: 2026-09-04
 Status: **frozen before harness implementation or any evidence run**
 
 This amendment corrects one source-selection tie rule in
