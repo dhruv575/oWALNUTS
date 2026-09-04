@@ -5,7 +5,7 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, and target
 architecture (see the `walnutpie` module documentation).
 
-## [0.2.0] - 2026-09-02
+## [0.2.0] - 2026-09-04
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`
 (unchanged since 0.1.0-beta.2: every pinned fingerprint and oracle still
@@ -314,19 +314,26 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   were process-valid, while six Windows heap-corruption exits and one
   post-result timeout left six paired triplets invalid. The registered
   completeness gate therefore failed. Two-hit reduced nuisance unique-chain
-  actions from 35 to 14, but also failed the registered minimum sample size,
-  efficacy, funnel, origin-safety and efficiency requirements, selecting the
-  preregistered `no_rescue` safety fallback. The frozen classifier labelled
-  only pathological/frozen ARMA and Lotka-Volterra starts; this is not
-  evidence that rescue destroyed genuine modes. Immediate
+  actions from 35 to 14, but `two_hit` failed its conjunctive gates, including
+  the registered minimum sample size, efficacy, funnel, origin-safety and
+  efficiency requirements. That failure alone did not select `no_rescue`; it
+  advanced the mechanical rule to the `current` fallback check. `current`
+  separately had registered red lines in four origin-overwrite cells (five
+  events) plus unknown run history for HMM/92104, so the fallback selected
+  `no_rescue`. The classifier found pathological/frozen ARMA and
+  Lotka-Volterra origins and zero HMM origins, so WP36 does not establish
+  genuine posterior-mode destruction. Immediate
   `restart_from_best` retains WP33's strong bad-start efficacy and remains
   fully opt-in, together with observe-only, two-hit and pooling, through
   `Adaptation::Custom(WarmupConfig::with_chain_rescue(...))`. A restart that
   acts copies state between chains and therefore invalidates the
-  independent-start interpretation of ordinary R-hat. Default sampler output
-  is bit-identical to an otherwise identical explicit custom no-rescue
-  warmup, and its rescue telemetry is empty. This is the post-study default
-  commit, not an algorithm revision: the retained kernel,
+  independent-start interpretation of ordinary R-hat. Historical WP35 replay
+  must use study revision `8d3a7b5` and its recorded source under test
+  `aa4510f`: running `STUDIES/posteriordb_bench_v6` at current HEAD would use
+  the intentional no-rescue `Adaptation::default()` and would not reproduce
+  WP35. Default sampler output is bit-identical to an otherwise identical
+  explicit custom no-rescue warmup, and its rescue telemetry is empty. This is
+  the post-study default commit, not an algorithm revision: the retained kernel,
   `walnutpie::WarmupConfig` / `RunConfig` defaults, walnutpie facade outputs,
   and all core fingerprints are unchanged.
 

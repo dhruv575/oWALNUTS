@@ -300,11 +300,13 @@ pub const DEFAULT_U_TURN_RULE: UTurnRule = UTurnRule::MomentumSum;
 /// **Post-study default decision after `STUDIES/chain_rescue_v2` (WP36).**
 /// WP33 had temporarily made [`ChainRescueConfig::restart_from_best`] the
 /// identity/diagonal multi-chain default after strong bad-start efficacy.
-/// WP36's preregistered safety fallback selected no rescue after the
-/// completeness gate failed and the candidate failed its registered
-/// efficacy, funnel, origin-safety, and efficiency requirements. Its frozen
-/// classifier labelled the affected starts as pathological/frozen ARMA and
-/// Lotka-Volterra starts; that does not establish genuine mode destruction.
+/// In WP36, `two_hit` failed its conjunctive gates, which advanced the frozen
+/// rule to the `current` fallback check but did not itself select no rescue.
+/// `current` then had registered red lines in four origin-overwrite cells
+/// (five events) plus unknown HMM/92104 run history, selecting no rescue. The
+/// classifier found pathological/frozen ARMA and Lotka-Volterra origins and
+/// zero HMM origins, so WP36 does not establish genuine posterior-mode
+/// destruction.
 ///
 /// Rescue remains fully supported as an explicit opt-in through
 /// [`Adaptation::Custom`] and [`WarmupConfig::with_chain_rescue`], including

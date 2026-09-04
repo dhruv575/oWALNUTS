@@ -128,12 +128,23 @@ its frozen release rule: one passing `one_comp` cell has max |z| 4.023 and one
 `sblrc` sampler subprocess exited without a result, leaving its fixed-16
 efficiency gates unevaluable (observed 0.848x CmdStan per gradient over the 15
 complete models). WP36 then mechanically selected `no_rescue`: its
-preregistered completeness gate failed after seven process faults, and the
-two-hit candidate also failed the efficacy, funnel, origin-safety and
-efficiency requirements. The final 0.2 default therefore returns to the plain
-multi-chain warmup used by v5. The v5 numbers below remain the qualified
-headline; v6 remains the historical record of the temporary WP33 default and
-must be read beside it. [E16, E17, E18]
+preregistered completeness gate failed after seven process faults, and
+`two_hit` failed its conjunctive efficacy, nuisance-reduction, funnel,
+origin-safety and efficiency gates. That failure alone did not select
+`no_rescue`; it advanced the mechanical rule to the `current` fallback check.
+`current` had registered red lines in four origin-overwrite cells (five
+events) plus unknown run history for HMM/92104, so the fallback selected
+`no_rescue`. The final 0.2 default therefore returns to the plain multi-chain
+warmup used by v5. The v5 numbers below remain the qualified headline; v6
+remains the historical record of the temporary WP33 default and must be read
+beside it. [E16, E17, E18]
+
+> **Historical WP35 replay:** do not run
+> `STUDIES/posteriordb_bench_v6` from the current tree and call it a WP35
+> reproduction. Check out the recorded WP35 study revision `8d3a7b5` (source
+> under test `aa4510f`) first. At current HEAD,
+> `Adaptation::default()` intentionally means no rescue, whereas WP35 measured
+> the temporary restart-from-best default.
 
 - **More cells pass than CmdStan or nutpie.** oWALNUTS passes **42/51**
   cells; CmdStan 36, nutpie 28. Twelve models at 3/3 against ten and eight.
@@ -191,7 +202,7 @@ regression that CmdStan already samples cleanly still costs oWALNUTS
 | `Tuning::kernel_options` U-turn rule | `UTurnRule::MomentumSum` (Stan's generalised criterion) | **post-hoc default change after WP31**, validated by WP32: with Stan's metric prior it is 1.51x the endpoint rule per gradient over 17 posteriordb models; the frozen `v10` endpoint rule is `KernelOptions::default()` [E14, E15] |
 | `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75); warmup exhaustion rule `AcceptUnlessDivergent` [E10] |
 | `Metric` | adapted diagonal | Welford, regularised with Stan's prior (`DiagonalMetricRegularization::Stan`, **post-hoc default change after WP31**; the `v10` `TowardUnit` prior floors small variances at 0.01 and collapsed the step on `sblrc` / `arma11`) [E14, E15] |
-| warmup chain rescue | none (`DEFAULT_CHAIN_RESCUE = None`) | WP36's frozen mechanical fallback after failed completeness and candidate safety/efficacy gates; default telemetry has no rescue records [E18] |
+| warmup chain rescue | none (`DEFAULT_CHAIN_RESCUE = None`) | `two_hit` failed its conjunctive gates; `current` then hit registered red lines in four origin-overwrite cells (five events) plus unknown HMM/92104 run history, selecting the WP36 fallback; default telemetry has no rescue records [E18] |
 | initial evaluation | cached | one gradient per transition saved, draws bit-identical [E6] |
 | `Limits` | admit the exact worst case | the worst case is a bound the run cannot exceed, so admission costs nothing |
 
@@ -424,10 +435,12 @@ provenance.
 - [E18] chain rescue v2: all 288 one-shot cells launched, 281 process-valid,
   with six heap-corruption exits and one post-result timeout leaving six
   invalid triplets. Two-hit reduced nuisance unique-chain actions 35 -> 14
-  but failed the registered minimum sample size, efficacy, funnel,
-  origin-safety and efficiency requirements, so the frozen safety fallback
-  selected `no_rescue`. The classifier labelled only pathological/frozen
-  ARMA and Lotka-Volterra starts, not genuine mode destruction:
+  but failed its conjunctive gates. The rule then tested `current`, whose
+  registered red lines were four origin-overwrite cells (five events) plus
+  unknown HMM/92104 run history; only that second step selected `no_rescue`.
+  The classifier found pathological/frozen ARMA and Lotka-Volterra origins
+  and zero HMM origins, so WP36 does not establish genuine posterior-mode
+  destruction:
   [`STUDIES/chain_rescue_v2`](STUDIES/chain_rescue_v2/README.md)
   (`WP36-CHAIN-RESCUE-V2`).
 - [E11] The sampler defaults on the funnel: four levels 0.0203 / 0.0242 /
