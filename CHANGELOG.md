@@ -305,7 +305,32 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Changed
 
-- **DEFAULT CHANGE (WP33, by the preregistered rule): the sampler's own
+- **POST-STUDY DEFAULT CHANGE (WP36): chain rescue is disabled by default.**
+  `Adaptation::DualAveraging` and `Adaptation::Paper` no longer install a
+  rescue on identity or diagonal multi-chain runs, and
+  `sampler::DEFAULT_CHAIN_RESCUE` is now the truthful
+  `Option<ChainRescueConfig> = None` (`STUDIES/chain_rescue_v2`,
+  [WP36-CHAIN-RESCUE-V2]). WP36 launched all 288 frozen one-shot cells; 281
+  were process-valid, while six Windows heap-corruption exits and one
+  post-result timeout left six paired triplets invalid. The registered
+  completeness gate therefore failed. Two-hit reduced nuisance unique-chain
+  actions from 35 to 14, but also failed the registered minimum sample size,
+  efficacy, funnel, origin-safety and efficiency requirements, selecting the
+  preregistered `no_rescue` safety fallback. The frozen classifier labelled
+  only pathological/frozen ARMA and Lotka-Volterra starts; this is not
+  evidence that rescue destroyed genuine modes. Immediate
+  `restart_from_best` retains WP33's strong bad-start efficacy and remains
+  fully opt-in, together with observe-only, two-hit and pooling, through
+  `Adaptation::Custom(WarmupConfig::with_chain_rescue(...))`. A restart that
+  acts copies state between chains and therefore invalidates the
+  independent-start interpretation of ordinary R-hat. Default sampler output
+  is bit-identical to an otherwise identical explicit custom no-rescue
+  warmup, and its rescue telemetry is empty. This is the post-study default
+  commit, not an algorithm revision: the retained kernel,
+  `walnutpie::WarmupConfig` / `RunConfig` defaults, walnutpie facade outputs,
+  and all core fingerprints are unchanged.
+
+- **HISTORICAL TEMPORARY DEFAULT CHANGE (WP33, by the preregistered rule): the sampler's own
   adaptation modes apply `sampler::DEFAULT_CHAIN_RESCUE =
   ChainRescueConfig::restart_from_best()` on the identity and diagonal
   metrics with at least two chains** (`STUDIES/chain_rescue_v1`,

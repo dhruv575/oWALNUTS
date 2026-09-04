@@ -144,7 +144,6 @@ fn identity_metric_matches_the_diagonal_facade_without_mass_adaptation() {
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
                 .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-                .with_chain_rescue(DEFAULT_CHAIN_RESCUE)
                 .with_mass_adaptation(false),
         )),
         nz(1),
@@ -181,8 +180,7 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
     )
@@ -221,13 +219,36 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
             WarmupConfig::new(0.9)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
     )
     .unwrap();
     assert_eq!(started.chains(), direct.chains());
+}
+
+#[test]
+fn default_multi_chain_warmup_is_explicit_no_rescue_bit_for_bit() {
+    let target = Gaussian(3);
+    let starts = starts(3);
+    let default = sampler().run(&target, &starts).unwrap();
+    let explicit = sampler()
+        .adaptation(Adaptation::Custom(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+        ))
+        .run(&target, &starts)
+        .unwrap();
+
+    assert_eq!(DEFAULT_CHAIN_RESCUE, None);
+    assert!(
+        default
+            .telemetry()
+            .all(|telemetry| telemetry.chain_rescues().is_empty())
+    );
+    assert_eq!(default, explicit);
 }
 
 #[test]
@@ -353,8 +374,7 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
                 .with_mass_adaptation(false)
                 .with_paper_adaptation(paper)
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         );
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
     let posterior = sampler()
@@ -380,6 +400,11 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
             .telemetry()
             .all(|telemetry| !telemetry.paper_adaptation_updates().is_empty())
     );
+    assert!(
+        posterior
+            .telemetry()
+            .all(|telemetry| telemetry.chain_rescues().is_empty())
+    );
 }
 
 #[test]
@@ -390,7 +415,6 @@ fn evaluation_budget_matches_the_budgeted_facade() {
             .unwrap()
             .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
             .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-            .with_chain_rescue(DEFAULT_CHAIN_RESCUE)
             .with_mass_adaptation(false),
     ));
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
@@ -483,8 +507,7 @@ fn cancellation_and_timeout_match_run_control() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
         &RunControl::new().with_cancellation(&*flag),
@@ -506,8 +529,7 @@ fn cancellation_and_timeout_match_run_control() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
-                .with_chain_rescue(DEFAULT_CHAIN_RESCUE),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
         )),
         nz(1),
         &RunControl::new().with_timeout(Duration::ZERO).unwrap(),

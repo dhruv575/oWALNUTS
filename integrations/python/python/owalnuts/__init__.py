@@ -35,7 +35,8 @@ HAS_STAN: bool = bool(getattr(_owalnuts, "HAS_STAN", False))
 #: (``DEFAULT_WARMUP_EXHAUSTION``), ``metric_regularization``
 #: (``DEFAULT_METRIC_REGULARIZATION``), ``target_accept``, ``adapt_mass``,
 #: ``init_radius``, ``init_max_attempts``, ``cache_initial_evaluation``,
-#: ``admit_worst_case``, ``algorithm_revision`` and
+#: ``admit_worst_case``, ``chain_rescue`` (``None`` after WP36),
+#: ``algorithm_revision`` and
 #: ``paper_adaptation_revision``. ``Tuning()`` and ``Adaptation()`` take
 #: their defaults from here, and ``sample`` sends only what you set, so a
 #: Rust default change reaches the package without any edit here.

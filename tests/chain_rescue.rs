@@ -835,23 +835,48 @@ fn rescue_with_skipped_boundaries_or_one_chain_is_the_plain_run() {
 }
 
 #[test]
-fn sampler_custom_adaptation_carries_the_rescue_and_dense_metric_rejects_it() {
+fn sampler_default_is_silent_and_custom_supports_every_rescue_policy() {
     let target = Gaussian(2);
-    let rescue = ChainRescueConfig::restart_from_best();
-    let posterior = Sampler::new()
+    let default = Sampler::new()
         .warmup(300)
         .draws(50)
         .chains(3)
-        .adaptation(Adaptation::Custom(warmup(Some(rescue.clone()))))
         .run_from_random_starts(&target)
         .unwrap();
-    assert!(posterior.telemetry().all(|t| !t.chain_rescues().is_empty()));
+    assert!(
+        default
+            .telemetry()
+            .all(|telemetry| telemetry.chain_rescues().is_empty())
+    );
+
+    for rescue in [
+        ChainRescueConfig::restart_from_best(),
+        ChainRescueConfig::observe_only(),
+        ChainRescueConfig::two_hit(),
+        ChainRescueConfig::pool_at_boundaries(),
+    ] {
+        let posterior = Sampler::new()
+            .warmup(300)
+            .draws(50)
+            .chains(3)
+            .adaptation(Adaptation::Custom(warmup(Some(rescue))))
+            .run_from_random_starts(&target)
+            .unwrap();
+        assert!(
+            posterior
+                .telemetry()
+                .all(|telemetry| !telemetry.chain_rescues().is_empty())
+        );
+    }
+
     let dense = Sampler::new()
         .warmup(300)
         .draws(50)
         .chains(3)
         .metric(Metric::dense())
-        .adaptation(Adaptation::Custom(warmup(Some(rescue))))
+        .adaptation(Adaptation::Custom(warmup(Some(
+            ChainRescueConfig::restart_from_best(),
+        ))))
         .run_from_random_starts(&target);
     assert!(dense.is_err());
     assert!(
@@ -864,10 +889,7 @@ fn sampler_custom_adaptation_carries_the_rescue_and_dense_metric_rejects_it() {
             .with_minimum_window_transitions(1)
             .is_err()
     );
-    assert_eq!(
-        owalnuts::sampler::DEFAULT_CHAIN_RESCUE,
-        ChainRescueConfig::restart_from_best()
-    );
+    assert_eq!(owalnuts::sampler::DEFAULT_CHAIN_RESCUE, None);
     assert_eq!(
         ChainRescueConfig::observe_only().mode(),
         ChainRescueMode::RestartFromBest

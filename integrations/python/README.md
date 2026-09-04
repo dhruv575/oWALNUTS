@@ -75,9 +75,10 @@ diagonal-metric prior and the one-sided warmup exhaustion rule of the
 post-WP31 default change (`STUDIES/joint_default_v1`,
 `STUDIES/posteriordb_bench_v5`), the cached initial evaluation, dual
 averaging toward acceptance 0.8 with an adapted diagonal metric, and
-worst-case admission. `owalnuts.DEFAULTS` is that set, read from the Rust
-constants at import (read-only); `Tuning()` and `Adaptation()` default from
-it, and the test suite checks that `sample` with explicit arguments equal to
+worst-case admission. Warmup chain rescue is disabled by default after WP36.
+`owalnuts.DEFAULTS` is that set, read from the Rust constants at import
+(read-only), including `chain_rescue=None`; `Tuning()` and `Adaptation()`
+default from it, and the test suite checks that `sample` with explicit arguments equal to
 `DEFAULTS` reproduces a Rust `Sampler` run bit for bit. Pass
 `tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the 0.1 package's
 tuning, `Tuning(u_turn_rule="endpoints")` with
