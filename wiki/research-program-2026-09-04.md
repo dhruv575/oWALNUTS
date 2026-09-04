@@ -30,14 +30,16 @@ answered **no** by its own evidence.
 
 ## What is in the release tree
 
-**A small API.** `owalnuts::sampler` is 21 public items: one `Sampler` builder,
-one `Posterior`, and `Metric` / `Adaptation` / `Tuning` / `Limits` / `Init`.
-Every path is a thin wrapper over one `walnutpie` entry point and is tested to
-produce bit-identical draws to calling that facade directly. The research-only
-facades (projected and pooled arrowhead, the `direct_original_q` family, the
-research evaluation limit) moved behind a `research` Cargo feature, off by
-default. `walnutpie` remains public and frozen; `ALGORITHM_REVISION` never
-changed during this programme.
+**A small API.** `owalnuts::sampler` exposes 30 top-level public names/items
+across its builder, posterior/result, configuration, target, diagnostic and
+control surfaces. `Sampler`, `Posterior`, `Metric`, `Adaptation`, `Tuning`,
+`Limits` and `Init` remain the primary user-facing path, rather than an
+exhaustive inventory. Every sampling path is a thin wrapper over one
+`walnutpie` entry point and is tested to produce bit-identical draws to calling
+that facade directly. The research-only facades (projected and pooled
+arrowhead, the `direct_original_q` family, the research evaluation limit)
+moved behind a `research` Cargo feature, off by default. `walnutpie` remains
+public and frozen; `ALGORITHM_REVISION` never changed during this programme.
 
 **Diagnostics and export in the crate.** `owalnuts::diagnostics` computes
 rank-normalised folded split R-hat, bulk, tail, quantile and mean ESS, MCSE and
@@ -73,7 +75,7 @@ with an sdist that vendors the path-dependency crates and PyPI trusted
 publishing gated on a tag. The name `owalnuts` is available on PyPI. The
 non-Windows legs have not been exercised.
 
-## The defaults changed eight times, each behind evidence
+## The defaults changed nine times, each behind evidence
 
 `walnutpie::RunConfig`, `WarmupConfig` and `KernelTuning` defaults are frozen for
 the oracles; every change below is in `owalnuts::sampler` only.

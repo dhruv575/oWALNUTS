@@ -1,4 +1,4 @@
-# Release 0.2.0 (2026-09-02)
+# Release 0.2.0 (unpublished; record updated 2026-09-04)
 
 First non-beta release of `owalnuts`. Kernel revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10` (unchanged since
@@ -20,7 +20,7 @@ cross-platform release/package matrix has been exercised.
 | `0eafc49` | `owalnuts::diagnostics` (rank-normalised R-hat, bulk/tail/quantile ESS, MCSE, Stan-style `Summary`) and `owalnuts::export::CmdStanCsv` | ArviZ fixture `tests/data/arviz_fixture.json` (1e-6 relative); `tests/export_cmdstan.rs` |
 | `00e55a7` | `owalnuts::sampler` builder API; `research` Cargo feature gate | `tests/sampler_api.rs` (bit-identical to the `walnutpie` entry points) |
 | `97c593b` | Allocation-free kernel hot path, bit-identical | `tests/kernel_fingerprint.rs`; `examples/kernel_bench.rs` |
-| `e79cb0f` | `owalnuts-autodiff` fused-primitive tape crate (`integrations/autodiff`) | `integrations/AUTODIFF-RESEARCH.md` Â§Route (e) |
+| `e79cb0f` | `owalnuts-autodiff` fused-primitive tape crate (`integrations/autodiff`) | `integrations/AUTODIFF-RESEARCH.md` § Route (e) |
 | `52be19e` | posteriordb benchmark against CmdStan and nutpie | WP22-POSTERIORDB-BENCH-V1 |
 | `be2325c` | BridgeStan: non-threaded build, `ReplicatedStanTarget`, NaN/inf mapped to the recoverable path | `STUDIES/posteriordb_bench_v1/artifacts/wall-gap` |
 | `5417e0c` | `sampler::Init` uniform starts with retries; Appendix C v4 defaults and guards | `STUDIES/paper_adaptation_robust_v1` |
@@ -29,7 +29,7 @@ cross-platform release/package matrix has been exercised.
 | this release | `sampler::Tuning` default refinement levels 4 -> 8: the four-level default halved the funnel's tail mass; eight levels are exact on three seeds at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D Gaussian | `STUDIES/funnel_defaults_v1` (WP28) |
 | this release | **DEFAULT CHANGE (post-hoc after WP31)**: `sampler::Tuning::default()` U-turn rule `Endpoints` -> `MomentumSum`; `Adaptation::DualAveraging` / `Paper` regularise the diagonal metric with Stan's prior (`DEFAULT_U_TURN_RULE`, `DEFAULT_METRIC_REGULARIZATION`) | `STUDIES/joint_default_v1` (WP31, rule not met, decided post hoc), validated by `STUDIES/posteriordb_bench_v5` (WP32) |
 | `87d8817` | **FINAL DEFAULT CHANGE (WP36):** `sampler::DEFAULT_CHAIN_RESCUE = None`; default output is directly tested against explicit custom no-rescue warmup, while observe-only, `restart_from_best`, `two_hit` and pooling remain explicit policies | `STUDIES/chain_rescue_v2` (WP36) |
-| this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
+| this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | — |
 
 The upgrade notes (facade unchanged, research items behind the feature,
 sampler defaults `h = 0.5`, depth 10, eight levels, `delta = 1` versus the frozen
@@ -290,10 +290,10 @@ WP28). No oWALNUTS cell errored, froze or diverged.
 gradient cost relative to the hand-written gradient is 7.6x / 4.1x on the
 fused Eight Schools form (206 ns), 13.7x on Neal's 10-D funnel (104 ns),
 3.0x / 2.8x on the local level `lupdf` at T = 100 / 1,000 (435 ns /
-3.93 Âµs) and 4.6-4.8x on the noncentered local level; gradients agree with
+3.93 µs) and 4.6-4.8x on the noncentered local level; gradients agree with
 the hand oracles to 1e-14 or better. For comparison, BridgeStan's Stan Math
-gradient is 6.7 Âµs on Eight Schools with `STAN_THREADS` (0.59 Âµs without)
-and 38 Âµs at T = 1,000; the Enzyme route needs a from-source rustc and is
+gradient is 6.7 µs on Eight Schools with `STAN_THREADS` (0.59 µs without)
+and 38 µs at T = 1,000; the Enzyme route needs a from-source rustc and is
 parked (`integrations/enzyme`). The Python GIL-free transport
 (`from_cfunc`, `from_pymc(gil_free=True)`) reaches ~31,000 min-bulk ESS/s
 on Eight Schools at four threads, parity with nutpie.
@@ -303,14 +303,17 @@ on Eight Schools at four threads, parity with nutpie.
 - **ESS per gradient on easy posteriors is 0.7-0.8x CmdStan** at matched
   step, depth histogram and gradient count (eight schools, arK, garch11,
   mesquite in `adaptation_parity_v1`). `kernel_efficiency_v1` accounts for
-  it: the default kernel is 0.75-0.81x reference NUTS on Gaussians and Eight
-  Schools (1.03x on the correlated Gaussian) because of the wasted
-  re-evaluation per transition (0.9x at depth 3, 0.97x at depth 5) and the
-  endpoint U-turn rule (0.75x on the isotropic Gaussian, 1.0x on the
+  it: the then-default endpoint-rule kernel was 0.75-0.81x reference NUTS on
+  Gaussians and Eight Schools (1.03x on the correlated Gaussian) because of
+  the wasted re-evaluation per transition (0.9x at depth 3, 0.97x at depth 5)
+  and the endpoint U-turn rule (0.75x on the isotropic Gaussian, 1.0x on the
   correlated one), with refinement rejections at 0.85-0.95x where refinement
-  engages. The cache is now the `Sampler` default; Stan's momentum-sum
-  U-turn rule stays opt-in (`KernelOptions`): on posteriordb it is 1.06x
-  geomean and 0.78–2.14x per model (WP26), not the gap.
+  engages. The cache and `UTurnRule::MomentumSum` are now `Sampler` defaults
+  after the joint WP31 change and WP32 validation. Historically, WP26 tested
+  `MomentumSum` in isolation: it was 1.064x geomean and 0.78–2.14x per model
+  but missed that study's flip rule, so it correctly remained opt-in at that
+  point. `UTurnRule::Endpoints` is now the explicit opt-in alternative and the
+  frozen `walnutpie::KernelOptions::default()` behavior.
 - **Refinement rarely engages on posteriordb models**: ~1 % of retained
   leaves refine (99 % at level 0), so on those targets oWALNUTS is NUTS with
   a slightly shorter step paying the reverse-check cost; the wins measured
@@ -324,7 +327,7 @@ on Eight Schools at four threads, parity with nutpie.
 - The `stan_style` warmup preset is opt-in because it regresses four models
   and fails R-hat on two.
 - Paper adaptation is supported by the diagonal and fixed-operator facades
-  only; the Ïƒ_x -> 0 state-space funnel (`sspd-10`) is not sampled by any
+  only; the σ_x -> 0 state-space funnel (`sspd-10`) is not sampled by any
   Euclidean sampler tested; there is no step-jitter option; seeds are not
   portable across kernel revisions; cancellation and deadlines are
   cooperative (all carried from 0.1.0-beta.2).
@@ -345,7 +348,7 @@ on Eight Schools at four threads, parity with nutpie.
 
 - [x] `cargo fmt --check`, `cargo clippy --all-targets --all-features -D
       warnings`, `-D warnings` rustdoc (GNU 1.88)
-- [x] `cargo test --release` without (189) and with (204) the `research`
+- [x] `cargo test --release` without (218) and with (234) the `research`
       feature
 - [x] `owalnuts-autodiff` (16 tests) and `owalnuts-bridgestan` (12 tests,
       model tests run locally) green, fmt and clippy clean
