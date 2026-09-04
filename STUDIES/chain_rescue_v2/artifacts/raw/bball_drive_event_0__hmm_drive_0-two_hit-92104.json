@@ -1,0 +1,89 @@
+{
+  "actions": null,
+  "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "arm": "two_hit",
+  "chains": 4,
+  "chains_data": null,
+  "complete": true,
+  "dimension": 6,
+  "error": "kernel attempted a nonfinite target position",
+  "init": {
+    "max_attempts": 100,
+    "radius": 2.0,
+    "rule": "owalnuts::sampler::Init::uniform()",
+    "start_search_calls": 4
+  },
+  "initial_position_sha256": [
+    "826b90e266deb151c97a41ca7a9cab307bda36ea3aeaccd6135c1cdeaa52eda5",
+    "c69682bc48687bb6e979e89166ed0680e53999ef8faff8be97052fbfd7b242c0",
+    "bf292cc1876bde054dd5bdfba3bb724254437efb96de53399f9fc0eca848d0f0",
+    "24bde1cfda9e1d3fe6799f907d5d743ecc435e0d300f50230834054b62f0aa2a"
+  ],
+  "initial_positions": [
+    [
+      1.4128135372944337,
+      -0.20658229080705848,
+      -1.454660836138724,
+      1.7457987294471415,
+      -0.7024329839147905,
+      -0.6657391731075091
+    ],
+    [
+      0.777478737114838,
+      1.6739674171868693,
+      -1.7887428859002732,
+      -1.9263282489391393,
+      -1.9819021128981298,
+      -0.3237266034187005
+    ],
+    [
+      0.3351262291965291,
+      -1.952720991137241,
+      -1.8731784749342415,
+      -0.0007708928656899872,
+      1.1012641344087717,
+      0.19893331294132643
+    ],
+    [
+      0.2561640883572993,
+      -1.5077241060073927,
+      1.5008388947339864,
+      1.5733347812388248,
+      -0.6420132760304131,
+      -0.4977840522624195
+    ]
+  ],
+  "recoverable_failures_total": 1123,
+  "rescue_history": "unavailable",
+  "retained": 1000,
+  "schema": "chain-rescue-v2-cell-raw",
+  "schema_version": 1,
+  "seed": 92104,
+  "stage": "run",
+  "status": "sampler_error",
+  "target": "bball_drive_event_0-hmm_drive_0",
+  "target_calls_total": 33051,
+  "telemetry_complete": false,
+  "telemetry_unknown": true,
+  "threads": 4,
+  "wall_seconds": 3.0995462,
+  "warmup": 1000,
+  "warmup_config": {
+    "chain_rescue": {
+      "log_density_iqr_factor": 3.0,
+      "minimum_window_transitions": 10,
+      "mode": "RestartFromBest",
+      "policy": "TwoHit",
+      "source_tie_rule": "larger step, then larger median log density, then higher chain index",
+      "step_ratio": 0.1
+    },
+    "explicit_arm": true,
+    "inherits_default_chain_rescue": false,
+    "mass_adaptation": true,
+    "metric_regularization": "Stan",
+    "mode": "dual_averaging",
+    "target_accept": 0.8,
+    "warmup_exhaustion_rule": "AcceptUnlessDivergent"
+  },
+  "warmup_schedule": null
+}
