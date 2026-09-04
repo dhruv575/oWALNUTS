@@ -5409,6 +5409,21 @@ impl fmt::Display for Error {
         {
             write!(f, ": {}", source.message())?;
         }
+        match (self.chain, self.transition) {
+            (Some(chain), Some(transition)) => {
+                write!(f, " (chain {chain}, transition {transition})")?;
+            }
+            (Some(chain), None) => write!(f, " (chain {chain})")?,
+            (None, Some(transition)) => write!(f, " (transition {transition})")?,
+            (None, None) => {}
+        }
+        if self.kind == ErrorKind::Numerical && self.message.contains("nonfinite target position") {
+            f.write_str(
+                "; the integrator overflowed: try a smaller initial `step_size`, \
+                 check the gradient's scale, or make the target return \
+                 `TargetError::recoverable` where it cannot evaluate",
+            )?;
+        }
         Ok(())
     }
 }
