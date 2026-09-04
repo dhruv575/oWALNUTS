@@ -169,6 +169,16 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   They are still compiled (`src/walnutpie/research.rs`), so no kernel path
   changed; the `STUDIES/` crates and the Python integration enable the
   feature.
+- **Research-only `NonfinitePositionPolicy`.** `KernelTuning::
+  with_nonfinite_position` / `sampler::Tuning::nonfinite_position` select
+  what a transition does when the integrator hands the target a nonfinite
+  position. The default `Abort` is the frozen `v10` behaviour (the run ends
+  with `ErrorKind::Numerical`); the opt-in `RejectLeaf` treats the point as a
+  zero-density leaf with a zero gradient, like a recoverable target failure,
+  and counts it in `WorkTotals::nonfinite_position_rejections`. Runs in which
+  the event never occurs are bit-identical under either policy; fingerprints
+  unchanged. Motivated by `STUDIES/sspd_target_fatal_diag_v1`; qualified as
+  an opt-in only by `STUDIES/nonfinite_position_policy_v1` (WP38).
 - **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
   rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
   the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views
