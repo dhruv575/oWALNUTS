@@ -216,18 +216,17 @@ fn external_real_model_owned_worker_has_exact_parallel_parity() {
     assert_eq!(direct.param_unc_names(), replicated.param_unc_names());
 
     let dimension = direct.dimension();
-    let (position, expected_value, expected_gradient) =
-        [0.0, 0.1, -0.1, 0.5, -0.5]
-            .into_iter()
-            .find_map(|coordinate| {
-                let position = vec![coordinate; dimension];
-                let mut gradient = vec![0.0; dimension];
-                direct
-                    .log_density_gradient(&position, &mut gradient)
-                    .ok()
-                    .map(|value| (position, value, gradient))
-            })
-            .expect("one deterministic external-model probe is valid");
+    let (position, expected_value, expected_gradient) = [0.0, 0.1, -0.1, 0.5, -0.5]
+        .into_iter()
+        .find_map(|coordinate| {
+            let position = vec![coordinate; dimension];
+            let mut gradient = vec![0.0; dimension];
+            direct
+                .log_density_gradient(&position, &mut gradient)
+                .ok()
+                .map(|value| (position, value, gradient))
+        })
+        .expect("one deterministic external-model probe is valid");
 
     let observed: Vec<_> = std::thread::scope(|scope| {
         let handles: Vec<_> = (0..16)
@@ -251,8 +250,7 @@ fn external_real_model_owned_worker_has_exact_parallel_parity() {
     assert!(
         observed
             .iter()
-            .all(|(value, gradient)| *value == expected_value
-                && *gradient == expected_gradient)
+            .all(|(value, gradient)| *value == expected_value && *gradient == expected_gradient)
     );
     assert_eq!(replicated.calls(), 16);
 }
