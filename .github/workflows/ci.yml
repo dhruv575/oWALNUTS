@@ -28,13 +28,16 @@ jobs:
           - name: Windows GNU 1.88 (reference toolchain)
             os: windows-latest
             toolchain: 1.88.0-x86_64-pc-windows-gnu
+          - name: Windows MSVC 1.88
+            os: windows-latest
+            toolchain: 1.88.0-x86_64-pc-windows-msvc
           - name: Linux stable
             os: ubuntu-latest
             toolchain: stable
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -58,7 +61,7 @@ jobs:
           cargo run --locked --release --example gaussian
           cargo run --locked --release --example state_space_path_metric
       - name: Package contents
-        run: cargo package --locked --no-verify
+        run: cargo package --locked
 
   integrations:
     name: Integrations (${{ matrix.name }})
@@ -72,10 +75,13 @@ jobs:
           - name: Windows GNU 1.88
             os: windows-latest
             toolchain: 1.88.0-x86_64-pc-windows-gnu
+          - name: Windows MSVC 1.88
+            os: windows-latest
+            toolchain: 1.88.0-x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -89,10 +95,9 @@ jobs:
       - name: autodiff — tests (hand-gradient and finite-difference oracles)
         working-directory: integrations/autodiff
         run: cargo test --locked --release
-      # owalnuts-bridgestan: the sampling tests need a BridgeStan-compiled
-      # model (`bridgestan/models/*.so`, see its README) and skip themselves
-      # when it is absent; CI therefore checks, lints and runs the
-      # library-only tests without installing BridgeStan or a Stan toolchain.
+      # owalnuts-bridgestan: this matrix checks every Rust host toolchain.
+      # The dedicated qualification job below compiles and requires a real
+      # BridgeStan model on Linux GNU and Windows MSVC.
       - name: bridgestan — check, clippy
         working-directory: integrations/bridgestan
         run: |
@@ -111,3 +116,59 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --locked --all-targets --all-features -- -D warnings
           cargo clippy --locked --all-targets --no-default-features -- -D warnings
+
+  bridgestan-real-model:
+    name: BridgeStan real model (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GNU 1.88
+            os: ubuntu-latest
+            toolchain: 1.88.0-x86_64-unknown-linux-gnu
+            make: make
+          - name: Windows MSVC 1.88 host / MinGW model
+            os: windows-latest
+            toolchain: 1.88.0-x86_64-pc-windows-msvc
+            make: mingw32-make
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      MAKE: ${{ matrix.make }}
+      OWALNUTS_BRIDGESTAN_REQUIRE_REAL_MODEL: "1"
+      OWALNUTS_BRIDGESTAN_REAL_MODEL: ${{ github.workspace }}/integrations/bridgestan/models/eight_schools_model.so
+      OWALNUTS_BRIDGESTAN_REAL_DATA: ${{ github.workspace }}/integrations/bridgestan/models/eight_schools.data.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - name: Install the MinGW model toolchain
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-make
+      - name: Expose the MinGW model toolchain to Python and the Rust test host
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
+      - name: Cache BridgeStan and the Stan Math build
+        uses: actions/cache@v6
+        with:
+          path: ~/.bridgestan
+          key: bridgestan-2.9.0-${{ runner.os }}-${{ runner.arch }}-v1
+      - name: Install pinned BridgeStan
+        run: python -m pip install --disable-pip-version-check "bridgestan==2.9.0"
+      - name: Compile Eight Schools
+        run: python -c "from pathlib import Path; import bridgestan.compile as c; output = c.compile_model('integrations/bridgestan/models/eight_schools.stan'); print(output); assert Path(output).is_file()"
+      - name: Run required real-model BridgeStan tests
+        working-directory: integrations/bridgestan
+        run: cargo test --locked --release --test load -- --nocapture

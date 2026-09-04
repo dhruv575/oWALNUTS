@@ -2,9 +2,11 @@
 
 Skipped when the ``bridgestan`` package is missing, the extension was built
 without the ``stan`` feature, or the Eight Schools model cannot be compiled
-(no C++ toolchain / GNU make on this machine).
+(no C++ toolchain / GNU make on this machine), unless
+``OWALNUTS_REQUIRE_STAN_TESTS=1`` makes those conditions test failures.
 """
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -18,6 +20,13 @@ MODELS = Path(__file__).resolve().parents[2] / "bridgestan" / "models"
 Y = [28.0, 8.0, -3.0, 7.0, -1.0, 1.0, 18.0, 12.0]
 SIGMA = [15.0, 10.0, 16.0, 11.0, 9.0, 11.0, 10.0, 18.0]
 DATA = {"J": 8, "y": Y, "sigma": SIGMA}
+REQUIRE_STAN_TESTS = os.environ.get("OWALNUTS_REQUIRE_STAN_TESTS") == "1"
+
+
+def stan_unavailable(reason):
+    if REQUIRE_STAN_TESTS:
+        pytest.fail(reason, pytrace=False)
+    pytest.skip(reason)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific safety gate")
@@ -44,11 +53,14 @@ def test_windows_disables_python_native_bridgestan_paths():
 @pytest.fixture(scope="module")
 def eight_schools(tmp_path_factory):
     if not owalnuts.HAS_STAN:
-        pytest.skip("extension built without the `stan` feature")
-    pytest.importorskip("bridgestan")
+        stan_unavailable("extension built without the `stan` feature")
+    try:
+        __import__("bridgestan")
+    except ImportError as e:
+        stan_unavailable(f"bridgestan package unavailable: {e}")
     stan = MODELS / "eight_schools.stan"
     if not stan.exists():
-        pytest.skip(f"{stan} missing")
+        stan_unavailable(f"{stan} missing")
     # Compile into a private copy so the test never depends on a prebuilt
     # library and exercises the real `from_stan` compile path (~20 s once
     # Stan Math is built; the first BridgeStan build takes minutes).
@@ -58,7 +70,7 @@ def eight_schools(tmp_path_factory):
     try:
         return owalnuts.from_stan(src, DATA, seed=1)
     except Exception as e:  # noqa: BLE001 - toolchain dependent
-        pytest.skip(f"BridgeStan compile unavailable: {str(e)[-400:]}")
+        stan_unavailable(f"BridgeStan compile unavailable: {str(e)[-400:]}")
 
 
 def test_from_stan_reports_names_and_dimension(eight_schools):

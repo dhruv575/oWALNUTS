@@ -12,8 +12,10 @@ explicit rescue policies remain available. The separate Windows BridgeStan
 process-lifecycle failure has a narrow mitigation: one owned worker per target
 plus process-global native-call serialization completed a final 720-child
 Windows GNU diagnostic without a fault. The historical root cause is not
-proven, and Windows MSVC, Linux/macOS and package/wheel qualification remain
-open. Do not tag or publish until those release gates are complete.
+proven. CI now defines Windows MSVC core/integration and Windows MSVC plus
+Linux real-model BridgeStan gates, and the release workflow defines the full
+package/wheel matrix, but those external runs remain pending. Do not tag or
+publish until those release gates are green.
 
 ## What changed since 0.1.0-beta.2
 
@@ -346,12 +348,15 @@ on Eight Schools at four threads, parity with nutpie.
   was 3.1–5.1x the four-replica comparator. Root cause is still not proven,
   and qualification covers only Windows GNU, one host, three model binaries,
   short runs, and one effective replica per target. Windows MSVC,
-  Linux/macOS and package/wheel gates remain. Windows Python `from_stan` and
-  direct Python BridgeStan operations are disabled for 0.2. None of this
-  identifies a defect in the core Rust sampler, whose direct tests and
-  fingerprints remain green.
-- The BridgeStan crate's sampling tests need a locally compiled model and skip
-  in CI; only its pure-Rust nonfinite-mapping tests run there.
+  Linux/macOS and package/wheel gates remain pending. Windows Python
+  `from_stan` and direct Python BridgeStan operations are disabled for 0.2.
+  None of this identifies a defect in the core Rust sampler, whose direct
+  tests and fingerprints remain green.
+- CI now has a dedicated required-real-model job that compiles Eight Schools
+  with BridgeStan 2.9.0 and runs the Rust BridgeStan tests on Linux GNU and a
+  Windows MSVC Rust host loading a MinGW-built model. Its first external run
+  is pending; the ordinary integration matrix still permits model-dependent
+  tests to skip.
 - The Python package is not published; `maturin develop` from the tree.
 
 ## Release checklist
@@ -370,13 +375,18 @@ on Eight Schools at four threads, parity with nutpie.
       owned-one-worker/process-global-serialization backend and complete the
       final 720-child Windows GNU diagnostic; immutable earlier evidence was
       not rerun
-- [ ] Qualify the owned-worker backend and expert Rust `StanTarget` path on
-      Windows MSVC; Windows Python `from_stan` remains disabled
-- [ ] Exercise the core crate on Windows MSVC and Linux, and exercise package
-      jobs for Windows, manylinux x86_64/aarch64, macOS x86_64/arm64 and the
-      sdist
-- [ ] `git tag v0.2.0`, `cargo publish` and PyPI publish — blocked on the two
-      preceding items
+- [ ] Observe a green dedicated BridgeStan 2.9.0 real-model CI gate on Linux
+      GNU and on a Windows MSVC Rust host loading the MinGW-built model; the
+      workflow is configured, but has not run externally. Windows Python
+      `from_stan` remains disabled
+- [ ] Observe green core and integration matrices including Windows MSVC 1.88,
+      and green release jobs for Windows, manylinux x86_64/aarch64, macOS
+      x86_64/arm64 and the sdist; these workflow gates are configured but
+      remain pending
+- [ ] Configure the repository `pypi` environment and pending PyPI trusted
+      publisher, then push and observe the required CI gates
+- [ ] `git tag v0.2.0`, `cargo publish` and PyPI publish — blocked on the
+      preceding external gates
 
 ### Final default and benchmark status
 
