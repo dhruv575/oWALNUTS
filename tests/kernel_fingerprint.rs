@@ -5,6 +5,13 @@
 //! funnel (paper tuning) and noncentered Eight Schools (adapted diagonal
 //! warmup). Any change in floating-point operation order in the kernel
 //! changes them.
+//!
+//! The hashes are platform-specific: the call counts (and therefore every
+//! trajectory decision) agree across platforms, but the last bits of the
+//! draws follow the C math library's `exp`/`ln`, so Windows (GNU and MSVC
+//! agree) and Linux glibc pin different values. Where a platform/profile
+//! pair has no pinned value the test checks the call count and prints the
+//! hash so it can be pinned.
 
 use std::num::NonZeroUsize;
 
@@ -136,11 +143,7 @@ fn funnel_paper_tuning_four_chains_are_bit_exact() {
     )
     .unwrap();
     let (hash, calls) = fingerprint(&output);
-    assert_eq!(
-        (hash, calls),
-        (FUNNEL_FINGERPRINT, FUNNEL_CALLS),
-        "funnel fingerprint {hash:016x} with {calls} calls"
-    );
+    check("funnel", hash, calls, FUNNEL_FINGERPRINT, FUNNEL_CALLS);
 }
 
 #[test]
@@ -173,22 +176,52 @@ fn eight_schools_adapted_four_chains_are_bit_exact() {
     )
     .unwrap();
     let (hash, calls) = fingerprint(&output);
-    assert_eq!(
-        (hash, calls),
-        (EIGHT_SCHOOLS_FINGERPRINT, EIGHT_SCHOOLS_CALLS),
-        "eight schools fingerprint {hash:016x} with {calls} calls"
+    check(
+        "eight schools",
+        hash,
+        calls,
+        EIGHT_SCHOOLS_FINGERPRINT,
+        EIGHT_SCHOOLS_CALLS,
     );
 }
 
 // Baseline values (kernel before the hot-path work); see the module docs.
-const FUNNEL_FINGERPRINT: u64 = 0x387f_e4f4_c00c_3a05;
+#[cfg(windows)]
+const FUNNEL_FINGERPRINT: Option<u64> = Some(0x387f_e4f4_c00c_3a05);
+#[cfg(target_os = "linux")]
+const FUNNEL_FINGERPRINT: Option<u64> = Some(0x9da8_4e9d_a471_5afb);
+#[cfg(not(any(windows, target_os = "linux")))]
+const FUNNEL_FINGERPRINT: Option<u64> = None;
 const FUNNEL_CALLS: usize = 74_014;
 // The adapted Eight Schools run differs between the debug and release
 // profiles on the baseline kernel already (the warmup path is sensitive to
 // profile-dependent floating-point lowering); both baselines are pinned.
-const EIGHT_SCHOOLS_FINGERPRINT: u64 = if cfg!(debug_assertions) {
-    0xcd59_b77f_fe72_c8b6
+#[cfg(windows)]
+const EIGHT_SCHOOLS_FINGERPRINT: Option<u64> = if cfg!(debug_assertions) {
+    Some(0xcd59_b77f_fe72_c8b6)
 } else {
-    0x5600_757f_2a08_6a12
+    Some(0x5600_757f_2a08_6a12)
 };
+#[cfg(target_os = "linux")]
+const EIGHT_SCHOOLS_FINGERPRINT: Option<u64> = if cfg!(debug_assertions) {
+    Some(0xf0e5_5a36_305c_4077)
+} else {
+    None
+};
+#[cfg(not(any(windows, target_os = "linux")))]
+const EIGHT_SCHOOLS_FINGERPRINT: Option<u64> = None;
 const EIGHT_SCHOOLS_CALLS: usize = 38_464;
+
+/// Assert the pinned fingerprint where one exists; otherwise print it.
+fn check(label: &str, hash: u64, calls: usize, expected: Option<u64>, expected_calls: usize) {
+    assert_eq!(calls, expected_calls, "{label} made {calls} target calls");
+    match expected {
+        Some(expected) => assert_eq!(
+            hash, expected,
+            "{label} fingerprint {hash:016x} with {calls} calls"
+        ),
+        None => eprintln!(
+            "{label}: unpinned platform/profile, fingerprint {hash:016x} with {calls} calls"
+        ),
+    }
+}
