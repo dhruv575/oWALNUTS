@@ -1,0 +1,208 @@
+{
+  "by_matrix": {
+    "eval-r1-t1": {
+      "chains": 0,
+      "duration_seconds": {
+        "maximum": 0.06925900001078844,
+        "median": 0.06334814999718219,
+        "minimum": 0.06255940001574345
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "evaluate",
+      "planned": 6,
+      "raw_outputs_missing": 0,
+      "recorded": 6,
+      "replicas": 1,
+      "silent_failures": 0,
+      "successes": 6,
+      "threads": 1
+    },
+    "eval-r4-t4": {
+      "chains": 0,
+      "duration_seconds": {
+        "maximum": 0.6816126999910921,
+        "median": 0.6038685499952408,
+        "minimum": 0.5594041000003926
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "evaluate",
+      "planned": 6,
+      "raw_outputs_missing": 0,
+      "recorded": 6,
+      "replicas": 4,
+      "silent_failures": 0,
+      "successes": 6,
+      "threads": 4
+    },
+    "load-r1-t1": {
+      "chains": 0,
+      "duration_seconds": {
+        "maximum": 0.3731334999902174,
+        "median": 0.045873349998146296,
+        "minimum": 0.04224340000655502
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "load_drop",
+      "planned": 12,
+      "raw_outputs_missing": 0,
+      "recorded": 12,
+      "replicas": 1,
+      "silent_failures": 0,
+      "successes": 12,
+      "threads": 1
+    },
+    "load-r4-t4": {
+      "chains": 0,
+      "duration_seconds": {
+        "maximum": 0.6734931000100914,
+        "median": 0.5246387500083074,
+        "minimum": 0.4975519000145141
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "load_drop",
+      "planned": 12,
+      "raw_outputs_missing": 0,
+      "recorded": 12,
+      "replicas": 4,
+      "silent_failures": 0,
+      "successes": 12,
+      "threads": 4
+    },
+    "repeat-load-r1-t1": {
+      "chains": 0,
+      "duration_seconds": {
+        "maximum": 0.3909501000016462,
+        "median": 0.3788501999952132,
+        "minimum": 0.36675029998878017
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "repeat_load_drop",
+      "planned": 2,
+      "raw_outputs_missing": 0,
+      "recorded": 2,
+      "replicas": 1,
+      "silent_failures": 0,
+      "successes": 2,
+      "threads": 1
+    },
+    "repeat-load-r4-t4": {
+      "chains": 0,
+      "duration_seconds": {
+        "maximum": 11.21075739999651,
+        "median": 10.453052450000541,
+        "minimum": 9.695347500004573
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "repeat_load_drop",
+      "planned": 2,
+      "raw_outputs_missing": 0,
+      "recorded": 2,
+      "replicas": 4,
+      "silent_failures": 0,
+      "successes": 2,
+      "threads": 4
+    },
+    "sample-r1-t1": {
+      "chains": 1,
+      "duration_seconds": {
+        "maximum": 0.21895879998919554,
+        "median": 0.19209660001797602,
+        "minimum": 0.16913309998926707
+      },
+      "fault_cases": [],
+      "faults": 0,
+      "heartbeat_incomplete": 0,
+      "mode": "sample",
+      "planned": 3,
+      "raw_outputs_missing": 0,
+      "recorded": 3,
+      "replicas": 1,
+      "silent_failures": 0,
+      "successes": 3,
+      "threads": 1
+    },
+    "sample-r4-t4": {
+      "chains": 4,
+      "duration_seconds": {
+        "maximum": 3.312688399979379,
+        "median": 0.7982722999877296,
+        "minimum": 0.7447372000024188
+      },
+      "fault_cases": [
+        "sample-r4-t4-990603"
+      ],
+      "faults": 1,
+      "heartbeat_incomplete": 1,
+      "mode": "sample",
+      "planned": 3,
+      "raw_outputs_missing": 0,
+      "recorded": 3,
+      "replicas": 4,
+      "silent_failures": 1,
+      "successes": 2,
+      "threads": 4
+    }
+  },
+  "diagnostic_only": true,
+  "expected_children": 46,
+  "fault_details": [
+    {
+      "case_id": "sample-r4-t4-990603",
+      "last_heartbeat": {
+        "_file": "0009-drop-before.json",
+        "boundary": "before",
+        "chains": 4,
+        "cycle": null,
+        "detail": null,
+        "mode": "sample",
+        "pid": 4324,
+        "replicas": 4,
+        "schema": "sblrc-process-stability-v1-heartbeat",
+        "seed": 990603,
+        "sequence": 9,
+        "stage": "drop",
+        "threads": 4,
+        "unix_time_ms": 1788496170865
+      },
+      "raw_output_exists": true,
+      "reasons": [
+        "child return code was 3221226356, not zero",
+        "required heartbeat sequence is incomplete"
+      ],
+      "return_code": {
+        "hex_32": "0xC0000374",
+        "raw": 3221226356,
+        "signed_32": -1073740940,
+        "unsigned_32": 3221226356
+      },
+      "silent": true
+    }
+  ],
+  "faults": 1,
+  "forbidden_seed_90101_run": false,
+  "generated_utc": "2026-09-04T04:38:55Z",
+  "heartbeat_incomplete": 1,
+  "matrix_complete": true,
+  "missing_children": [],
+  "protocol_sha256": "0ae15b235c35b73932160e453656da903247dbdd6a1b2daea0e4666f78e8cb88",
+  "raw_outputs_missing": 0,
+  "recorded_children": 46,
+  "root_cause": "not established",
+  "schema": "sblrc-process-stability-v1-summary",
+  "silent_failures": 1,
+  "successes": 45,
+  "verdict": "fault_reproduced",
+  "verdict_text": "A process-stability fault reproduced in 1/46 diagnostic children: sample-r4-t4-990603 exited 0xC0000374 (STATUS_HEAP_CORRUPTION), silently, after the last durable heartbeat drop/before. The uninstrumented interval spans target drop plus the attempted next heartbeat; it is consistent with teardown but does not prove that teardown caused the fault."
+}
