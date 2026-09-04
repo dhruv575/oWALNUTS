@@ -10,6 +10,7 @@ SOURCE_FILES = [
     "protocol.json",
     "AMENDMENT-1.md",
     "AMENDMENT-2.md",
+    "AMENDMENT-3.md",
     "README.md",
     ".gitignore",
     "Cargo.toml",

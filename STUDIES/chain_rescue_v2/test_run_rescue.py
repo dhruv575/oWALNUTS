@@ -400,6 +400,33 @@ class FormulaAndClassificationTests(unittest.TestCase):
         findings = study.all_process_safety_findings([candidate], "current")
         self.assertTrue(result["origin_safety_unknown"])
         self.assertEqual(findings["origin_safety_unknown"], ["model/2"])
+        self.assertTrue(study.credited_pass_after_origin_mapping(True, result))
+
+    def test_origin_unknown_is_not_a_current_red_line(self):
+        findings = {
+            "origin_overwritten": [],
+            "origin_safety_unknown": ["model/2"],
+            "reference": [],
+            "funnel": [],
+            "unknown_run_error": [],
+        }
+        red_lines = study.current_red_line_report(findings, [], [])
+        self.assertNotIn("origin_safety_unknown", red_lines)
+        self.assertFalse(any(red_lines.values()))
+        findings["origin_overwritten"] = ["model/2"]
+        self.assertTrue(
+            study.current_red_line_report(findings, [], [])["origin_overwritten"]
+        )
+
+    def test_unknown_origin_still_blocks_two_hit_safety(self):
+        findings = {
+            "origin_overwritten": [],
+            "origin_safety_unknown": ["model/2"],
+            "reference": [],
+            "funnel": [],
+            "unknown_run_error": [],
+        }
+        self.assertFalse(study.candidate_origin_safety_pass(findings))
 
     def test_unique_restarted_chains_not_event_count(self):
         raw = {"actions": [{"chain": 1, "outcome_criterion": "Step"}] * 3}
@@ -632,6 +659,18 @@ class ProcessProtocolTests(unittest.TestCase):
         self.assertEqual(study.pe_section_differences(expected, deepcopy(expected)), [])
         changed = {".text": {"bytes": 2, "sha256": "different"}}
         self.assertEqual(study.pe_section_differences(expected, changed), [".text"])
+
+    def test_analysis_rebind_reuses_only_unchanged_rust_inputs(self):
+        self.assertTrue(study.is_rust_binary_source("src/walnutpie.rs"))
+        self.assertTrue(
+            study.is_rust_binary_source("STUDIES/chain_rescue_v2/Cargo.lock")
+        )
+        self.assertFalse(
+            study.is_rust_binary_source("STUDIES/chain_rescue_v2/run_rescue.py")
+        )
+        self.assertFalse(
+            study.is_rust_binary_source("STUDIES/chain_rescue_v2/AMENDMENT-3.md")
+        )
 
 
 if __name__ == "__main__":

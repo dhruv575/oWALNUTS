@@ -7,6 +7,7 @@ Commands:
   run_rescue.py run
   run_rescue.py analyze
   run_rescue.py prepare-provenance  # curator-only, create-new
+  run_rescue.py rebind-amendment-3-provenance  # curator-only, create-new
   run_rescue.py conformance         # curator-only, create-new
 
 `run` is the only command that launches evidence cells. It follows the frozen
@@ -36,6 +37,7 @@ PROTOCOL_PATH = HERE / "protocol.json"
 PROTOCOL = json.loads(PROTOCOL_PATH.read_text(encoding="utf-8"))
 AMENDMENT_1 = HERE / "AMENDMENT-1.md"
 AMENDMENT_2 = HERE / "AMENDMENT-2.md"
+AMENDMENT_3 = HERE / "AMENDMENT-3.md"
 ARTIFACTS = HERE / "artifacts"
 RAW = ARTIFACTS / "raw"
 PROCESSES = ARTIFACTS / "processes"
@@ -50,6 +52,9 @@ CONFORMANCE_INDEX = ARTIFACTS / "conformance" / "current.json"
 LEGACY_INPUT_MANIFEST = ARTIFACTS / "provenance" / "external-inputs.json"
 LEGACY_BUILD_MANIFEST = ARTIFACTS / "provenance" / "build-manifest.json"
 PROVENANCE_INDEX = ARTIFACTS / "provenance" / "current.json"
+AMENDMENT_3_PROVENANCE_INDEX = (
+    ARTIFACTS / "provenance" / "current-amendment-3.json"
+)
 
 DEFAULT_ASSETS = Path(
     r"C:\dev\owalnuts-wt\posteriordb-v6\STUDIES\posteriordb_bench_v6"
@@ -185,12 +190,17 @@ def authenticated_pointer_path(index: Path, field: str, legacy: Path) -> Path:
 
 
 def provenance_paths() -> tuple[Path, Path]:
+    index = (
+        AMENDMENT_3_PROVENANCE_INDEX
+        if AMENDMENT_3_PROVENANCE_INDEX.is_file()
+        else PROVENANCE_INDEX
+    )
     return (
         authenticated_pointer_path(
-            PROVENANCE_INDEX, "external_inputs", LEGACY_INPUT_MANIFEST
+            index, "external_inputs", LEGACY_INPUT_MANIFEST
         ),
         authenticated_pointer_path(
-            PROVENANCE_INDEX, "build_manifest", LEGACY_BUILD_MANIFEST
+            index, "build_manifest", LEGACY_BUILD_MANIFEST
         ),
     )
 
@@ -460,6 +470,8 @@ def source_file_records(repository: Path) -> list[dict[str, Any]]:
         "STUDIES/chain_rescue_v2/PREREGISTRATION.md",
         "STUDIES/chain_rescue_v2/AMENDMENT-1.md",
         "STUDIES/chain_rescue_v2/AMENDMENT-2.md",
+        "STUDIES/chain_rescue_v2/AMENDMENT-3.md",
+        "STUDIES/chain_rescue_v2/README.md",
     ).splitlines()
     return [
         {
@@ -519,6 +531,7 @@ def inspect_external_inputs() -> dict[str, Any]:
         "protocol_sha256": sha256(PROTOCOL_PATH),
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
+        "amendment_3_sha256": sha256(AMENDMENT_3),
         "assets": str(ASSETS.resolve()),
         "model_dir": str(MODEL_DIR.resolve()),
         "posteriordb": pdb,
@@ -538,6 +551,7 @@ def logical_external_identity(manifest: dict[str, Any]) -> dict[str, Any]:
         "protocol_sha256": manifest.get("protocol_sha256"),
         "amendment_1_sha256": manifest.get("amendment_1_sha256"),
         "amendment_2_sha256": manifest.get("amendment_2_sha256"),
+        "amendment_3_sha256": manifest.get("amendment_3_sha256"),
         "posteriordb": {
             key: manifest.get("posteriordb", {}).get(key)
             for key in ("head", "tree", "status_porcelain")
@@ -670,6 +684,144 @@ def prepare_provenance() -> None:
     print(f"wrote {PROVENANCE_INDEX.relative_to(HERE)}")
 
 
+def is_rust_binary_source(path: str) -> bool:
+    return (
+        path in {"Cargo.toml", "Cargo.lock"}
+        or path.endswith(".rs")
+        or path.startswith("integrations/bridgestan/")
+        or path
+        in {
+            "STUDIES/chain_rescue_v2/Cargo.toml",
+            "STUDIES/chain_rescue_v2/Cargo.lock",
+        }
+    )
+
+
+def canonical_source_matches(
+    repository: Path, record: dict[str, Any]
+) -> bool:
+    path = repository / record["path"]
+    if record.get("git_blob_sha1") is not None:
+        actual_blob = (
+            git_output(
+                repository,
+                "hash-object",
+                f"--path={record['path']}",
+                str(path),
+            )
+            if path.is_file()
+            else None
+        )
+        return actual_blob == record["git_blob_sha1"]
+    return file_matches_record(path, record)
+
+
+def rebind_amendment_3_provenance() -> None:
+    if AMENDMENT_3_PROVENANCE_INDEX.exists():
+        raise RuntimeError("Amendment-3 provenance index already exists; refusing replacement")
+    repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
+    if git_output(repository, "status", "--porcelain=v1"):
+        raise RuntimeError("source worktree must be clean before provenance rebind")
+    old_input = authenticated_pointer_path(
+        PROVENANCE_INDEX, "external_inputs", LEGACY_INPUT_MANIFEST
+    )
+    old_build_path = authenticated_pointer_path(
+        PROVENANCE_INDEX, "build_manifest", LEGACY_BUILD_MANIFEST
+    )
+    old_build = json.loads(old_build_path.read_text(encoding="utf-8"))
+    rust_source_files = [
+        record
+        for record in old_build.get("source_files", [])
+        if is_rust_binary_source(record["path"])
+    ]
+    changed_rust = [
+        record["path"]
+        for record in rust_source_files
+        if not canonical_source_matches(repository, record)
+    ]
+    if changed_rust:
+        raise RuntimeError(
+            f"Rust binary sources changed; audited rebuild is required: {changed_rust}"
+        )
+    for name, path in (
+        ("cell", HARNESS),
+        ("funnel", FUNNEL),
+        ("conformance", CONFORMANCE_BIN),
+    ):
+        if not file_matches_record(
+            path, old_build["executables"][name]["primary"]
+        ):
+            raise RuntimeError(f"prepared executable changed before rebind: {name}")
+    source_commit = git_output(repository, "rev-parse", "HEAD")
+    source_tree = git_output(repository, "rev-parse", "HEAD^{tree}")
+    suffix = source_commit[:12]
+    input_manifest = (
+        ARTIFACTS / "provenance" / f"external-inputs-amendment-3-{suffix}.json"
+    )
+    build_manifest = (
+        ARTIFACTS / "provenance" / f"build-manifest-amendment-3-{suffix}.json"
+    )
+    if input_manifest.exists() or build_manifest.exists():
+        raise RuntimeError("versioned Amendment-3 provenance path already exists")
+    external = inspect_external_inputs()
+    external["implementation_source_commit"] = source_commit
+    external["implementation_source_tree"] = source_tree
+    exclusive_write_json(input_manifest, external)
+    build = {
+        **old_build,
+        "schema": "chain-rescue-v2-build-manifest-analysis-rebind",
+        "provenance_revision": "amendment-3-analysis-only-rebind-v1",
+        "source_commit": source_commit,
+        "source_tree": source_tree,
+        "source_files": source_file_records(repository),
+        "external_input_manifest_sha256": sha256(input_manifest),
+        "build_performed_for_rebind": False,
+        "rust_binary_source_commit": old_build["source_commit"],
+        "rust_binary_source_tree": old_build["source_tree"],
+        "rust_binary_source_files": rust_source_files,
+        "conformance_build_manifest_sha256": sha256(old_build_path),
+        "reused_audited_executables": {
+            "reason": (
+                "Amendment 3 and its analyzer/report/documentation changes do not "
+                "modify Rust binary sources"
+            ),
+            "build_manifest": {
+                **file_record(old_build_path),
+                "path": old_build_path.relative_to(HERE).as_posix(),
+            },
+            "external_inputs": {
+                **file_record(old_input),
+                "path": old_input.relative_to(HERE).as_posix(),
+            },
+        },
+    }
+    exclusive_write_json(build_manifest, build)
+    exclusive_write_json(
+        AMENDMENT_3_PROVENANCE_INDEX,
+        {
+            "schema": "chain-rescue-v2-provenance-index-amendment-3",
+            "immutable": True,
+            "implementation_source_commit": source_commit,
+            "implementation_source_tree": source_tree,
+            "external_inputs": {
+                **file_record(input_manifest),
+                "path": input_manifest.relative_to(HERE).as_posix(),
+            },
+            "build_manifest": {
+                **file_record(build_manifest),
+                "path": build_manifest.relative_to(HERE).as_posix(),
+            },
+            "reuses_immutable_binary_build": {
+                **file_record(old_build_path),
+                "path": old_build_path.relative_to(HERE).as_posix(),
+            },
+        },
+    )
+    print(f"wrote {input_manifest.relative_to(HERE)}")
+    print(f"wrote {build_manifest.relative_to(HERE)}")
+    print(f"wrote {AMENDMENT_3_PROVENANCE_INDEX.relative_to(HERE)}")
+
+
 def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
     errors = []
     input_manifest, build_manifest = provenance_paths()
@@ -689,23 +841,26 @@ def verify_provenance(require_binaries: bool = True) -> dict[str, Any]:
         errors.append("implementation source commit/tree provenance mismatch")
     repository = Path(git_output(HERE, "rev-parse", "--show-toplevel"))
     for record in build.get("source_files", []):
-        path = repository / record["path"]
-        if record.get("git_blob_sha1") is not None:
-            actual_blob = (
-                git_output(
-                    repository,
-                    "hash-object",
-                    f"--path={record['path']}",
-                    str(path),
-                )
-                if path.is_file()
-                else None
-            )
-            source_matches = actual_blob == record["git_blob_sha1"]
-        else:
-            source_matches = file_matches_record(path, record)
-        if not source_matches:
+        if not canonical_source_matches(repository, record):
             errors.append(f"audited source mismatch: {record['path']}")
+    reuse = build.get("reused_audited_executables")
+    if reuse is not None:
+        reused_build = HERE / reuse.get("build_manifest", {}).get("path", "")
+        if not file_matches_record(reused_build, reuse.get("build_manifest", {})):
+            errors.append("reused immutable build manifest authentication failed")
+        reused_inputs = HERE / reuse.get("external_inputs", {}).get("path", "")
+        if not file_matches_record(reused_inputs, reuse.get("external_inputs", {})):
+            errors.append("reused immutable input manifest authentication failed")
+        for record in build.get("rust_binary_source_files", []):
+            if not canonical_source_matches(repository, record):
+                errors.append(
+                    f"reused binary source mismatch: {record['path']}"
+                )
+        if reused_build.is_file() and (
+            build.get("conformance_build_manifest_sha256")
+            != sha256(reused_build)
+        ):
+            errors.append("conformance reused-build hash mismatch")
     if build.get("toolchain") != EXPECTED_TOOLCHAIN:
         errors.append("build manifest toolchain mismatch")
     if require_binaries:
@@ -837,17 +992,20 @@ def validate_conformance_artifact() -> dict[str, Any]:
         errors.append("conformance amendment-1 hash mismatch")
     if result.get("amendment_2_sha256") != sha256(AMENDMENT_2):
         errors.append("conformance amendment-2 hash mismatch")
-    if result.get("build_manifest_sha256") != sha256(build_manifest):
-        errors.append("conformance build-manifest hash mismatch")
-    expected_exe = json.loads(build_manifest.read_text(encoding="utf-8"))[
-        "executables"
-    ]["conformance"]["primary"]
     build = json.loads(build_manifest.read_text(encoding="utf-8"))
+    expected_conformance_build = build.get(
+        "conformance_build_manifest_sha256", sha256(build_manifest)
+    )
+    if result.get("build_manifest_sha256") != expected_conformance_build:
+        errors.append("conformance build-manifest hash mismatch")
+    expected_exe = build["executables"]["conformance"]["primary"]
     if result.get("immutable") is not True:
         errors.append("conformance artifact is not marked immutable")
     if (
-        result.get("implementation_source_commit") != build.get("source_commit")
-        or result.get("implementation_source_tree") != build.get("source_tree")
+        result.get("implementation_source_commit")
+        != build.get("rust_binary_source_commit", build.get("source_commit"))
+        or result.get("implementation_source_tree")
+        != build.get("rust_binary_source_tree", build.get("source_tree"))
     ):
         errors.append("conformance implementation source mismatch")
     if result.get("conformance_executable") != expected_exe:
@@ -889,6 +1047,7 @@ def validate_environment(
         "protocol_sha256": sha256(PROTOCOL_PATH),
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
+        "amendment_3_sha256": sha256(AMENDMENT_3),
         "provenance": provenance,
         "conformance": conformance,
     }
@@ -2562,6 +2721,12 @@ def classify_origin_actions(
     }
 
 
+def credited_pass_after_origin_mapping(
+    raw_diagnostic_pass: bool, origin_result: dict[str, Any]
+) -> bool:
+    return bool(raw_diagnostic_pass and not origin_result["origin_overwritten"])
+
+
 def apply_origin_credit_and_identity(
     cells: dict[tuple[str, int, str], dict[str, Any]],
     triplet_valid: dict[tuple[str, int], bool],
@@ -2577,10 +2742,8 @@ def apply_origin_credit_and_identity(
                     cell, observe if arm in {"current", "two_hit"} else cell
                 )
                 cell.update(origin_result)
-                cell["credited_diagnostic_pass"] = bool(
-                    cell.get("raw_diagnostic_pass")
-                    and not cell["origin_overwritten"]
-                    and not cell["origin_safety_unknown"]
+                cell["credited_diagnostic_pass"] = credited_pass_after_origin_mapping(
+                    bool(cell.get("raw_diagnostic_pass")), origin_result
                 )
                 if (
                     triplet_valid[(target, seed)]
@@ -2646,6 +2809,26 @@ def all_process_safety_findings(
             )
         ],
     }
+
+
+def current_red_line_report(
+    findings: dict[str, list[str]],
+    no_fire_failures: list[str],
+    observe_mutations: list[str],
+) -> dict[str, list[str]]:
+    return {
+        "origin_overwritten": findings["origin_overwritten"],
+        "reference": findings["reference"],
+        "funnel": findings["funnel"],
+        "unknown_run_error": findings["unknown_run_error"],
+        "no_fire": no_fire_failures + observe_mutations,
+    }
+
+
+def candidate_origin_safety_pass(findings: dict[str, list[str]]) -> bool:
+    return not findings["origin_overwritten"] and not findings[
+        "origin_safety_unknown"
+    ]
 
 
 def prediction_p3_held(
@@ -2989,8 +3172,7 @@ def analyze() -> dict[str, Any]:
     two_unknown_run_errors = two_findings["unknown_run_error"]
     two_funnel_redlines = two_findings["funnel"]
     safety = (
-        not two_origin
-        and not two_origin_unknown
+        candidate_origin_safety_pass(two_findings)
         and not two_decisive
         and not two_legacy
         and not two_unknown_run_errors
@@ -3146,17 +3328,12 @@ def analyze() -> dict[str, Any]:
         if (target, seed, "current") in flat_cells
     ]
     current_findings = all_process_safety_findings(current_cells, "current")
-    current_red_lines = {
-        "origin_overwritten": current_findings["origin_overwritten"],
-        "origin_safety_unknown": current_findings["origin_safety_unknown"],
-        "reference": current_findings["reference"],
-        "funnel": current_findings["funnel"],
-        "unknown_run_error": current_findings["unknown_run_error"],
-        "no_fire": [
+    current_no_fire_failures = [
             item for item in no_fire_failures if item.endswith("/current")
         ]
-        + observe_mutations,
-    }
+    current_red_lines = current_red_line_report(
+        current_findings, current_no_fire_failures, observe_mutations
+    )
     all_two_hit_gates = all(gate["passed"] for gate in gates.values())
     any_current_red_line = any(current_red_lines.values())
     decision = (
@@ -3298,11 +3475,22 @@ def analyze() -> dict[str, Any]:
         "protocol_sha256": sha256(PROTOCOL_PATH),
         "amendment_1_sha256": sha256(AMENDMENT_1),
         "amendment_2_sha256": sha256(AMENDMENT_2),
+        "amendment_3_sha256": sha256(AMENDMENT_3),
         "input_manifest_sha256": sha256(input_manifest),
         "build_manifest_sha256": sha256(build_manifest),
         "conformance_sha256": sha256(conformance_artifact),
         "mechanical_decision": decision,
         "current_red_lines": current_red_lines,
+        "origin_safety_findings": {
+            "two_hit": {
+                "origin_overwritten": two_findings["origin_overwritten"],
+                "origin_safety_unknown": two_findings["origin_safety_unknown"],
+            },
+            "current": {
+                "origin_overwritten": current_findings["origin_overwritten"],
+                "origin_safety_unknown": current_findings["origin_safety_unknown"],
+            },
+        },
         "decision_gates": gates,
         "sign_tests": {
             "failure_class_two_hit_over_observe": efficacy_sign,
@@ -3373,6 +3561,7 @@ def run_conformance() -> None:
                 "protocol_sha256": sha256(PROTOCOL_PATH),
                 "amendment_1_sha256": sha256(AMENDMENT_1),
                 "amendment_2_sha256": sha256(AMENDMENT_2),
+                "amendment_3_sha256": sha256(AMENDMENT_3),
                 "input_manifest_sha256": provenance["input_manifest_sha256"],
                 "build_manifest_sha256": provenance["build_manifest_sha256"],
                 "conformance_executable": json.loads(
@@ -3418,6 +3607,8 @@ def main() -> None:
         print(json.dumps(verify_rebuild(), indent=2, sort_keys=True))
     elif command == "prepare-provenance":
         prepare_provenance()
+    elif command == "rebind-amendment-3-provenance":
+        rebind_amendment_3_provenance()
     elif command == "run":
         run_all()
     elif command == "analyze":

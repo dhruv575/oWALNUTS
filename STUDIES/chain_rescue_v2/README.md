@@ -4,8 +4,9 @@ Status: **pre-evidence review fixes implemented; evidence remains blocked
 unless authenticated hit-path conformance passes; no evidence launched**.
 
 `PREREGISTRATION.md`, `protocol.json`, and the superseding clarifications in
-`AMENDMENT-1.md` and `AMENDMENT-2.md` are frozen. The baseline is `17f1d97`;
-the harness was implemented after core commits through `abbc519`.
+`AMENDMENT-1.md`, `AMENDMENT-2.md`, and `AMENDMENT-3.md` are frozen. The
+baseline is `17f1d97`; the harness was implemented after core commits through
+`abbc519`.
 
 The three study arms are always explicit custom warmup configurations:
 
@@ -61,7 +62,9 @@ exactly omega R-hat, omega bulk ESS, zero divergences, finite draws, and no
 sampler error; tail z is separate and tail ESS is report-only. Paired-arm
 full-gate count comparisons remain restricted to valid triplets. Any action
 whose observe-origin metadata cannot be mapped by that chain's initial hash is
-reported as unknown and conservatively fails rescue safety.
+reported separately as `origin_safety_unknown`. It blocks `two_hit`'s
+zero-origin safety gate, but is not `origin_overwritten`, does not remove
+overwrite-based diagnostic credit, and is not a `current` fallback red line.
 
 ## External read-only assets
 
@@ -101,8 +104,12 @@ committed artifacts must never be overwritten.
 
 ## Clean-checkout reproduction
 
-1. Check out the implementation source commit/tree identified in
-   `artifacts/provenance/current.json` and the referenced build manifest.
+1. Check out the publication revision containing the immutable provenance and
+   conformance indexes. Do not check out only the recorded implementation
+   commit. The selected provenance index authenticates that implementation
+   source commit/tree from within the complete publication revision.
+   `current-amendment-3.json` is the active provenance index;
+   `current.json` remains the immutable pre-Amendment-3 historical index.
 2. Check out posteriordb commit
    `28f8d3d6e975315f42aa274a8399f21e07a43b30` cleanly. Set
    `WP36_POSTERIORDB_PATH` to that checkout.
@@ -126,7 +133,9 @@ launch worktree's complete executable bytes, logical external inputs, source,
 and current immutable conformance artifact. `run` calls `verify` and refuses
 evidence unless all prepared-worktree hashes and the hit-path PASS match.
 
-Every versioned conformance JSON is immutable; `current.json` authenticates the
-one bound to the implementation source and build manifest. The earlier
-fixtures remain untouched historical artifacts.
+Every versioned conformance JSON is immutable; its index authenticates the one
+bound to the audited Rust binary source and build manifest. The selected
+Amendment-3 provenance index separately authenticates the publication's
+analysis source and its reuse of those unchanged binaries. Earlier fixtures
+and indexes remain untouched historical artifacts.
 None of the 12 registered evidence seeds has been launched.
