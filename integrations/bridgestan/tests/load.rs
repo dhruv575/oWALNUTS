@@ -153,3 +153,37 @@ fn replicated_target_agrees_with_serial_and_counts_calls() {
         TargetErrorKind::Fatal
     ));
 }
+
+#[test]
+fn repeated_model_and_replica_load_drop_remains_evaluable() {
+    use owalnuts_bridgestan::ReplicatedStanTarget;
+
+    let so = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models/eight_schools_model.so");
+    if !so.exists() {
+        eprintln!("skipping: {} not built", so.display());
+        return;
+    }
+    for cycle in 0..16 {
+        let target =
+            StanTarget::load(&so, &default_preload(), Some(DATA), 100 + cycle).expect("load");
+        let mut gradient = vec![0.0; 10];
+        assert!(
+            target
+                .log_density_gradient(&[0.0; 10], &mut gradient)
+                .unwrap()
+                .is_finite()
+        );
+        drop(target);
+
+        let replicas =
+            ReplicatedStanTarget::load(&so, &default_preload(), Some(DATA), 200 + cycle, 4)
+                .expect("replicated load");
+        assert!(
+            replicas
+                .log_density_gradient(&[0.0; 10], &mut gradient)
+                .unwrap()
+                .is_finite()
+        );
+        drop(replicas);
+    }
+}

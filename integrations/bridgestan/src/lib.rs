@@ -45,6 +45,13 @@
 //!   and use [`ReplicatedStanTarget`], which loads one copy of the library per
 //!   concurrent thread (distinct file paths are distinct modules with their
 //!   own global autodiff stack) and dispatches each call to a free replica.
+//! * On Windows, model and preload DLLs are process-lifetime residents. This
+//!   prevents native TLS destructor callbacks from reaching unloaded code
+//!   after model drop. Model objects are still destructed normally. Replica
+//!   copies use a process-private content-addressed cache with an exclusive
+//!   process lease; repeated same-model loads reuse modules and later
+//!   processes clean stale unlocked directories. Non-Windows libraries still
+//!   unload, and their replica copies are deleted, on target drop.
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use libloading::{Library, Symbol};
@@ -53,10 +60,23 @@ use std::{
     cell::Cell,
     ffi::{CStr, CString, c_char, c_int, c_uint},
     fmt,
+    ops::Deref,
     path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
     sync::{Arc, Mutex, OnceLock, TryLockError, Weak},
 };
+#[cfg(windows)]
+use std::{
+    collections::HashMap,
+    fs::{File, OpenOptions},
+    io::Read,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+#[cfg(windows)]
+use fs2::FileExt;
+#[cfg(windows)]
+use sha2::{Digest, Sha256};
 
 #[repr(C)]
 struct BsModel {
@@ -78,6 +98,56 @@ type LogDensityGradientFn = unsafe extern "C" fn(
     *mut f64,
     *mut *mut c_char,
 ) -> c_int;
+
+/// A normal unload-on-drop library off Windows, and a process-resident
+/// registry reference on Windows.
+#[cfg(not(windows))]
+struct PlatformLibrary(Library);
+
+#[cfg(windows)]
+#[derive(Clone)]
+struct PlatformLibrary(Arc<Library>);
+
+impl Deref for PlatformLibrary {
+    type Target = Library;
+
+    fn deref(&self) -> &Self::Target {
+        #[cfg(not(windows))]
+        {
+            &self.0
+        }
+        #[cfg(windows)]
+        {
+            &self.0
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn load_library(path: &Path) -> Result<PlatformLibrary, libloading::Error> {
+    // SAFETY: loading a foreign shared library runs its initialisers. The
+    // caller supplies BridgeStan and its native runtime dependencies.
+    unsafe { Library::new(path) }.map(PlatformLibrary)
+}
+
+#[cfg(windows)]
+fn load_library(path: &Path) -> Result<PlatformLibrary, libloading::Error> {
+    static LIBRARIES: OnceLock<Mutex<HashMap<PathBuf, Arc<Library>>>> = OnceLock::new();
+
+    let key = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut libraries = LIBRARIES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(library) = libraries.get(&key) {
+        return Ok(PlatformLibrary(Arc::clone(library)));
+    }
+    // SAFETY: loading a foreign shared library runs its initialisers. The
+    // caller supplies BridgeStan and its native runtime dependencies.
+    let library = Arc::new(unsafe { Library::new(path) }?);
+    libraries.insert(key, Arc::clone(&library));
+    Ok(PlatformLibrary(library))
+}
 
 /// How concurrent evaluations are executed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,12 +186,7 @@ impl From<libloading::Error> for LoadError {
 
 /// A loaded, constructed Stan model exposed as an oWALNUTS target.
 pub struct StanTarget {
-    // Field order matters: the model must be destructed before the library
-    // (and any preloaded dependency) is unloaded. Rust drops fields in
-    // declaration order.
-    model: ModelHandle,
-    _library: Library,
-    _preloaded: Vec<Library>,
+    loaded: ModelAndLibraries<ModelHandle, LoadedLibraries>,
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
@@ -132,6 +197,19 @@ pub struct StanTarget {
     serial: Arc<Mutex<()>>,
     calls: AtomicUsize,
     recoverable: AtomicUsize,
+}
+
+/// Field order is the lifetime invariant: Rust drops `model` before
+/// `libraries`. This remains necessary on non-Windows, where libraries unload.
+struct ModelAndLibraries<M, L> {
+    model: M,
+    _libraries: L,
+}
+
+struct LoadedLibraries {
+    // The model DLL unloads before its preload dependencies off Windows.
+    _library: PlatformLibrary,
+    _preloaded: Vec<PlatformLibrary>,
 }
 
 struct ModelHandle {
@@ -170,12 +248,9 @@ impl StanTarget {
     ) -> Result<Self, LoadError> {
         let mut preloaded = Vec::with_capacity(preload.len());
         for dep in preload {
-            // SAFETY: loading a foreign shared library runs its initialisers;
-            // these are the TBB/pthread runtimes the model was linked against.
-            preloaded.push(unsafe { Library::new(dep) }?);
+            preloaded.push(load_library(dep)?);
         }
-        // SAFETY: same as above for the model library itself.
-        let library = unsafe { Library::new(model_so) }?;
+        let library = load_library(model_so)?;
         // SAFETY: symbol types match bridgestan.h 2.x declarations.
         let (construct, destruct, free_error, info_fn, unc_num, ldg) = unsafe {
             let construct: Symbol<ConstructFn> = library.get(b"bs_model_construct\0")?;
@@ -242,9 +317,13 @@ impl StanTarget {
             (names.len() == dimension as usize).then_some(names)
         });
         Ok(Self {
-            model,
-            _library: library,
-            _preloaded: preloaded,
+            loaded: ModelAndLibraries {
+                model,
+                _libraries: LoadedLibraries {
+                    _library: library,
+                    _preloaded: preloaded,
+                },
+            },
             dimension: dimension as usize,
             info,
             unc_names,
@@ -288,8 +367,8 @@ impl StanTarget {
         // by the caller), the model pointer is valid, and `err` is a writable
         // slot that we free if set.
         let rc = unsafe {
-            (self.model.log_density_gradient)(
-                self.model.ptr,
+            (self.loaded.model.log_density_gradient)(
+                self.loaded.model.ptr,
                 false,
                 true,
                 position.as_ptr(),
@@ -299,7 +378,7 @@ impl StanTarget {
             )
         };
         let outcome = if rc != 0 {
-            let message = take_error(err, self.model.free_error);
+            let message = take_error(err, self.loaded.model.free_error);
             Err(TargetError::recoverable(format!(
                 "stan exception: {message}"
             )))
@@ -405,8 +484,13 @@ impl Target for StanTarget {
 /// the module docs).
 ///
 /// Each replica is the same `*_model.so` copied to a distinct file name in a
-/// private temporary directory and loaded separately, so each has its own
-/// global Stan autodiff stack and may be evaluated by one thread at a time.
+/// private cache and loaded separately, so each has its own global Stan
+/// autodiff stack and may be evaluated by one thread at a time. On Windows,
+/// the process-private cache is content-addressed and reused by later loads of
+/// the same model in this process. Its files remain while their modules are
+/// resident and are removed by a later process after its lease check proves
+/// the creating process has exited. Other platforms retain unload-and-delete
+/// behavior on target drop.
 /// A call takes the first free replica (trying the one this thread used last
 /// first, so steady-state dispatch is one uncontended `try_lock`); with at
 /// least as many replicas as calling threads, evaluations never wait. The
@@ -416,23 +500,264 @@ impl Target for StanTarget {
 /// pointless; use [`StanTarget`] directly.
 pub struct ReplicatedStanTarget {
     replicas: Vec<StanTarget>,
-    // Dropped after the replicas (field order): removes the copied libraries.
-    _copies: TempCopies,
+    // Dropped after the replicas (field order). Off Windows this removes
+    // copies after their libraries unload; Windows cache copies are resident.
+    _copies: ReplicaCopies,
     dimension: usize,
 }
 
-struct TempCopies {
+#[cfg(not(windows))]
+struct ReplicaCopies {
     dir: PathBuf,
     files: Vec<PathBuf>,
 }
 
-impl Drop for TempCopies {
+#[cfg(not(windows))]
+impl Drop for ReplicaCopies {
     fn drop(&mut self) {
         for f in &self.files {
             let _ = std::fs::remove_file(f);
         }
         let _ = std::fs::remove_dir(&self.dir);
     }
+}
+
+#[cfg(not(windows))]
+impl ReplicaCopies {
+    fn prepare(model_so: &Path, replicas: usize) -> Result<Self, LoadError> {
+        let dir = std::env::temp_dir().join(format!(
+            "owalnuts-bridgestan-{}-{}",
+            std::process::id(),
+            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut copies = Self {
+            dir: dir.clone(),
+            files: Vec::new(),
+        };
+        if replicas > 1 {
+            std::fs::create_dir_all(&dir).map_err(|e| LoadError::Invalid(e.to_string()))?;
+            let stem = model_so
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "model.so".into());
+            for replica in 1..replicas {
+                let copy = dir.join(format!("replica{replica}-{stem}"));
+                std::fs::copy(model_so, &copy).map_err(|e| LoadError::Invalid(e.to_string()))?;
+                copies.files.push(copy);
+            }
+        }
+        Ok(copies)
+    }
+}
+
+#[cfg(windows)]
+struct ReplicaCopies {
+    files: Vec<PathBuf>,
+}
+
+#[cfg(windows)]
+impl ReplicaCopies {
+    fn prepare(model_so: &Path, replicas: usize) -> Result<Self, LoadError> {
+        let files = if replicas > 1 {
+            process_replica_cache()?.copies(model_so, replicas)?
+        } else {
+            Vec::new()
+        };
+        Ok(Self { files })
+    }
+}
+
+#[cfg(windows)]
+struct DigestRecord {
+    length: u64,
+    modified: Option<SystemTime>,
+    digest: String,
+}
+
+#[cfg(windows)]
+struct ProcessReplicaCache {
+    dir: PathBuf,
+    _lease: File,
+    copy_lock: Mutex<()>,
+    digests: Mutex<HashMap<PathBuf, DigestRecord>>,
+}
+
+#[cfg(windows)]
+impl ProcessReplicaCache {
+    fn create(root: &Path) -> std::io::Result<Self> {
+        const CLEANUP_GRACE: Duration = Duration::from_secs(60 * 60);
+
+        std::fs::create_dir_all(root)?;
+        cleanup_stale_cache_dirs(root, CLEANUP_GRACE);
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = (0..1000)
+            .find_map(|attempt| {
+                let candidate =
+                    root.join(format!("process-{}-{nonce}-{attempt}", std::process::id()));
+                match std::fs::create_dir(&candidate) {
+                    Ok(()) => Some(Ok(candidate)),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => None,
+                    Err(error) => Some(Err(error)),
+                }
+            })
+            .transpose()?
+            .ok_or_else(|| std::io::Error::other("could not allocate replica cache directory"))?;
+        let lease_path = dir.join(".lease");
+        let lease = match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&lease_path)
+        {
+            Ok(lease) => lease,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                return Err(error);
+            }
+        };
+        if let Err(error) = lease.lock_exclusive() {
+            drop(lease);
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(error);
+        }
+        Ok(Self {
+            dir,
+            _lease: lease,
+            copy_lock: Mutex::new(()),
+            digests: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn digest(&self, source: &Path) -> Result<String, LoadError> {
+        let key = std::fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
+        let metadata =
+            std::fs::metadata(source).map_err(|error| LoadError::Invalid(error.to_string()))?;
+        let modified = metadata.modified().ok();
+        {
+            let digests = self
+                .digests
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(record) = digests.get(&key)
+                && record.length == metadata.len()
+                && record.modified == modified
+            {
+                return Ok(record.digest.clone());
+            }
+        }
+        let mut input =
+            File::open(source).map_err(|error| LoadError::Invalid(error.to_string()))?;
+        let mut hasher = Sha256::new();
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let count = input
+                .read(&mut buffer)
+                .map_err(|error| LoadError::Invalid(error.to_string()))?;
+            if count == 0 {
+                break;
+            }
+            hasher.update(&buffer[..count]);
+        }
+        let digest = format!("{:x}", hasher.finalize());
+        self.digests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(
+                key,
+                DigestRecord {
+                    length: metadata.len(),
+                    modified,
+                    digest: digest.clone(),
+                },
+            );
+        Ok(digest)
+    }
+
+    fn copies(&self, source: &Path, replicas: usize) -> Result<Vec<PathBuf>, LoadError> {
+        let digest = self.digest(source)?;
+        let extension = source
+            .extension()
+            .map(|extension| extension.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "dll".into());
+        let _copy_guard = self
+            .copy_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut copies = Vec::with_capacity(replicas.saturating_sub(1));
+        for replica in 1..replicas {
+            let copy = self
+                .dir
+                .join(format!("{digest}-replica-{replica}.{extension}"));
+            if !copy.exists() {
+                let temporary = self.dir.join(format!(
+                    ".copy-{}-{}",
+                    std::process::id(),
+                    NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+                ));
+                if let Err(error) = std::fs::copy(source, &temporary) {
+                    let _ = std::fs::remove_file(&temporary);
+                    return Err(LoadError::Invalid(error.to_string()));
+                }
+                if let Err(error) = std::fs::rename(&temporary, &copy) {
+                    let _ = std::fs::remove_file(&temporary);
+                    return Err(LoadError::Invalid(error.to_string()));
+                }
+            }
+            copies.push(copy);
+        }
+        Ok(copies)
+    }
+}
+
+#[cfg(windows)]
+fn cache_dir_old_enough(path: &Path, minimum_age: Duration) -> bool {
+    std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_some_and(|age| age >= minimum_age)
+}
+
+#[cfg(windows)]
+fn cleanup_stale_cache_dirs(root: &Path, minimum_age: Duration) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() || !cache_dir_old_enough(&path, minimum_age) {
+            continue;
+        }
+        let lease_path = path.join(".lease");
+        match OpenOptions::new().read(true).write(true).open(lease_path) {
+            Ok(lease) => {
+                if lease.try_lock_exclusive().is_err() {
+                    continue;
+                }
+                let _ = FileExt::unlock(&lease);
+                drop(lease);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => continue,
+        }
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+#[cfg(windows)]
+fn process_replica_cache() -> Result<&'static ProcessReplicaCache, LoadError> {
+    static CACHE: OnceLock<Result<ProcessReplicaCache, String>> = OnceLock::new();
+
+    CACHE
+        .get_or_init(|| {
+            let root = std::env::temp_dir().join("owalnuts-bridgestan-cache-v1");
+            ProcessReplicaCache::create(&root).map_err(|error| error.to_string())
+        })
+        .as_ref()
+        .map_err(|error| LoadError::Invalid(error.clone()))
 }
 
 thread_local! {
@@ -444,7 +769,9 @@ impl ReplicatedStanTarget {
     /// [`StanTarget::load`] for the other arguments). `replicas` should be at
     /// least the number of threads that will call the target concurrently.
     /// Replica 0 is the original file; replicas 1.. are copies made under a
-    /// process-private temporary directory and deleted on drop.
+    /// process-private cache. On Windows, same-content replica paths and
+    /// resident modules are reused for the life of the process; elsewhere the
+    /// copies are deleted on drop.
     pub fn load(
         model_so: &Path,
         preload: &[PathBuf],
@@ -453,29 +780,11 @@ impl ReplicatedStanTarget {
         replicas: usize,
     ) -> Result<Self, LoadError> {
         let replicas = replicas.max(1);
-        let dir = std::env::temp_dir().join(format!(
-            "owalnuts-bridgestan-{}-{}",
-            std::process::id(),
-            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
-        ));
-        let mut copies = TempCopies {
-            dir: dir.clone(),
-            files: Vec::new(),
-        };
+        let copies = ReplicaCopies::prepare(model_so, replicas)?;
         let mut loaded = Vec::with_capacity(replicas);
         loaded.push(StanTarget::load(model_so, preload, data, seed)?);
-        if replicas > 1 {
-            std::fs::create_dir_all(&dir).map_err(|e| LoadError::Invalid(e.to_string()))?;
-            let stem = model_so
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "model.so".into());
-            for i in 1..replicas {
-                let copy = dir.join(format!("replica{i}-{stem}"));
-                std::fs::copy(model_so, &copy).map_err(|e| LoadError::Invalid(e.to_string()))?;
-                copies.files.push(copy.clone());
-                loaded.push(StanTarget::load(&copy, preload, data, seed)?);
-            }
+        for copy in &copies.files {
+            loaded.push(StanTarget::load(copy, preload, data, seed)?);
         }
         let dimension = loaded[0].dimension();
         Ok(Self {
@@ -592,4 +901,115 @@ pub fn default_preload() -> Vec<PathBuf> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    struct DropProbe {
+        name: &'static str,
+        log: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl Drop for DropProbe {
+        fn drop(&mut self) {
+            self.log
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(self.name);
+        }
+    }
+
+    #[test]
+    fn model_is_dropped_before_its_libraries() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let loaded = ModelAndLibraries {
+            model: DropProbe {
+                name: "model",
+                log: Arc::clone(&log),
+            },
+            _libraries: DropProbe {
+                name: "libraries",
+                log: Arc::clone(&log),
+            },
+        };
+        drop(loaded);
+        assert_eq!(*log.lock().unwrap(), ["model", "libraries"]);
+    }
+
+    #[cfg(windows)]
+    fn test_directory(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "owalnuts-bridgestan-test-{label}-{}-{}",
+            std::process::id(),
+            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_library_registry_keeps_and_reuses_resident_handle() {
+        let first = load_library(Path::new("kernel32.dll")).expect("load kernel32");
+        let identity = Arc::as_ptr(&first.0);
+        drop(first);
+        let second = load_library(Path::new("kernel32.dll")).expect("reload kernel32");
+        assert_eq!(identity, Arc::as_ptr(&second.0));
+        assert!(
+            Arc::strong_count(&second.0) >= 2,
+            "the process registry retains its own strong reference"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_replica_cache_reuses_copies_and_cleans_only_unleased_dirs() {
+        let outer = test_directory("cache");
+        let root = outer.join("cache");
+        std::fs::create_dir_all(&outer).unwrap();
+        let source = outer.join("source.dll");
+        std::fs::write(&source, b"not a real DLL; cache behavior only").unwrap();
+
+        let cache = ProcessReplicaCache::create(&root).unwrap();
+        let cache_dir = cache.dir.clone();
+        let first = cache.copies(&source, 4).unwrap();
+        let second = cache.copies(&source, 4).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 3);
+        assert!(first.iter().all(|copy| copy.exists()));
+
+        cleanup_stale_cache_dirs(&root, Duration::ZERO);
+        assert!(
+            cache_dir.exists(),
+            "an exclusively leased process cache must not be removed"
+        );
+
+        drop(cache);
+        cleanup_stale_cache_dirs(&root, Duration::ZERO);
+        assert!(
+            !cache_dir.exists(),
+            "a later process may remove an unlocked stale cache"
+        );
+        let _ = std::fs::remove_dir_all(outer);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn non_windows_replica_copies_are_deleted_on_drop() {
+        let outer = std::env::temp_dir().join(format!(
+            "owalnuts-bridgestan-test-copy-{}-{}",
+            std::process::id(),
+            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&outer).unwrap();
+        let source = outer.join("source.so");
+        std::fs::write(&source, b"copy behavior only").unwrap();
+        let copies = ReplicaCopies::prepare(&source, 4).unwrap();
+        let copy_dir = copies.dir.clone();
+        assert_eq!(copies.files.len(), 3);
+        drop(copies);
+        assert!(!copy_dir.exists());
+        let _ = std::fs::remove_dir_all(outer);
+    }
 }

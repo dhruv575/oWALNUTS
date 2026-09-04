@@ -43,12 +43,32 @@ A library built without `STAN_THREADS` has one global autodiff stack per
 a mutex (shared by every `StanTarget` loaded from the same file) and reports
 `Threading::Serialised`. For multi-chain sampling use
 `ReplicatedStanTarget::load(so, preload, data, seed, threads)`: it copies
-the library to `threads - 1` distinct temporary paths (distinct paths are
-distinct modules with their own autodiff stack), loads each, and dispatches
-every call to a free replica (one uncontended `try_lock`, ~50 ns). With as
-many replicas as calling threads no evaluation ever waits; measured
+the library to `threads - 1` distinct paths (distinct paths are distinct
+modules with their own autodiff stack), loads each, and dispatches every call
+to a free replica (one uncontended `try_lock`, ~50 ns). With as many replicas
+as calling threads no evaluation ever waits; measured
 per-thread cost with 4 threads is within 5-10% of the single-thread cost.
-The copies are deleted on drop.
+
+## Native-library lifetime
+
+On Windows, BridgeStan model DLLs and preload DLLs are intentionally resident
+until process exit. `StanTarget` model objects are still destructed normally,
+before their library references are dropped. The process registry reuses one
+loaded handle per canonical path, preventing repeated load/drop from
+repeatedly mapping the same module. This avoids unloading code while a native
+thread-local destructor callback may still refer to it. On Linux and macOS,
+libraries retain their previous unload-on-drop behavior.
+
+Windows replica copies live in a process-private, SHA-256 content-addressed
+cache. Repeated loads of the same model and replica index reuse both path and
+resident module, so memory and files do not grow with load/drop cycles. Memory
+does grow until process exit for each distinct model content and highest
+replica count loaded. The original model and preload source files, plus cache
+copies, can remain locked by Windows while mapped. Cache directories hold an
+exclusive lease; later processes remove directories at least one hour old
+only after acquiring that lease, so active-process files are not deleted.
+Off Windows, replica copies remain per-target temporary files and are deleted
+after the model modules unload on drop.
 
 ## Use
 
