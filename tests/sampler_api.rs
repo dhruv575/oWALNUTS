@@ -53,6 +53,28 @@ fn nz(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).unwrap()
 }
 
+#[cfg(feature = "research")]
+#[test]
+fn reverse_coarsening_order_is_research_only_and_threads_to_kernel_tuning() {
+    use owalnuts::sampler::ReverseCoarseningOrder;
+
+    assert_eq!(
+        Tuning::default()
+            .to_kernel()
+            .unwrap()
+            .reverse_coarsening_order(),
+        ReverseCoarseningOrder::FinestToCoarsest
+    );
+    assert_eq!(
+        Tuning::default()
+            .reverse_coarsening_order(ReverseCoarseningOrder::CoarsestToFinest)
+            .to_kernel()
+            .unwrap()
+            .reverse_coarsening_order(),
+        ReverseCoarseningOrder::CoarsestToFinest
+    );
+}
+
 fn starts(dimension: usize) -> Vec<Vec<f64>> {
     (0..3)
         .map(|chain| {

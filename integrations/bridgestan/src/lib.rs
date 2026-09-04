@@ -73,7 +73,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use std::{
-    ffi::{CStr, CString, c_char, c_int, c_uint},
+    ffi::{CStr, CString, c_char, c_int, c_uint, c_void},
     fmt,
     ops::Deref,
     path::{Path, PathBuf},
@@ -97,6 +97,17 @@ type FreeErrorFn = unsafe extern "C" fn(*mut c_char);
 type InfoFn = unsafe extern "C" fn(*const BsModel) -> *const c_char;
 type UncNumFn = unsafe extern "C" fn(*const BsModel) -> c_int;
 type UncNamesFn = unsafe extern "C" fn(*const BsModel) -> *const c_char;
+type ParamNumFn = unsafe extern "C" fn(*const BsModel, bool, bool) -> c_int;
+type ParamNamesFn = unsafe extern "C" fn(*const BsModel, bool, bool) -> *const c_char;
+type ParamConstrainFn = unsafe extern "C" fn(
+    *const BsModel,
+    bool,
+    bool,
+    *const f64,
+    *mut f64,
+    *mut c_void,
+    *mut *mut c_char,
+) -> c_int;
 type LogDensityGradientFn = unsafe extern "C" fn(
     *const BsModel,
     bool,
@@ -278,6 +289,7 @@ pub struct StanTarget {
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
+    constrained_names: Vec<String>,
     compiled_threading: Threading,
     calls: AtomicUsize,
     recoverable: AtomicUsize,
@@ -288,6 +300,8 @@ struct NativeTarget {
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
+    constrained_dimension: usize,
+    constrained_names: Vec<String>,
     compiled_threading: Threading,
     /// Shared by every target loaded from the same module. It serializes model
     /// setup/teardown and non-STAN_THREADS evaluations.
@@ -312,6 +326,7 @@ struct ModelHandle {
     destruct: DestructFn,
     free_error: FreeErrorFn,
     log_density_gradient: LogDensityGradientFn,
+    param_constrain: ParamConstrainFn,
 }
 
 // SAFETY: BridgeStan models are immutable after construction; concurrent
@@ -351,14 +366,37 @@ impl NativeTarget {
         }
         let library = load_library(model_so)?;
         // SAFETY: symbol types match bridgestan.h 2.x declarations.
-        let (construct, destruct, free_error, info_fn, unc_num, ldg) = unsafe {
+        let (
+            construct,
+            destruct,
+            free_error,
+            info_fn,
+            unc_num,
+            ldg,
+            param_num,
+            param_names,
+            param_constrain,
+        ) = unsafe {
             let construct: Symbol<ConstructFn> = library.get(b"bs_model_construct\0")?;
             let destruct: Symbol<DestructFn> = library.get(b"bs_model_destruct\0")?;
             let free_error: Symbol<FreeErrorFn> = library.get(b"bs_free_error_msg\0")?;
             let info_fn: Symbol<InfoFn> = library.get(b"bs_model_info\0")?;
             let unc_num: Symbol<UncNumFn> = library.get(b"bs_param_unc_num\0")?;
             let ldg: Symbol<LogDensityGradientFn> = library.get(b"bs_log_density_gradient\0")?;
-            (*construct, *destruct, *free_error, *info_fn, *unc_num, *ldg)
+            let param_num: Symbol<ParamNumFn> = library.get(b"bs_param_num\0")?;
+            let param_names: Symbol<ParamNamesFn> = library.get(b"bs_param_names\0")?;
+            let param_constrain: Symbol<ParamConstrainFn> = library.get(b"bs_param_constrain\0")?;
+            (
+                *construct,
+                *destruct,
+                *free_error,
+                *info_fn,
+                *unc_num,
+                *ldg,
+                *param_num,
+                *param_names,
+                *param_constrain,
+            )
         };
         // Optional: older BridgeStan libraries may lack it; names are then `None`.
         // SAFETY: symbol type matches bridgestan.h 2.x.
@@ -386,6 +424,7 @@ impl NativeTarget {
             destruct,
             free_error,
             log_density_gradient: ldg,
+            param_constrain,
         };
         // SAFETY: model pointer is valid; info string is owned by the model.
         let info_raw = unsafe { info_fn(ptr) };
@@ -428,6 +467,36 @@ impl NativeTarget {
                 }
             }
         };
+        // SAFETY: model pointer is valid and both flags match the requested
+        // constrained plus transformed-parameter output.
+        let constrained_dimension = unsafe { param_num(ptr, true, false) };
+        if constrained_dimension <= 0 {
+            return Err(LoadError::Invalid(format!(
+                "bs_param_num returned {constrained_dimension}"
+            )));
+        }
+        // SAFETY: model pointer is valid; the string is model-owned.
+        let constrained_names_raw = unsafe { param_names(ptr, true, false) };
+        if constrained_names_raw.is_null() {
+            return Err(LoadError::Invalid(
+                "bs_param_names returned a null pointer".into(),
+            ));
+        }
+        // SAFETY: the checked pointer names a NUL-terminated string.
+        let constrained_names = unsafe { CStr::from_ptr(constrained_names_raw) }
+            .to_str()
+            .map_err(|_| LoadError::Invalid("bs_param_names returned malformed UTF-8".into()))?
+            .split(',')
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if constrained_names.len() != constrained_dimension as usize
+            || constrained_names.iter().any(String::is_empty)
+        {
+            return Err(LoadError::Invalid(format!(
+                "bs_param_names returned {} names for dimension {constrained_dimension}",
+                constrained_names.len()
+            )));
+        }
         drop(setup_guard);
         Ok(Self {
             loaded: Some(ModelAndLibraries {
@@ -440,6 +509,8 @@ impl NativeTarget {
             dimension: dimension as usize,
             info,
             unc_names,
+            constrained_dimension: constrained_dimension as usize,
+            constrained_names,
             compiled_threading,
             serial,
         })
@@ -500,6 +571,64 @@ impl NativeTarget {
             }
         }
     }
+
+    fn constrain_unlocked(&self, position: &[f64]) -> Result<Vec<f64>, TargetError> {
+        #[cfg(windows)]
+        let _process_guard = process_native_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let model = &self
+            .loaded
+            .as_ref()
+            .expect("native model exists until drop")
+            .model;
+        let mut constrained = vec![0.0; self.constrained_dimension];
+        let mut err: *mut c_char = std::ptr::null_mut();
+        // SAFETY: both arrays have the dimensions reported by BridgeStan, the
+        // model is valid, generated quantities are disabled, and `err` is a
+        // writable slot whose allocation is released below.
+        let rc = unsafe {
+            (model.param_constrain)(
+                model.ptr,
+                true,
+                false,
+                position.as_ptr(),
+                constrained.as_mut_ptr(),
+                std::ptr::null_mut(),
+                &mut err,
+            )
+        };
+        if rc != 0 {
+            let message = take_error(err, model.free_error);
+            Err(TargetError::new(format!(
+                "stan constrain exception: {message}"
+            )))
+        } else {
+            if !err.is_null() {
+                let _ = take_error(err, model.free_error);
+            }
+            if constrained.iter().all(|value| value.is_finite()) {
+                Ok(constrained)
+            } else {
+                Err(TargetError::new(
+                    "BridgeStan constrain returned non-finite values",
+                ))
+            }
+        }
+    }
+
+    fn constrain(&self, position: &[f64]) -> Result<Vec<f64>, TargetError> {
+        if position.len() != self.dimension {
+            return Err(TargetError::new(
+                "position dimension mismatch during BridgeStan constrain",
+            ));
+        }
+        let _guard = self
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.constrain_unlocked(position)
+    }
 }
 
 impl Drop for NativeTarget {
@@ -537,6 +666,8 @@ struct WorkerMetadata {
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
+    constrained_dimension: usize,
+    constrained_names: Vec<String>,
     compiled_threading: Threading,
 }
 
@@ -558,6 +689,10 @@ enum WorkerRequest {
         position: Vec<f64>,
         response: SyncSender<WorkerReply>,
     },
+    Constrain {
+        position: Vec<f64>,
+        response: SyncSender<Result<Vec<f64>, String>>,
+    },
     Shutdown,
 }
 
@@ -565,6 +700,7 @@ enum WorkerRequest {
 trait OwnedBackend: Send + 'static {
     fn metadata(&self) -> WorkerMetadata;
     fn evaluate(&mut self, position: &[f64]) -> WorkerReply;
+    fn constrain(&mut self, position: &[f64]) -> Result<Vec<f64>, String>;
 }
 
 #[cfg(windows)]
@@ -574,6 +710,8 @@ impl OwnedBackend for NativeTarget {
             dimension: self.dimension,
             info: self.info.clone(),
             unc_names: self.unc_names.clone(),
+            constrained_dimension: self.constrained_dimension,
+            constrained_names: self.constrained_names.clone(),
             compiled_threading: self.compiled_threading,
         }
     }
@@ -585,6 +723,10 @@ impl OwnedBackend for NativeTarget {
             Err(error) => WorkerOutcome::Recoverable(error.message().to_owned()),
         };
         WorkerReply { gradient, outcome }
+    }
+
+    fn constrain(&mut self, position: &[f64]) -> Result<Vec<f64>, String> {
+        NativeTarget::constrain(self, position).map_err(|error| error.message().to_owned())
     }
 }
 
@@ -617,6 +759,20 @@ impl OwnedClient {
             WorkerOutcome::Success(value) => Ok(value),
             WorkerOutcome::Recoverable(message) => Err(TargetError::recoverable(message)),
         }
+    }
+
+    fn constrain(&self, position: &[f64]) -> Result<Vec<f64>, TargetError> {
+        let (response_tx, response_rx) = sync_channel(0);
+        self.requests
+            .send(WorkerRequest::Constrain {
+                position: position.to_vec(),
+                response: response_tx,
+            })
+            .map_err(|_| TargetError::new("BridgeStan owner worker disconnected"))?;
+        response_rx
+            .recv()
+            .map_err(|_| TargetError::new("BridgeStan owner worker panicked or disconnected"))?
+            .map_err(TargetError::new)
     }
 
     fn shutdown(&mut self) {
@@ -658,6 +814,9 @@ where
                     match request {
                         WorkerRequest::Evaluate { position, response } => {
                             let _ = response.send(backend.evaluate(&position));
+                        }
+                        WorkerRequest::Constrain { position, response } => {
+                            let _ = response.send(backend.constrain(&position));
                         }
                         WorkerRequest::Shutdown => break,
                     }
@@ -712,6 +871,8 @@ impl StanTarget {
                 native.dimension,
                 native.info.clone(),
                 native.unc_names.clone(),
+                native.constrained_dimension,
+                native.constrained_names.clone(),
                 native.compiled_threading,
             );
             (native, metadata)
@@ -730,6 +891,8 @@ impl StanTarget {
                     metadata.dimension,
                     metadata.info,
                     metadata.unc_names,
+                    metadata.constrained_dimension,
+                    metadata.constrained_names,
                     metadata.compiled_threading,
                 ),
             )
@@ -742,7 +905,8 @@ impl StanTarget {
             dimension: metadata.0,
             info: metadata.1,
             unc_names: metadata.2,
-            compiled_threading: metadata.3,
+            constrained_names: metadata.4,
+            compiled_threading: metadata.5,
             calls: AtomicUsize::new(0),
             recoverable: AtomicUsize::new(0),
         })
@@ -775,6 +939,30 @@ impl StanTarget {
     /// coordinate), or `None` when the library does not export them.
     pub fn param_unc_names(&self) -> Option<&[String]> {
         self.unc_names.as_deref()
+    }
+
+    /// Constrained parameters plus transformed parameters, in BridgeStan's
+    /// native order (`include_tp=true`, `include_gq=false`).
+    pub fn constrained_param_names(&self) -> &[String] {
+        &self.constrained_names
+    }
+
+    /// Transform one unconstrained draw to constrained parameters plus
+    /// transformed parameters (`include_tp=true`, `include_gq=false`).
+    pub fn constrain(&self, position: &[f64]) -> Result<Vec<f64>, TargetError> {
+        if position.len() != self.dimension {
+            return Err(TargetError::new(
+                "position dimension mismatch during BridgeStan constrain",
+            ));
+        }
+        #[cfg(not(windows))]
+        {
+            self.native.constrain(position)
+        }
+        #[cfg(windows)]
+        {
+            self.worker.constrain(position)
+        }
     }
 
     /// Fused evaluations started so far.
@@ -1382,12 +1570,12 @@ pub fn bridgestan_home() -> Option<PathBuf> {
 /// Libraries that must be resident before a Windows BridgeStan model loads.
 pub fn default_preload() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if cfg!(windows) {
-        if let Some(home) = bridgestan_home() {
-            let tbb = home.join("stan/lib/stan_math/lib/tbb/tbb.dll");
-            if tbb.exists() {
-                out.push(tbb);
-            }
+    if cfg!(windows)
+        && let Some(home) = bridgestan_home()
+    {
+        let tbb = home.join("stan/lib/stan_math/lib/tbb/tbb.dll");
+        if tbb.exists() {
+            out.push(tbb);
         }
     }
     out
@@ -1488,6 +1676,8 @@ mod tests {
                     dimension: 2,
                     info: "fake STAN_THREADS=false".into(),
                     unc_names: Some(vec!["a".into(), "b".into()]),
+                    constrained_dimension: 2,
+                    constrained_names: vec!["a".into(), "b".into()],
                     compiled_threading: Threading::Serialised,
                 }
             })
@@ -1512,6 +1702,13 @@ mod tests {
                     gradient,
                     outcome: WorkerOutcome::Success(-0.5 * position.iter().sum::<f64>()),
                 }
+            })
+        }
+
+        fn constrain(&mut self, position: &[f64]) -> Result<Vec<f64>, String> {
+            self.native_activity.call(|| {
+                log_operation(&self.log, "constrain");
+                Ok(position.to_vec())
             })
         }
     }
@@ -1792,6 +1989,8 @@ mod tests {
             metadata.unc_names.as_deref(),
             Some(&["a".into(), "b".into()][..])
         );
+        assert_eq!(metadata.constrained_dimension, 2);
+        assert_eq!(metadata.constrained_names, ["a", "b"]);
 
         let mut gradient = [0.0; 2];
         let calls = AtomicUsize::new(0);
@@ -1807,6 +2006,7 @@ mod tests {
         assert_eq!(error.unwrap_err().kind(), TargetErrorKind::Recoverable);
         assert_eq!(calls.load(Ordering::Relaxed), 2);
         assert_eq!(recoverable.load(Ordering::Relaxed), 1);
+        assert_eq!(client.constrain(&[3.0, 5.0]).unwrap(), [3.0, 5.0]);
 
         thread::scope(|scope| {
             let handles: Vec<_> = (0..16)
@@ -1835,6 +2035,7 @@ mod tests {
         assert!(labels.contains(&"preload"));
         assert!(labels.contains(&"library_load"));
         assert!(labels.contains(&"symbol_load"));
+        assert!(labels.contains(&"constrain"));
         assert!(labels.contains(&"construct"));
         assert!(labels.contains(&"metadata"));
         assert!(labels.contains(&"names"));

@@ -195,6 +195,8 @@ fn matches_both_validated_upstream_transition_sequences() {
                 TransitionTuning {
                     leaf: FixedTuning {
                         options: crate::kernel::KernelOptions::default(),
+                        reverse_coarsening_order:
+                            crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
                         step_size: number(kernel, "step"),
                         max_refinement_levels: usize_field(kernel, "max_step_halvings"),
                         min_micro_steps: usize_field(kernel, "min_micro_steps"),

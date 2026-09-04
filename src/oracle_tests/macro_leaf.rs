@@ -93,6 +93,7 @@ fn check_case(requested_name: &str) {
         };
         let tuning = FixedTuning {
             options: crate::kernel::KernelOptions::default(),
+            reverse_coarsening_order: crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
             step_size: number(input, "macro_step"),
             max_refinement_levels: count(input, "max_step_halvings"),
             min_micro_steps: count(input, "min_micro_steps"),

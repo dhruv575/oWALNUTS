@@ -66,6 +66,8 @@ use std::time::{Duration, Instant};
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
+#[cfg(feature = "research")]
+pub use crate::walnutpie::ReverseCoarseningOrder;
 pub use crate::walnutpie::{
     Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
     StructuredBlockMass, StructuredCovarianceBlock, StructuredMetricRefresh,
@@ -519,6 +521,8 @@ pub struct Tuning {
     max_error: f64,
     divergence_threshold: f64,
     kernel_options: KernelOptions,
+    #[cfg(feature = "research")]
+    reverse_coarsening_order: ReverseCoarseningOrder,
 }
 
 impl Default for Tuning {
@@ -534,6 +538,8 @@ impl Default for Tuning {
                 u_turn: DEFAULT_U_TURN_RULE,
                 ..KernelOptions::default()
             },
+            #[cfg(feature = "research")]
+            reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
         }
     }
 }
@@ -585,6 +591,14 @@ impl Tuning {
         self.kernel_options = options;
         self
     }
+    /// Select reverse-coarsening traversal order for a deterministic target
+    /// that returns only finite evaluations or recoverable zero-density
+    /// points. Research-only; every default remains finest to coarsest.
+    #[cfg(feature = "research")]
+    pub fn reverse_coarsening_order(mut self, order: ReverseCoarseningOrder) -> Self {
+        self.reverse_coarsening_order = order;
+        self
+    }
 
     /// The validated `walnutpie` tuning this configures.
     pub fn to_kernel(&self) -> Result<KernelTuning, Error> {
@@ -592,7 +606,7 @@ impl Tuning {
             NonZeroUsize::new(value)
                 .ok_or_else(|| Error::configuration(format!("{what} must be nonzero")))
         };
-        KernelTuning::new(
+        let tuning = KernelTuning::new(
             self.step_size,
             nonzero(self.max_depth, "max_depth")?,
             nonzero(self.min_micro_steps, "min_micro_steps")?,
@@ -600,7 +614,10 @@ impl Tuning {
             self.max_error,
         )?
         .with_divergence_threshold(self.divergence_threshold)
-        .map(|tuning| tuning.with_options(self.kernel_options))
+        .map(|tuning| tuning.with_options(self.kernel_options))?;
+        #[cfg(feature = "research")]
+        let tuning = tuning.with_reverse_coarsening_order(self.reverse_coarsening_order);
+        Ok(tuning)
     }
 }
 
@@ -912,6 +929,34 @@ impl Sampler {
     ///
     /// Errors are all-or-nothing: no draws are returned on failure.
     pub fn run<T: Target>(&self, target: &T, starts: &[Vec<f64>]) -> Result<Posterior, Error> {
+        self.run_with_control_value(target, starts, RunControl::new())
+    }
+
+    /// Run through the high-level boundary while emitting complete research
+    /// comparison and per-target-call records.
+    #[cfg(feature = "research")]
+    pub fn run_with_comparison_observers<T: Target>(
+        &self,
+        target: &T,
+        starts: &[Vec<f64>],
+        proposals: &crate::walnutpie::ProposalObservationControl<'_>,
+        comparisons: &dyn crate::walnutpie::ComparisonObserver,
+    ) -> Result<Posterior, Error> {
+        self.run_with_control_value(
+            target,
+            starts,
+            RunControl::new()
+                .with_proposal_observations(proposals)
+                .with_comparison_observer(comparisons),
+        )
+    }
+
+    fn run_with_control_value<'a, T: Target>(
+        &self,
+        target: &T,
+        starts: &[Vec<f64>],
+        base_control: RunControl<'a>,
+    ) -> Result<Posterior, Error> {
         let config = self.run_config()?;
         let starts = self.starts(starts)?;
         let chains = NonZeroUsize::new(starts.len())
@@ -923,7 +968,7 @@ impl Sampler {
         let dimension = NonZeroUsize::new(dimension)
             .ok_or_else(|| Error::configuration("target dimension must be nonzero"))?;
 
-        let mut control = RunControl::new();
+        let mut control = base_control;
         if let Some(cancellation) = &self.limits.cancellation {
             control = control.with_cancellation(&**cancellation);
         }
