@@ -6,6 +6,13 @@ First non-beta release of `owalnuts`. Kernel revision
 adaptation `walnutpie-paper-adaptation-kquantile-gamma-v4`; structured
 refresh `walnutpie-structured-metric-refresh-v1`.
 
+**Publication status (updated 2026-09-04): blocked.** WP36 resolves the
+default-safety decision: the 0.2 sampler default is **no chain rescue**, while
+explicit rescue policies remain available. A separate Windows native
+process-lifecycle defect remains in the BridgeStan replicated-target path.
+Do not tag or publish until it is localised or mitigated and the
+cross-platform release/package matrix has been exercised.
+
 ## What changed since 0.1.0-beta.2
 
 | Merge | Change | Evidence |
@@ -21,11 +28,13 @@ refresh `walnutpie-structured-metric-refresh-v1`.
 | `c4a4086`, `54081e1` | Opt-in `KernelOptions` (`UTurnRule`, `ExhaustionRule`), `RunConfig::with_cached_initial_evaluation`; `Sampler` caches the initial evaluation by default (bit-identical draws, one call per transition saved) | `STUDIES/kernel_efficiency_v1` |
 | this release | `sampler::Tuning` default refinement levels 4 -> 8: the four-level default halved the funnel's tail mass; eight levels are exact on three seeds at 1.05x / 1.00x ESS per call on Eight Schools and a 100-D Gaussian | `STUDIES/funnel_defaults_v1` (WP28) |
 | this release | **DEFAULT CHANGE (post-hoc after WP31)**: `sampler::Tuning::default()` U-turn rule `Endpoints` -> `MomentumSum`; `Adaptation::DualAveraging` / `Paper` regularise the diagonal metric with Stan's prior (`DEFAULT_U_TURN_RULE`, `DEFAULT_METRIC_REGULARIZATION`) | `STUDIES/joint_default_v1` (WP31, rule not met, decided post hoc), validated by `STUDIES/posteriordb_bench_v5` (WP32) |
+| `87d8817` | **FINAL DEFAULT CHANGE (WP36):** `sampler::DEFAULT_CHAIN_RESCUE = None`; default output is directly tested against explicit custom no-rescue warmup, while observe-only, `restart_from_best`, `two_hit` and pooling remain explicit policies | `STUDIES/chain_rescue_v2` (WP36) |
 | this release | CHANGELOG, version 0.2.0, Python package 0.2.0 (`init="uniform"`, `summary()`, sampler defaults), CI for the integration crates | â€” |
 
 The upgrade notes (facade unchanged, research items behind the feature,
 sampler defaults `h = 0.5`, depth 10, eight levels, `delta = 1` versus the frozen
-`RunConfig`/`KernelTuning` defaults) are in `CHANGELOG.md`.
+`RunConfig`/`KernelTuning` defaults, and no automatic chain rescue) are in
+`CHANGELOG.md`.
 
 ## Validation evidence
 
@@ -319,8 +328,17 @@ on Eight Schools at four threads, parity with nutpie.
   Euclidean sampler tested; there is no step-jitter option; seeds are not
   portable across kernel revisions; cancellation and deadlines are
   cooperative (all carried from 0.1.0-beta.2).
-- The BridgeStan crate's sampling tests need a locally compiled model and
-  skip in CI; only its pure-Rust nonfinite-mapping tests run there.
+- **Windows native BridgeStan process lifecycle is a release blocker.**
+  WP35A reproduced one silent `0xC0000374` exit in 46 diagnostic children
+  after a four-replica sampling result was durably published and the child
+  reached `drop/before`; WP36 recorded six more heap-corruption exits and one
+  post-result timeout. The root cause is not established. This evidence is
+  specific to the BridgeStan replicated-target/DLL/thread integration path and
+  does not identify a fault in the core Rust sampler, whose fingerprints and
+  direct tests remain green. It nevertheless blocks the Python `from_stan`
+  integration and therefore blocks publication of the combined release.
+- The BridgeStan crate's sampling tests need a locally compiled model and skip
+  in CI; only its pure-Rust nonfinite-mapping tests run there.
 - The Python package is not published; `maturin develop` from the tree.
 
 ## Release checklist
@@ -333,29 +351,52 @@ on Eight Schools at four threads, parity with nutpie.
       model tests run locally) green, fmt and clippy clean
 - [x] Python package rebuilt and its pytest suite green
 - [x] `cargo package --allow-dirty` verify build
-- [ ] `git tag v0.2.0` and `cargo publish` - left to the maintainer
-- [ ] PyPI wheels: the `wheels.yml` matrix has only been exercised on Windows;
-      the manylinux, macOS and MSVC legs are unverified
-- [x] WP23 posteriordb v2 numbers above
+- [x] WP36 default-safety decision applied: no rescue by default; explicit
+      policies remain available; default/no-rescue parity is tested
+- [ ] Localise or mitigate the Windows `0xC0000374`/post-result teardown fault
+      in the BridgeStan replicated-target path and add a regression check; do
+      not rerun the immutable WP35 `sblrc` evidence cell
+- [ ] Exercise the core crate on Windows MSVC and the Linux backends, and
+      exercise package jobs for Windows, manylinux x86_64/aarch64, macOS
+      x86_64/arm64 and the sdist
+- [ ] `git tag v0.2.0`, `cargo publish` and PyPI publish — blocked on the two
+      preceding items
 
-### Outstanding before the release numbers are final
+### Final default and benchmark status
 
-The validation tables above end at **WP32 (posteriordb v5, 42/51 gates)**.
-Three later studies changed, characterised and remeasured the shipped defaults:
+The admitted release headline remains **WP32/posteriordb v5: 42/51 gates**.
+Its no-rescue multi-chain warmup again matches the current sampler behavior
+after the final WP36 default commit `87d8817`.
 
-- **WP33 `chain_rescue_v1`** made warmup chain rescue a default *after* v5.
-- **WP34 `refinement_role_v1`** established that refinement does not pay on
-  ordinary posteriors and that `delta = 2` is worth 1.07x per gradient at the
-  same gates, pending a decision study.
-- **WP35 `posteriordb_bench_v6`** measured the complete current defaults on
-  fresh seeds: **45/51** gates against CmdStan 34 and nutpie 29, no frozen
-  chain, and funnel tail-mass |z| <= 2 on every seed. It did **not** meet its
+- **WP35 `posteriordb_bench_v6`** measured the temporary WP33
+  `restart_from_best` default on fresh seeds: **45/51** gates against CmdStan
+  34 and nutpie 29, no frozen chain, and funnel tail-mass |z| <= 2 on every
+  seed. It did **not** meet its
   preregistered release rule: one passing `one_comp` cell has max |z| 4.023,
   and one `sblrc` oWALNUTS subprocess exited without a result, leaving the
   fixed-16 efficiency gates unevaluable (observed 0.848x CmdStan per gradient
   and 0.825x wall per gradient over the 15 complete models). The v5 table
   remains the last headline admitted by its own rule; WP35 must be reported
-  beside it rather than substituted silently.
+  beside it as historical evidence, not substituted silently.
+- **WP35A `sblrc_process_stability_v1`** used 46 diagnostic-only children and
+  reproduced one silent four-replica `0xC0000374` fault after durable result
+  publication at `drop/before`; 45 children succeeded. Root cause is not
+  established, and evidence seed 90101 was neither rerun nor used.
+- **WP36 `chain_rescue_v2`** completed 288 launches: 281 process-valid, six
+  heap-corruption exits, one post-result timeout and six invalid triplets.
+  `two_hit` reduced nuisance unique-chain actions 35→14, but had only nine
+  complete blocks and failed its registered efficacy, funnel, origin and
+  efficiency gates. The registered fallback then found mapped-origin overwrite
+  red lines in four `current` cells (five events) and selected `no_rescue`.
+  The frozen classifier found pathological/frozen ARMA and Lotka-Volterra
+  origins and zero HMM origins, so the study does **not** prove genuine
+  posterior-mode destruction.
+
+No posteriordb v7 is required before release. This is a reasoned update to the
+earlier plan, not result-driven benchmark substitution: the final sampler
+restores v5's no-rescue defaults, and parity with explicit no rescue is tested
+directly. A future v7 is required if an automatic cross-chain action is
+reintroduced.
 
 See [`research-program-2026-09-04.md`](research-program-2026-09-04.md) for the
 full state and the open lines.
