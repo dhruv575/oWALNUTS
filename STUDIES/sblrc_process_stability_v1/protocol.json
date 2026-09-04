@@ -1,0 +1,137 @@
+{
+  "schema": "sblrc-process-stability-v1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-09-04",
+  "purpose": "Process-lifecycle diagnostic for the silent sblrc WP35 child failure. This is not posterior-performance evidence and does not rerun evidence seed 90101.",
+  "source_commit_under_test": "8a8f8211cb87330e7c61fe3a4596aa32cd404d12",
+  "forbidden_seeds": [
+    90101
+  ],
+  "external_inputs": {
+    "read_only": true,
+    "model": {
+      "path": "C:\\dev\\owalnuts-wt\\posteriordb-v6\\STUDIES\\posteriordb_bench_v6\\models\\sblrc__blr_model.so",
+      "bytes": 3891206,
+      "sha256": "b77acc367c40b3afbb51f239e87fe896c1e7631643352361734b0dbacb0c50f1"
+    },
+    "data": {
+      "path": "C:\\dev\\owalnuts-wt\\posteriordb-v6\\STUDIES\\posteriordb_bench_v6\\models\\sblrc__blr.data.json",
+      "bytes": 11288,
+      "sha256": "2227de01d39e50560dd8341a84ed176a2a081cc8c8a841261dd4d6c38b47dc9c"
+    },
+    "python": "C:\\dev\\owalnuts-wt\\posteriordb-v6\\STUDIES\\posteriordb_bench_v6\\.venv\\Scripts\\python.exe"
+  },
+  "sampler": {
+    "warmup": 1000,
+    "retained": 1000,
+    "init": "owalnuts::sampler::Init::uniform()",
+    "metric": "diagonal",
+    "adaptation": "default",
+    "tuning": "default",
+    "limits": "admit_worst_case",
+    "sampling_rows_are_exact": true
+  },
+  "matrix": [
+    {
+      "id": "load-r1-t1",
+      "mode": "load_drop",
+      "replicas": 1,
+      "threads": 1,
+      "chains": 0,
+      "repetitions": 12,
+      "seeds": [990101, 990102, 990103, 990104, 990105, 990106, 990107, 990108, 990109, 990110, 990111, 990112]
+    },
+    {
+      "id": "load-r4-t4",
+      "mode": "load_drop",
+      "replicas": 4,
+      "threads": 4,
+      "chains": 0,
+      "repetitions": 12,
+      "seeds": [990201, 990202, 990203, 990204, 990205, 990206, 990207, 990208, 990209, 990210, 990211, 990212]
+    },
+    {
+      "id": "eval-r1-t1",
+      "mode": "evaluate",
+      "replicas": 1,
+      "threads": 1,
+      "chains": 0,
+      "repetitions": 6,
+      "evaluations_per_thread": 256,
+      "seeds": [990301, 990302, 990303, 990304, 990305, 990306]
+    },
+    {
+      "id": "eval-r4-t4",
+      "mode": "evaluate",
+      "replicas": 4,
+      "threads": 4,
+      "chains": 0,
+      "repetitions": 6,
+      "evaluations_per_thread": 256,
+      "seeds": [990401, 990402, 990403, 990404, 990405, 990406]
+    },
+    {
+      "id": "sample-r1-t1",
+      "mode": "sample",
+      "replicas": 1,
+      "threads": 1,
+      "chains": 1,
+      "repetitions": 3,
+      "seeds": [990501, 990502, 990503]
+    },
+    {
+      "id": "sample-r4-t4",
+      "mode": "sample",
+      "replicas": 4,
+      "threads": 4,
+      "chains": 4,
+      "repetitions": 3,
+      "seeds": [990601, 990602, 990603]
+    },
+    {
+      "id": "repeat-load-r1-t1",
+      "mode": "repeat_load_drop",
+      "replicas": 1,
+      "threads": 1,
+      "chains": 0,
+      "repetitions": 2,
+      "load_drop_cycles": 20,
+      "seeds": [990701, 990702]
+    },
+    {
+      "id": "repeat-load-r4-t4",
+      "mode": "repeat_load_drop",
+      "replicas": 4,
+      "threads": 4,
+      "chains": 0,
+      "repetitions": 2,
+      "load_drop_cycles": 20,
+      "seeds": [990801, 990802]
+    }
+  ],
+  "execution": {
+    "order": "matrix order, then seeds ascending within each row",
+    "timeout_seconds_per_child": 120,
+    "rerun_failed_child": false,
+    "expected_child_count": 46,
+    "capture": [
+      "atomic stage heartbeats",
+      "raw output existence",
+      "stdout",
+      "stderr",
+      "duration",
+      "timeout",
+      "return_code_raw",
+      "return_code_signed_32",
+      "return_code_unsigned_32",
+      "return_code_hex_32"
+    ]
+  },
+  "classification": {
+    "success": "return code zero, final raw result status ok, raw output exists, and required heartbeat sequence is complete",
+    "fault_reproduced": "any timeout, unsuccessful return, missing or non-ok raw result, or incomplete required heartbeat sequence",
+    "silent_failure": "fault reproduced with empty captured stdout and stderr",
+    "causal_limit": "last durable heartbeat localizes a stage but does not establish root cause"
+  },
+  "seed_verification": "Before freezing, an exact whole-number search over tracked source and non-artifact study files found no use of any listed diagnostic seed. Seed 90101 is explicitly forbidden."
+}
