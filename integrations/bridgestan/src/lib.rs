@@ -26,14 +26,13 @@
 //!   reject such a proposal rather than abort the run, and the posteriordb
 //!   benchmark (`STUDIES/posteriordb_bench_v1`) lost every `arma11` cell to
 //!   the previous fatal mapping. Only a failed dimension check remains fatal.
-//! * Thread safety: with `STAN_THREADS=true` Stan's autodiff stack is
-//!   thread-local and one model instance may be evaluated from many threads
-//!   concurrently, which is what the parallel facade entry points do. The
-//!   constructor reads `bs_model_info` and, if the library was not built with
-//!   `STAN_THREADS=true`, serialises every evaluation through a mutex shared
-//!   by all `StanTarget`s loaded from that file (same path, same module, same
-//!   global autodiff stack) and reports [`StanTarget::threading`] as
-//!   [`Threading::Serialised`].
+//! * Thread safety: on Windows every BridgeStan native operation runs on one
+//!   owned OS thread per target. Caller and Rayon threads use a bounded
+//!   channel; drop sends shutdown and joins the owner after model destruction
+//!   and native TLS teardown. [`ReplicatedStanTarget`] deliberately has one
+//!   effective Windows worker regardless of its requested count. Off Windows,
+//!   `STAN_THREADS=true` permits direct concurrent evaluation; otherwise a
+//!   module-identity mutex serialises construction and evaluation.
 //! * **Do not build with `STAN_THREADS=true` on Windows/mingw-w64.** GCC on
 //!   mingw-w64 implements `__thread` with emulated TLS (`__emutls_get_address`
 //!   on every access), and Stan Math touches its thread-local autodiff stack
@@ -42,35 +41,38 @@
 //!   costs 9–16x more per gradient than the default build (arK 120 vs 12.8 µs,
 //!   hmm_example 445 vs 28 µs, eight schools 6.2 vs 0.59 µs); the default
 //!   build matches CmdStan's per-gradient cost. Build without `STAN_THREADS`
-//!   and use [`ReplicatedStanTarget`], which loads one copy of the library per
-//!   concurrent thread (distinct file paths are distinct modules with their
-//!   own global autodiff stack) and dispatches each call to a free replica.
+//!   The Windows owned worker safely serialises calls from parallel samplers.
+//!   Off Windows, [`ReplicatedStanTarget`] loads one copy of the library per
+//!   concurrent thread and dispatches each call to a free replica.
 //! * On Windows, model and preload DLLs are process-lifetime residents. This
 //!   prevents native TLS destructor callbacks from reaching unloaded code
-//!   after model drop. Model objects are still destructed normally. Replica
-//!   copies use a process-private content-addressed cache with an exclusive
-//!   process lease; repeated same-model loads reuse modules and later
+//!   after owner shutdown. Model objects are destructed on their owner. Models
+//!   load from a real-SHA-256 process-private cache, so their source files are
+//!   not kept mapped or locked. Repeated same-content loads reuse modules and later
 //!   processes clean stale unlocked directories. Non-Windows libraries still
 //!   unload, and their replica copies are deleted, on target drop.
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use libloading::{Library, Symbol};
-use owalnuts::walnutpie::{Target, TargetError};
-use std::{
-    cell::Cell,
-    ffi::{CStr, CString, c_char, c_int, c_uint},
-    fmt,
-    ops::Deref,
-    path::{Path, PathBuf},
-    sync::atomic::{AtomicUsize, Ordering},
-    sync::{Arc, Mutex, OnceLock, TryLockError, Weak},
-};
+use owalnuts::walnutpie::{Target, TargetError, TargetErrorKind};
+#[cfg(not(windows))]
+use std::{cell::Cell, sync::TryLockError};
 #[cfg(windows)]
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
     io::Read,
+    sync::mpsc::{Receiver, SyncSender, sync_channel},
+    thread::{self, JoinHandle},
     time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use std::{
+    ffi::{CStr, CString, c_char, c_int, c_uint},
+    fmt,
+    ops::Deref,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicUsize, Ordering},
+    sync::{Arc, Mutex, OnceLock, Weak},
 };
 
 #[cfg(windows)]
@@ -186,17 +188,27 @@ impl From<libloading::Error> for LoadError {
 
 /// A loaded, constructed Stan model exposed as an oWALNUTS target.
 pub struct StanTarget {
+    #[cfg(not(windows))]
+    native: NativeTarget,
+    #[cfg(windows)]
+    worker: OwnedClient,
+    dimension: usize,
+    info: String,
+    unc_names: Option<Vec<String>>,
+    threading: Threading,
+    calls: AtomicUsize,
+    recoverable: AtomicUsize,
+}
+
+struct NativeTarget {
     loaded: ModelAndLibraries<ModelHandle, LoadedLibraries>,
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
     threading: Threading,
-    /// Shared by every `StanTarget` loaded from the same file: without
-    /// `STAN_THREADS` the autodiff stack is a global of the *module*, and
-    /// Windows/POSIX return the same module for the same path.
+    /// Shared by every target loaded from the same module. It serializes model
+    /// construction and non-STAN_THREADS evaluations.
     serial: Arc<Mutex<()>>,
-    calls: AtomicUsize,
-    recoverable: AtomicUsize,
 }
 
 /// Field order is the lifetime invariant: Rust drops `model` before
@@ -235,12 +247,8 @@ impl Drop for ModelHandle {
     }
 }
 
-impl StanTarget {
-    /// Load `model_so` (a BridgeStan `*_model.so`), preloading each library in
-    /// `preload` first (on Windows, `tbb.dll` from
-    /// `stan/lib/stan_math/lib/tbb` must be resident before the model loads),
-    /// and construct the model with CmdStan-JSON `data` and `seed`.
-    pub fn load(
+impl NativeTarget {
+    fn load(
         model_so: &Path,
         preload: &[PathBuf],
         data: Option<&str>,
@@ -273,12 +281,19 @@ impl StanTarget {
         };
         let data_ptr = data_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
         let mut err: *mut c_char = std::ptr::null_mut();
-        // SAFETY: valid C string (or null) and a writable error slot.
-        let ptr = unsafe { construct(data_ptr, seed, &mut err) };
-        if ptr.is_null() {
-            let message = take_error(err, free_error);
-            return Err(LoadError::Construct(message));
-        }
+        let serial = module_lock(model_so);
+        let ptr = {
+            let _construct_guard = serial
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            // SAFETY: valid C string (or null) and a writable error slot.
+            let ptr = unsafe { construct(data_ptr, seed, &mut err) };
+            if ptr.is_null() {
+                let message = take_error(err, free_error);
+                return Err(LoadError::Construct(message));
+            }
+            ptr
+        };
         let model = ModelHandle {
             ptr,
             destruct,
@@ -286,7 +301,14 @@ impl StanTarget {
             log_density_gradient: ldg,
         };
         // SAFETY: model pointer is valid; info string is owned by the model.
-        let info = unsafe { CStr::from_ptr(info_fn(ptr)) }
+        let info_raw = unsafe { info_fn(ptr) };
+        if info_raw.is_null() {
+            return Err(LoadError::Invalid(
+                "bs_model_info returned a null pointer".into(),
+            ));
+        }
+        // SAFETY: the checked pointer names a NUL-terminated model-owned string.
+        let info = unsafe { CStr::from_ptr(info_raw) }
             .to_string_lossy()
             .into_owned();
         // SAFETY: model pointer is valid.
@@ -301,21 +323,28 @@ impl StanTarget {
         } else {
             Threading::Serialised
         };
-        let unc_names = unc_names_fn.and_then(|f| {
-            // SAFETY: model pointer is valid; the string is owned by the model.
-            let raw = unsafe { f(ptr) };
-            if raw.is_null() {
-                return None;
+        let unc_names = match unc_names_fn {
+            None => None,
+            Some(names_fn) => {
+                // SAFETY: model pointer is valid; the string is owned by the model.
+                let raw = unsafe { names_fn(ptr) };
+                if raw.is_null() {
+                    return Err(LoadError::Invalid(
+                        "bs_param_unc_names returned a null pointer".into(),
+                    ));
+                }
+                // SAFETY: the checked pointer names a NUL-terminated string.
+                let joined = unsafe { CStr::from_ptr(raw) }.to_string_lossy();
+                let names: Vec<String> = joined.split(',').map(str::to_owned).collect();
+                if names.len() != dimension as usize || names.iter().any(String::is_empty) {
+                    return Err(LoadError::Invalid(format!(
+                        "bs_param_unc_names returned {} names for dimension {dimension}",
+                        names.len()
+                    )));
+                }
+                Some(names)
             }
-            // SAFETY: BridgeStan returns a NUL-terminated string.
-            let joined = unsafe { CStr::from_ptr(raw) }.to_string_lossy();
-            let names: Vec<String> = joined
-                .split(',')
-                .filter(|n| !n.is_empty())
-                .map(str::to_owned)
-                .collect();
-            (names.len() == dimension as usize).then_some(names)
-        });
+        };
         Ok(Self {
             loaded: ModelAndLibraries {
                 model,
@@ -328,7 +357,265 @@ impl StanTarget {
             info,
             unc_names,
             threading,
-            serial: module_lock(model_so),
+            serial,
+        })
+    }
+
+    fn evaluate_unlocked(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        let mut value = f64::NAN;
+        let mut err: *mut c_char = std::ptr::null_mut();
+        // SAFETY: `position` and `gradient` have `dimension` elements (checked
+        // by the caller), the model pointer is valid, and `err` is a writable
+        // slot that we free if set.
+        let rc = unsafe {
+            (self.loaded.model.log_density_gradient)(
+                self.loaded.model.ptr,
+                false,
+                true,
+                position.as_ptr(),
+                &mut value,
+                gradient.as_mut_ptr(),
+                &mut err,
+            )
+        };
+        if rc != 0 {
+            let message = take_error(err, self.loaded.model.free_error);
+            Err(TargetError::recoverable(format!(
+                "stan exception: {message}"
+            )))
+        } else {
+            map_evaluation(value, gradient)
+        }
+    }
+
+    fn evaluate(&self, position: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
+        match self.threading {
+            Threading::Concurrent => self.evaluate_unlocked(position, gradient),
+            Threading::Serialised => {
+                let _guard = self
+                    .serial
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                self.evaluate_unlocked(position, gradient)
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+#[derive(Clone, Debug)]
+struct WorkerMetadata {
+    dimension: usize,
+    info: String,
+    unc_names: Option<Vec<String>>,
+    threading: Threading,
+}
+
+#[cfg(windows)]
+enum WorkerOutcome {
+    Success(f64),
+    Recoverable(String),
+}
+
+#[cfg(windows)]
+struct WorkerReply {
+    gradient: Vec<f64>,
+    outcome: WorkerOutcome,
+}
+
+#[cfg(windows)]
+enum WorkerRequest {
+    Evaluate {
+        position: Vec<f64>,
+        response: SyncSender<WorkerReply>,
+    },
+    Shutdown,
+}
+
+#[cfg(windows)]
+trait OwnedBackend: Send + 'static {
+    fn metadata(&self) -> WorkerMetadata;
+    fn evaluate(&mut self, position: &[f64]) -> WorkerReply;
+}
+
+#[cfg(windows)]
+impl OwnedBackend for NativeTarget {
+    fn metadata(&self) -> WorkerMetadata {
+        WorkerMetadata {
+            dimension: self.dimension,
+            info: self.info.clone(),
+            unc_names: self.unc_names.clone(),
+            threading: self.threading,
+        }
+    }
+
+    fn evaluate(&mut self, position: &[f64]) -> WorkerReply {
+        let mut gradient = vec![0.0; self.dimension];
+        let outcome = match NativeTarget::evaluate(self, position, &mut gradient) {
+            Ok(value) => WorkerOutcome::Success(value),
+            Err(error) => WorkerOutcome::Recoverable(error.message().to_owned()),
+        };
+        WorkerReply { gradient, outcome }
+    }
+}
+
+#[cfg(windows)]
+struct OwnedClient {
+    requests: SyncSender<WorkerRequest>,
+    join: Option<JoinHandle<()>>,
+}
+
+#[cfg(windows)]
+impl OwnedClient {
+    fn evaluate(&self, position: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
+        let (response_tx, response_rx) = sync_channel(0);
+        self.requests
+            .send(WorkerRequest::Evaluate {
+                position: position.to_vec(),
+                response: response_tx,
+            })
+            .map_err(|_| TargetError::new("BridgeStan owner worker disconnected"))?;
+        let reply = response_rx
+            .recv()
+            .map_err(|_| TargetError::new("BridgeStan owner worker panicked or disconnected"))?;
+        if reply.gradient.len() != gradient.len() {
+            return Err(TargetError::new(
+                "BridgeStan owner worker returned a mismatched gradient",
+            ));
+        }
+        gradient.copy_from_slice(&reply.gradient);
+        match reply.outcome {
+            WorkerOutcome::Success(value) => Ok(value),
+            WorkerOutcome::Recoverable(message) => Err(TargetError::recoverable(message)),
+        }
+    }
+
+    fn shutdown(&mut self) {
+        let _ = self.requests.send(WorkerRequest::Shutdown);
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for OwnedClient {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+#[cfg(windows)]
+fn start_owned_worker<B, F>(loader: F) -> Result<(OwnedClient, WorkerMetadata), LoadError>
+where
+    B: OwnedBackend,
+    F: FnOnce() -> Result<B, LoadError> + Send + 'static,
+{
+    static NEXT_WORKER_ID: AtomicUsize = AtomicUsize::new(0);
+
+    let (request_tx, request_rx): (SyncSender<WorkerRequest>, Receiver<WorkerRequest>) =
+        sync_channel(1);
+    let (init_tx, init_rx) = sync_channel(0);
+    let worker_id = NEXT_WORKER_ID.fetch_add(1, Ordering::Relaxed);
+    let join = thread::Builder::new()
+        .name(format!("owalnuts-bridgestan-{worker_id}"))
+        .spawn(move || match loader() {
+            Ok(mut backend) => {
+                let metadata = backend.metadata();
+                if init_tx.send(Ok(metadata)).is_err() {
+                    return;
+                }
+                while let Ok(request) = request_rx.recv() {
+                    match request {
+                        WorkerRequest::Evaluate { position, response } => {
+                            let _ = response.send(backend.evaluate(&position));
+                        }
+                        WorkerRequest::Shutdown => break,
+                    }
+                }
+            }
+            Err(error) => {
+                let _ = init_tx.send(Err(error));
+            }
+        })
+        .map_err(|error| LoadError::Invalid(format!("could not spawn owner worker: {error}")))?;
+    match init_rx.recv() {
+        Ok(Ok(metadata)) => Ok((
+            OwnedClient {
+                requests: request_tx,
+                join: Some(join),
+            },
+            metadata,
+        )),
+        Ok(Err(error)) => {
+            let _ = join.join();
+            Err(error)
+        }
+        Err(_) => {
+            let _ = join.join();
+            Err(LoadError::Invalid(
+                "BridgeStan owner worker panicked during load".into(),
+            ))
+        }
+    }
+}
+
+impl StanTarget {
+    /// Load `model_so` (a BridgeStan `*_model.so`), preloading each library in
+    /// `preload` first (on Windows, `tbb.dll` from
+    /// `stan/lib/stan_math/lib/tbb` must be resident before the model loads),
+    /// and construct the model with CmdStan-JSON `data` and `seed`.
+    ///
+    /// On Windows all native operations execute on one owned OS thread and
+    /// callers communicate with it through a bounded channel.
+    pub fn load(
+        model_so: &Path,
+        preload: &[PathBuf],
+        data: Option<&str>,
+        seed: u32,
+    ) -> Result<Self, LoadError> {
+        #[cfg(not(windows))]
+        let (backend, metadata) = {
+            let native = NativeTarget::load(model_so, preload, data, seed)?;
+            let metadata = (
+                native.dimension,
+                native.info.clone(),
+                native.unc_names.clone(),
+                native.threading,
+            );
+            (native, metadata)
+        };
+        #[cfg(windows)]
+        let (backend, metadata) = {
+            let cached_model = process_replica_cache()?.model_copy(model_so)?;
+            let preload = preload.to_vec();
+            let data = data.map(str::to_owned);
+            let (worker, metadata) = start_owned_worker(move || {
+                NativeTarget::load(&cached_model, &preload, data.as_deref(), seed)
+            })?;
+            (
+                worker,
+                (
+                    metadata.dimension,
+                    metadata.info,
+                    metadata.unc_names,
+                    metadata.threading,
+                ),
+            )
+        };
+        Ok(Self {
+            #[cfg(not(windows))]
+            native: backend,
+            #[cfg(windows)]
+            worker: backend,
+            dimension: metadata.0,
+            info: metadata.1,
+            unc_names: metadata.2,
+            threading: metadata.3,
             calls: AtomicUsize::new(0),
             recoverable: AtomicUsize::new(0),
         })
@@ -361,34 +648,35 @@ impl StanTarget {
     }
 
     fn evaluate(&self, position: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
-        let mut value = f64::NAN;
-        let mut err: *mut c_char = std::ptr::null_mut();
-        // SAFETY: `position` and `gradient` have `dimension` elements (checked
-        // by the caller), the model pointer is valid, and `err` is a writable
-        // slot that we free if set.
-        let rc = unsafe {
-            (self.loaded.model.log_density_gradient)(
-                self.loaded.model.ptr,
-                false,
-                true,
-                position.as_ptr(),
-                &mut value,
-                gradient.as_mut_ptr(),
-                &mut err,
-            )
-        };
-        let outcome = if rc != 0 {
-            let message = take_error(err, self.loaded.model.free_error);
-            Err(TargetError::recoverable(format!(
-                "stan exception: {message}"
-            )))
-        } else {
-            map_evaluation(value, gradient)
-        };
-        if outcome.is_err() {
-            self.recoverable.fetch_add(1, Ordering::Relaxed);
+        #[cfg(not(windows))]
+        {
+            self.native.evaluate(position, gradient)
         }
+        #[cfg(windows)]
+        {
+            self.worker.evaluate(position, gradient)
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn evaluate_replica_unlocked(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let outcome = self.native.evaluate_unlocked(position, gradient);
+        record_recoverable(&outcome, &self.recoverable);
         outcome
+    }
+}
+
+fn record_recoverable(outcome: &Result<f64, TargetError>, recoverable: &AtomicUsize) {
+    if outcome
+        .as_ref()
+        .is_err_and(|error| error.kind() == TargetErrorKind::Recoverable)
+    {
+        recoverable.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -469,28 +757,23 @@ impl Target for StanTarget {
             return Err(TargetError::new("position/gradient dimension mismatch"));
         }
         self.calls.fetch_add(1, Ordering::Relaxed);
-        match self.threading {
-            Threading::Concurrent => self.evaluate(position, gradient),
-            Threading::Serialised => {
-                let _guard = self.serial.lock().unwrap_or_else(|p| p.into_inner());
-                self.evaluate(position, gradient)
-            }
-        }
+        let outcome = self.evaluate(position, gradient);
+        record_recoverable(&outcome, &self.recoverable);
+        outcome
     }
 }
 
-/// A pool of independently loaded copies of one model library, for
-/// libraries built *without* `STAN_THREADS` (the fast build on Windows, see
-/// the module docs).
+/// A pool of independently loaded copies of one model library off Windows.
 ///
 /// Each replica is the same `*_model.so` copied to a distinct file name in a
 /// private cache and loaded separately, so each has its own global Stan
-/// autodiff stack and may be evaluated by one thread at a time. On Windows,
-/// the process-private cache is content-addressed and reused by later loads of
-/// the same model in this process. Its files remain while their modules are
-/// resident and are removed by a later process after its lease check proves
-/// the creating process has exited. Other platforms retain unload-and-delete
-/// behavior on target drop.
+/// autodiff stack and may be evaluated by one thread at a time.
+///
+/// On Windows this type intentionally uses one effective [`StanTarget`] owned
+/// worker regardless of the requested count. Calls from any number of sampler
+/// threads are serialized through that worker. Multi-worker Windows execution
+/// is out of scope until separately qualified; use [`Self::requested_replicas`]
+/// to distinguish the requested and effective counts.
 /// A call takes the first free replica (trying the one this thread used last
 /// first, so steady-state dispatch is one uncontended `try_lock`); with at
 /// least as many replicas as calling threads, evaluations never wait. The
@@ -504,6 +787,7 @@ pub struct ReplicatedStanTarget {
     // copies after their libraries unload; Windows cache copies are resident.
     _copies: ReplicaCopies,
     dimension: usize,
+    requested_replicas: usize,
 }
 
 #[cfg(not(windows))]
@@ -551,27 +835,13 @@ impl ReplicaCopies {
 }
 
 #[cfg(windows)]
-struct ReplicaCopies {
-    files: Vec<PathBuf>,
-}
+struct ReplicaCopies;
 
 #[cfg(windows)]
 impl ReplicaCopies {
-    fn prepare(model_so: &Path, replicas: usize) -> Result<Self, LoadError> {
-        let files = if replicas > 1 {
-            process_replica_cache()?.copies(model_so, replicas)?
-        } else {
-            Vec::new()
-        };
-        Ok(Self { files })
+    fn prepare(_model_so: &Path, _replicas: usize) -> Result<Self, LoadError> {
+        Ok(Self)
     }
-}
-
-#[cfg(windows)]
-struct DigestRecord {
-    length: u64,
-    modified: Option<SystemTime>,
-    digest: String,
 }
 
 #[cfg(windows)]
@@ -579,7 +849,6 @@ struct ProcessReplicaCache {
     dir: PathBuf,
     _lease: File,
     copy_lock: Mutex<()>,
-    digests: Mutex<HashMap<PathBuf, DigestRecord>>,
 }
 
 #[cfg(windows)]
@@ -627,27 +896,10 @@ impl ProcessReplicaCache {
             dir,
             _lease: lease,
             copy_lock: Mutex::new(()),
-            digests: Mutex::new(HashMap::new()),
         })
     }
 
-    fn digest(&self, source: &Path) -> Result<String, LoadError> {
-        let key = std::fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
-        let metadata =
-            std::fs::metadata(source).map_err(|error| LoadError::Invalid(error.to_string()))?;
-        let modified = metadata.modified().ok();
-        {
-            let digests = self
-                .digests
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if let Some(record) = digests.get(&key)
-                && record.length == metadata.len()
-                && record.modified == modified
-            {
-                return Ok(record.digest.clone());
-            }
-        }
+    fn digest(source: &Path) -> Result<String, LoadError> {
         let mut input =
             File::open(source).map_err(|error| LoadError::Invalid(error.to_string()))?;
         let mut hasher = Sha256::new();
@@ -661,23 +913,11 @@ impl ProcessReplicaCache {
             }
             hasher.update(&buffer[..count]);
         }
-        let digest = format!("{:x}", hasher.finalize());
-        self.digests
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(
-                key,
-                DigestRecord {
-                    length: metadata.len(),
-                    modified,
-                    digest: digest.clone(),
-                },
-            );
-        Ok(digest)
+        Ok(format!("{:x}", hasher.finalize()))
     }
 
-    fn copies(&self, source: &Path, replicas: usize) -> Result<Vec<PathBuf>, LoadError> {
-        let digest = self.digest(source)?;
+    fn model_copy(&self, source: &Path) -> Result<PathBuf, LoadError> {
+        let digest = Self::digest(source)?;
         let extension = source
             .extension()
             .map(|extension| extension.to_string_lossy().into_owned())
@@ -686,29 +926,36 @@ impl ProcessReplicaCache {
             .copy_lock
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut copies = Vec::with_capacity(replicas.saturating_sub(1));
-        for replica in 1..replicas {
-            let copy = self
-                .dir
-                .join(format!("{digest}-replica-{replica}.{extension}"));
-            if !copy.exists() {
-                let temporary = self.dir.join(format!(
-                    ".copy-{}-{}",
-                    std::process::id(),
-                    NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
-                ));
-                if let Err(error) = std::fs::copy(source, &temporary) {
-                    let _ = std::fs::remove_file(&temporary);
-                    return Err(LoadError::Invalid(error.to_string()));
-                }
-                if let Err(error) = std::fs::rename(&temporary, &copy) {
-                    let _ = std::fs::remove_file(&temporary);
-                    return Err(LoadError::Invalid(error.to_string()));
-                }
+        let copy = self.dir.join(format!("{digest}-model.{extension}"));
+        if copy.exists() {
+            if Self::digest(&copy)? != digest {
+                return Err(LoadError::Invalid(format!(
+                    "cached model content does not match its identity: {}",
+                    copy.display()
+                )));
             }
-            copies.push(copy);
+            return Ok(copy);
         }
-        Ok(copies)
+        let temporary = self.dir.join(format!(
+            ".copy-{}-{}",
+            std::process::id(),
+            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        if let Err(error) = std::fs::copy(source, &temporary) {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(LoadError::Invalid(error.to_string()));
+        }
+        if Self::digest(&temporary)? != digest {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(LoadError::Invalid(
+                "model source changed while it was copied".into(),
+            ));
+        }
+        if let Err(error) = std::fs::rename(&temporary, &copy) {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(LoadError::Invalid(error.to_string()));
+        }
+        Ok(copy)
     }
 }
 
@@ -760,6 +1007,7 @@ fn process_replica_cache() -> Result<&'static ProcessReplicaCache, LoadError> {
         .map_err(|error| LoadError::Invalid(error.clone()))
 }
 
+#[cfg(not(windows))]
 thread_local! {
     static PREFERRED_REPLICA: Cell<usize> = const { Cell::new(0) };
 }
@@ -779,10 +1027,15 @@ impl ReplicatedStanTarget {
         seed: u32,
         replicas: usize,
     ) -> Result<Self, LoadError> {
-        let replicas = replicas.max(1);
-        let copies = ReplicaCopies::prepare(model_so, replicas)?;
-        let mut loaded = Vec::with_capacity(replicas);
+        let requested_replicas = replicas;
+        #[cfg(not(windows))]
+        let effective_replicas = requested_replicas.max(1);
+        #[cfg(windows)]
+        let effective_replicas = 1;
+        let copies = ReplicaCopies::prepare(model_so, effective_replicas)?;
+        let mut loaded = Vec::with_capacity(effective_replicas);
         loaded.push(StanTarget::load(model_so, preload, data, seed)?);
+        #[cfg(not(windows))]
         for copy in &copies.files {
             loaded.push(StanTarget::load(copy, preload, data, seed)?);
         }
@@ -791,11 +1044,18 @@ impl ReplicatedStanTarget {
             replicas: loaded,
             _copies: copies,
             dimension,
+            requested_replicas,
         })
     }
 
+    /// Effective replicas. This is always one on Windows.
     pub fn replicas(&self) -> usize {
         self.replicas.len()
+    }
+
+    /// Replica count requested by the caller before the Windows safety cap.
+    pub fn requested_replicas(&self) -> usize {
+        self.requested_replicas
     }
 
     /// The `bs_model_info` string of the library.
@@ -845,27 +1105,32 @@ impl Target for ReplicatedStanTarget {
         if position.len() != self.dimension || gradient.len() != self.dimension {
             return Err(TargetError::new("position/gradient dimension mismatch"));
         }
-        let n = self.replicas.len();
-        let start = PREFERRED_REPLICA.with(Cell::get) % n;
-        for k in 0..n {
-            let i = (start + k) % n;
-            let r = &self.replicas[i];
-            let guard = match r.serial.try_lock() {
-                Ok(g) => g,
-                Err(TryLockError::Poisoned(p)) => p.into_inner(),
-                Err(TryLockError::WouldBlock) => continue,
-            };
-            PREFERRED_REPLICA.with(|p| p.set(i));
-            r.calls.fetch_add(1, Ordering::Relaxed);
-            let out = r.evaluate(position, gradient);
-            drop(guard);
-            return out;
+        #[cfg(windows)]
+        {
+            self.replicas[0].log_density_gradient(position, gradient)
         }
-        // Every replica is busy (more callers than replicas): wait for ours.
-        let r = &self.replicas[start];
-        let _guard = r.serial.lock().unwrap_or_else(|p| p.into_inner());
-        r.calls.fetch_add(1, Ordering::Relaxed);
-        r.evaluate(position, gradient)
+        #[cfg(not(windows))]
+        {
+            let n = self.replicas.len();
+            let start = PREFERRED_REPLICA.with(Cell::get) % n;
+            for k in 0..n {
+                let i = (start + k) % n;
+                let r = &self.replicas[i];
+                let guard = match r.native.serial.try_lock() {
+                    Ok(g) => g,
+                    Err(TryLockError::Poisoned(p)) => p.into_inner(),
+                    Err(TryLockError::WouldBlock) => continue,
+                };
+                PREFERRED_REPLICA.with(|p| p.set(i));
+                let out = r.evaluate_replica_unlocked(position, gradient);
+                drop(guard);
+                return out;
+            }
+            // Every replica is busy (more callers than replicas): wait for ours.
+            let r = &self.replicas[start];
+            let _guard = r.native.serial.lock().unwrap_or_else(|p| p.into_inner());
+            r.evaluate_replica_unlocked(position, gradient)
+        }
     }
 }
 
@@ -907,6 +1172,8 @@ pub fn default_preload() -> Vec<PathBuf> {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    #[cfg(windows)]
+    use std::{cell::RefCell, thread::ThreadId};
 
     struct DropProbe {
         name: &'static str,
@@ -920,6 +1187,98 @@ mod tests {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .push(self.name);
         }
+    }
+
+    #[cfg(windows)]
+    type OperationLog = Arc<Mutex<Vec<(&'static str, ThreadId)>>>;
+
+    #[cfg(windows)]
+    fn log_operation(log: &OperationLog, operation: &'static str) {
+        log.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push((operation, thread::current().id()));
+    }
+
+    #[cfg(windows)]
+    struct OwnerTlsProbe(OperationLog);
+
+    #[cfg(windows)]
+    impl Drop for OwnerTlsProbe {
+        fn drop(&mut self) {
+            log_operation(&self.0, "tls_destruct");
+        }
+    }
+
+    #[cfg(windows)]
+    thread_local! {
+        #[allow(clippy::missing_const_for_thread_local)]
+        static OWNER_TLS_PROBE: RefCell<Option<OwnerTlsProbe>> = RefCell::new(None);
+    }
+
+    #[cfg(windows)]
+    struct FakeBackend {
+        log: OperationLog,
+        active: Arc<AtomicUsize>,
+    }
+
+    #[cfg(windows)]
+    impl OwnedBackend for FakeBackend {
+        fn metadata(&self) -> WorkerMetadata {
+            log_operation(&self.log, "metadata");
+            log_operation(&self.log, "names");
+            WorkerMetadata {
+                dimension: 2,
+                info: "fake STAN_THREADS=false".into(),
+                unc_names: Some(vec!["a".into(), "b".into()]),
+                threading: Threading::Serialised,
+            }
+        }
+
+        fn evaluate(&mut self, position: &[f64]) -> WorkerReply {
+            log_operation(&self.log, "gradient");
+            if position.first() == Some(&99.0) {
+                panic!("fake native panic");
+            }
+            let mut gradient = position.iter().map(|value| -*value).collect();
+            if position.first().is_some_and(|value| *value < 0.0) {
+                log_operation(&self.log, "error_free");
+                return WorkerReply {
+                    gradient,
+                    outcome: WorkerOutcome::Recoverable("fake domain error".into()),
+                };
+            }
+            gradient.resize(2, 0.0);
+            WorkerReply {
+                gradient,
+                outcome: WorkerOutcome::Success(-0.5 * position.iter().sum::<f64>()),
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for FakeBackend {
+        fn drop(&mut self) {
+            log_operation(&self.log, "model_destruct");
+            self.active.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    #[cfg(windows)]
+    fn start_fake_worker(
+        log: OperationLog,
+        active: Arc<AtomicUsize>,
+    ) -> (OwnedClient, WorkerMetadata) {
+        start_owned_worker(move || {
+            OWNER_TLS_PROBE.with(|probe| {
+                probe.replace(Some(OwnerTlsProbe(Arc::clone(&log))));
+            });
+            for operation in ["preload", "library_load", "symbol_load", "construct"] {
+                log_operation(&log, operation);
+            }
+            active.fetch_add(1, Ordering::SeqCst);
+            Ok(FakeBackend { log, active })
+        })
+        .unwrap()
     }
 
     #[test]
@@ -973,11 +1332,20 @@ mod tests {
 
         let cache = ProcessReplicaCache::create(&root).unwrap();
         let cache_dir = cache.dir.clone();
-        let first = cache.copies(&source, 4).unwrap();
-        let second = cache.copies(&source, 4).unwrap();
+        let first = cache.model_copy(&source).unwrap();
+        let second = cache.model_copy(&source).unwrap();
         assert_eq!(first, second);
-        assert_eq!(first.len(), 3);
-        assert!(first.iter().all(|copy| copy.exists()));
+        assert!(first.exists());
+
+        std::fs::write(&first, b"tampered cached model").unwrap();
+        assert!(cache.model_copy(&source).is_err());
+        std::fs::remove_file(&first).unwrap();
+        let restored = cache.model_copy(&source).unwrap();
+        assert_eq!(restored, first);
+
+        std::fs::write(&source, b"different real content of same-ish size").unwrap();
+        let changed = cache.model_copy(&source).unwrap();
+        assert_ne!(changed, first);
 
         cleanup_stale_cache_dirs(&root, Duration::ZERO);
         assert!(
@@ -992,6 +1360,125 @@ mod tests {
             "a later process may remove an unlocked stale cache"
         );
         let _ = std::fs::remove_dir_all(outer);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owned_worker_runs_native_operations_on_one_thread_and_joins_tls() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let active = Arc::new(AtomicUsize::new(0));
+        let caller = thread::current().id();
+        let (mut client, metadata) = start_fake_worker(Arc::clone(&log), Arc::clone(&active));
+        assert_eq!(metadata.dimension, 2);
+        assert_eq!(
+            metadata.unc_names.as_deref(),
+            Some(&["a".into(), "b".into()][..])
+        );
+
+        let mut gradient = [0.0; 2];
+        let calls = AtomicUsize::new(0);
+        let recoverable = AtomicUsize::new(0);
+        calls.fetch_add(1, Ordering::Relaxed);
+        let success = client.evaluate(&[2.0, 4.0], &mut gradient);
+        record_recoverable(&success, &recoverable);
+        assert_eq!(success.unwrap(), -3.0);
+        assert_eq!(gradient, [-2.0, -4.0]);
+        calls.fetch_add(1, Ordering::Relaxed);
+        let error = client.evaluate(&[-1.0, 0.0], &mut gradient);
+        record_recoverable(&error, &recoverable);
+        assert_eq!(error.unwrap_err().kind(), TargetErrorKind::Recoverable);
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+        assert_eq!(recoverable.load(Ordering::Relaxed), 1);
+
+        thread::scope(|scope| {
+            let handles: Vec<_> = (0..16)
+                .map(|value| {
+                    let client = &client;
+                    scope.spawn(move || {
+                        let mut gradient = [0.0; 2];
+                        client
+                            .evaluate(&[value as f64, 1.0], &mut gradient)
+                            .unwrap()
+                    })
+                })
+                .collect();
+            for handle in handles {
+                assert!(handle.join().unwrap().is_finite());
+            }
+        });
+        client.shutdown();
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+
+        let operations = log.lock().unwrap();
+        let owner = operations[0].1;
+        assert_ne!(owner, caller);
+        assert!(operations.iter().all(|(_, thread)| *thread == owner));
+        let labels: Vec<_> = operations.iter().map(|(operation, _)| *operation).collect();
+        assert!(labels.contains(&"preload"));
+        assert!(labels.contains(&"library_load"));
+        assert!(labels.contains(&"symbol_load"));
+        assert!(labels.contains(&"construct"));
+        assert!(labels.contains(&"metadata"));
+        assert!(labels.contains(&"names"));
+        assert!(labels.contains(&"gradient"));
+        assert!(labels.contains(&"error_free"));
+        let model_drop = labels
+            .iter()
+            .position(|label| *label == "model_destruct")
+            .unwrap();
+        let tls_drop = labels
+            .iter()
+            .position(|label| *label == "tls_destruct")
+            .unwrap();
+        assert!(model_drop < tls_drop);
+        assert_eq!(labels.last(), Some(&"tls_destruct"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owner_panic_becomes_fatal_and_drop_does_not_panic() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let active = Arc::new(AtomicUsize::new(0));
+        let (client, _) = start_fake_worker(log, Arc::clone(&active));
+        let mut gradient = [0.0; 2];
+        let error = client.evaluate(&[99.0, 0.0], &mut gradient).unwrap_err();
+        assert_eq!(error.kind(), TargetErrorKind::Fatal);
+        drop(client);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn load_failure_is_joined_before_return() {
+        struct ExitProbe(Arc<AtomicUsize>);
+        impl Drop for ExitProbe {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let worker_active = Arc::clone(&active);
+        let result = start_owned_worker::<FakeBackend, _>(move || {
+            worker_active.fetch_add(1, Ordering::SeqCst);
+            let _exit = ExitProbe(Arc::clone(&worker_active));
+            Err(LoadError::Invalid("fake load failure".into()))
+        });
+        assert!(result.is_err());
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn repeated_owned_load_drop_leaves_no_workers() {
+        let active = Arc::new(AtomicUsize::new(0));
+        for _ in 0..64 {
+            let log = Arc::new(Mutex::new(Vec::new()));
+            let (client, _) = start_fake_worker(log, Arc::clone(&active));
+            assert_eq!(active.load(Ordering::SeqCst), 1);
+            drop(client);
+            assert_eq!(active.load(Ordering::SeqCst), 0);
+        }
     }
 
     #[cfg(not(windows))]

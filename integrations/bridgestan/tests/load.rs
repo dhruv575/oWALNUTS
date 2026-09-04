@@ -106,7 +106,8 @@ fn replicated_target_agrees_with_serial_and_counts_calls() {
     let Some(m) = model() else { return };
     let so = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models/eight_schools_model.so");
     let pool = ReplicatedStanTarget::load(&so, &default_preload(), Some(DATA), 7, 4).expect("pool");
-    assert_eq!(pool.replicas(), 4);
+    assert_eq!(pool.requested_replicas(), 4);
+    assert_eq!(pool.replicas(), if cfg!(windows) { 1 } else { 4 });
     assert_eq!(pool.dimension(), m.dimension());
     let points: Vec<Vec<f64>> = (0..64)
         .map(|i| {
@@ -186,4 +187,72 @@ fn repeated_model_and_replica_load_drop_remains_evaluable() {
         );
         drop(replicas);
     }
+}
+
+#[test]
+fn external_real_model_owned_worker_has_exact_parallel_parity() {
+    use owalnuts_bridgestan::ReplicatedStanTarget;
+
+    let Some(model_path) = std::env::var_os("OWALNUTS_BRIDGESTAN_REAL_MODEL").map(PathBuf::from)
+    else {
+        eprintln!("skipping: OWALNUTS_BRIDGESTAN_REAL_MODEL is not set");
+        return;
+    };
+    let Some(data_path) = std::env::var_os("OWALNUTS_BRIDGESTAN_REAL_DATA").map(PathBuf::from)
+    else {
+        eprintln!("skipping: OWALNUTS_BRIDGESTAN_REAL_DATA is not set");
+        return;
+    };
+    let data = std::fs::read_to_string(data_path).expect("read external model data");
+    let direct =
+        StanTarget::load(&model_path, &default_preload(), Some(&data), 991).expect("direct load");
+    let replicated =
+        ReplicatedStanTarget::load(&model_path, &default_preload(), Some(&data), 991, 4)
+            .expect("replicated load");
+    assert_eq!(replicated.requested_replicas(), 4);
+    assert_eq!(replicated.replicas(), if cfg!(windows) { 1 } else { 4 });
+    assert_eq!(direct.dimension(), replicated.dimension());
+    assert_eq!(direct.info(), replicated.info());
+    assert_eq!(direct.param_unc_names(), replicated.param_unc_names());
+
+    let dimension = direct.dimension();
+    let (position, expected_value, expected_gradient) =
+        [0.0, 0.1, -0.1, 0.5, -0.5]
+            .into_iter()
+            .find_map(|coordinate| {
+                let position = vec![coordinate; dimension];
+                let mut gradient = vec![0.0; dimension];
+                direct
+                    .log_density_gradient(&position, &mut gradient)
+                    .ok()
+                    .map(|value| (position, value, gradient))
+            })
+            .expect("one deterministic external-model probe is valid");
+
+    let observed: Vec<_> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let position = &position;
+                let replicated = &replicated;
+                scope.spawn(move || {
+                    let mut gradient = vec![0.0; dimension];
+                    let value = replicated
+                        .log_density_gradient(position, &mut gradient)
+                        .unwrap();
+                    (value, gradient)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect()
+    });
+    assert!(
+        observed
+            .iter()
+            .all(|(value, gradient)| *value == expected_value
+                && *gradient == expected_gradient)
+    );
+    assert_eq!(replicated.calls(), 16);
 }

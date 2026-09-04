@@ -41,34 +41,35 @@ Measurements: `STUDIES/posteriordb_bench_v1/artifacts/wall-gap/README.md`.
 A library built without `STAN_THREADS` has one global autodiff stack per
 *loaded module*, so a single `StanTarget` serialises its evaluations through
 a mutex (shared by every `StanTarget` loaded from the same file) and reports
-`Threading::Serialised`. For multi-chain sampling use
-`ReplicatedStanTarget::load(so, preload, data, seed, threads)`: it copies
-the library to `threads - 1` distinct paths (distinct paths are distinct
-modules with their own autodiff stack), loads each, and dispatches every call
-to a free replica (one uncontended `try_lock`, ~50 ns). With as many replicas
-as calling threads no evaluation ever waits; measured
-per-thread cost with 4 threads is within 5-10% of the single-thread cost.
+`Threading::Serialised`. Off Windows,
+`ReplicatedStanTarget::load(so, preload, data, seed, threads)` copies the
+library to distinct paths and dispatches calls to free replicas. On Windows
+it records the requested count but deliberately uses one effective owned
+worker; `requested_replicas()` and `replicas()` expose both values.
+Multi-worker Windows execution is out of scope until separately qualified.
 
 ## Native-library lifetime
 
-On Windows, BridgeStan model DLLs and preload DLLs are intentionally resident
-until process exit. `StanTarget` model objects are still destructed normally,
-before their library references are dropped. The process registry reuses one
-loaded handle per canonical path, preventing repeated load/drop from
-repeatedly mapping the same module. This avoids unloading code while a native
-thread-local destructor callback may still refer to it. On Linux and macOS,
-libraries retain their previous unload-on-drop behavior.
+On Windows, `StanTarget::load` creates one dedicated OS thread. Library and
+symbol loading, model construction, metadata and names, gradients, native
+error freeing, and model destruction occur only on that thread. Caller and
+Rayon threads exchange bounded requests with it. Drop sends shutdown and
+joins without propagating a worker panic; therefore model destruction and the
+owner's native TLS teardown complete before drop returns. A disconnected or
+panicked worker is a fatal target error.
 
-Windows replica copies live in a process-private, SHA-256 content-addressed
-cache. Repeated loads of the same model and replica index reuse both path and
-resident module, so memory and files do not grow with load/drop cycles. Memory
-does grow until process exit for each distinct model content and highest
-replica count loaded. The original model and preload source files, plus cache
-copies, can remain locked by Windows while mapped. Cache directories hold an
-exclusive lease; later processes remove directories at least one hour old
-only after acquiring that lease, so active-process files are not deleted.
-Off Windows, replica copies remain per-target temporary files and are deleted
-after the model modules unload on drop.
+Windows model and preload DLL handles remain process-resident, preventing TLS
+callbacks from reaching unloaded code. A model is first copied into a
+process-private cache whose identity is a freshly computed SHA-256 of its
+contents; existing copies are rehashed before reuse. The source model is
+closed after hashing/copying and is not kept mapped or locked. The cached
+model and preload DLLs can remain locked, and native module memory remains
+until process exit for each distinct model/preload loaded. Cache directories
+hold an exclusive lease; later processes remove directories at least one hour
+old only after acquiring the lease. Repeated same-content loads reuse one
+cached path and resident module, so load/drop cycles do not create unbounded
+files or mappings. On Linux and macOS direct calls, unload-on-drop behavior,
+and per-target replica cleanup are unchanged.
 
 ## Use
 

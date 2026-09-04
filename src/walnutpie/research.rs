@@ -832,14 +832,6 @@ pub fn sample_chains_projected_arrowhead<T: Target>(
         .ok_or_else(Error::overflow)?;
     let failed_chain = AtomicUsize::new(usize::MAX);
     let threads = max_threads.get().min(chains);
-    let pool = (threads > 1)
-        .then(|| {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build()
-                .map_err(|_| Error::resource("could not create bounded Rayon pool"))
-        })
-        .transpose()?;
     let mut states = initial_positions
         .iter()
         .enumerate()
@@ -906,8 +898,10 @@ pub fn sample_chains_projected_arrowhead<T: Target>(
             }
             result
         };
-        let results: Vec<Result<ChainOutput, Error>> = if let Some(pool) = &pool {
-            pool.install(|| states.par_iter_mut().enumerate().map(execute).collect())
+        let results: Vec<Result<ChainOutput, Error>> = if threads > 1 {
+            with_scoped_pool(threads, |pool| {
+                pool.install(|| states.par_iter_mut().enumerate().map(execute).collect())
+            })?
         } else {
             states.iter_mut().enumerate().map(execute).collect()
         };
@@ -1203,11 +1197,7 @@ pub fn sample_chains_direct_original_q<T: Target>(
             .map(|(chain, position)| execute(chain, position))
             .collect::<Vec<_>>()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
-        catch_unwind(AssertUnwindSafe(|| {
+        with_scoped_pool(threads, |pool| {
             pool.install(|| {
                 initial_positions
                     .par_iter()
@@ -1215,8 +1205,7 @@ pub fn sample_chains_direct_original_q<T: Target>(
                     .map(|(chain, position)| execute(chain, position))
                     .collect::<Vec<_>>()
             })
-        }))
-        .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+        })?
     };
     let mut chains = Vec::with_capacity(results.len());
     for result in results {
