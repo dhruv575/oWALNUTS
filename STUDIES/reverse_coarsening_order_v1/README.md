@@ -5,11 +5,13 @@ evidence**.
 
 Controlling review clarifications, in order:
 [`AMENDMENT-1.md`](AMENDMENT-1.md), then
-[`AMENDMENT-2.md`](AMENDMENT-2.md). The later amendment controls conflicts,
-freezes direct typed comparison and zero-work handling, and pins the WP37A
-Funnel/Gaussian source. A pass can qualify only explicit Rust opt-ins for
-deterministic finite-or-recoverable targets. No generic, walnutpie, high-level
-sampler, or Python default may change.
+[`AMENDMENT-2.md`](AMENDMENT-2.md), then final
+[`AMENDMENT-3.md`](AMENDMENT-3.md). The latest amendment controls conflicts,
+freezes exact callback accounting, target configuration, and fatal locations,
+and corrects the nonexistent A9 reference. No further protocol amendment is
+expected. A pass can qualify only explicit Rust opt-ins for deterministic
+finite-or-recoverable targets. No generic, walnutpie, high-level sampler, or
+Python default may change.
 
 `PREREGISTRATION.md` and `protocol.json` freeze a two-arm mechanical study of
 reverse-level traversal at fixed `delta = 1`:
