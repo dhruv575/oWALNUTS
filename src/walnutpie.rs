@@ -8133,6 +8133,30 @@ pub fn sample_block_dense<T: Target>(
     Ok(output)
 }
 
+/// Build a run-local Rayon pool whose operating-system threads are joined
+/// before this helper returns. Joining the scoped threads also completes their
+/// native TLS destructors before a caller can drop a target backed by a DLL.
+fn with_scoped_pool<R>(
+    threads: usize,
+    operation: impl FnOnce(&rayon::ThreadPool) -> R,
+) -> Result<R, Error> {
+    with_scoped_pool_using(threads, |worker| worker.run(), operation)
+}
+
+fn with_scoped_pool_using<R>(
+    threads: usize,
+    worker_wrapper: impl Fn(rayon::ThreadBuilder) + Sync,
+    operation: impl FnOnce(&rayon::ThreadPool) -> R,
+) -> Result<R, Error> {
+    catch_unwind(AssertUnwindSafe(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build_scoped(worker_wrapper, operation)
+    }))
+    .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+    .map_err(|_| Error::resource("could not create bounded Rayon pool"))
+}
+
 /// Sample explicitly initialized chains using a frozen block-diagonal metric.
 pub fn sample_chains_block_dense<T: Target>(
     target: &T,
@@ -8177,11 +8201,7 @@ pub fn sample_chains_block_dense<T: Target>(
             .map(|(chain, position)| execute(chain, position))
             .collect::<Vec<_>>()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
-        catch_unwind(AssertUnwindSafe(|| {
+        with_scoped_pool(threads, |pool| {
             pool.install(|| {
                 initial_positions
                     .par_iter()
@@ -8189,8 +8209,7 @@ pub fn sample_chains_block_dense<T: Target>(
                     .map(|(chain, position)| execute(chain, position))
                     .collect::<Vec<_>>()
             })
-        }))
-        .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+        })?
     };
     let mut chains = Vec::with_capacity(results.len());
     for result in results {
@@ -8671,12 +8690,7 @@ pub fn sample_chains_dense_with_control<T: Target>(
             .map(|(chain, position)| execute(chain, position))
             .collect()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
-        catch_unwind(AssertUnwindSafe(|| pool.install(run)))
-            .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+        with_scoped_pool(threads, |pool| pool.install(run))?
     };
     let mut chains = Vec::with_capacity(results.len());
     for result in results {
@@ -9548,11 +9562,7 @@ pub fn sample_chains_structured_refresh<T: Target>(
             .map(|(chain, position)| execute(chain, position))
             .collect::<Vec<_>>()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
-        catch_unwind(AssertUnwindSafe(|| {
+        with_scoped_pool(threads, |pool| {
             pool.install(|| {
                 initial_positions
                     .par_iter()
@@ -9560,8 +9570,7 @@ pub fn sample_chains_structured_refresh<T: Target>(
                     .map(|(chain, position)| execute(chain, position))
                     .collect::<Vec<_>>()
             })
-        }))
-        .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+        })?
     };
     let mut chains = Vec::with_capacity(results.len());
     let mut metric_updates = Vec::with_capacity(results.len());
@@ -9777,12 +9786,7 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
             .map(|(chain, position)| execute(chain, position))
             .collect()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
-        catch_unwind(AssertUnwindSafe(|| pool.install(run)))
-            .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+        with_scoped_pool(threads, |pool| pool.install(run))?
     };
     let mut chains = Vec::with_capacity(results.len());
     for result in results {
@@ -9948,12 +9952,7 @@ fn sample_chains_validated<T: Target>(
             .map(|(chain, position)| execute(chain, position))
             .collect::<Vec<_>>()
     } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|_| Error::resource("could not create bounded Rayon pool"))?;
-        catch_unwind(AssertUnwindSafe(|| pool.install(run)))
-            .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?
+        with_scoped_pool(threads, |pool| pool.install(run))?
     };
     let mut chains = Vec::with_capacity(results.len());
     for result in results {
@@ -10677,23 +10676,6 @@ fn sample_chains_rescued<'a, T: Target>(
         .checked_add(config.retained)
         .ok_or_else(Error::overflow)?;
     let chains = initial_positions.len();
-    let mut slots: Vec<RescueSlot<'a, T>> = (0..chains)
-        .map(|_| RescueSlot {
-            run: None,
-            error: None,
-        })
-        .collect();
-    let mut streaks = vec![ChainRescueStreak::default(); chains];
-    let pool = if threads == 1 {
-        None
-    } else {
-        Some(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build()
-                .map_err(|_| Error::resource("could not create bounded Rayon pool"))?,
-        )
-    };
     let segment = |slot: &mut RescueSlot<'a, T>, chain: usize, end: usize| {
         if slot.error.is_some() {
             return;
@@ -10730,56 +10712,70 @@ fn sample_chains_rescued<'a, T: Target>(
             slot.error = Some(error);
         }
     };
-    let run_segment = |slots: &mut Vec<RescueSlot<'a, T>>, end: usize| -> Result<(), Error> {
-        match &pool {
-            None => slots
-                .iter_mut()
-                .enumerate()
-                .for_each(|(chain, slot)| segment(slot, chain, end)),
-            Some(pool) => catch_unwind(AssertUnwindSafe(|| {
-                pool.install(|| {
-                    slots
-                        .par_iter_mut()
-                        .enumerate()
-                        .for_each(|(chain, slot)| segment(slot, chain, end));
-                })
-            }))
-            .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?,
-        }
-        for slot in slots.iter_mut() {
-            if let Some(error) = slot.error.take() {
-                return Err(error);
+    let run = |pool: Option<&rayon::ThreadPool>| -> Result<MultiChainOutput, Error> {
+        let mut slots: Vec<RescueSlot<'a, T>> = (0..chains)
+            .map(|_| RescueSlot {
+                run: None,
+                error: None,
+            })
+            .collect();
+        let mut streaks = vec![ChainRescueStreak::default(); chains];
+        let run_segment = |slots: &mut Vec<RescueSlot<'a, T>>, end: usize| -> Result<(), Error> {
+            match pool {
+                None => slots
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(chain, slot)| segment(slot, chain, end)),
+                Some(pool) => catch_unwind(AssertUnwindSafe(|| {
+                    pool.install(|| {
+                        slots
+                            .par_iter_mut()
+                            .enumerate()
+                            .for_each(|(chain, slot)| segment(slot, chain, end));
+                    })
+                }))
+                .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?,
             }
+            for slot in slots.iter_mut() {
+                if let Some(error) = slot.error.take() {
+                    return Err(error);
+                }
+            }
+            Ok(())
+        };
+        for (window_index, window) in schedule.windows.iter().enumerate() {
+            if window.is_empty() || window.end > config.discarded {
+                continue;
+            }
+            run_segment(&mut slots, window.end)?;
+            rescue_boundary(
+                &mut slots,
+                window_index,
+                window.end - 1,
+                warmup,
+                rescue,
+                &mut streaks,
+            )?;
         }
-        Ok(())
+        run_segment(&mut slots, transitions)?;
+        let mut outputs = Vec::with_capacity(chains);
+        for (chain, slot) in slots.into_iter().enumerate() {
+            let run = slot
+                .run
+                .ok_or_else(|| Error::new(ErrorKind::Internal, "chain never started"))?;
+            outputs.push(run.finish().map_err(|error| error.at_chain(chain))?);
+        }
+        Ok(MultiChainOutput {
+            chains: outputs,
+            base_seed: config.seed,
+            algorithm_revision: ALGORITHM_REVISION,
+        })
     };
-    for (window_index, window) in schedule.windows.iter().enumerate() {
-        if window.is_empty() || window.end > config.discarded {
-            continue;
-        }
-        run_segment(&mut slots, window.end)?;
-        rescue_boundary(
-            &mut slots,
-            window_index,
-            window.end - 1,
-            warmup,
-            rescue,
-            &mut streaks,
-        )?;
+    if threads == 1 {
+        run(None)
+    } else {
+        with_scoped_pool(threads, |pool| run(Some(pool)))?
     }
-    run_segment(&mut slots, transitions)?;
-    let mut outputs = Vec::with_capacity(chains);
-    for (chain, slot) in slots.into_iter().enumerate() {
-        let run = slot
-            .run
-            .ok_or_else(|| Error::new(ErrorKind::Internal, "chain never started"))?;
-        outputs.push(run.finish().map_err(|error| error.at_chain(chain))?);
-    }
-    Ok(MultiChainOutput {
-        chains: outputs,
-        base_seed: config.seed,
-        algorithm_revision: ALGORITHM_REVISION,
-    })
 }
 
 /// Sample multiple chains from the same exact initial position. No jitter is added.
@@ -10865,8 +10861,22 @@ pub(crate) fn splitmix64(mut value: u64) -> u64 {
 mod tests {
     use super::*;
     use crate::kernel::{ScriptedTransitionRng, TransitionDraw, transition_w_with_telemetry};
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize};
     use std::thread;
+
+    struct TlsDropProbe(Arc<AtomicUsize>);
+
+    impl Drop for TlsDropProbe {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    thread_local! {
+        static SCOPED_POOL_TLS_PROBE: std::cell::RefCell<Option<TlsDropProbe>> =
+            std::cell::RefCell::new(None);
+    }
 
     struct Gaussian(usize);
 
@@ -10889,6 +10899,30 @@ mod tests {
 
     fn config(seed: u64) -> RunConfig {
         RunConfig::new(2, NonZeroUsize::new(5).unwrap(), seed)
+    }
+
+    #[test]
+    fn scoped_pool_completes_worker_tls_destructors_before_return() {
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let started = Arc::new(AtomicUsize::new(0));
+        with_scoped_pool_using(
+            4,
+            |worker| {
+                SCOPED_POOL_TLS_PROBE.with(|probe| {
+                    probe.replace(Some(TlsDropProbe(Arc::clone(&dropped))));
+                });
+                started.fetch_add(1, Ordering::SeqCst);
+                worker.run();
+                SCOPED_POOL_TLS_PROBE.with(|probe| drop(probe.take()));
+            },
+            |pool| {
+                pool.broadcast(|_| ());
+                assert_eq!(started.load(Ordering::SeqCst), 4);
+                assert_eq!(dropped.load(Ordering::SeqCst), 0);
+            },
+        )
+        .unwrap();
+        assert_eq!(dropped.load(Ordering::SeqCst), 4);
     }
 
     #[test]
