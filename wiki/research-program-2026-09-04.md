@@ -1,6 +1,6 @@
 # Research program 2026-09-04: the 0.2 program — make it usable, then make it competitive
 
-Status: **complete through WP36 and the append-only Windows BridgeStan
+Status: **complete through WP37A and the append-only Windows BridgeStan
 lifetime diagnostics; no sampling is running.** Everything described here is
 committed in the current `0.2.0` release tree; nothing is pushed, tagged or
 published. The owned-one-worker mitigation passed its final Windows GNU
@@ -9,7 +9,7 @@ package/wheel verification. The historical native root cause is not proven.
 Companion documents:
 `research-program-2026-08-31.md`
 (the programme that produced `0.1.0-beta.2`), `research-ledger-2026-08-31.md`
-(one checksummed entry per study, WP22–WP36, including subordinate WP35A),
+(one checksummed entry per study, WP22–WP37A, including subordinate WP35A),
 `release-0.2.0.md`.
 
 ## What this programme was
@@ -27,7 +27,7 @@ work, diagnostics and export, and a README rewrite.
 
 Items 1, 4, 5, 6 and 7 were engineering and are done. Item 2 turned out to be
 the programme: the benchmark falsified far more than it confirmed, and every
-subsequent study (WP24–WP36) exists because of something it found. Item 3 was
+subsequent study (WP24–WP37A) exists because of something it found. Item 3 was
 answered **no** by its own evidence.
 
 ## What is in the release tree
@@ -189,6 +189,17 @@ arm loses per gradient. Where oWALNUTS is furthest behind CmdStan (`accel_gp`
 reverse-coarsening stop, which ends 10–54% of transitions there against 0.8–7%
 on the regressions.
 
+**Fixed `delta = 2` is not qualified for the preregistered adaptive-to-2 path
+(WP37A).** All 84 funnel, strict noncentered Eight Schools and analytic 100-D
+Gaussian children were one-shot valid. F1, F2, F5, E1–E4 and G1–G4 passed;
+F3 and F4 failed. Funnel pooled accuracy passed, and fixed2 had 13 retained
+divergences across six seeds versus fixed1's 14 across four, but each arm had
+only 2/12 healthy seeds and the healthy sets were disjoint. Eight Schools E3
+was 1.0478 and Gaussian G3 was 1.0168. The mechanical decision is
+**`FIXED2_NOT_QUALIFIED_FOR_ADAPTIVE_TO_2`**. This blocks only WP37A's naive
+adaptive-to-2 path, not every possible target-adaptive rule. No implementation
+or default change is authorised by this study.
+
 The honest conclusion is a statement about the target class. **WALNUTS wins
 where stiffness is localised** — Neal's funnel, the T=1000 state-space path,
 `gp_pois_regr` and the centered eight schools, where the NUTS implementations
@@ -198,7 +209,7 @@ oWALNUTS finishes cleanly where CmdStan and nutpie leave a chain stuck or
 divergent, while still spending more gradients per effective sample on healthy
 models (0.67–0.95x).
 
-## Open investigations after WP36, in priority order
+## Open investigations after WP37A, in priority order
 
 1. **Qualify the narrow BridgeStan mitigation beyond Windows GNU.** WP35A and
    WP36 reproduced the replicated-target failure class; the first
@@ -215,25 +226,23 @@ models (0.67–0.95x).
    `StanTarget` use is mitigation-qualified only on Windows GNU; Windows
    Python `from_stan` and direct Python BridgeStan remain disabled.
    Publication remains blocked until this matrix is complete.
-3. **Optional rescue research, not a default.** WP36 resolves the 0.2 default:
+3. **A semantics-preserving cheaper reverse-coarsening check at fixed
+   `delta = 1`.** This is the next kernel study after the external release
+   gates. Reverse-coarsening is the named residual on the hard models: WP30
+   measured it at 3–7% of orbits on regressions and WP34 at 10–54% on the four
+   worst models, and it is the difference between 0.90x and 0.95x of reference
+   NUTS. The study must preserve sampler semantics and leave defaults unchanged.
+4. **Further target-adaptive `delta` research, after reverse-coarsening.**
+   WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
+   fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.
+   The result does not rule out every target-adaptive rule that could reach 2,
+   but no such rule is next in the kernel queue or authorised for implementation.
+5. **Optional rescue research, not a default.** WP36 resolves the 0.2 default:
    no automatic cross-chain action. A future study may test an observe-only
    warning or a narrowly scoped step-only action. It must preserve original
    chain attribution and retain the origin classifier limitation: WP36 found
    only pathological/frozen ARMA and `lotka_volterra` origins and zero HMM
    origins, so it provides no proof of genuine mode destruction.
-4. **Adaptive `delta`.** WP34's near-miss arm is
-   1.070x over 17 models and 1.077x on the healthy ones at the *same* step and
-   the same 42 gates, taking the CmdStan ratio from 0.850x to 0.915x;
-   `da06-d2` reaches 1.122x on the healthy models. Both fail the preregistered
-   no-model-below-0.85x clause only on `accel_gp` (0.68x and 0.22x), the model
-   whose 54% reverse-coarsening rate means refinement is doing real work there.
-   The right experiment is `delta` adapted per target from the observed `|dH|`
-   distribution rather than a fixed constant, with the funnel and Eight Schools
-   side checks that WP34 did not get to run.
-5. **A cheaper reverse-coarsening check.** This is now the named residual on the
-   hard models: WP30 measured it at 3–7% of orbits on regressions and WP34 at
-   10–54% on the four worst models, and it is the difference between 0.90x and
-   0.95x of reference NUTS.
 
 ## Method notes worth keeping
 

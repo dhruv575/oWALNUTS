@@ -1,0 +1,1508 @@
+{
+  "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "baseline": {
+    "commit": "443e86a3bb053ed1a2a1560caca5266427a3b35c",
+    "tree": "b534495caf9fd8de5aa8f76a6d84be60a79e52eb"
+  },
+  "binary": {
+    "bytes": 5836891,
+    "path": "target/release/delta2-sidechecks-v1.exe",
+    "sha256": "d1a6c05083a00660dd2a15f314321b5e7678685bd85f262fc1ac18713662749c"
+  },
+  "binary_build": {
+    "command": "cargo +1.88.0-x86_64-pc-windows-gnu build --release --locked --manifest-path C:\\dev\\owalnuts-wt\\delta2-sidechecks\\STUDIES\\delta2_sidechecks_v1\\Cargo.toml",
+    "embedded_commit": "e91458dca1aa7944b07c65514ad2313b4a60cd4d",
+    "embedded_tree": "8e32afadf0a5688cc42107d499ab41c881b7d6fe",
+    "target": "x86_64-pc-windows-gnu"
+  },
+  "cargo_lock": {
+    "bytes": 9773,
+    "path": "Cargo.lock",
+    "sha256": "2d4f93673186e1dbe7099dc6fcf2625ac947e619025883c15a6ea46995828438"
+  },
+  "cargo_version": "cargo 1.88.0 (873a06493 2025-05-10)",
+  "conformance": {
+    "bytes": 17565,
+    "path": "CONFORMANCE.json",
+    "sha256": "af9c5dea95a2e2a2883fe85af2d570f2fc95087805ebf197b9a4621813fc0472"
+  },
+  "created_utc": "2026-09-04T18:45:50.484153Z",
+  "effective_configs": {
+    "eight_schools_strict/fixed1": {
+      "config": {
+        "adaptation": {
+          "chain_rescue": null,
+          "inherits_default_chain_rescue": false,
+          "kind": "dual_averaging",
+          "mass_adaptation": true,
+          "step_size_adaptation": true,
+          "target_acceptance": 0.95,
+          "warmup_exhaustion": "AcceptUnlessDivergent"
+        },
+        "admission": "exact worst-case TargetEvaluationAdmissionLimit",
+        "arm": "fixed1",
+        "cache_initial_evaluation": false,
+        "callback_cap": 10000000,
+        "chains": 4,
+        "current_final_default_assertions": {
+          "DEFAULT_CHAIN_RESCUE": null,
+          "DEFAULT_METRIC_REGULARIZATION": "Stan",
+          "DEFAULT_U_TURN_RULE": "MomentumSum",
+          "DEFAULT_WARMUP_EXHAUSTION": "AcceptUnlessDivergent",
+          "Tuning::default.divergence_threshold": 1000.0,
+          "Tuning::default.max_error": 1.0,
+          "Tuning::default.max_refinement_levels": 8,
+          "Tuning::default.max_tree_depth": 10,
+          "Tuning::default.min_micro_steps": 1,
+          "Tuning::default.step_size": 0.5
+        },
+        "dimension": 10,
+        "kernel": {
+          "divergence_threshold": 1000.0,
+          "initial_step_size": 0.3,
+          "max_error": 1.0,
+          "max_refinement_levels": 8,
+          "max_tree_depth": 8,
+          "min_micro_steps": 1,
+          "retained_exhaustion_rule": "Stop",
+          "u_turn_rule": "MomentumSum"
+        },
+        "metric": {
+          "initial": "identity",
+          "kind": "adapted diagonal",
+          "regularization": "Stan"
+        },
+        "only_arm_difference": "kernel.max_error",
+        "retained": 1000,
+        "sampler_boundary": "walnutpie::sample_chains_with_target_budget",
+        "schema": "owalnuts-delta2-sidechecks-v1-effective-config",
+        "starts_or_initializer": {
+          "kind": "fixed",
+          "positions": [
+            [
+              0.0,
+              -2.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          ]
+        },
+        "target": "eight_schools_strict",
+        "threads": 1,
+        "timeout_seconds": 900,
+        "warmup": 1000
+      },
+      "sha256": "e6584579a295b14bff4e363fd65b279b597196a1c6c9e2b0ca12b949f952ef17"
+    },
+    "eight_schools_strict/fixed2": {
+      "config": {
+        "adaptation": {
+          "chain_rescue": null,
+          "inherits_default_chain_rescue": false,
+          "kind": "dual_averaging",
+          "mass_adaptation": true,
+          "step_size_adaptation": true,
+          "target_acceptance": 0.95,
+          "warmup_exhaustion": "AcceptUnlessDivergent"
+        },
+        "admission": "exact worst-case TargetEvaluationAdmissionLimit",
+        "arm": "fixed2",
+        "cache_initial_evaluation": false,
+        "callback_cap": 10000000,
+        "chains": 4,
+        "current_final_default_assertions": {
+          "DEFAULT_CHAIN_RESCUE": null,
+          "DEFAULT_METRIC_REGULARIZATION": "Stan",
+          "DEFAULT_U_TURN_RULE": "MomentumSum",
+          "DEFAULT_WARMUP_EXHAUSTION": "AcceptUnlessDivergent",
+          "Tuning::default.divergence_threshold": 1000.0,
+          "Tuning::default.max_error": 1.0,
+          "Tuning::default.max_refinement_levels": 8,
+          "Tuning::default.max_tree_depth": 10,
+          "Tuning::default.min_micro_steps": 1,
+          "Tuning::default.step_size": 0.5
+        },
+        "dimension": 10,
+        "kernel": {
+          "divergence_threshold": 1000.0,
+          "initial_step_size": 0.3,
+          "max_error": 2.0,
+          "max_refinement_levels": 8,
+          "max_tree_depth": 8,
+          "min_micro_steps": 1,
+          "retained_exhaustion_rule": "Stop",
+          "u_turn_rule": "MomentumSum"
+        },
+        "metric": {
+          "initial": "identity",
+          "kind": "adapted diagonal",
+          "regularization": "Stan"
+        },
+        "only_arm_difference": "kernel.max_error",
+        "retained": 1000,
+        "sampler_boundary": "walnutpie::sample_chains_with_target_budget",
+        "schema": "owalnuts-delta2-sidechecks-v1-effective-config",
+        "starts_or_initializer": {
+          "kind": "fixed",
+          "positions": [
+            [
+              0.0,
+              -2.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          ]
+        },
+        "target": "eight_schools_strict",
+        "threads": 1,
+        "timeout_seconds": 900,
+        "warmup": 1000
+      },
+      "sha256": "edcd54342e3214060c374fc9ddcd0c5b837e6c995ea4bb921de0e9f7a9727be5"
+    },
+    "funnel/fixed1": {
+      "config": {
+        "adaptation": {
+          "chain_rescue": null,
+          "inherits_default_chain_rescue": false,
+          "kind": "dual_averaging",
+          "mass_adaptation": true,
+          "step_size_adaptation": true,
+          "target_acceptance": 0.8,
+          "warmup_exhaustion": "AcceptUnlessDivergent"
+        },
+        "admission": "Limits::admit_worst_case()",
+        "arm": "fixed1",
+        "cache_initial_evaluation": true,
+        "callback_cap": null,
+        "chains": 4,
+        "current_final_default_assertions": {
+          "DEFAULT_CHAIN_RESCUE": null,
+          "DEFAULT_METRIC_REGULARIZATION": "Stan",
+          "DEFAULT_U_TURN_RULE": "MomentumSum",
+          "DEFAULT_WARMUP_EXHAUSTION": "AcceptUnlessDivergent",
+          "Tuning::default.divergence_threshold": 1000.0,
+          "Tuning::default.max_error": 1.0,
+          "Tuning::default.max_refinement_levels": 8,
+          "Tuning::default.max_tree_depth": 10,
+          "Tuning::default.min_micro_steps": 1,
+          "Tuning::default.step_size": 0.5
+        },
+        "dimension": 10,
+        "kernel": {
+          "divergence_threshold": 1000.0,
+          "initial_step_size": 0.5,
+          "max_error": 1.0,
+          "max_refinement_levels": 8,
+          "max_tree_depth": 10,
+          "min_micro_steps": 1,
+          "retained_exhaustion_rule": "Stop",
+          "u_turn_rule": "MomentumSum"
+        },
+        "metric": {
+          "initial": "identity",
+          "kind": "adapted diagonal",
+          "regularization": "Stan"
+        },
+        "only_arm_difference": "kernel.max_error",
+        "retained": 20000,
+        "sampler_boundary": "owalnuts::sampler::Sampler",
+        "schema": "owalnuts-delta2-sidechecks-v1-effective-config",
+        "starts_or_initializer": {
+          "kind": "fixed",
+          "positions": [
+            [
+              -3.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          ]
+        },
+        "target": "funnel",
+        "threads": 4,
+        "timeout_seconds": 3600,
+        "warmup": 2000
+      },
+      "sha256": "68d3af1996c86c1300158b0230619f43bd3fce60726abec1090cd8d433a81015"
+    },
+    "funnel/fixed2": {
+      "config": {
+        "adaptation": {
+          "chain_rescue": null,
+          "inherits_default_chain_rescue": false,
+          "kind": "dual_averaging",
+          "mass_adaptation": true,
+          "step_size_adaptation": true,
+          "target_acceptance": 0.8,
+          "warmup_exhaustion": "AcceptUnlessDivergent"
+        },
+        "admission": "Limits::admit_worst_case()",
+        "arm": "fixed2",
+        "cache_initial_evaluation": true,
+        "callback_cap": null,
+        "chains": 4,
+        "current_final_default_assertions": {
+          "DEFAULT_CHAIN_RESCUE": null,
+          "DEFAULT_METRIC_REGULARIZATION": "Stan",
+          "DEFAULT_U_TURN_RULE": "MomentumSum",
+          "DEFAULT_WARMUP_EXHAUSTION": "AcceptUnlessDivergent",
+          "Tuning::default.divergence_threshold": 1000.0,
+          "Tuning::default.max_error": 1.0,
+          "Tuning::default.max_refinement_levels": 8,
+          "Tuning::default.max_tree_depth": 10,
+          "Tuning::default.min_micro_steps": 1,
+          "Tuning::default.step_size": 0.5
+        },
+        "dimension": 10,
+        "kernel": {
+          "divergence_threshold": 1000.0,
+          "initial_step_size": 0.5,
+          "max_error": 2.0,
+          "max_refinement_levels": 8,
+          "max_tree_depth": 10,
+          "min_micro_steps": 1,
+          "retained_exhaustion_rule": "Stop",
+          "u_turn_rule": "MomentumSum"
+        },
+        "metric": {
+          "initial": "identity",
+          "kind": "adapted diagonal",
+          "regularization": "Stan"
+        },
+        "only_arm_difference": "kernel.max_error",
+        "retained": 20000,
+        "sampler_boundary": "owalnuts::sampler::Sampler",
+        "schema": "owalnuts-delta2-sidechecks-v1-effective-config",
+        "starts_or_initializer": {
+          "kind": "fixed",
+          "positions": [
+            [
+              -3.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          ]
+        },
+        "target": "funnel",
+        "threads": 4,
+        "timeout_seconds": 3600,
+        "warmup": 2000
+      },
+      "sha256": "bf1f818b15d2fea546311af05f6605d9233ecbd950d0865adce986b73503d6fe"
+    },
+    "gaussian100/fixed1": {
+      "config": {
+        "adaptation": {
+          "chain_rescue": null,
+          "inherits_default_chain_rescue": false,
+          "kind": "dual_averaging",
+          "mass_adaptation": true,
+          "step_size_adaptation": true,
+          "target_acceptance": 0.8,
+          "warmup_exhaustion": "AcceptUnlessDivergent"
+        },
+        "admission": "Limits::admit_worst_case()",
+        "arm": "fixed1",
+        "cache_initial_evaluation": true,
+        "callback_cap": null,
+        "chains": 4,
+        "current_final_default_assertions": {
+          "DEFAULT_CHAIN_RESCUE": null,
+          "DEFAULT_METRIC_REGULARIZATION": "Stan",
+          "DEFAULT_U_TURN_RULE": "MomentumSum",
+          "DEFAULT_WARMUP_EXHAUSTION": "AcceptUnlessDivergent",
+          "Tuning::default.divergence_threshold": 1000.0,
+          "Tuning::default.max_error": 1.0,
+          "Tuning::default.max_refinement_levels": 8,
+          "Tuning::default.max_tree_depth": 10,
+          "Tuning::default.min_micro_steps": 1,
+          "Tuning::default.step_size": 0.5
+        },
+        "dimension": 100,
+        "kernel": {
+          "divergence_threshold": 1000.0,
+          "initial_step_size": 0.5,
+          "max_error": 1.0,
+          "max_refinement_levels": 8,
+          "max_tree_depth": 10,
+          "min_micro_steps": 1,
+          "retained_exhaustion_rule": "Stop",
+          "u_turn_rule": "MomentumSum"
+        },
+        "metric": {
+          "initial": "identity",
+          "kind": "adapted diagonal",
+          "regularization": "Stan"
+        },
+        "only_arm_difference": "kernel.max_error",
+        "retained": 1000,
+        "sampler_boundary": "owalnuts::sampler::Sampler",
+        "schema": "owalnuts-delta2-sidechecks-v1-effective-config",
+        "starts_or_initializer": {
+          "distribution": "uniform(-2,2)",
+          "kind": "Init::uniform",
+          "max_attempts": 100,
+          "radius": 2.0,
+          "seeded": true
+        },
+        "target": "gaussian100",
+        "threads": 4,
+        "timeout_seconds": 600,
+        "warmup": 1000
+      },
+      "sha256": "367b1e7f78757e2bcb1a5a7242fe942861b5d35a958adbe4b9f4e155df2047ff"
+    },
+    "gaussian100/fixed2": {
+      "config": {
+        "adaptation": {
+          "chain_rescue": null,
+          "inherits_default_chain_rescue": false,
+          "kind": "dual_averaging",
+          "mass_adaptation": true,
+          "step_size_adaptation": true,
+          "target_acceptance": 0.8,
+          "warmup_exhaustion": "AcceptUnlessDivergent"
+        },
+        "admission": "Limits::admit_worst_case()",
+        "arm": "fixed2",
+        "cache_initial_evaluation": true,
+        "callback_cap": null,
+        "chains": 4,
+        "current_final_default_assertions": {
+          "DEFAULT_CHAIN_RESCUE": null,
+          "DEFAULT_METRIC_REGULARIZATION": "Stan",
+          "DEFAULT_U_TURN_RULE": "MomentumSum",
+          "DEFAULT_WARMUP_EXHAUSTION": "AcceptUnlessDivergent",
+          "Tuning::default.divergence_threshold": 1000.0,
+          "Tuning::default.max_error": 1.0,
+          "Tuning::default.max_refinement_levels": 8,
+          "Tuning::default.max_tree_depth": 10,
+          "Tuning::default.min_micro_steps": 1,
+          "Tuning::default.step_size": 0.5
+        },
+        "dimension": 100,
+        "kernel": {
+          "divergence_threshold": 1000.0,
+          "initial_step_size": 0.5,
+          "max_error": 2.0,
+          "max_refinement_levels": 8,
+          "max_tree_depth": 10,
+          "min_micro_steps": 1,
+          "retained_exhaustion_rule": "Stop",
+          "u_turn_rule": "MomentumSum"
+        },
+        "metric": {
+          "initial": "identity",
+          "kind": "adapted diagonal",
+          "regularization": "Stan"
+        },
+        "only_arm_difference": "kernel.max_error",
+        "retained": 1000,
+        "sampler_boundary": "owalnuts::sampler::Sampler",
+        "schema": "owalnuts-delta2-sidechecks-v1-effective-config",
+        "starts_or_initializer": {
+          "distribution": "uniform(-2,2)",
+          "kind": "Init::uniform",
+          "max_attempts": 100,
+          "radius": 2.0,
+          "seeded": true
+        },
+        "target": "gaussian100",
+        "threads": 4,
+        "timeout_seconds": 600,
+        "warmup": 1000
+      },
+      "sha256": "4310af4ad92213d8fdf971633dae48387dd8f3d832356d43729fc87341a1c20c"
+    }
+  },
+  "effective_configs_document_sha256": "c296df79b9e2644ecde0b6b795a219a29b786be331667557535a2874533e88af",
+  "evidence_state": "NO_EVIDENCE_LAUNCHED",
+  "harness_source": {
+    "commit": "e91458dca1aa7944b07c65514ad2313b4a60cd4d",
+    "records": [
+      {
+        "bytes": 8145,
+        "git_blob_sha1": "b173aacf9ac318bde2fb471e2cdc0b8b55660d74",
+        "path": "Cargo.lock",
+        "sha256": "2e8f38e341499e6ce0eaff5a5f80ddfbbcde592c2ce9d443996f9329f1177d1e"
+      },
+      {
+        "bytes": 1661,
+        "git_blob_sha1": "48c6f52c63b42e0e7e47715c84bded147a9eca9a",
+        "path": "Cargo.toml",
+        "sha256": "9e77d0ef8a8f258ee7ca1205afae6d9520e6464530775f34741451b718532f3b"
+      },
+      {
+        "bytes": 25,
+        "git_blob_sha1": "a7d13f5dc03c5301ae5f91c52780b4329a46e24f",
+        "path": "STUDIES/delta2_sidechecks_v1/.gitattributes",
+        "sha256": "2fd4fc454a813a0596bdaa456f03bbaafedc1b76babc14839edd7e75f8f09d5d"
+      },
+      {
+        "bytes": 53,
+        "git_blob_sha1": "25f9963b8adaa278bbac63ca276e694a0d341309",
+        "path": "STUDIES/delta2_sidechecks_v1/.gitignore",
+        "sha256": "a34866aa825df1b556da3bf338105a5e9b5b47b4a1eda1d2f04d86bee6b030da"
+      },
+      {
+        "bytes": 16341,
+        "git_blob_sha1": "9acbf24cfd8a56a3ebfb26be1db6bf1dd0d1e50a",
+        "path": "STUDIES/delta2_sidechecks_v1/AMENDMENT-1.md",
+        "sha256": "2990becb882452275c7eee6c1b9305d117a79dddfae41bd77473b79476c9d48f"
+      },
+      {
+        "bytes": 9773,
+        "git_blob_sha1": "ebbf78c5dcf971b8ec461b20f4d5d5fc7168f23b",
+        "path": "STUDIES/delta2_sidechecks_v1/Cargo.lock",
+        "sha256": "2d4f93673186e1dbe7099dc6fcf2625ac947e619025883c15a6ea46995828438"
+      },
+      {
+        "bytes": 297,
+        "git_blob_sha1": "07f2337d6a5c287b3521e9539e496e94a645cae1",
+        "path": "STUDIES/delta2_sidechecks_v1/Cargo.toml",
+        "sha256": "1a5dfceef9b7c32682f8e4bf2dec3020e64644380b7e2bb1e60f01145f62b51c"
+      },
+      {
+        "bytes": 3564,
+        "git_blob_sha1": "e93dc7ac93f687831bbed1f5c7a37bc3eb05ee64",
+        "path": "STUDIES/delta2_sidechecks_v1/MANIFEST.txt",
+        "sha256": "7ed4837570692ce2c7f44939d0e32b276b14eb834d86b4869d3de44149138c86"
+      },
+      {
+        "bytes": 14542,
+        "git_blob_sha1": "7138fc792059d99d2e63a0dc73a56abfe565b361",
+        "path": "STUDIES/delta2_sidechecks_v1/PREREGISTRATION.md",
+        "sha256": "4f61248d8207e0b3fc84f9d55e3a093b8fb963e1c6d1ba0e88ee1669a2aecf73"
+      },
+      {
+        "bytes": 70761,
+        "git_blob_sha1": "b6232f2dfae7d4b136e5de7685fdbc0e5037fa95",
+        "path": "STUDIES/delta2_sidechecks_v1/analyze.py",
+        "sha256": "b502b014e3761c4dc6f31eaeb6bc28eecd0ce5cc869c8ee944cfd99cf4fc6166"
+      },
+      {
+        "bytes": 451,
+        "git_blob_sha1": "992573dcdf704088b05fe5d59c9cd988483ef6cf",
+        "path": "STUDIES/delta2_sidechecks_v1/build.rs",
+        "sha256": "bf7e49875af6f45b4b1aaaa4148b1098721db74af543f8aae10b202623d26258"
+      },
+      {
+        "bytes": 885,
+        "git_blob_sha1": "98e4fafa0b87a8939f759c9a9ed8ca38a16a8a20",
+        "path": "STUDIES/delta2_sidechecks_v1/checksums.py",
+        "sha256": "7e3b707bc224d4b8f8bb46fc2952c9cd99596b2a7759bc8869e0a1113803f331"
+      },
+      {
+        "bytes": 18393,
+        "git_blob_sha1": "611a8a5aa37e3d2ad858f341a8d7f093d1d2c829",
+        "path": "STUDIES/delta2_sidechecks_v1/protocol.json",
+        "sha256": "bf82f4a075c2811666b845cb90e763a94a7eb76c979d956377913be2dc9ce58b"
+      },
+      {
+        "bytes": 29768,
+        "git_blob_sha1": "1bf8be6906db618a5061c0ac5874982c1298b975",
+        "path": "STUDIES/delta2_sidechecks_v1/run_study.py",
+        "sha256": "f0dcedf424146499b809729f41f774db8e42d8f23a116525df446ef0079859e9"
+      },
+      {
+        "bytes": 36666,
+        "git_blob_sha1": "0385e3fbcd2caad2c92c81a02b0ec148f02d2543",
+        "path": "STUDIES/delta2_sidechecks_v1/src/main.rs",
+        "sha256": "ba6629bd6ceb0d1d0d7b6016de68c21c2ef8861c294aed8c24d50aff52f4ec49"
+      },
+      {
+        "bytes": 6150,
+        "git_blob_sha1": "2726ddd369438f4f5ca0d55a506131cabb49126b",
+        "path": "STUDIES/delta2_sidechecks_v1/test_study.py",
+        "sha256": "0826bafbfe127466b3ad808053b029a0bad880691e1fab524519fd87996626a7"
+      },
+      {
+        "bytes": 36404,
+        "git_blob_sha1": "aa50cfdb5b35f4fbd5ba87582c24515439e85c23",
+        "path": "src/diagnostics.rs",
+        "sha256": "972962fd0f8dff5bfd833a535ddcb157e2f30e4b7613fe7245d1117549f53d8f"
+      },
+      {
+        "bytes": 11713,
+        "git_blob_sha1": "0096a31a6bd40779818ace4c76841a3bf4889797",
+        "path": "src/export.rs",
+        "sha256": "147406ccd4d18e6d0f1464e53611e060e525ed6c98d4f2b12f4b6cd9c20695d0"
+      },
+      {
+        "bytes": 197265,
+        "git_blob_sha1": "660e841f071bb201da77f1d895bf15864dbd3389",
+        "path": "src/kernel.rs",
+        "sha256": "7ec1808f538ac3ab0ffa50d71d77b59b2c4a0586dcbc536d33c81f36961f4c5d"
+      },
+      {
+        "bytes": 1123,
+        "git_blob_sha1": "1e49852c24ac3493ee759b4ce5b5216e3e67761a",
+        "path": "src/lib.rs",
+        "sha256": "b0aeeab0e41aa4344b0911f5ed525c04ea53052cd0ed1cbb0315f4686721d9d0"
+      },
+      {
+        "bytes": 6242,
+        "git_blob_sha1": "20790a1d8be114954dedd9dd05b448615a1ce9c5",
+        "path": "src/oracle_tests/funnel_leaf.rs",
+        "sha256": "7a9f247ec53ce1593dcb3be791c0fe1ef782e298c13ad242b6f548874b7803ea"
+      },
+      {
+        "bytes": 8920,
+        "git_blob_sha1": "6a37c7a49665cc8a7a1b5160eb5236c106715c22",
+        "path": "src/oracle_tests/invalid_leaf.rs",
+        "sha256": "21337e66a9d3bca396b3f9a0399914714fb08998bde1a982621db28a0f67635a"
+      },
+      {
+        "bytes": 7793,
+        "git_blob_sha1": "aad489e07bf0370ae389d6fc8e73f3f88fb099ab",
+        "path": "src/oracle_tests/macro_leaf.rs",
+        "sha256": "640f2ec34a531b2b4ea79505e5d19a9756644f7e04cbbc7cc7c0908e0673b855"
+      },
+      {
+        "bytes": 97,
+        "git_blob_sha1": "4effb4a4114ef0bd86fafb3c247819ad504688a5",
+        "path": "src/oracle_tests/mod.rs",
+        "sha256": "95d164856a45edbe46071d016aec727ceb15afbd4c8539e8dc692e2c3b3347af"
+      },
+      {
+        "bytes": 18224,
+        "git_blob_sha1": "e19e419cc8c0b4e7074228c70337749482c867eb",
+        "path": "src/oracle_tests/sequence.rs",
+        "sha256": "5bec23f535d7c9fbde8557aab342e14a474fd9b7b7b08183b022aed30509ae51"
+      },
+      {
+        "bytes": 11600,
+        "git_blob_sha1": "5f043b4c941d6d823f05797ad1484b5ec0c4359f",
+        "path": "src/oracle_tests/span.rs",
+        "sha256": "b77c5eb1a788141eabf1ca0ab3e498a283e298e8ade049b580d0fc961aa64475"
+      },
+      {
+        "bytes": 12858,
+        "git_blob_sha1": "57f5c0d08a71fc6ce203f2500a5a7a876c86540e",
+        "path": "src/oracle_tests/transition.rs",
+        "sha256": "2adfa486987ff8d0768c50f8a02cbc1bb2b015043b156885d3ad27aee4b29ceb"
+      },
+      {
+        "bytes": 48234,
+        "git_blob_sha1": "e3c70f3e3ccd2a3e82bbc6400181d8bedd39467e",
+        "path": "src/sampler.rs",
+        "sha256": "1936721fa652262f4b479ddadb553ddd03ad4a17adbfb847ee5460d847d8935f"
+      },
+      {
+        "bytes": 492,
+        "git_blob_sha1": "23e24d971a650d5690acfb716ad4c427476bb152",
+        "path": "src/types.rs",
+        "sha256": "cc7e550ea6931157b1204b6d5ec551f659b384545b066ade3e182d3b3381ce1c"
+      },
+      {
+        "bytes": 510332,
+        "git_blob_sha1": "3a3b372d317cc5c702cbe80f6445885d14c4a14f",
+        "path": "src/walnutpie.rs",
+        "sha256": "be489f1935adf7d48163255c25dde1eb3d75df20a8ff113e591144944af847f5"
+      },
+      {
+        "bytes": 46828,
+        "git_blob_sha1": "8056c03cc0a7ec6278158fead1e18feb6d0e45ea",
+        "path": "src/walnutpie/research.rs",
+        "sha256": "046b5902b974717976ac59f5f43f878abf9d3332b8ae9fa7b640404218278a40"
+      }
+    ],
+    "tree": "8e32afadf0a5688cc42107d499ab41c881b7d6fe"
+  },
+  "manifest": {
+    "bytes": 3564,
+    "count": 84,
+    "entries": [
+      {
+        "arm": "fixed1",
+        "ordinal": 1,
+        "seed": 93101,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 2,
+        "seed": 93101,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 3,
+        "seed": 93102,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 4,
+        "seed": 93102,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 5,
+        "seed": 93103,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 6,
+        "seed": 93103,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 7,
+        "seed": 93104,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 8,
+        "seed": 93104,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 9,
+        "seed": 93105,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 10,
+        "seed": 93105,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 11,
+        "seed": 93106,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 12,
+        "seed": 93106,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 13,
+        "seed": 93107,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 14,
+        "seed": 93107,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 15,
+        "seed": 93108,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 16,
+        "seed": 93108,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 17,
+        "seed": 93109,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 18,
+        "seed": 93109,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 19,
+        "seed": 93110,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 20,
+        "seed": 93110,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 21,
+        "seed": 93111,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 22,
+        "seed": 93111,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 23,
+        "seed": 93112,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 24,
+        "seed": 93112,
+        "sentinel": "SINGLE",
+        "target": "funnel",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 25,
+        "seed": 93101,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 26,
+        "seed": 93101,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 27,
+        "seed": 93101,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 28,
+        "seed": 93101,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 29,
+        "seed": 93101,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 30,
+        "seed": 93101,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 31,
+        "seed": 93102,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 32,
+        "seed": 93102,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 33,
+        "seed": 93102,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 34,
+        "seed": 93102,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 35,
+        "seed": 93102,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 36,
+        "seed": 93102,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 37,
+        "seed": 93103,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 38,
+        "seed": 93103,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 39,
+        "seed": 93103,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 40,
+        "seed": 93103,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 41,
+        "seed": 93103,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 42,
+        "seed": 93103,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 43,
+        "seed": 93104,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 44,
+        "seed": 93104,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 45,
+        "seed": 93104,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 46,
+        "seed": 93104,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 47,
+        "seed": 93104,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 48,
+        "seed": 93104,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 49,
+        "seed": 93105,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 50,
+        "seed": 93105,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 51,
+        "seed": 93105,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 52,
+        "seed": 93105,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 53,
+        "seed": 93105,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 54,
+        "seed": 93105,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 55,
+        "seed": 93106,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 56,
+        "seed": 93106,
+        "sentinel": "REPEAT_1_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 57,
+        "seed": 93106,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 58,
+        "seed": 93106,
+        "sentinel": "REPEAT_2_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 1
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 59,
+        "seed": 93106,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 60,
+        "seed": 93106,
+        "sentinel": "REPEAT_3_OF_3",
+        "target": "eight_schools_strict",
+        "zero_based_repetition": 2
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 61,
+        "seed": 93101,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 62,
+        "seed": 93101,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 63,
+        "seed": 93102,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 64,
+        "seed": 93102,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 65,
+        "seed": 93103,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 66,
+        "seed": 93103,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 67,
+        "seed": 93104,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 68,
+        "seed": 93104,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 69,
+        "seed": 93105,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 70,
+        "seed": 93105,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 71,
+        "seed": 93106,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 72,
+        "seed": 93106,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 73,
+        "seed": 93107,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 74,
+        "seed": 93107,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 75,
+        "seed": 93108,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 76,
+        "seed": 93108,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 77,
+        "seed": 93109,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 78,
+        "seed": 93109,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 79,
+        "seed": 93110,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 80,
+        "seed": 93110,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 81,
+        "seed": 93111,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 82,
+        "seed": 93111,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed2",
+        "ordinal": 83,
+        "seed": 93112,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      },
+      {
+        "arm": "fixed1",
+        "ordinal": 84,
+        "seed": 93112,
+        "sentinel": "SINGLE",
+        "target": "gaussian100",
+        "zero_based_repetition": 0
+      }
+    ],
+    "path": "MANIFEST.txt",
+    "sha256": "7ed4837570692ce2c7f44939d0e32b276b14eb834d86b4869d3de44149138c86",
+    "target_counts": {
+      "eight_schools_strict": 36,
+      "funnel": 24,
+      "gaussian100": 24
+    }
+  },
+  "normalized_source_files": {
+    "AMENDMENT-1.md": {
+      "bytes": 16341,
+      "path": "AMENDMENT-1.md",
+      "sha256": "2990becb882452275c7eee6c1b9305d117a79dddfae41bd77473b79476c9d48f",
+      "utf8_lf_normalized_sha256": "2990becb882452275c7eee6c1b9305d117a79dddfae41bd77473b79476c9d48f"
+    },
+    "PREREGISTRATION.md": {
+      "bytes": 14542,
+      "path": "PREREGISTRATION.md",
+      "sha256": "4f61248d8207e0b3fc84f9d55e3a093b8fb963e1c6d1ba0e88ee1669a2aecf73",
+      "utf8_lf_normalized_sha256": "4f61248d8207e0b3fc84f9d55e3a093b8fb963e1c6d1ba0e88ee1669a2aecf73"
+    },
+    "protocol.json": {
+      "bytes": 18393,
+      "path": "protocol.json",
+      "sha256": "bf82f4a075c2811666b845cb90e763a94a7eb76c979d956377913be2dc9ce58b",
+      "utf8_lf_normalized_sha256": "bf82f4a075c2811666b845cb90e763a94a7eb76c979d956377913be2dc9ce58b"
+    }
+  },
+  "os_cpu": {
+    "logical_cpu_count": 16,
+    "machine": "AMD64",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+    "processor_identifier": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+    "release": "10",
+    "system": "Windows",
+    "version": "10.0.26200"
+  },
+  "preregistration_commits": {
+    "amendment": "a9efca24f3f043e069128f1aa3dcd04f0b0f9648",
+    "preregistration": "150b34ad88fa24d50392ff8c692f5308512f16a6"
+  },
+  "python": {
+    "executable": "C:\\dev\\owalnuts-wt\\delta2-sidechecks\\STUDIES\\delta2_sidechecks_v1\\.venv\\Scripts\\python.exe",
+    "version": "3.11.16 (main, Aug 14 2026, 15:34:35) [MSC v.1944 64 bit (AMD64)]"
+  },
+  "rustc_vv": "rustc 1.88.0 (6b00bc388 2025-06-23)\nbinary: rustc\ncommit-hash: 6b00bc3880198600130e1cf62b8f8a93494488cc\ncommit-date: 2025-06-23\nhost: x86_64-pc-windows-gnu\nrelease: 1.88.0\nLLVM version: 20.1.5",
+  "schema": "owalnuts-delta2-sidechecks-v1-provenance",
+  "schema_version": 1
+}

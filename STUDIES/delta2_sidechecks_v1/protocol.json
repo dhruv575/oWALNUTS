@@ -1,0 +1,586 @@
+{
+  "schema": "owalnuts-delta2-sidechecks-v1",
+  "study": "delta2_sidechecks_v1",
+  "work_package": "WP37A",
+  "status": "FROZEN_BEFORE_HARNESS_OR_SAMPLING",
+  "frozen_utc": "2026-09-04",
+  "purpose": "Qualification gate for whether a separately preregistered adaptive-delta implementation study may proceed. This is not a default decision, and fixed delta=2 cannot become the default from this study.",
+  "source_baseline": {
+    "commit": "443e86a3bb053ed1a2a1560caca5266427a3b35c",
+    "tree": "b534495caf9fd8de5aa8f76a6d84be60a79e52eb"
+  },
+  "preregistration_scope": {
+    "scaffold_only": true,
+    "harness_implemented": false,
+    "adaptive_delta_implemented": false,
+    "study_built": false,
+    "evidence_run": false,
+    "sampling_run": false
+  },
+  "evidence_scope": {
+    "pure_rust_targets_only": true,
+    "bridgestan": false,
+    "posteriordb": false,
+    "python_target_callbacks": false,
+    "process_target_servers": false,
+    "historical_results_are_evidence": false,
+    "external_study_evidence_seeds": false,
+    "historical_use": "settings and motivation only"
+  },
+  "arms_order": [
+    "fixed1",
+    "fixed2"
+  ],
+  "arms": {
+    "fixed1": {
+      "role": "incumbent",
+      "base": "current final sampler/target-track configuration",
+      "max_error": 1.0,
+      "only_arm_difference": true
+    },
+    "fixed2": {
+      "role": "qualification candidate only; ineligible for default selection",
+      "base": "current final sampler/target-track configuration",
+      "max_error": 2.0,
+      "only_arm_difference": true
+    }
+  },
+  "current_final_defaults": {
+    "step_size_h0": 0.5,
+    "max_tree_depth": 10,
+    "min_micro_steps": 1,
+    "max_refinement_levels": 8,
+    "u_turn_rule": "MomentumSum",
+    "divergence_threshold": 1000.0,
+    "metric": "adapted diagonal from identity",
+    "metric_regularization": "DiagonalMetricRegularization::Stan",
+    "warmup_exhaustion": "DEFAULT_WARMUP_EXHAUSTION",
+    "chain_rescue": null,
+    "chain_rescue_assertion": "DEFAULT_CHAIN_RESCUE == None; no explicit rescue policy",
+    "target_accept_default": 0.8,
+    "cache_initial_evaluation": true,
+    "admission": "Limits::admit_worst_case()"
+  },
+  "targets": {
+    "funnel": {
+      "implementation": "in-process Rust Target",
+      "source_settings": [
+        "WP28 funnel_defaults_v1",
+        "WP34 refinement_role_v1 side check"
+      ],
+      "definition": "omega ~ Normal(0,3); for i=1..9, x_i | omega has mean 0, variance exp(omega), and standard deviation exp(omega/2)",
+      "dimension": 10,
+      "starts": [
+        {
+          "omega": -3.0,
+          "x_1_through_x_9": 0.0
+        },
+        {
+          "omega": -1.0,
+          "x_1_through_x_9": 0.0
+        },
+        {
+          "omega": 1.0,
+          "x_1_through_x_9": 0.0
+        },
+        {
+          "omega": 3.0,
+          "x_1_through_x_9": 0.0
+        }
+      ],
+      "chains": 4,
+      "threads": 4,
+      "warmup": 2000,
+      "retained": 20000,
+      "target_accept": 0.8,
+      "tuning": "current_final_defaults with arm max_error",
+      "exact": {
+        "p_omega_lt_minus5": 0.0477903522728147,
+        "p_omega_lt_minus6": 0.0227501319481792,
+        "variance_omega": 9.0
+      },
+      "pooled_batch_mcse": {
+        "batch_draws": 500,
+        "batches_per_chain": 40,
+        "total_batches_per_arm": 1920,
+        "decision_role": "descriptive only"
+      },
+      "required_estimands": [
+        "P(omega < -5), indicator MCSE, descriptive z",
+        "P(omega < -6), indicator MCSE, descriptive z",
+        "Var(omega)",
+        "rank-normalized split R-hat for omega",
+        "bulk and tail ESS for omega",
+        "retained and warmup target calls",
+        "final step and metric",
+        "divergences",
+        "invalid-evaluation stops",
+        "refinement exhaustions",
+        "maximum-depth stops",
+        "full refinement-level-built histogram",
+        "reverse-coarsening rejections and stops"
+      ]
+    },
+    "eight_schools_strict": {
+      "implementation": "in-process Rust walnutpie Target and sampling facade",
+      "source_settings": [
+        "eight_schools_v9_rebench_v1 strict track",
+        "WP34 refinement_role_v1 side check"
+      ],
+      "definition": "strict noncentered Eight Schools unconstrained density (mu, log_tau, z_1..z_8), with the historical observations, scales, priors and transformations",
+      "dimension": 10,
+      "starts": [
+        [
+          0.0,
+          -2.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "chains": 4,
+      "chain_execution": "sequential",
+      "threads": 1,
+      "warmup": 1000,
+      "retained": 1000,
+      "target_accept": 0.95,
+      "tuning": {
+        "step_size_h0": 0.3,
+        "max_tree_depth": 8,
+        "min_micro_steps": 1,
+        "max_refinement_levels": 8,
+        "max_error": "arm value",
+        "divergence_threshold": 1000.0,
+        "u_turn_rule": "MomentumSum"
+      },
+      "metric": "adapted diagonal from identity",
+      "metric_regularization": "DiagonalMetricRegularization::Stan",
+      "warmup_exhaustion": "DEFAULT_WARMUP_EXHAUSTION",
+      "chain_rescue": null,
+      "sampling_boundary": "sample_chains_with_target_budget warm production call",
+      "initial_evaluation_cache": false,
+      "callback_cap": 10000000,
+      "timing_repetitions_per_seed_arm": 3,
+      "bit_identity_fields": [
+        "retained draw bytes",
+        "total target callbacks",
+        "warmup target callbacks",
+        "retained target callbacks",
+        "final tuning hash",
+        "final metric hash",
+        "retained diagnostics"
+      ],
+      "timing_only_allowed_difference": [
+        "wall duration",
+        "process metadata"
+      ],
+      "functionals": [
+        "mu",
+        "tau",
+        "mean_theta",
+        "sd_theta",
+        "theta_1",
+        "theta_8"
+      ],
+      "required_estimands_per_functional": [
+        "mean",
+        "standard deviation",
+        "MCSE",
+        "rank R-hat",
+        "bulk ESS",
+        "tail ESS",
+        "bulk ESS per callback",
+        "tail ESS per callback"
+      ]
+    },
+    "gaussian100": {
+      "implementation": "in-process Rust Target",
+      "source_settings": [
+        "WP28 funnel_defaults_v1 cost/control"
+      ],
+      "definition": "100-dimensional standard Gaussian",
+      "dimension": 100,
+      "initialization": "Init::uniform(), uniform(-2,2), seeded",
+      "chains": 4,
+      "threads": 4,
+      "warmup": 1000,
+      "retained": 1000,
+      "target_accept": 0.8,
+      "tuning": "current_final_defaults with arm max_error",
+      "exact_coordinate_mean": 0.0,
+      "exact_coordinate_variance": 1.0,
+      "primary_work_statistic": "mean bulk ESS over 100 coordinates / retained target calls",
+      "required_estimands_per_coordinate": [
+        "mean",
+        "variance",
+        "rank R-hat",
+        "bulk ESS",
+        "tail ESS"
+      ],
+      "required_cell_telemetry": [
+        "retained and warmup target calls",
+        "final step and metric",
+        "divergences",
+        "invalid-evaluation stops",
+        "refinement exhaustions",
+        "maximum-depth stops",
+        "refinement-level-built histogram",
+        "reverse-coarsening rejections and stops"
+      ]
+    }
+  },
+  "seeds": {
+    "range": [
+      93101,
+      93102,
+      93103,
+      93104,
+      93105,
+      93106,
+      93107,
+      93108,
+      93109,
+      93110,
+      93111,
+      93112
+    ],
+    "funnel": [
+      93101,
+      93102,
+      93103,
+      93104,
+      93105,
+      93106,
+      93107,
+      93108,
+      93109,
+      93110,
+      93111,
+      93112
+    ],
+    "eight_schools_strict": [
+      93101,
+      93102,
+      93103,
+      93104,
+      93105,
+      93106
+    ],
+    "gaussian100": [
+      93101,
+      93102,
+      93103,
+      93104,
+      93105,
+      93106,
+      93107,
+      93108,
+      93109,
+      93110,
+      93111,
+      93112
+    ],
+    "contiguous": true,
+    "skipped_numbers": [],
+    "paired_across_arms": true,
+    "external_study_evidence_seeds": false,
+    "search": {
+      "baseline": "443e86a3bb053ed1a2a1560caca5266427a3b35c",
+      "pattern": "(?<![0-9A-Za-z_.])(?:93101|93102|93103|93104|93105|93106|93107|93108|93109|93110|93111|93112)(?![0-9A-Za-z_.])",
+      "command": "git grep -n -P $pattern 443e86a -- . ':(exclude)**/artifacts/**'",
+      "result": "NO_MATCHES",
+      "interpretation": "No candidate appeared as an exact standalone whole-number token in tracked baseline files outside artifact directories; lookarounds also exclude identifiers and hexadecimal checksum substrings."
+    }
+  },
+  "run_plan": {
+    "targets_order": [
+      "funnel",
+      "eight_schools_strict",
+      "gaussian100"
+    ],
+    "seed_order": "ascending",
+    "fresh_child_per_cell": true,
+    "funnel_arm_rotation": "zero-based even seed index fixed1,fixed2; odd fixed2,fixed1",
+    "gaussian100_arm_rotation": "zero-based even seed index fixed1,fixed2; odd fixed2,fixed1",
+    "eight_schools_arm_rotation": "fixed1,fixed2 when (zero-based seed index + zero-based repetition index) is even; reverse otherwise",
+    "cells": {
+      "funnel": 24,
+      "eight_schools_strict": 36,
+      "gaussian100": 24,
+      "total": 84
+    }
+  },
+  "process_contract": {
+    "launch_marker": "immutable create-new marker keyed by target, seed, arm, repetition",
+    "marker_or_process_record_forbids_relaunch": true,
+    "child_result_publication": "atomic write and flush before teardown",
+    "nonzero_exit_after_result": "process failure",
+    "sampler_error_in_valid_process": "valid failing result",
+    "process_record_fields": [
+      "command",
+      "timestamps",
+      "stdout SHA-256",
+      "stderr SHA-256",
+      "timeout state",
+      "signed exit status",
+      "unsigned exit status",
+      "hex exit status",
+      "raw-result state",
+      "raw-result SHA-256"
+    ],
+    "no_result_driven_reruns": true,
+    "maximum_launches_per_planned_cell": 1,
+    "replacement_seeds": false,
+    "post_first_launch_bug_policy": "study does not qualify; evidence is not deleted or restarted"
+  },
+  "provenance_contract": {
+    "required_before_first_evidence": true,
+    "required_bindings": [
+      "source baseline commit and tree",
+      "PREREGISTRATION.md UTF-8/LF-normalized SHA-256",
+      "protocol.json UTF-8/LF-normalized SHA-256",
+      "harness source commit and tree",
+      "complete release-binary SHA-256",
+      "serialized effective arm and target configs",
+      "rustc -Vv",
+      "Cargo.lock SHA-256",
+      "OS and CPU metadata",
+      "ordered 84-cell manifest"
+    ],
+    "evidence_outputs": "append-only"
+  },
+  "gates": {
+    "funnel": {
+      "F1_completeness": {
+        "planned_process_records": 24,
+        "all_process_valid": true,
+        "all_schema_valid": true,
+        "all_finite": true,
+        "all_config_authenticated": true
+      },
+      "F2_pooled_substantive_accuracy_and_agreement": {
+        "applies_to_each_arm": {
+          "max_abs_error_p_omega_lt_minus5": 0.006,
+          "max_abs_error_p_omega_lt_minus6": 0.004,
+          "max_abs_error_variance_omega": 1.0
+        },
+        "max_abs_fixed2_minus_fixed1": {
+          "p_omega_lt_minus5": 0.004,
+          "p_omega_lt_minus6": 0.003,
+          "variance_omega": 0.75
+        },
+        "descriptive_z_is_gate": false
+      },
+      "F3_gross_per_seed_fixed2_safety": {
+        "finite_draws_and_diagnostics": true,
+        "sampler_errors": 0,
+        "retained_divergences": 0,
+        "max_rank_rhat": 1.05,
+        "max_abs_error_p_omega_lt_minus5": 0.025,
+        "max_abs_error_p_omega_lt_minus6": 0.015,
+        "variance_omega_interval": [
+          5.0,
+          13.0
+        ]
+      },
+      "F4_health_count_noninferiority": {
+        "healthy_seed": {
+          "finite_draws": true,
+          "sampler_errors": 0,
+          "max_rank_rhat": 1.01,
+          "min_bulk_ess_omega": 400,
+          "min_tail_ess_omega": 400,
+          "retained_divergences": 0,
+          "retained_invalid_stops": 0,
+          "retained_refinement_exhaustions": 0
+        },
+        "fixed2_min_healthy_seeds": 9,
+        "fixed2_healthy_count_gte_fixed1": true
+      },
+      "F5_counter_nonregression": {
+        "fixed2_summed_counts_lte_fixed1": [
+          "retained divergences",
+          "retained invalid stops",
+          "retained refinement exhaustions"
+        ],
+        "mandatory_report_not_gated": [
+          "refinement-level-built histograms and paired ratios",
+          "reverse-coarsening rejection/stop totals and paired ratios"
+        ]
+      }
+    },
+    "eight_schools_strict": {
+      "E1_completeness_and_identity": {
+        "planned_process_records": 36,
+        "all_process_valid": true,
+        "all_schema_valid": true,
+        "all_config_authenticated": true,
+        "all_three_repetitions_bit_identical": true
+      },
+      "E2_six_functional_agreement": {
+        "draw_source_after_identity": "repetition zero only",
+        "aggregation": "pool all six seeds within arm",
+        "functionals": [
+          "mu",
+          "tau",
+          "mean_theta",
+          "sd_theta",
+          "theta_1",
+          "theta_8"
+        ],
+        "mean_rule": "abs(mean_fixed2 - mean_fixed1) <= 0.10 * pooled_SD + 2 * pooled_MCSE",
+        "sd_rule": "abs(SD_fixed2 - SD_fixed1) <= 0.15 * pooled_SD + 2 * pooled_MCSE",
+        "pooled_SD": "sqrt((SD_fixed1^2 + SD_fixed2^2) / 2)",
+        "pooled_MCSE": "sqrt(MCSE_fixed1^2 + MCSE_fixed2^2)",
+        "every_functional_must_pass": true
+      },
+      "E3_ess_per_callback": {
+        "seed_arm_score": "minimum over six functionals of bulk ESS / total callbacks started, warmup included",
+        "aggregation": "geometric mean over six paired fixed2/fixed1 seed ratios",
+        "minimum_ratio": 0.9,
+        "tail_ess_per_callback": "reported"
+      },
+      "E4_no_new_failure": {
+        "healthy_seed": {
+          "every_functional_min_bulk_ess": 400,
+          "every_functional_min_tail_ess": 400,
+          "every_functional_max_rank_rhat": 1.01,
+          "finite_draws": true,
+          "max_divergence_rate": 0.01,
+          "max_depth_rate": 0.01,
+          "retained_refinement_exhaustions": 0,
+          "retained_invalid_stops": 0,
+          "sampler_errors": 0
+        },
+        "fixed2_min_healthy_seeds": 5,
+        "fixed2_healthy_count_gte_fixed1": true,
+        "no_fixed1_healthy_fixed2_unhealthy_seed": true,
+        "fixed2_may_not_introduce_absent_failure_class": [
+          "process",
+          "sampler",
+          "nonfinite",
+          "divergence",
+          "invalid stop",
+          "refinement exhaustion"
+        ]
+      }
+    },
+    "gaussian100": {
+      "G1_completeness": {
+        "planned_process_records": 24,
+        "all_process_valid": true,
+        "all_schema_valid": true,
+        "all_finite": true,
+        "all_config_authenticated": true
+      },
+      "G2_coordinate_accuracy_and_agreement": {
+        "aggregation": "pool all 12 seeds within arm",
+        "each_arm_every_coordinate": {
+          "max_abs_mean": 0.08,
+          "variance_interval": [
+            0.85,
+            1.15
+          ]
+        },
+        "every_coordinate_max_abs_fixed2_minus_fixed1": {
+          "mean": 0.08,
+          "variance": 0.12
+        }
+      },
+      "G3_ess_per_call": {
+        "seed_arm_score": "mean coordinate bulk ESS / retained target calls",
+        "aggregation": "fixed2 seed median / fixed1 seed median",
+        "minimum_ratio": 0.9,
+        "also_report": [
+          "median paired seed ratio",
+          "tail ESS work ratios"
+        ]
+      },
+      "G4_no_health_regression": {
+        "healthy_seed": {
+          "every_coordinate_min_bulk_ess": 400,
+          "every_coordinate_min_tail_ess": 400,
+          "every_coordinate_max_rank_rhat": 1.01,
+          "finite_draws": true,
+          "retained_divergences": 0,
+          "retained_invalid_stops": 0,
+          "retained_refinement_exhaustions": 0,
+          "sampler_errors": 0
+        },
+        "fixed2_min_healthy_seeds": 11,
+        "fixed2_healthy_count_gte_fixed1": true,
+        "no_fixed1_healthy_fixed2_unhealthy_seed": true,
+        "fixed2_summed_counts_lte_fixed1": [
+          "retained divergences",
+          "retained invalid stops",
+          "retained refinement exhaustions"
+        ]
+      }
+    }
+  },
+  "decision": {
+    "pass_condition": "F1-F5, E1-E4, and G1-G4 all pass",
+    "pass_label": "QUALIFIED_FOR_SEPARATE_ADAPTIVE_DELTA_STUDY",
+    "pass_action": "Write a new preregistration, then and only then implement an adaptive-delta candidate. No default change. Fixed2 remains ineligible for default selection.",
+    "failure_or_inconclusive_label": "REJECT_FIXED2_AND_ADAPTIVE_TO_2",
+    "failure_or_inconclusive_action": "Do not implement adaptive delta; move to research on a cheaper reverse-coarsening check.",
+    "fixed2_can_become_default": false,
+    "adaptive_delta_can_be_implemented_before_result": false
+  },
+  "reporting": {
+    "report_all_84_cells": true,
+    "report_every_gate": true,
+    "seed_selection": false,
+    "chain_selection": false,
+    "coordinate_selection": false,
+    "functional_selection": false,
+    "repetition_selection": false
+  },
+  "predictions": {
+    "P1": "Both arms satisfy pooled funnel bounds; fixed2 reduces refinement and reverse-coarsening counts without losing healthy seeds.",
+    "P2": "Strict Eight Schools repetitions are bit-identical, agreement holds for all six functionals, and fixed2/fixed1 minimum-bulk-ESS per callback is at least 0.90.",
+    "P3": "Both Gaussian arms satisfy coordinate accuracy, fixed2 retains at least 0.90 of fixed1 ESS per retained call, and health does not regress.",
+    "P4": "The predicted mechanical result is QUALIFIED_FOR_SEPARATE_ADAPTIVE_DELTA_STUDY; this does not authorize implementation before the result."
+  }
+}
