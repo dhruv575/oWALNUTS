@@ -488,7 +488,10 @@ def prepare_provenance() -> None:
         "funnel": FUNNEL,
         "conformance": CONFORMANCE_BIN,
     }
-    with tempfile.TemporaryDirectory(prefix="wp36-audited-rebuild-") as temporary:
+    (HERE / "target").mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="wp36-audited-rebuild-", dir=HERE / "target"
+    ) as temporary:
         rebuild_command = build_command + ["--target-dir", temporary]
         subprocess.run(rebuild_command, cwd=repository, check=True)
         rebuilt = {
@@ -503,8 +506,14 @@ def prepare_provenance() -> None:
             full_match = left["sha256"] == right["sha256"] and left["bytes"] == right["bytes"]
             section_match = left_sections == right_sections
             if not full_match and not section_match:
+                different_sections = sorted(
+                    name
+                    for name in set(left_sections) | set(right_sections)
+                    if left_sections.get(name) != right_sections.get(name)
+                )
                 raise RuntimeError(
-                    f"isolated rebuild differs in PE sections for {name}"
+                    f"isolated rebuild differs in PE sections for {name}: "
+                    f"{different_sections}"
                 )
             executables[name] = {
                 "primary": left,
