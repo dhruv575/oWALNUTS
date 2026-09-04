@@ -1505,8 +1505,21 @@ pub enum ChainRescueMode {
     PoolAtBoundaries,
 }
 
+/// Confirmation policy for restart-mode chain rescue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum ChainRescuePolicy {
+    /// Restart at the first eligible boundary with an outlier signal.
+    Immediate,
+    /// Score and record the restart rule without mutating sampler state.
+    ObserveOnly,
+    /// Restart only after the same canonical signal at two adjacent eligible
+    /// slow-window boundaries.
+    TwoHit,
+}
+
 /// Opt-in warmup-time chain rescue for multi-chain runs
-/// (`STUDIES/chain_rescue_v1`, WP33).
+/// (`STUDIES/chain_rescue_v1`, WP33; `STUDIES/chain_rescue_v2`, WP36).
 ///
 /// Stan, nutpie and the plain oWALNUTS driver run their chains
 /// independently, so one chain that drew a bad start (a second mode, the
@@ -1530,13 +1543,19 @@ pub enum ChainRescueMode {
 ///   chain keeps its RNG stream and its telemetry, and a boundary with no
 ///   outlier does nothing, so a run in which the rescue never fires
 ///   produces the draws of the run without it.
+///   [`ChainRescuePolicy::ObserveOnly`] records the same scores, hits and
+///   deterministic proposed source without selecting a source-window
+///   position, consuming rescue RNG or mutating state.
+///   [`ChainRescuePolicy::TwoHit`] delays the action until the same
+///   Step-priority criterion is present at two adjacent eligible boundaries;
+///   skipped and clean boundaries reset the streak, as does a restart.
 /// * [`ChainRescueMode::PoolAtBoundaries`]: the chains' window variance
 ///   statistics are merged exactly and regularised at the pooled count,
 ///   the result is installed on every chain, the step becomes the median
 ///   over chains of the post-boundary steps and dual averaging restarts
 ///   from it on every chain. Positions are untouched.
 ///
-/// Both act only on discarded transitions: retained draws come from the
+/// All modes act or observe only on discarded transitions: retained draws come from the
 /// unchanged per-chain kernel started from whatever state warmup leaves, so
 /// the retained-phase kernel, its fingerprints and its reversibility are
 /// unaffected. A rescue is an initialisation choice made with information
@@ -1547,9 +1566,19 @@ pub enum ChainRescueMode {
 /// trusting the gates of a multimodal target. Single-chain runs ignore the
 /// configuration; the dense and structured-refresh facades reject it and
 /// the fixed-operator facades never adapt, so they never reach a boundary.
+///
+/// # Production overhead
+///
+/// Any mode synchronises chains at slow-window boundaries and stores the
+/// selected-state log density for the current window. Restart modes also
+/// retain the current window's unconstrained positions until its boundary so
+/// that an acted-on chain can draw one uniformly. Observe-only and pooling do
+/// not retain those source windows. Telemetry stores one full unconstrained
+/// pre-action position per chain and boundary, never a full source window.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChainRescueConfig {
     mode: ChainRescueMode,
+    policy: ChainRescuePolicy,
     step_ratio: f64,
     log_density_iqr_factor: f64,
     minimum_window_transitions: usize,
@@ -1562,9 +1591,29 @@ impl ChainRescueConfig {
     pub const fn restart_from_best() -> Self {
         Self {
             mode: ChainRescueMode::RestartFromBest,
+            policy: ChainRescuePolicy::Immediate,
             step_ratio: 0.1,
             log_density_iqr_factor: 3.0,
             minimum_window_transitions: 10,
+        }
+    }
+
+    /// Observe the current restart rule without mutating sampler state or
+    /// consuming rescue RNG. Apart from rescue telemetry, execution is
+    /// bit-identical to a run without chain rescue.
+    pub const fn observe_only() -> Self {
+        Self {
+            policy: ChainRescuePolicy::ObserveOnly,
+            ..Self::restart_from_best()
+        }
+    }
+
+    /// WP36 candidate: restart only on the second adjacent eligible hit of
+    /// the same Step-priority criterion.
+    pub const fn two_hit() -> Self {
+        Self {
+            policy: ChainRescuePolicy::TwoHit,
+            ..Self::restart_from_best()
         }
     }
 
@@ -1614,8 +1663,23 @@ impl ChainRescueConfig {
         Ok(self)
     }
 
+    /// Select the restart policy. Observe-only and two-hit policies are valid
+    /// only for [`ChainRescueMode::RestartFromBest`].
+    pub fn with_policy(mut self, policy: ChainRescuePolicy) -> Result<Self, Error> {
+        if policy != ChainRescuePolicy::Immediate && self.mode != ChainRescueMode::RestartFromBest {
+            return Err(Error::configuration(
+                "observe-only and two-hit chain rescue require restart-from-best mode",
+            ));
+        }
+        self.policy = policy;
+        Ok(self)
+    }
+
     pub fn mode(&self) -> ChainRescueMode {
         self.mode
+    }
+    pub fn policy(&self) -> ChainRescuePolicy {
+        self.policy
     }
     pub fn step_ratio(&self) -> f64 {
         self.step_ratio
@@ -1646,6 +1710,8 @@ pub enum ChainRescueSkip {
     ShortWindow,
     /// No chain qualified as a source (restart mode).
     NoSource,
+    /// A step or log-density score needed by the restart rule was not finite.
+    NonFiniteScore,
     /// Fewer than two chains had window statistics to pool.
     NothingToPool,
 }
@@ -1658,6 +1724,16 @@ pub enum ChainRescueOutcome {
     Kept,
     /// The boundary was skipped for every chain.
     Skipped(ChainRescueSkip),
+    /// Observe-only mode saw a hit but deliberately took no action.
+    ObservedHit {
+        /// Step-priority canonical rule that was observed.
+        criterion: ChainRescueCriterion,
+    },
+    /// Two-hit mode saw the first hit in a possible adjacent pair.
+    PendingFirstHit {
+        /// Step-priority canonical rule whose streak is now one.
+        criterion: ChainRescueCriterion,
+    },
     /// Re-seeded from `source` (restart mode).
     Restarted {
         /// Chain index the state was copied from.
@@ -1690,6 +1766,23 @@ pub struct ChainRescueUpdate {
     step_before: f64,
     median_log_density: Option<f64>,
     log_density_iqr: Option<f64>,
+    eligible: bool,
+    skip_reason: Option<ChainRescueSkip>,
+    median_step: Option<f64>,
+    step_threshold: Option<f64>,
+    step_hit: bool,
+    density_reference: Option<f64>,
+    density_spread: Option<f64>,
+    density_gap: Option<f64>,
+    density_threshold: Option<f64>,
+    density_hit: bool,
+    observed_canonical_criterion: Option<ChainRescueCriterion>,
+    prior_criterion: Option<ChainRescueCriterion>,
+    prior_streak: usize,
+    resulting_criterion: Option<ChainRescueCriterion>,
+    resulting_streak: usize,
+    proposed_source_chain: Option<usize>,
+    pre_action_unconstrained_position: Vec<f64>,
     outcome: ChainRescueOutcome,
 }
 
@@ -1714,6 +1807,10 @@ impl ChainRescueUpdate {
     pub fn step_before(&self) -> f64 {
         self.step_before
     }
+    /// Alias for [`Self::step_before`] using the WP36 telemetry name.
+    pub fn current_step(&self) -> f64 {
+        self.step_before
+    }
     /// Median selected-state log density over the window.
     pub fn median_log_density(&self) -> Option<f64> {
         self.median_log_density
@@ -1721,6 +1818,64 @@ impl ChainRescueUpdate {
     /// Interquartile range of the selected-state log density over the window.
     pub fn log_density_iqr(&self) -> Option<f64> {
         self.log_density_iqr
+    }
+    /// Whether the current-rule score was eligible to produce an observation.
+    pub fn eligible(&self) -> bool {
+        self.eligible
+    }
+    /// Exact reason an ineligible boundary was skipped.
+    pub fn skip_reason(&self) -> Option<ChainRescueSkip> {
+        self.skip_reason
+    }
+    pub fn median_step(&self) -> Option<f64> {
+        self.median_step
+    }
+    pub fn step_threshold(&self) -> Option<f64> {
+        self.step_threshold
+    }
+    pub fn step_hit(&self) -> bool {
+        self.step_hit
+    }
+    pub fn density_reference(&self) -> Option<f64> {
+        self.density_reference
+    }
+    pub fn density_spread(&self) -> Option<f64> {
+        self.density_spread
+    }
+    pub fn density_gap(&self) -> Option<f64> {
+        self.density_gap
+    }
+    pub fn density_threshold(&self) -> Option<f64> {
+        self.density_threshold
+    }
+    pub fn density_hit(&self) -> bool {
+        self.density_hit
+    }
+    /// Step-priority canonical criterion, present only at an eligible hit.
+    pub fn observed_canonical_criterion(&self) -> Option<ChainRescueCriterion> {
+        self.observed_canonical_criterion
+    }
+    pub fn prior_criterion(&self) -> Option<ChainRescueCriterion> {
+        self.prior_criterion
+    }
+    pub fn prior_streak(&self) -> usize {
+        self.prior_streak
+    }
+    pub fn resulting_criterion(&self) -> Option<ChainRescueCriterion> {
+        self.resulting_criterion
+    }
+    pub fn resulting_streak(&self) -> usize {
+        self.resulting_streak
+    }
+    /// Deterministic best non-outlier chain. This does not imply that a
+    /// source-window position was selected.
+    pub fn proposed_source_chain(&self) -> Option<usize> {
+        self.proposed_source_chain
+    }
+    /// Full unconstrained chain position immediately before any boundary
+    /// action.
+    pub fn pre_action_unconstrained_position(&self) -> &[f64] {
+        &self.pre_action_unconstrained_position
     }
     pub fn outcome(&self) -> &ChainRescueOutcome {
         &self.outcome
@@ -7136,7 +7291,12 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     && window_index.is_some()
                 {
                     record.log_densities.push(selected_log_density);
-                    record.positions.push(position.clone());
+                    if warmup.chain_rescue.as_ref().is_some_and(|rescue| {
+                        rescue.mode == ChainRescueMode::RestartFromBest
+                            && rescue.policy != ChainRescuePolicy::ObserveOnly
+                    }) {
+                        record.positions.push(position.clone());
+                    }
                 }
                 let unrefined_fraction = match warmup.paper_adaptation.as_ref() {
                     Some(paper) if paper.exhausted_as_zero => unrefined_fraction.or(Some(0.0)),
@@ -9728,6 +9888,185 @@ struct RescueSourceState {
     search_step: Option<f64>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ChainRescueStreak {
+    criterion: Option<ChainRescueCriterion>,
+    streak: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TwoHitObservation {
+    Skipped,
+    Clean,
+    Hit(ChainRescueCriterion),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TwoHitTransition {
+    prior: ChainRescueStreak,
+    resulting: ChainRescueStreak,
+    restart: bool,
+}
+
+/// Pure state transition for the WP36 two-hit confirmation rule.
+fn advance_two_hit(prior: ChainRescueStreak, observation: TwoHitObservation) -> TwoHitTransition {
+    let (resulting, restart) = match observation {
+        TwoHitObservation::Skipped | TwoHitObservation::Clean => {
+            (ChainRescueStreak::default(), false)
+        }
+        TwoHitObservation::Hit(criterion)
+            if prior.criterion == Some(criterion) && prior.streak == 1 =>
+        {
+            (ChainRescueStreak::default(), true)
+        }
+        TwoHitObservation::Hit(criterion) => (
+            ChainRescueStreak {
+                criterion: Some(criterion),
+                streak: 1,
+            },
+            false,
+        ),
+    };
+    TwoHitTransition {
+        prior,
+        resulting,
+        restart,
+    }
+}
+
+fn skip_two_hit_boundary(streaks: &mut [ChainRescueStreak]) {
+    for streak in streaks {
+        *streak = advance_two_hit(*streak, TwoHitObservation::Skipped).resulting;
+    }
+}
+
+const fn canonical_rescue_criterion(
+    step_hit: bool,
+    density_hit: bool,
+) -> Option<ChainRescueCriterion> {
+    if step_hit {
+        Some(ChainRescueCriterion::Step)
+    } else if density_hit {
+        Some(ChainRescueCriterion::LogDensity)
+    } else {
+        None
+    }
+}
+
+struct RescueBoundaryScores {
+    window_index: usize,
+    transition: usize,
+    window_transitions: Vec<usize>,
+    steps: Vec<f64>,
+    density_scores: Vec<Option<(f64, f64)>>,
+    median_step: Option<f64>,
+    step_threshold: Option<f64>,
+    step_hits: Vec<bool>,
+    density_reference: Option<f64>,
+    density_spread: Option<f64>,
+    density_gaps: Vec<Option<f64>>,
+    density_threshold: Option<f64>,
+    density_hits: Vec<bool>,
+    raw_criteria: Vec<Option<ChainRescueCriterion>>,
+    finite: bool,
+    proposed_source: Option<usize>,
+    pre_action_positions: Vec<Vec<f64>>,
+}
+
+struct RescueBoundaryDecision {
+    eligible: bool,
+    skip_reason: Option<ChainRescueSkip>,
+    observed_criteria: Vec<Option<ChainRescueCriterion>>,
+    prior: Vec<ChainRescueStreak>,
+    resulting: Vec<ChainRescueStreak>,
+    proposed_source: Option<usize>,
+    outcomes: Vec<ChainRescueOutcome>,
+}
+
+fn record_rescue_boundary<T: Target>(
+    slots: &mut [RescueSlot<'_, T>],
+    scores: &RescueBoundaryScores,
+    decision: RescueBoundaryDecision,
+) {
+    for (chain, slot) in slots.iter_mut().enumerate() {
+        let run = slot.run.as_mut().expect("started");
+        run.telemetry.chain_rescues.push(ChainRescueUpdate {
+            window_index: scores.window_index,
+            transition: scores.transition,
+            chain,
+            window_transitions: scores.window_transitions[chain],
+            step_before: scores.steps[chain],
+            median_log_density: scores.density_scores[chain].map(|score| score.0),
+            log_density_iqr: scores.density_scores[chain].map(|score| score.1),
+            eligible: decision.eligible,
+            skip_reason: decision.skip_reason,
+            median_step: scores.median_step,
+            step_threshold: scores.step_threshold,
+            step_hit: scores.step_hits[chain],
+            density_reference: scores.density_reference,
+            density_spread: scores.density_spread,
+            density_gap: scores.density_gaps[chain],
+            density_threshold: scores.density_threshold,
+            density_hit: scores.density_hits[chain],
+            observed_canonical_criterion: decision.observed_criteria[chain],
+            prior_criterion: decision.prior[chain].criterion,
+            prior_streak: decision.prior[chain].streak,
+            resulting_criterion: decision.resulting[chain].criterion,
+            resulting_streak: decision.resulting[chain].streak,
+            proposed_source_chain: decision.proposed_source,
+            pre_action_unconstrained_position: scores.pre_action_positions[chain].clone(),
+            outcome: decision.outcomes[chain].clone(),
+        });
+    }
+}
+
+fn restart_chains<T: Target>(
+    slots: &mut [RescueSlot<'_, T>],
+    positions: &mut [Vec<Vec<f64>>],
+    source: usize,
+    criteria: &[Option<ChainRescueCriterion>],
+) -> Vec<ChainRescueOutcome> {
+    let source_state = {
+        let run = slots[source].run.as_ref().expect("started");
+        RescueSourceState {
+            positions: std::mem::take(&mut positions[source]),
+            active_mass: run.active_mass.clone(),
+            inverse_mass: run.inverse_mass.clone(),
+            active_tuning: run.active_tuning,
+            dual_averaging: run.dual_averaging.clone(),
+            stream_step: run.stream_step,
+            search_step: run.search_step,
+        }
+    };
+    debug_assert!(!source_state.positions.is_empty());
+    let mut outcomes = Vec::with_capacity(slots.len());
+    for (chain, slot) in slots.iter_mut().enumerate() {
+        let Some(criterion) = criteria[chain] else {
+            outcomes.push(ChainRescueOutcome::Kept);
+            continue;
+        };
+        let run = slot.run.as_mut().expect("started");
+        let (rng, cached_state) = run.rng_slot.parts();
+        let source_position = rng.random_range(0..source_state.positions.len());
+        run.position
+            .copy_from_slice(&source_state.positions[source_position]);
+        *cached_state = None;
+        run.active_mass = source_state.active_mass.clone();
+        run.inverse_mass = source_state.inverse_mass.clone();
+        run.active_tuning = source_state.active_tuning;
+        run.dual_averaging = source_state.dual_averaging.clone();
+        run.stream_step = source_state.stream_step;
+        run.search_step = source_state.search_step;
+        outcomes.push(ChainRescueOutcome::Restarted {
+            source,
+            criterion,
+            source_position,
+            step_after: source_state.active_tuning.step_size,
+        });
+    }
+    outcomes
+}
+
 /// The boundary action of [`ChainRescueConfig`] on every started chain.
 fn rescue_boundary<T: Target>(
     slots: &mut [RescueSlot<'_, T>],
@@ -9735,8 +10074,10 @@ fn rescue_boundary<T: Target>(
     transition: usize,
     warmup: &WarmupConfig,
     rescue: &ChainRescueConfig,
+    streaks: &mut [ChainRescueStreak],
 ) -> Result<(), Error> {
     let chains = slots.len();
+    debug_assert_eq!(chains, streaks.len());
     // Take every chain's window record; the buffers restart empty.
     let mut log_densities = Vec::with_capacity(chains);
     let mut positions = Vec::with_capacity(chains);
@@ -9762,110 +10103,239 @@ fn rescue_boundary<T: Target>(
         .iter()
         .map(|values| median_and_iqr(values))
         .collect();
-    let record_all = |slots: &mut [RescueSlot<'_, T>],
-                      outcome: &dyn Fn(usize) -> ChainRescueOutcome| {
-        for (chain, slot) in slots.iter_mut().enumerate() {
-            let run = slot.run.as_mut().expect("started");
-            run.telemetry.chain_rescues.push(ChainRescueUpdate {
-                window_index,
-                transition,
-                chain,
-                window_transitions: log_densities[chain].len(),
-                step_before: steps[chain],
-                median_log_density: scores[chain].map(|score| score.0),
-                log_density_iqr: scores[chain].map(|score| score.1),
-                outcome: outcome(chain),
-            });
-        }
-    };
-    if log_densities
+    let inputs_finite = steps.iter().all(|value| value.is_finite())
+        && scores
+            .iter()
+            .all(|score| score.is_some_and(|(median, iqr)| median.is_finite() && iqr.is_finite()));
+    let medians: Vec<f64> = scores
         .iter()
-        .any(|values| values.len() < rescue.minimum_window_transitions)
-    {
-        record_all(slots, &|_| {
-            ChainRescueOutcome::Skipped(ChainRescueSkip::ShortWindow)
-        });
+        .map(|score| score.map_or(f64::NAN, |score| score.0))
+        .collect();
+    let iqrs: Vec<f64> = scores
+        .iter()
+        .map(|score| score.map_or(f64::NAN, |score| score.1))
+        .collect();
+    let median_step = inputs_finite.then(|| median_of(&steps));
+    let step_threshold = median_step.map(|median| rescue.step_ratio * median);
+    let step_hits: Vec<bool> = steps
+        .iter()
+        .map(|step| step_threshold.is_some_and(|threshold| *step < threshold))
+        .collect();
+    let density_reference = inputs_finite.then(|| median_of(&medians));
+    let density_spread = inputs_finite.then(|| median_of(&iqrs));
+    let density_threshold = density_spread.map(|spread| rescue.log_density_iqr_factor * spread);
+    let density_gaps: Vec<Option<f64>> = medians
+        .iter()
+        .map(|median| density_reference.map(|reference| reference - median))
+        .collect();
+    let density_hits: Vec<bool> = density_gaps
+        .iter()
+        .map(|gap| {
+            gap.zip(density_threshold)
+                .is_some_and(|(gap, threshold)| gap > threshold)
+        })
+        .collect();
+    let raw_criteria: Vec<Option<ChainRescueCriterion>> = (0..chains)
+        .map(|chain| canonical_rescue_criterion(step_hits[chain], density_hits[chain]))
+        .collect();
+    let finite = inputs_finite
+        && median_step.is_some_and(f64::is_finite)
+        && step_threshold.is_some_and(f64::is_finite)
+        && density_reference.is_some_and(f64::is_finite)
+        && density_spread.is_some_and(f64::is_finite)
+        && density_threshold.is_some_and(f64::is_finite)
+        && density_gaps
+            .iter()
+            .all(|gap| gap.is_some_and(f64::is_finite));
+    let proposed_source = finite.then(|| {
+        (0..chains)
+            .filter(|chain| raw_criteria[*chain].is_none())
+            .max_by(|a, b| {
+                steps[*a]
+                    .total_cmp(&steps[*b])
+                    .then(medians[*a].total_cmp(&medians[*b]))
+                    .then_with(|| b.cmp(a))
+            })
+    });
+    let boundary_scores = RescueBoundaryScores {
+        window_index,
+        transition,
+        window_transitions: log_densities.iter().map(Vec::len).collect(),
+        steps,
+        density_scores: scores,
+        median_step,
+        step_threshold,
+        step_hits,
+        density_reference,
+        density_spread,
+        density_gaps,
+        density_threshold,
+        density_hits,
+        raw_criteria,
+        finite,
+        proposed_source: proposed_source.flatten(),
+        pre_action_positions: slots
+            .iter()
+            .map(|slot| slot.run.as_ref().expect("started").position.clone())
+            .collect(),
+    };
+    let prior = streaks.to_vec();
+    let short_window = boundary_scores
+        .window_transitions
+        .iter()
+        .any(|count| *count < rescue.minimum_window_transitions);
+    if short_window {
+        skip_two_hit_boundary(streaks);
+        record_rescue_boundary(
+            slots,
+            &boundary_scores,
+            RescueBoundaryDecision {
+                eligible: false,
+                skip_reason: Some(ChainRescueSkip::ShortWindow),
+                observed_criteria: vec![None; chains],
+                prior,
+                resulting: streaks.to_vec(),
+                proposed_source: None,
+                outcomes: vec![ChainRescueOutcome::Skipped(ChainRescueSkip::ShortWindow); chains],
+            },
+        );
         return Ok(());
     }
     match rescue.mode {
         ChainRescueMode::RestartFromBest => {
-            let step_median = median_of(&steps);
-            let medians: Vec<f64> = scores
-                .iter()
-                .map(|score| score.expect("scored").0)
-                .collect();
-            let iqrs: Vec<f64> = scores
-                .iter()
-                .map(|score| score.expect("scored").1)
-                .collect();
-            let reference = median_of(&medians);
-            let spread = median_of(&iqrs);
-            let criteria: Vec<Option<ChainRescueCriterion>> = (0..chains)
-                .map(|chain| {
-                    if steps[chain] < rescue.step_ratio * step_median {
-                        Some(ChainRescueCriterion::Step)
-                    } else if reference - medians[chain] > rescue.log_density_iqr_factor * spread {
-                        Some(ChainRescueCriterion::LogDensity)
+            let skip_reason = if !boundary_scores.finite {
+                Some(ChainRescueSkip::NonFiniteScore)
+            } else if boundary_scores.proposed_source.is_none() {
+                Some(ChainRescueSkip::NoSource)
+            } else {
+                None
+            };
+            let Some(source) = boundary_scores
+                .proposed_source
+                .filter(|_| skip_reason.is_none())
+            else {
+                skip_two_hit_boundary(streaks);
+                let reason = skip_reason.expect("missing restart skip reason");
+                record_rescue_boundary(
+                    slots,
+                    &boundary_scores,
+                    RescueBoundaryDecision {
+                        eligible: false,
+                        skip_reason: Some(reason),
+                        observed_criteria: vec![None; chains],
+                        prior,
+                        resulting: streaks.to_vec(),
+                        proposed_source: None,
+                        outcomes: vec![ChainRescueOutcome::Skipped(reason); chains],
+                    },
+                );
+                return Ok(());
+            };
+            let observed = boundary_scores.raw_criteria.clone();
+            match rescue.policy {
+                ChainRescuePolicy::Immediate => {
+                    streaks.fill(ChainRescueStreak::default());
+                    let outcomes = if observed.iter().any(Option::is_some) {
+                        restart_chains(slots, &mut positions, source, &observed)
                     } else {
-                        None
-                    }
-                })
-                .collect();
-            let source = (0..chains)
-                .filter(|chain| criteria[*chain].is_none())
-                .max_by(|a, b| {
-                    steps[*a]
-                        .total_cmp(&steps[*b])
-                        .then(medians[*a].total_cmp(&medians[*b]))
-                });
-            let Some(source) = source else {
-                record_all(slots, &|_| {
-                    ChainRescueOutcome::Skipped(ChainRescueSkip::NoSource)
-                });
-                return Ok(());
-            };
-            if criteria.iter().all(Option::is_none) {
-                record_all(slots, &|_| ChainRescueOutcome::Kept);
-                return Ok(());
-            }
-            let source_state = {
-                let run = slots[source].run.as_ref().expect("started");
-                RescueSourceState {
-                    positions: std::mem::take(&mut positions[source]),
-                    active_mass: run.active_mass.clone(),
-                    inverse_mass: run.inverse_mass.clone(),
-                    active_tuning: run.active_tuning,
-                    dual_averaging: run.dual_averaging.clone(),
-                    stream_step: run.stream_step,
-                    search_step: run.search_step,
+                        vec![ChainRescueOutcome::Kept; chains]
+                    };
+                    record_rescue_boundary(
+                        slots,
+                        &boundary_scores,
+                        RescueBoundaryDecision {
+                            eligible: true,
+                            skip_reason: None,
+                            observed_criteria: observed,
+                            prior,
+                            resulting: streaks.to_vec(),
+                            proposed_source: Some(source),
+                            outcomes,
+                        },
+                    );
                 }
-            };
-            let mut outcomes = Vec::with_capacity(chains);
-            for (chain, slot) in slots.iter_mut().enumerate() {
-                let Some(criterion) = criteria[chain] else {
-                    outcomes.push(ChainRescueOutcome::Kept);
-                    continue;
-                };
-                let run = slot.run.as_mut().expect("started");
-                let (rng, cached_state) = run.rng_slot.parts();
-                let source_position = rng.random_range(0..source_state.positions.len());
-                run.position
-                    .copy_from_slice(&source_state.positions[source_position]);
-                *cached_state = None;
-                run.active_mass = source_state.active_mass.clone();
-                run.inverse_mass = source_state.inverse_mass.clone();
-                run.active_tuning = source_state.active_tuning;
-                run.dual_averaging = source_state.dual_averaging.clone();
-                run.stream_step = source_state.stream_step;
-                run.search_step = source_state.search_step;
-                outcomes.push(ChainRescueOutcome::Restarted {
-                    source,
-                    criterion,
-                    source_position,
-                    step_after: source_state.active_tuning.step_size,
-                });
+                ChainRescuePolicy::ObserveOnly => {
+                    streaks.fill(ChainRescueStreak::default());
+                    let outcomes = observed
+                        .iter()
+                        .map(|criterion| match criterion {
+                            Some(criterion) => ChainRescueOutcome::ObservedHit {
+                                criterion: *criterion,
+                            },
+                            None => ChainRescueOutcome::Kept,
+                        })
+                        .collect();
+                    record_rescue_boundary(
+                        slots,
+                        &boundary_scores,
+                        RescueBoundaryDecision {
+                            eligible: true,
+                            skip_reason: None,
+                            observed_criteria: observed,
+                            prior,
+                            resulting: streaks.to_vec(),
+                            proposed_source: Some(source),
+                            outcomes,
+                        },
+                    );
+                }
+                ChainRescuePolicy::TwoHit => {
+                    let transitions: Vec<TwoHitTransition> = observed
+                        .iter()
+                        .enumerate()
+                        .map(|(chain, criterion)| {
+                            advance_two_hit(
+                                streaks[chain],
+                                criterion.map_or(TwoHitObservation::Clean, TwoHitObservation::Hit),
+                            )
+                        })
+                        .collect();
+                    let action_criteria: Vec<Option<ChainRescueCriterion>> = transitions
+                        .iter()
+                        .zip(&observed)
+                        .map(|(state, criterion)| state.restart.then_some(*criterion).flatten())
+                        .collect();
+                    for (streak, state) in streaks.iter_mut().zip(&transitions) {
+                        *streak = state.resulting;
+                    }
+                    let restarted = action_criteria.iter().any(Option::is_some);
+                    let mut outcomes = if restarted {
+                        restart_chains(slots, &mut positions, source, &action_criteria)
+                    } else {
+                        vec![ChainRescueOutcome::Kept; chains]
+                    };
+                    if !restarted {
+                        for (chain, criterion) in observed.iter().enumerate() {
+                            if let Some(criterion) = criterion {
+                                outcomes[chain] = ChainRescueOutcome::PendingFirstHit {
+                                    criterion: *criterion,
+                                };
+                            }
+                        }
+                    } else {
+                        for (chain, criterion) in observed.iter().enumerate() {
+                            if criterion.is_some() && action_criteria[chain].is_none() {
+                                outcomes[chain] = ChainRescueOutcome::PendingFirstHit {
+                                    criterion: criterion.expect("checked"),
+                                };
+                            }
+                        }
+                    }
+                    record_rescue_boundary(
+                        slots,
+                        &boundary_scores,
+                        RescueBoundaryDecision {
+                            eligible: true,
+                            skip_reason: None,
+                            observed_criteria: observed,
+                            prior: transitions.iter().map(|state| state.prior).collect(),
+                            resulting: streaks.to_vec(),
+                            proposed_source: Some(source),
+                            outcomes,
+                        },
+                    );
+                }
             }
-            record_all(slots, &|chain| outcomes[chain].clone());
         }
         ChainRescueMode::PoolAtBoundaries => {
             let mut pooled: Option<DiagonalVariance> = None;
@@ -9879,9 +10349,25 @@ fn rescue_boundary<T: Target>(
                     });
                 }
                 if pooled_chains < 2 {
-                    record_all(slots, &|_| {
-                        ChainRescueOutcome::Skipped(ChainRescueSkip::NothingToPool)
-                    });
+                    skip_two_hit_boundary(streaks);
+                    record_rescue_boundary(
+                        slots,
+                        &boundary_scores,
+                        RescueBoundaryDecision {
+                            eligible: false,
+                            skip_reason: Some(ChainRescueSkip::NothingToPool),
+                            observed_criteria: vec![None; chains],
+                            prior,
+                            resulting: streaks.to_vec(),
+                            proposed_source: None,
+                            outcomes: vec![
+                                ChainRescueOutcome::Skipped(
+                                    ChainRescueSkip::NothingToPool,
+                                );
+                                chains
+                            ],
+                        },
+                    );
                     return Ok(());
                 }
             }
@@ -9897,7 +10383,7 @@ fn rescue_boundary<T: Target>(
                 None => None,
             };
             let pooled_sample_count = pooled.as_ref().map_or(0, |variance| variance.count);
-            let step = median_of(&steps);
+            let step = median_of(&boundary_scores.steps);
             let is_final = transition + 1 == warmup_discarded(slots);
             for slot in slots.iter_mut() {
                 let run = slot.run.as_mut().expect("started");
@@ -9915,10 +10401,26 @@ fn rescue_boundary<T: Target>(
                     run.stream_step = step;
                 }
             }
-            record_all(slots, &|_| ChainRescueOutcome::Pooled {
-                step_after: step,
-                pooled_sample_count,
-            });
+            streaks.fill(ChainRescueStreak::default());
+            record_rescue_boundary(
+                slots,
+                &boundary_scores,
+                RescueBoundaryDecision {
+                    eligible: true,
+                    skip_reason: None,
+                    observed_criteria: vec![None; chains],
+                    prior,
+                    resulting: streaks.to_vec(),
+                    proposed_source: None,
+                    outcomes: vec![
+                        ChainRescueOutcome::Pooled {
+                            step_after: step,
+                            pooled_sample_count,
+                        };
+                        chains
+                    ],
+                },
+            );
         }
     }
     Ok(())
@@ -9983,6 +10485,7 @@ fn sample_chains_rescued<'a, T: Target>(
             error: None,
         })
         .collect();
+    let mut streaks = vec![ChainRescueStreak::default(); chains];
     let pool = if threads == 1 {
         None
     } else {
@@ -10057,7 +10560,14 @@ fn sample_chains_rescued<'a, T: Target>(
             continue;
         }
         run_segment(&mut slots, window.end)?;
-        rescue_boundary(&mut slots, window_index, window.end - 1, warmup, rescue)?;
+        rescue_boundary(
+            &mut slots,
+            window_index,
+            window.end - 1,
+            warmup,
+            rescue,
+            &mut streaks,
+        )?;
     }
     run_segment(&mut slots, transitions)?;
     let mut outputs = Vec::with_capacity(chains);
@@ -10181,6 +10691,58 @@ mod tests {
 
     fn config(seed: u64) -> RunConfig {
         RunConfig::new(2, NonZeroUsize::new(5).unwrap(), seed)
+    }
+
+    #[test]
+    fn two_hit_state_resets_on_clean_skip_change_and_restart() {
+        assert_eq!(
+            canonical_rescue_criterion(true, true),
+            Some(ChainRescueCriterion::Step),
+            "Step has canonical priority when both rules hit"
+        );
+        let empty = ChainRescueStreak::default();
+        let first = advance_two_hit(empty, TwoHitObservation::Hit(ChainRescueCriterion::Step));
+        assert!(!first.restart);
+        assert_eq!(
+            first.resulting,
+            ChainRescueStreak {
+                criterion: Some(ChainRescueCriterion::Step),
+                streak: 1,
+            }
+        );
+
+        let clean = advance_two_hit(first.resulting, TwoHitObservation::Clean);
+        assert!(!clean.restart);
+        assert_eq!(clean.resulting, empty);
+        let skipped = advance_two_hit(first.resulting, TwoHitObservation::Skipped);
+        assert!(!skipped.restart);
+        assert_eq!(skipped.resulting, empty);
+
+        let changed = advance_two_hit(
+            first.resulting,
+            TwoHitObservation::Hit(ChainRescueCriterion::LogDensity),
+        );
+        assert!(!changed.restart);
+        assert_eq!(
+            changed.resulting,
+            ChainRescueStreak {
+                criterion: Some(ChainRescueCriterion::LogDensity),
+                streak: 1,
+            }
+        );
+
+        let restart = advance_two_hit(
+            first.resulting,
+            TwoHitObservation::Hit(ChainRescueCriterion::Step),
+        );
+        assert!(restart.restart);
+        assert_eq!(restart.resulting, empty);
+        let after_restart = advance_two_hit(
+            restart.resulting,
+            TwoHitObservation::Hit(ChainRescueCriterion::Step),
+        );
+        assert!(!after_restart.restart);
+        assert_eq!(after_restart.resulting, first.resulting);
     }
 
     #[test]
