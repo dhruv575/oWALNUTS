@@ -1,0 +1,51 @@
+{
+  "schema": "bridgestan-owned-worker-v1-validation",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "checks": [
+    {
+      "scope": "root",
+      "command": "cargo fmt --all -- --check; strict all-target/all-feature Clippy; debug and release all-target/all-feature tests; rustdoc with -D warnings; release build",
+      "status": "passed"
+    },
+    {
+      "scope": "integrations/bridgestan",
+      "command": "format; all-target/all-feature check and strict Clippy; release tests; rustdoc with -D warnings",
+      "status": "passed",
+      "note": "The environment-backed real-model parity test ran against the frozen sblrc model and data, in addition to seven fake/unit and the remaining integration tests."
+    },
+    {
+      "scope": "integrations/autodiff",
+      "command": "format; strict all-target/all-feature Clippy; release tests; rustdoc with -D warnings",
+      "status": "passed"
+    },
+    {
+      "scope": "integrations/python",
+      "command": "format; strict Clippy with all features and with no default features",
+      "status": "passed"
+    },
+    {
+      "scope": "integrations/enzyme",
+      "command": "offline lock refresh; format; strict all-target/all-feature Clippy; release tests",
+      "status": "passed",
+      "note": "The first --locked invocation exposed the stale root package version in this integration lockfile; commit 17c60da refreshed only owalnuts 0.1.0-beta.2 to 0.2.0, after which locked validation passed."
+    },
+    {
+      "scope": "STUDIES/bridgestan_owned_worker_v1",
+      "command": "format; strict Clippy; debug/release tests; rustdoc with -D warnings; Python unit tests and bytecode compilation",
+      "status": "passed"
+    },
+    {
+      "scope": "real BridgeStan parity",
+      "command": "external_real_model_owned_worker_has_exact_parallel_parity with frozen sblrc binary/data",
+      "status": "passed"
+    },
+    {
+      "scope": "frozen stress",
+      "command": "single exclusive 180 comparator + 540 owned parent/child run",
+      "status": "passed owned-worker acceptance",
+      "note": "Comparator had 19 event-inclusive faults; owned had zero. No child was rerun."
+    }
+  ],
+  "owned_worker_release_gate": "passed_with_limited_scope",
+  "root_cause": "not established"
+}
