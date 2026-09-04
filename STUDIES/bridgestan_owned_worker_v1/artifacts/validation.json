@@ -1,0 +1,56 @@
+{
+  "schema": "bridgestan-owned-worker-v1-validation",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "checks": [
+    {
+      "scope": "root",
+      "command": "GNU 1.88 cargo fmt --all --check; default and all-feature debug tests; all-feature release tests; strict all-target/all-feature Clippy; rustdoc with -D warnings",
+      "status": "passed",
+      "note": "Includes the projected-arrowhead regression proving one scoped pool construction for the complete transition loop and exact sequential/parallel outputs."
+    },
+    {
+      "scope": "integrations/bridgestan",
+      "command": "GNU 1.88 format; debug and release all-target/all-feature tests; strict Clippy; rustdoc with -D warnings",
+      "status": "passed",
+      "note": "24 debug and 24 release tests passed. Current external model paths were unavailable and those source-level tests skipped internally; the earlier frozen sblrc parity result remains recorded and was not rerun. New tests cover effective versus compiled threading, metadata validation, optional names, concurrent resident loads, replaced content, cache plateau, and owner teardown."
+    },
+    {
+      "scope": "integrations/autodiff",
+      "command": "GNU 1.88 format; debug/release tests; strict all-target/all-feature Clippy; rustdoc with -D warnings",
+      "status": "passed",
+      "note": "15 debug and 15 release integration tests plus rustdoc passed."
+    },
+    {
+      "scope": "integrations/python",
+      "command": "GNU 1.88 format; Cargo debug/release tests with Python runtime DLL; strict all-target/all-feature Clippy; rustdoc; release extension build; Python 3.14 pytest",
+      "status": "passed",
+      "note": "17 Python tests passed and 11 optional dependency/platform tests skipped. The Windows from_stan/direct-StanModel safety-gate test passed. ArviZ 1.x construction/result compatibility is covered while the frozen 0.23 fixture remains the strict diagnostic oracle."
+    },
+    {
+      "scope": "integrations/enzyme",
+      "command": "offline lock refresh; format; strict all-target/all-feature Clippy; release tests",
+      "status": "passed",
+      "note": "The first --locked invocation exposed the stale root package version in this integration lockfile; commit 17c60da refreshed only owalnuts 0.1.0-beta.2 to 0.2.0, after which locked validation passed."
+    },
+    {
+      "scope": "STUDIES/bridgestan_owned_worker_v1",
+      "command": "format; strict Clippy; Cargo tests; six Python analysis unit tests and bytecode compilation; analysis-only regeneration",
+      "status": "passed",
+      "note": "No stress child or sampler executable was launched."
+    },
+    {
+      "scope": "real BridgeStan parity",
+      "command": "external_real_model_owned_worker_has_exact_parallel_parity with frozen sblrc binary/data",
+      "status": "passed in original validation",
+      "note": "Not rerun during review because the external compiled model was no longer present."
+    },
+    {
+      "scope": "frozen stress",
+      "command": "single exclusive 180 comparator + 540 owned parent/child run",
+      "status": "historical result preserved; strengthened analysis passed",
+      "note": "Comparator had 19 event-inclusive faults; owned had zero. All 540 owned outputs report effective_replicas=1 and all five claimed parity fields match in 167 comparable pairs. No child was rerun."
+    }
+  ],
+  "owned_worker_release_gate": "passed_with_limited_scope",
+  "root_cause": "not established"
+}

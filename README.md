@@ -72,7 +72,10 @@ One line each for the other front doors:
 - **Stan models**: [`owalnuts-bridgestan`](integrations/bridgestan/README.md)
   wraps a BridgeStan-compiled model as a `Target`
   (`ReplicatedStanTarget::load(so, preload, data, seed, threads)` for
-  multi-chain runs).
+  multi-chain runs). On Windows the Rust integration records the requested
+  replica count but uses one effective owned worker per target and serializes
+  all native BridgeStan calls process-wide; Python `from_stan` and direct
+  Python BridgeStan operations are disabled there for 0.2.
 - **Rust autodiff**: [`owalnuts-autodiff`](integrations/autodiff/README.md)
   turns `fn log_density<S: Scalar>(&self, q: &[S]) -> S` into a `Target`
   with a reverse-mode tape, a few times the cost of a hand-written gradient.
@@ -315,6 +318,14 @@ wraps (`tests/sampler_api.rs`).
   accounted allocations, not process memory.
 - The Python, BridgeStan and autodiff crates are built from the tree, not
   published; the BridgeStan sampling tests need a locally compiled model.
+- The core Rust sampler is distinct from optional Stan support. The Windows
+  GNU Rust `StanTarget` owned-worker mitigation completed 540 ordinary and 180
+  concurrent-target diagnostic children without a fault, but the historical
+  root cause is not proven and sampling was 3.1–5.1x the four-replica
+  comparator. Windows execution is therefore limited to one effective replica
+  per target with a process-global native-call lock. Windows MSVC and the
+  Linux/macOS/package matrices remain release gates; Windows Python
+  `from_stan` and direct Python BridgeStan calls remain disabled.
 
 ## API stability
 

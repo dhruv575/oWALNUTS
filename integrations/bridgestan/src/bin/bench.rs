@@ -16,7 +16,9 @@ use owalnuts_bridgestan::{StanTarget, default_preload};
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use serde_json::{Value, json};
 use std::{
-    fs,
+    env, fs,
+    fs::OpenOptions,
+    io::Write,
     num::NonZeroUsize,
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -232,8 +234,18 @@ fn run_sampling<T: Target>(
 }
 
 fn main() {
-    let out_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("artifacts");
-    fs::create_dir_all(&out_dir).unwrap();
+    let output_path = env::args_os().nth(1).map(PathBuf::from).unwrap_or_else(|| {
+        eprintln!("usage: bench <new-output.json>");
+        std::process::exit(2);
+    });
+    let output_parent = output_path.parent().unwrap_or_else(|| {
+        eprintln!(
+            "benchmark output path has no parent: {}",
+            output_path.display()
+        );
+        std::process::exit(2);
+    });
+    fs::create_dir_all(output_parent).unwrap();
     let preload = default_preload();
     let mut rng = SmallRng::seed_from_u64(2026083102);
 
@@ -292,6 +304,7 @@ fn main() {
     let stan_ll_so = models_dir().join("local_level_model.so");
     let mut ll_compare = Vec::new();
     let mut ll_sampling = Vec::new();
+    let mut ll_provenance = Vec::new();
     for (t, reps) in [(100usize, 40_000usize), (1000, 4_000)] {
         let data = simulate(t, 2026083101);
         let data_json = json!({
@@ -301,6 +314,13 @@ fn main() {
         .to_string();
         let stan_ll =
             StanTarget::load(&stan_ll_so, &preload, Some(&data_json), 1).expect("load local level");
+        ll_provenance.push(json!({
+            "T": t,
+            "model_info": stan_ll.info(),
+            "compiled_threading": format!("{:?}", stan_ll.compiled_threading()),
+            "threading": format!("{:?}", stan_ll.threading()),
+            "execution": format!("{:?}", stan_ll.execution()),
+        }));
         let hand_ll = LocalLevel::new(data.clone(), Backend::Hand);
         let points: Vec<Vec<f64>> = (0..20)
             .map(|_| (0..t).map(|_| rng.random_range(-2.0..2.0)).collect())
@@ -360,14 +380,29 @@ fn main() {
 
     let result = json!({
         "algorithm_revision": ALGORITHM_REVISION,
-        "bridgestan": "2.9.0 (STAN_THREADS=true, mingw g++ 16.1.0)",
+        "provenance": {
+            "eight_schools": {
+                "model_info": stan_es.info(),
+                "compiled_threading": format!("{:?}", stan_es.compiled_threading()),
+                "threading": format!("{:?}", stan_es.threading()),
+                "execution": format!("{:?}", stan_es.execution()),
+            },
+            "local_level": ll_provenance,
+        },
         "eight_schools": {"threading": format!("{:?}", stan_es.threading()), "agreement": es_compare, "sampling": es_sampling},
         "local_level": {"agreement": ll_compare, "sampling": ll_sampling},
     });
-    fs::write(
-        out_dir.join("bridgestan-benchmark.json"),
-        serde_json::to_string_pretty(&result).unwrap(),
-    )
-    .unwrap();
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&output_path)
+        .unwrap_or_else(|error| {
+            panic!(
+                "refusing to replace benchmark output {}: {error}",
+                output_path.display()
+            )
+        });
+    writeln!(output, "{}", serde_json::to_string_pretty(&result).unwrap()).unwrap();
+    output.sync_all().unwrap();
     println!("{}", serde_json::to_string_pretty(&result).unwrap());
 }

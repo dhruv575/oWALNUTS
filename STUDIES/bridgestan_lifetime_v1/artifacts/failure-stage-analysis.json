@@ -1,0 +1,50 @@
+{
+  "schema": "bridgestan-lifetime-v1-failure-stage-analysis",
+  "diagnostic_only": true,
+  "baseline": {
+    "faults": 15,
+    "return_codes": {
+      "0xC0000374": 13,
+      "timeout_without_return_code": 2
+    },
+    "last_durable_heartbeat": {
+      "drop/before": 10,
+      "sampling/before": 5
+    },
+    "by_shape": {
+      "sblrc": 11,
+      "diamonds": 4,
+      "mesquite": 0
+    }
+  },
+  "fixed": {
+    "faults": 8,
+    "return_codes": {
+      "0xC0000374": 8
+    },
+    "last_durable_heartbeat": {
+      "sampling/before": 7,
+      "process/complete": 1
+    },
+    "by_shape": {
+      "sblrc": 3,
+      "diamonds": 4,
+      "mesquite": 1
+    }
+  },
+  "windows_application_events": {
+    "capture_available": true,
+    "events_total": 252,
+    "event_1001_windows_error_reporting": 216,
+    "fixed_event_1000": {
+      "0xC0000374": 8,
+      "0xC0000005": 5
+    },
+    "baseline_event_1000": {
+      "0xC0000374": 13,
+      "0xC0000005": 10
+    }
+  },
+  "interpretation": "The baseline clustered at drop/before, while seven fixed failures occurred before sampling/after, which includes the newly joined worker-exit and TLS-destructor interval. This movement is consistent with the scoped barrier making a native destructor-time failure synchronous, but it neither proves that mechanism nor identifies the underlying heap corruption. The resident-module intervention did not eliminate the failure class.",
+  "root_cause": "not established"
+}

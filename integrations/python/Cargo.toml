@@ -16,7 +16,7 @@ path = "src/lib.rs"
 [features]
 default = ["stan"]
 # BridgeStan-compiled Stan models through `owalnuts-bridgestan`
-# (`ReplicatedStanTarget`, one library copy per thread, GIL-free).
+# (`ReplicatedStanTarget`; Windows uses one owned worker).
 stan = ["dep:owalnuts-bridgestan"]
 
 [dependencies]

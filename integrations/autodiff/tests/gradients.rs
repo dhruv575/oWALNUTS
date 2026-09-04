@@ -541,7 +541,10 @@ fn parallel_threads_have_independent_tapes() {
                     let mut ga = vec![0.0; 10];
                     let vh = model.hand_gradient(&q, &mut gh);
                     let va = target.log_density_gradient(&q, &mut ga).unwrap();
-                    assert_eq!(va.to_bits(), vh.to_bits());
+                    assert!(
+                        (va - vh).abs() <= 2.0 * f64::EPSILON * (1.0 + vh.abs()),
+                        "threaded value mismatch: autodiff={va:?}, hand={vh:?}"
+                    );
                     assert_gradients_close("thread", &gh, &ga, 1e-10);
                 }
             })

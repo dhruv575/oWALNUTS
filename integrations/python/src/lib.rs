@@ -1166,7 +1166,7 @@ fn sample_cfunc<'py>(
 #[cfg(feature = "stan")]
 mod stan {
     use super::*;
-    use owalnuts_bridgestan::{ReplicatedStanTarget, Threading, default_preload};
+    use owalnuts_bridgestan::{Execution, ReplicatedStanTarget, Threading, default_preload};
     use std::path::{Path, PathBuf};
 
     fn load(
@@ -1189,8 +1189,18 @@ mod stan {
         }
     }
 
+    fn execution_name(execution: Execution) -> &'static str {
+        match execution {
+            Execution::DirectConcurrent => "direct_concurrent",
+            Execution::DirectSerialised => "direct_serialised",
+            Execution::ReplicatedConcurrent => "replicated_concurrent",
+            Execution::OwnedSerialised => "owned_serialised",
+        }
+    }
+
     /// Load a BridgeStan model library once and report its unconstrained
-    /// dimension, `bs_param_unc_names`, `bs_model_info` and threading mode.
+    /// dimension, names, model info, and explicitly probe-scoped backend
+    /// metadata. A later sample creates a distinct target from its run config.
     #[pyfunction]
     #[pyo3(signature = (model_so, data=None, seed=1, preload=None))]
     pub fn stan_model_info<'py>(
@@ -1208,7 +1218,14 @@ mod stan {
             target.param_unc_names().map(<[String]>::to_vec),
         )?;
         d.set_item("info", target.info())?;
-        d.set_item("threading", threading_name(target.threading()))?;
+        d.set_item(
+            "compiled_threading",
+            threading_name(target.compiled_threading()),
+        )?;
+        d.set_item("probe_threading", threading_name(target.threading()))?;
+        d.set_item("probe_execution", execution_name(target.execution()))?;
+        d.set_item("probe_requested_replicas", target.requested_replicas())?;
+        d.set_item("probe_effective_replicas", target.effective_replicas())?;
         Ok(d)
     }
 
@@ -1241,14 +1258,23 @@ mod stan {
             Ok((target, output))
         })?;
         let wall = started.elapsed().as_secs_f64();
-        output_dict(
+        let result = output_dict(
             py,
             output.inner(),
             wall,
             target.calls(),
             target.recoverable_failures(),
             0.0,
-        )
+        )?;
+        result.set_item(
+            "compiled_threading",
+            threading_name(target.compiled_threading()),
+        )?;
+        result.set_item("threading", threading_name(target.threading()))?;
+        result.set_item("execution", execution_name(target.execution()))?;
+        result.set_item("requested_replicas", target.requested_replicas())?;
+        result.set_item("effective_replicas", target.effective_replicas())?;
+        Ok(result)
     }
 
     /// Uniform starts with retries for a BridgeStan model.

@@ -42,7 +42,7 @@ jobs:
             target: aarch64
             manylinux: "2_28"
           - name: macos-x86_64
-            os: macos-13
+            os: macos-15-intel
             target: x86_64
           - name: macos-arm64
             os: macos-14
@@ -53,8 +53,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Build wheel (abi3, CPython 3.10+)
@@ -79,7 +79,7 @@ jobs:
           cd "$PACKAGE_DIR/tests"
           "$PY" -c "import owalnuts, sys; print(owalnuts.__file__, owalnuts.ALGORITHM_REVISION, 'stan' if owalnuts.HAS_STAN else 'no-stan', sys.version)"
           "$PY" -m pytest -q -rs test_adapters.py test_stan.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.name }}
           path: dist/*.whl
@@ -90,10 +90,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Verify the locked Python integration dependency graph
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: cargo check --locked --all-features
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -102,9 +108,6 @@ jobs:
           args: --out ../../dist
       - name: List the sdist
         run: tar tzf dist/*.tar.gz
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Build from the sdist in a clean directory and test
         # Proves the sdist is self-contained: the root crate and the
         # bridgestan crate are vendored by maturin (see pyproject.toml).
@@ -116,7 +119,7 @@ jobs:
           python -m pip install "$GITHUB_WORKSPACE"/dist/owalnuts-*.tar.gz -v
           cp "$GITHUB_WORKSPACE/$PACKAGE_DIR"/tests/*.py .
           python -m pytest -q -rs test_adapters.py test_stan.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -128,16 +131,18 @@ jobs:
     needs: wheels
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      OWALNUTS_REQUIRE_STAN_TESTS: "1"
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheel-linux-x86_64
           path: dist
@@ -145,7 +150,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu \
-            pytest "arviz>=0.17" "jax>=0.4" "torch>=2.0" "pymc>=5.10" "numba>=0.59" "bridgestan>=2.5"
+            pytest "arviz>=0.17" "jax>=0.4" "torch>=2.0" "pymc>=5.10" "numba>=0.59" "bridgestan==2.9.0"
           python -m pip install dist/owalnuts-*.whl
       - name: Run the full suite (BridgeStan compiles Eight Schools with the system g++)
         run: |
@@ -157,7 +162,7 @@ jobs:
     # Trusted publishing: configure the `pypi` environment on the repository
     # and register this workflow as a trusted publisher for the `owalnuts`
     # project on pypi.org. No API token lives in the repository.
-    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.publish)
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))
     needs: [wheels, sdist, backends]
     runs-on: ubuntu-latest
     environment:
@@ -167,7 +172,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

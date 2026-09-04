@@ -7,10 +7,29 @@
 //! `cargo test` works on a checkout without a C++ toolchain.
 
 use owalnuts::walnutpie::{Target, TargetErrorKind};
-use owalnuts_bridgestan::{StanTarget, Threading, default_preload};
+use owalnuts_bridgestan::{Execution, StanTarget, Threading, default_preload};
 use std::path::PathBuf;
 
 const DATA: &str = r#"{"J":8,"y":[28,8,-3,7,-1,1,18,12],"sigma":[15,10,16,11,9,11,10,18]}"#;
+
+fn external_model() -> Option<(PathBuf, PathBuf)> {
+    let model = std::env::var_os("OWALNUTS_BRIDGESTAN_REAL_MODEL").map(PathBuf::from);
+    let data = std::env::var_os("OWALNUTS_BRIDGESTAN_REAL_DATA").map(PathBuf::from);
+    match (model, data) {
+        (Some(model), Some(data)) => Some((model, data)),
+        missing => {
+            assert!(
+                std::env::var_os("OWALNUTS_BRIDGESTAN_REQUIRE_REAL_MODEL").is_none(),
+                "external real-model test was required but model/data variables were incomplete: {missing:?}"
+            );
+            eprintln!(
+                "skipping: OWALNUTS_BRIDGESTAN_REAL_MODEL and \
+                 OWALNUTS_BRIDGESTAN_REAL_DATA are not both set"
+            );
+            None
+        }
+    }
+}
 
 fn model() -> Option<StanTarget> {
     let so = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models/eight_schools_model.so");
@@ -31,6 +50,21 @@ fn dimension_and_finite_evaluation() {
     assert!(lp.is_finite());
     assert!(g.iter().all(|x| x.is_finite()));
     assert_eq!(m.calls(), 1);
+    if cfg!(windows) {
+        assert_eq!(m.threading(), Threading::Serialised);
+    } else {
+        assert_eq!(m.threading(), m.compiled_threading());
+    }
+    assert_eq!(
+        m.execution(),
+        if cfg!(windows) {
+            Execution::OwnedSerialised
+        } else if m.threading() == Threading::Concurrent {
+            Execution::DirectConcurrent
+        } else {
+            Execution::DirectSerialised
+        }
+    );
 }
 
 #[test]
@@ -106,7 +140,25 @@ fn replicated_target_agrees_with_serial_and_counts_calls() {
     let Some(m) = model() else { return };
     let so = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models/eight_schools_model.so");
     let pool = ReplicatedStanTarget::load(&so, &default_preload(), Some(DATA), 7, 4).expect("pool");
-    assert_eq!(pool.replicas(), 4);
+    assert_eq!(pool.requested_replicas(), 4);
+    assert_eq!(pool.replicas(), if cfg!(windows) { 1 } else { 4 });
+    assert_eq!(pool.effective_replicas(), pool.replicas());
+    assert_eq!(
+        pool.threading(),
+        if cfg!(windows) {
+            Threading::Serialised
+        } else {
+            Threading::Concurrent
+        }
+    );
+    assert_eq!(
+        pool.execution(),
+        if cfg!(windows) {
+            Execution::OwnedSerialised
+        } else {
+            Execution::ReplicatedConcurrent
+        }
+    );
     assert_eq!(pool.dimension(), m.dimension());
     let points: Vec<Vec<f64>> = (0..64)
         .map(|i| {
@@ -152,4 +204,170 @@ fn replicated_target_agrees_with_serial_and_counts_calls() {
             .kind(),
         TargetErrorKind::Fatal
     ));
+}
+
+#[test]
+fn repeated_model_and_replica_load_drop_remains_evaluable() {
+    use owalnuts_bridgestan::ReplicatedStanTarget;
+
+    let so = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models/eight_schools_model.so");
+    if !so.exists() {
+        eprintln!("skipping: {} not built", so.display());
+        return;
+    }
+    for cycle in 0..16 {
+        let target =
+            StanTarget::load(&so, &default_preload(), Some(DATA), 100 + cycle).expect("load");
+        let mut gradient = vec![0.0; 10];
+        assert!(
+            target
+                .log_density_gradient(&[0.0; 10], &mut gradient)
+                .unwrap()
+                .is_finite()
+        );
+        drop(target);
+
+        let replicas =
+            ReplicatedStanTarget::load(&so, &default_preload(), Some(DATA), 200 + cycle, 4)
+                .expect("replicated load");
+        assert!(
+            replicas
+                .log_density_gradient(&[0.0; 10], &mut gradient)
+                .unwrap()
+                .is_finite()
+        );
+        drop(replicas);
+    }
+}
+
+#[test]
+fn external_real_model_owned_worker_has_exact_parallel_parity() {
+    use owalnuts_bridgestan::ReplicatedStanTarget;
+
+    let Some((model_path, data_path)) = external_model() else {
+        return;
+    };
+    let data = std::fs::read_to_string(data_path).expect("read external model data");
+    let direct =
+        StanTarget::load(&model_path, &default_preload(), Some(&data), 991).expect("direct load");
+    let replicated =
+        ReplicatedStanTarget::load(&model_path, &default_preload(), Some(&data), 991, 4)
+            .expect("replicated load");
+    assert_eq!(replicated.requested_replicas(), 4);
+    assert_eq!(replicated.replicas(), if cfg!(windows) { 1 } else { 4 });
+    assert_eq!(replicated.effective_replicas(), replicated.replicas());
+    if cfg!(windows) {
+        assert_eq!(direct.threading(), Threading::Serialised);
+        assert_eq!(replicated.threading(), Threading::Serialised);
+        assert_eq!(direct.compiled_threading(), replicated.compiled_threading());
+        assert_eq!(direct.execution(), Execution::OwnedSerialised);
+        assert_eq!(replicated.execution(), Execution::OwnedSerialised);
+    }
+    assert_eq!(direct.dimension(), replicated.dimension());
+    assert_eq!(direct.info(), replicated.info());
+    assert_eq!(direct.param_unc_names(), replicated.param_unc_names());
+
+    let dimension = direct.dimension();
+    let (position, expected_value, expected_gradient) = [0.0, 0.1, -0.1, 0.5, -0.5]
+        .into_iter()
+        .find_map(|coordinate| {
+            let position = vec![coordinate; dimension];
+            let mut gradient = vec![0.0; dimension];
+            direct
+                .log_density_gradient(&position, &mut gradient)
+                .ok()
+                .map(|value| (position, value, gradient))
+        })
+        .expect("one deterministic external-model probe is valid");
+
+    let observed: Vec<_> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let position = &position;
+                let replicated = &replicated;
+                scope.spawn(move || {
+                    let mut gradient = vec![0.0; dimension];
+                    let value = replicated
+                        .log_density_gradient(position, &mut gradient)
+                        .unwrap();
+                    (value, gradient)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect()
+    });
+    assert!(
+        observed
+            .iter()
+            .all(|(value, gradient)| *value == expected_value && *gradient == expected_gradient)
+    );
+    assert_eq!(replicated.calls(), 16);
+}
+
+#[cfg(windows)]
+#[test]
+fn external_real_model_concurrent_target_instances_have_exact_parity() {
+    use owalnuts_bridgestan::ReplicatedStanTarget;
+    use std::sync::{Arc, Barrier};
+
+    let Some((model_path, data_path)) = external_model() else {
+        return;
+    };
+    let data = Arc::new(std::fs::read_to_string(data_path).expect("read external model data"));
+    let start = Arc::new(Barrier::new(4));
+    let loaded = Arc::new(Barrier::new(4));
+    let before_drop = Arc::new(Barrier::new(4));
+    let observed = std::thread::scope(|scope| {
+        let handles = (0..4)
+            .map(|_| {
+                let model_path = model_path.clone();
+                let data = Arc::clone(&data);
+                let start = Arc::clone(&start);
+                let loaded = Arc::clone(&loaded);
+                let before_drop = Arc::clone(&before_drop);
+                scope.spawn(move || {
+                    start.wait();
+                    let target = ReplicatedStanTarget::load(
+                        &model_path,
+                        &default_preload(),
+                        Some(data.as_str()),
+                        994,
+                        4,
+                    )
+                    .expect("concurrent target load");
+                    assert_eq!(target.requested_replicas(), 4);
+                    assert_eq!(target.effective_replicas(), 1);
+                    assert_eq!(target.threading(), Threading::Serialised);
+                    assert_eq!(target.execution(), Execution::OwnedSerialised);
+                    loaded.wait();
+                    let mut gradient = vec![0.0; target.dimension()];
+                    let value = target
+                        .log_density_gradient(&vec![0.0; target.dimension()], &mut gradient)
+                        .expect("concurrent target evaluation");
+                    let metadata = (
+                        target.dimension(),
+                        target.info().to_owned(),
+                        target.param_unc_names().map(<[String]>::to_vec),
+                        target.compiled_threading(),
+                        target.calls(),
+                        target.recoverable_failures(),
+                    );
+                    before_drop.wait();
+                    drop(target);
+                    (value, gradient, metadata)
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(observed.len(), 4);
+    assert!(observed[1..].iter().all(|value| value == &observed[0]));
+    assert_eq!(observed[0].2.4, 1);
+    assert_eq!(observed[0].2.5, 0);
 }

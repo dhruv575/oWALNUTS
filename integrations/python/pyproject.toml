@@ -40,8 +40,8 @@ jax = ["jax>=0.4"]
 torch = ["torch>=2.0"]
 pymc = ["pymc>=5.10"]
 numba = ["numba>=0.59"]
-# `from_stan`: compiles Stan programs with the bridgestan package (needs a
-# C++17 toolchain and GNU make; BridgeStan fetches its own Stan sources).
+# `from_stan`: Linux/macOS only in 0.2; Windows is explicitly disabled because
+# Python bridgestan.StanModel calls bypass the Rust owned-worker backend.
 stan = ["bridgestan>=2.5"]
 test = ["pytest>=7", "arviz>=0.17", "jax>=0.4", "torch>=2.0", "pymc>=5.10", "numba>=0.59", "bridgestan>=2.5"]
 

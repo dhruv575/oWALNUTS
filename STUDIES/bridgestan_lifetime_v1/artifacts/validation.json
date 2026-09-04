@@ -1,0 +1,66 @@
+{
+  "schema": "bridgestan-lifetime-v1-validation",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "checks": [
+    {
+      "scope": "root",
+      "command": "cargo fmt --all -- --check",
+      "status": "passed"
+    },
+    {
+      "scope": "root",
+      "command": "cargo clippy --locked --all-targets --all-features -- -D warnings",
+      "status": "passed"
+    },
+    {
+      "scope": "root",
+      "command": "cargo test --locked --all-targets --all-features",
+      "profile": "debug",
+      "status": "passed"
+    },
+    {
+      "scope": "root",
+      "command": "cargo test --locked --release --all-targets --all-features",
+      "profile": "release",
+      "status": "passed"
+    },
+    {
+      "scope": "root",
+      "command": "RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --all-features",
+      "status": "passed"
+    },
+    {
+      "scope": "root",
+      "command": "cargo build --locked --release --all-targets --all-features",
+      "status": "passed"
+    },
+    {
+      "scope": "integrations/bridgestan",
+      "command": "format; check --all-targets --all-features; strict Clippy with and without all features; test --release --all-features; rustdoc",
+      "status": "passed",
+      "note": "integration-local compiled model fixtures were absent and model-dependent test bodies skipped; the stress harness loaded three frozen external compiled models"
+    },
+    {
+      "scope": "integrations/autodiff",
+      "command": "format; strict Clippy; test --release",
+      "status": "passed"
+    },
+    {
+      "scope": "integrations/python",
+      "command": "format; strict Clippy with all features and no default features",
+      "status": "passed"
+    },
+    {
+      "scope": "STUDIES/bridgestan_lifetime_v1",
+      "command": "format; strict Clippy; debug/release tests; Python unittests; rustdoc",
+      "status": "passed"
+    },
+    {
+      "scope": "STUDIES/bridgestan_lifetime_v1",
+      "command": "single frozen 180 baseline + 180 fixed parent/child stress run",
+      "status": "failed acceptance",
+      "note": "baseline 15 faults; fixed 8 faults; no child reruns"
+    }
+  ],
+  "overall_release_status": "blocked"
+}

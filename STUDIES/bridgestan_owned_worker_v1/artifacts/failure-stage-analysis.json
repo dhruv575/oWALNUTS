@@ -1,0 +1,53 @@
+{
+  "schema": "bridgestan-owned-worker-v1-failure-stage-analysis",
+  "comparator": {
+    "children": 180,
+    "process_faults": 17,
+    "event_1000_correlations": 18,
+    "nominal_success_event_1000_faults": 2,
+    "event_inclusive_fault_union": 19,
+    "return_codes_in_fault_union": {
+      "0xC0000374": 16,
+      "0x00000001": 1,
+      "0x00000000_with_correlated_event_1000": 2
+    },
+    "timeouts": 1,
+    "missing_outputs": 13,
+    "incomplete_heartbeats": 17,
+    "last_durable_heartbeat_in_fault_union": {
+      "sampling/before": 13,
+      "drop/before": 4,
+      "process/complete": 2
+    },
+    "faults_by_shape": {
+      "sblrc": 10,
+      "diamonds": 8,
+      "mesquite": 1
+    },
+    "event_1000_signatures": {
+      "count": 18,
+      "counts": {
+        "0xc0000374/ntdll.dll": 14,
+        "0xc0000005/libwinpthread-1.dll": 3,
+        "0xc0000005/unknown": 1
+      },
+      "correlation": "Exact comparator executable path and faulting PID, with Event 1000 application-start FILETIME within 283 ms of the parent-recorded process start; 17/18 differed by at most 4 ms."
+    }
+  },
+  "owned": {
+    "children": 540,
+    "process_faults": 0,
+    "event_1000_correlations": 0,
+    "event_inclusive_fault_union": 0,
+    "nonzero_exits": 0,
+    "timeouts": 0,
+    "missing_outputs": 0,
+    "incomplete_heartbeats": 0,
+    "faults_by_shape": {
+      "sblrc": 0,
+      "diamonds": 0,
+      "mesquite": 0
+    }
+  },
+  "interpretation": "The fresh comparator reproduced the native failure class, including two failures invisible to process return-code-only analysis. The owned one-worker arm met the registered zero-fault criterion. This supports the intervention for the finite matrix but does not identify the historical root cause or qualify multiple Windows owner workers."
+}

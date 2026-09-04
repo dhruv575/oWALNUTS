@@ -1,0 +1,81 @@
+{
+  "schema": "bridgestan-owned-worker-v1-parity-and-performance",
+  "paired_cells_planned": 180,
+  "paired_cells_with_successful_raw_outputs": 167,
+  "paired_cells_without_two_raw_outputs": 13,
+  "claimed_parity_invariants": [
+    "sample_fingerprint_fnv1a64",
+    "target_calls",
+    "recoverable_failures",
+    "algorithm_revision",
+    "samples_observed"
+  ],
+  "exact_mismatches": {
+    "schema": 0,
+    "status": 0,
+    "shape": 0,
+    "seed": 0,
+    "model": 0,
+    "data": 0,
+    "diagnostic_only": 0,
+    "sample_fingerprint_fnv1a64": 0,
+    "diagnostic_checksum": 0,
+    "samples_observed": 0,
+    "all_retained_values_finite": 0,
+    "target_calls": 0,
+    "recoverable_failures": 0,
+    "algorithm_revision": 0,
+    "dimension": 0,
+    "requested_replicas": 0,
+    "threads": 0,
+    "chains": 0,
+    "warmup_per_chain": 0,
+    "retained_per_chain": 0,
+    "threading": 0
+  },
+  "owned_effective_replicas": {
+    "children_checked": 540,
+    "required": 1,
+    "violations": 0
+  },
+  "median_seconds": {
+    "process": {
+      "comparator": 0.4658822000201326,
+      "owned_paired": 0.27247364999493584,
+      "owned_full": 0.2786037000041688,
+      "owned_over_comparator_ratio": 0.5848552487799731
+    },
+    "load_by_shape": {
+      "sblrc": {
+        "comparator": 0.3957906,
+        "owned": 0.1543681
+      },
+      "diamonds": {
+        "comparator": 0.47643165,
+        "owned": 0.1758451
+      },
+      "mesquite": {
+        "comparator": 0.4116215,
+        "owned": 0.1568067
+      }
+    },
+    "sampling_by_shape": {
+      "sblrc": {
+        "comparator": 0.0211877,
+        "owned": 0.07774975,
+        "owned_over_comparator_ratio": 3.669570
+      },
+      "diamonds": {
+        "comparator": 0.16188135,
+        "owned": 0.4963478,
+        "owned_over_comparator_ratio": 3.066121
+      },
+      "mesquite": {
+        "comparator": 0.00778225,
+        "owned": 0.03931505,
+        "owned_over_comparator_ratio": 5.051887
+      }
+    }
+  },
+  "interpretation": "The owned arm's lower process median reflects loading one cached module instead of four and does not imply faster dispatch. Isolated short-run sampling medians were about 3.1x to 5.1x higher under serialized channel dispatch. Timings are descriptive and successful comparator subsets are conditioned on survival."
+}

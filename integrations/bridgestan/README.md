@@ -11,10 +11,12 @@ cd ..                                   # integrations/
 python -m venv .venv-bs
 .\.venv-bs\Scripts\pip install bridgestan numpy
 $env:MAKE = "mingw32-make"              # GNU make from the mingw-w64 toolchain
-.\.venv-bs\Scripts\python -c "import bridgestan.compile as c; c.compile_model('bridgestan/models/eight_schools.stan', make_args=['STAN_THREADS=true']); c.compile_model('bridgestan/models/local_level.stan', make_args=['STAN_THREADS=true'])"
+.\.venv-bs\Scripts\python -c "import bridgestan.compile as c; c.compile_model('bridgestan/models/eight_schools.stan'); c.compile_model('bridgestan/models/local_level.stan')"
 ```
 
-The first build compiles Stan Math (~2 min); later models take ~20 s.
+The first build also builds Stan Math and can take substantially longer than
+later model builds; timing depends on the BridgeStan version, compiler, and
+host.
 
 ## Recommended build configuration
 
@@ -40,15 +42,60 @@ Measurements: `STUDIES/posteriordb_bench_v1/artifacts/wall-gap/README.md`.
 
 A library built without `STAN_THREADS` has one global autodiff stack per
 *loaded module*, so a single `StanTarget` serialises its evaluations through
-a mutex (shared by every `StanTarget` loaded from the same file) and reports
-`Threading::Serialised`. For multi-chain sampling use
-`ReplicatedStanTarget::load(so, preload, data, seed, threads)`: it copies
-the library to `threads - 1` distinct temporary paths (distinct paths are
-distinct modules with their own autodiff stack), loads each, and dispatches
-every call to a free replica (one uncontended `try_lock`, ~50 ns). With as
-many replicas as calling threads no evaluation ever waits; measured
-per-thread cost with 4 threads is within 5-10% of the single-thread cost.
-The copies are deleted on drop.
+a mutex (shared by every `StanTarget` loaded from the same file).
+`threading()` reports effective call concurrency and is always
+`Threading::Serialised` for Windows owned-one targets, even if the DLL was
+compiled with `STAN_THREADS=true`. `compiled_threading()` reports that
+separate DLL capability, while `execution()` identifies the detailed backend.
+Off Windows,
+`ReplicatedStanTarget::load(so, preload, data, seed, threads)` copies the
+library only for replicas 1 through n-1 and dispatches calls to free replicas.
+Replica 0 (and every single-replica load) retains the original path so
+`$ORIGIN`/`@loader_path` dependencies resolve exactly as they did for
+`StanTarget`. On Windows
+it records the requested count but deliberately uses one effective owned
+worker; `requested_replicas()` and `effective_replicas()` expose both values
+(`replicas()` remains an alias for the effective count).
+More than one effective worker per Windows target remains out of scope.
+Multiple target instances may each own a worker, but the process-global
+native-call policy serializes those owners.
+
+## Native-library lifetime
+
+On Windows, `StanTarget::load` creates one dedicated OS thread. Library and
+symbol loading, model construction, metadata and names, gradients, native
+error freeing, and model destruction occur only on that thread. Caller and
+Rayon threads exchange bounded requests with it. Drop sends shutdown and
+joins without propagating a worker panic; therefore model destruction and the
+owner's native TLS teardown complete before drop returns. A disconnected or
+panicked worker is a fatal target error.
+
+Windows model and preload DLL handles remain process-resident, preventing TLS
+callbacks from reaching unloaded code. A model is first copied into a
+process-private cache whose identity is a freshly computed SHA-256 of its
+contents; existing copies are rehashed before reuse. The source model is
+closed after hashing/copying and is not kept mapped or locked. The cached
+model and preload DLLs can remain locked, and native module memory remains
+until process exit for each distinct model/preload loaded. Cache directories
+hold an exclusive lease; later processes remove directories at least one hour
+old only after acquiring the lease. Repeated same-content loads reuse one
+cached path and resident module; same-process tests verify handle and cache
+file counts plateau across repeated loads. Memory and cached files can still
+grow with each distinct model content or preload path used in one process.
+
+The model-module lock covers library/symbol setup, construction, the
+dimension/name/capability metadata snapshot, and model teardown. On Windows a
+second process-global native-call lock covers those operations, every
+evaluation, native error free, and destruction across all owner threads and
+model paths. This is the supported process-wide serialized policy. Off
+Windows replica 0 uses the original path while replicas 1 through n-1 share
+one in-memory source snapshot; a post-load byte check rejects a source
+revision change before any copy is loaded. All replicas must agree on
+dimension, optional names, and compiled threading capability. Linux and macOS
+retain direct calls, unload-on-drop behavior, and per-target copy cleanup. For
+compatibility with older BridgeStan builds, a missing, null, malformed, or
+wrong-length optional `bs_param_unc_names` result becomes `None` on every
+platform, including across the Windows worker transport.
 
 ## Use
 
@@ -63,6 +110,9 @@ let out = sample_chains(&target, &starts, &DiagonalMass::identity(dim), &config,
 
 // Multi-chain with the recommended (non-STAN_THREADS) build:
 let target = ReplicatedStanTarget::load(&so, &default_preload(), Some(data), 1, threads)?;
+assert_eq!(target.requested_replicas(), threads);
+let effective = target.effective_replicas(); // one on Windows
+let execution = target.execution();
 ```
 
 Semantics: unconstrained coordinates, `propto=false`, `jacobian=true`; a Stan
@@ -72,17 +122,27 @@ which kernel v10 refines through exactly like the walnutpie reference.
 ## Verify and measure
 
 ```powershell
-cargo +1.88.0-x86_64-pc-windows-gnu test --release     # skips if models are not built
-cargo +1.88.0-x86_64-pc-windows-gnu run --release --bin bench
+cargo +1.88.0-x86_64-pc-windows-gnu test --release
+cargo +1.88.0-x86_64-pc-windows-gnu run --release --features bench --bin bench -- artifacts/bridgestan-benchmark-<run-id>.json
 cargo +1.88.0-x86_64-pc-windows-gnu run --release --bin wallgap -- model.so data.json [calls] [threads]
 ```
 
-`wallgap` prints the us per `bs_log_density_gradient` call through
-`StanTarget`, through the raw function pointer, with `threads` threads on
-one instance, and with `threads` threads on a `ReplicatedStanTarget`.
+The benchmark requires a new output path and refuses to overwrite it. Its JSON
+records `bs_model_info`, compiled capability, and effective backend from each
+library actually loaded; it does not use a hard-coded BridgeStan/compiler
+label.
 
-Results and interpretation: `../AUTODIFF-RESEARCH.md` and
-`artifacts/bridgestan-benchmark.json`.
+`wallgap` prints the us per `bs_log_density_gradient` call through
+`StanTarget`, with `threads` callers on one instance, and through
+`ReplicatedStanTarget`. Its raw function-pointer arm is disabled on Windows
+because it would bypass the owned-worker backend; off Windows the raw arm
+uses full model/error cleanup before unloading.
+
+Historical benchmark provenance is recorded in `../AUTODIFF-RESEARCH.md` and
+`artifacts/bridgestan-benchmark.json`. Current Windows owned-one lifecycle and
+timing provenance is `../../STUDIES/bridgestan_owned_worker_v1`; its short-run
+sampling medians were 3.1–5.1x the four-replica comparator and are not a
+replacement for a dedicated benchmark.
 
 ## Facade note (WP18)
 
