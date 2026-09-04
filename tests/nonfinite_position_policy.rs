@@ -90,7 +90,10 @@ fn reject_leaf_completes_and_counts_the_event() {
         .telemetry()
         .map(|telemetry| telemetry.total().nonfinite_position_rejections())
         .sum();
-    assert!(rejections >= 5, "expected one rejection per transition, got {rejections}");
+    assert!(
+        rejections >= 5,
+        "expected one rejection per transition, got {rejections}"
+    );
 }
 
 /// A 3-D standard normal never overflows, so the two policies must produce
@@ -127,7 +130,10 @@ fn policies_are_bit_identical_when_the_event_never_occurs() {
     };
     let abort = run(NonfinitePositionPolicy::Abort);
     let reject = run(NonfinitePositionPolicy::RejectLeaf);
-    assert_eq!(abort.draws().collect::<Vec<_>>(), reject.draws().collect::<Vec<_>>());
+    assert_eq!(
+        abort.draws().collect::<Vec<_>>(),
+        reject.draws().collect::<Vec<_>>()
+    );
     assert_eq!(abort.total_target_calls(), reject.total_target_calls());
     for (a, r) in abort.telemetry().zip(reject.telemetry()) {
         assert_eq!(a.total(), r.total());
