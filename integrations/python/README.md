@@ -10,15 +10,15 @@ you already use.
 
 ```console
 pip install owalnuts               # numpy only
-pip install "owalnuts[stan]"       # + bridgestan: Stan programs via from_stan
+pip install "owalnuts[stan]"       # + bridgestan: Linux/macOS from_stan
 pip install "owalnuts[jax]"        # or [torch], [pymc], [numba], [arviz]
 ```
 
 Wheels are abi3 (one per platform, CPython 3.10+) for Linux x86_64/aarch64,
 macOS x86_64/arm64 and Windows x86_64; anywhere else `pip` builds the sdist
-with a Rust 1.88+ toolchain. `[stan]` additionally needs a C++17 compiler
-and GNU make (BridgeStan fetches its own Stan sources on first use; on
-Windows use the mingw-w64 `g++`/`mingw32-make`).
+with a Rust 1.88+ toolchain. On Linux/macOS, `[stan]` additionally needs a
+C++17 compiler and GNU make (BridgeStan fetches its own Stan sources on first
+use). Python `from_stan` is disabled on Windows 0.2 as described below.
 
 ### From source
 
@@ -109,7 +109,16 @@ target, dim, q0, names, unravel = owalnuts.from_pymc(model)  # compiled logp_dlo
 ## Stan models
 
 `from_stan` compiles a Stan program with the [BridgeStan](https://github.com/roualdes/bridgestan)
-package (`pip install "owalnuts[stan]"`) and samples it GIL-free:
+package (`pip install "owalnuts[stan]"`) and samples it GIL-free on Linux and
+macOS:
+
+> **Windows 0.2 safety gate:** `from_stan`, `StanTarget.__call__`,
+> `StanTarget.model`, `constrained_names`, and `constrain` raise an actionable
+> unsupported-platform error. Those operations use the separate Python
+> `bridgestan.StanModel` and bypass the Rust owned-worker lifetime backend.
+> The Rust `owalnuts-bridgestan` API is the qualified Windows path. `HAS_STAN`
+> reports whether the extension was compiled with the feature; it does not
+> override this platform gate.
 
 ```python
 import owalnuts
@@ -123,20 +132,19 @@ theta = target.constrain(result)     # (chains, draws, n) constrained draws, bs_
 target.constrained_names()           # their names; include_tp=/include_gq= as in BridgeStan
 ```
 
-The library is built **without** `STAN_THREADS` (pass
-`make_args=["STAN_THREADS=true"]` to change that): on Windows/mingw-w64 a
-threaded Stan build is 9-16x slower per gradient (emulated TLS,
-`STUDIES/posteriordb_bench_v1/artifacts/wall-gap`), and `sample` does not
-need it — the Rust `owalnuts_bridgestan::ReplicatedStanTarget` loads one
-copy of the library per thread (each copy has its own global autodiff
-stack) and runs the chains with the interpreter detached, so `threads=4`
-is four parallel chains at the single-thread per-gradient cost. Positions
+Off Windows, the library is built **without** `STAN_THREADS` unless
+`make_args=["STAN_THREADS=true"]` is passed. The Rust
+`owalnuts_bridgestan::ReplicatedStanTarget` loads one snapshotted copy per
+effective replica and runs with the interpreter detached. Rust metadata
+distinguishes effective `threading`, `compiled_threading`, `execution`,
+`requested_replicas`, and `effective_replicas`; these fields are retained on `StanTarget`/`SampleResult`
+where that backend is used. Positions
 are Stan's unconstrained parameters (`propto=False, jacobian=True`); a Stan
 exception or nonfinite value is a zero-density proposal (refined, then
 rejected), as in CmdStan. `data` is a dict (numpy arrays allowed), a
 `.json` path or JSON text; `seed` is the Stan model seed, the sampling seed
 is `sample(seed=...)`. A `StanTarget` is also a plain `logp_and_grad`
-callable through the `bridgestan` package, for inspection.
+callable through the `bridgestan` package off Windows.
 
 Structured metrics (the state-space "path metric" from the 2026-08-31
 research program) are one call:
@@ -182,9 +190,9 @@ ESS per second is what the callback overhead taxes.
 Every `sample` call releases the GIL for the whole run; the kernel calls
 the target from Rust worker threads. A Python callable re-attaches the
 interpreter on each call, so those chains are serialised (use `threads=1`).
-Three transports never touch the interpreter and run `threads` chains in
-parallel: the built-in native targets, `from_stan` (BridgeStan, above), and
-compiled C-ABI callbacks (`from_cfunc`, `from_pymc(gil_free=True)`):
+The built-in native targets and compiled C-ABI callbacks (`from_cfunc`,
+`from_pymc(gil_free=True)`) never touch the interpreter and run `threads`
+chains in parallel. Off Windows, `from_stan` (BridgeStan, above) does too:
 
 ```python
 import numba, owalnuts

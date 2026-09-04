@@ -289,16 +289,17 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   tested against a fresh interpreter by `.github/workflows/wheels.yml` and
   published from `v*` tags through PyPI trusted publishing.
 - **Stan models from Python.** `owalnuts.from_stan(stan_file, data, seed=,
-  make_args=)` compiles a Stan program with the `bridgestan` package (no
-  `STAN_THREADS` by default: the fast build on Windows/mingw-w64) and
+  make_args=)` compiles a Stan program with the `bridgestan` package on Linux
+  and macOS (no `STAN_THREADS` by default) and
   returns a `StanTarget` that `owalnuts.sample` runs through the Rust
-  `owalnuts_bridgestan::ReplicatedStanTarget` — one library copy per thread,
-  GIL-free, so `threads=4` gives four parallel chains — with the model's
+  `owalnuts_bridgestan::ReplicatedStanTarget` — snapshotted library replicas,
+  GIL-free — with the model's
   unconstrained parameter names on the result (`bs_param_unc_names`, new in
   the bridgestan crate) and `StanTarget.constrain(result)` for the
   constrained draws (`bs_param_constrain`). Cargo feature `stan` of the
   extension (default on); the bridgestan crate's tape-backend `bench` binary
-  moved behind its own `bench` feature.
+  moved behind its own `bench` feature. Windows 0.2 disables `from_stan` and
+  direct Python model operations; use the Rust owned-worker API.
 - `examples/kernel_bench.rs` (kernel hot-path microbenchmark) and
   `tests/kernel_fingerprint.rs` (bit-exact run fingerprints in both build
   profiles).
@@ -483,6 +484,26 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 
 ### Fixed
 
+- **Windows BridgeStan native lifetime is isolated on one owned OS thread.**
+  Every library/symbol, construct, metadata/name, gradient/error-free, and
+  model-destruct call now runs on that owner; bounded-channel callers never
+  enter model code, and drop joins through native TLS teardown. Windows
+  `ReplicatedStanTarget` records the requested count but uses one effective
+  replica; `threading()` reports serialized effective execution while
+  `compiled_threading()` preserves the DLL capability and `execution()`
+  names the backend. Model bytes use a verified SHA-256 cache and
+  module-global setup is locked; non-Windows replicas come from one source
+  snapshot. The first resident-DLL/scoped-pool diagnostic failed (8/180);
+  the follow-up owned-one diagnostic had zero faults in 540 children
+  (one-sided 95% upper bound 0.553229%) against 19/180 event-inclusive
+  comparator faults, with exact invariants in all 167 comparable pairs.
+  Sampling medians were 3.1–5.1x the four-replica comparator. Scope is one
+  Windows GNU host and three short-run models; MSVC/Linux/macOS and more than
+  one Windows owner remain unqualified, so release publication stays blocked.
+  Python `from_stan` and direct Python `bridgestan.StanModel` call/name/
+  constrain paths are disabled on Windows 0.2 because they bypass this Rust
+  owner backend. (`STUDIES/bridgestan_lifetime_v1`,
+  `STUDIES/bridgestan_owned_worker_v1`)
 - **The Python package goes through `owalnuts::sampler` and inherits its
   defaults.** `integrations/python` built `KernelTuning` / `WarmupConfig` on
   the `walnutpie` facade directly and restated the sampler defaults, so it

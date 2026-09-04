@@ -48,11 +48,13 @@ process codes, PIDs/start times, atomic heartbeats, raw output, stdout/stderr,
 timeouts, Event 1000/1001, and path/PID/application-start-time correlations.
 A correlated Event 1000 turns nominal process success into a study fault.
 
-The owned arm passes only with zero faults of every registered class and zero
-fingerprint mismatches among paired successful outputs. Performance is
-descriptive. Zero faults in all 540 owned children gives a one-sided 95%
-binomial upper bound of approximately 0.552%; scope remains limited to the
-registered models, short run shape, BridgeStan build, and host.
+The strengthened derived acceptance requires zero faults of every registered
+class, `effective_replicas == 1` in every owned output, and zero mismatches in
+all five claimed parity fields (fingerprint, target/recoverable counters,
+algorithm revision, and sample count) among paired successful outputs.
+Performance is descriptive. Zero faults in all 540 owned children gives a
+one-sided 95% binomial upper bound of 0.553229% (0.553% in prose); scope remains
+limited to the registered models, short run shape, BridgeStan build, and host.
 
 ## Verdict
 
@@ -68,16 +70,20 @@ that returned 1, and two nominal return-code-zero children with independently
 correlated Event 1000; event-inclusive union was 19 faults. The owned arm had
 zero nonzero exits, timeouts, missing outputs, incomplete heartbeats, and
 correlated Event 1000. Its one-sided 95% zero-failure binomial upper bound is
-`0.0055323` (0.553%).
+`0.005532292551836959` (`0.553229%`; 0.553% in prose). Among the 18
+comparator Event 1000 records, 14 were `0xC0000374`/`ntdll.dll`, three were
+`0xC0000005`/`libwinpthread-1.dll`, and one was
+`0xC0000005`/unknown-module.
 
 All 167 paired cells with successful raw output in both arms had exact FNV-1a
 sample fingerprints, target-call counts, recoverable-failure counts,
 algorithm revisions, and observed sample counts. Thirteen comparator cells
 had no raw output and therefore were not numerically comparable; no owned
-output was missing.
+output was missing, and all 540 owned outputs reported one effective replica.
 
-Process-level median duration was 0.466 seconds for the comparator and 0.279
-seconds for the paired owned arm (ratio 0.585). This does not mean channel
+Process-level median duration was 0.465882 seconds for the paired comparator
+and 0.272474 seconds for the paired owned arm (ratio 0.585). The full
+540-child owned median was 0.278604 seconds. This does not mean channel
 dispatch is faster: one-worker model loading was much shorter because it maps
 one model instead of four, while median sampling time was about 3.1x
 (diamonds), 3.7x (sblrc), and 5.1x (mesquite) the comparator. These short runs
@@ -86,5 +92,6 @@ are load dominated, so timing is descriptive only.
 The owned-worker mitigation clears this diagnostic lifetime gate, but it does
 not prove the historical root cause or general safety. The result is limited
 to these three model binaries, four-chain/four-thread 4/4 runs, the recorded
-Windows host, and one owned worker. Multi-worker Windows execution remains
-unqualified. No merge, push, tag, or publication was performed.
+Windows GNU host, and one owned worker. Multi-worker Windows execution and
+MSVC, Linux, and macOS qualification remain open, so the entire release is not
+declared unblocked. No merge, push, tag, or publication was performed.
