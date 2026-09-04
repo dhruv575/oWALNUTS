@@ -850,210 +850,217 @@ pub fn sample_chains_projected_arrowhead<T: Target>(
     let mut updates = Vec::with_capacity(schedule.windows.len());
     let mut generation = 0usize;
 
-    for transition in 0..transitions {
-        run_control_check(run_control)?;
-        let window_index = schedule
-            .windows
-            .iter()
-            .position(|window| transition >= window.start && transition < window.end);
-        for state in &mut states {
-            if window_index.is_some() && state.accumulator.is_none() {
-                state.accumulator = Some(ProjectedCovariance::new(
-                    global,
-                    specification,
-                    active_mass.path(),
-                ));
-            }
-        }
-        let mass = DirectOriginalQMass::LowRankArrowhead(active_mass.clone());
-        let execute = |(chain, state): (usize, &mut PooledProjectedChain)| {
-            let control = ExecutionControl {
-                public: run_control,
-                failed_chain: Some(&failed_chain),
-                chain,
-            };
-            let mut one = config.clone();
-            one.discarded = 0;
-            one.retained = 1;
-            one.warmup = None;
-            one.capture_acceptance = true;
-            one.tuning.step_size = state.active_step;
-            let result = run_chain(
-                target,
-                dimension,
-                &state.position,
-                &identity,
-                Some(&mass),
-                false,
-                &one,
-                chain_seed(config.seed, chain),
-                threads,
-                &control,
-                None,
-                Some(&mut state.persistent),
-            )
-            .map_err(|error| error.at_chain(chain).at_transition(transition));
-            if result.is_err() {
-                failed_chain.fetch_min(chain, Ordering::AcqRel);
-            }
-            result
-        };
-        let results: Vec<Result<ChainOutput, Error>> = if threads > 1 {
-            with_scoped_pool(threads, |pool| {
-                pool.install(|| states.par_iter_mut().enumerate().map(execute).collect())
-            })?
-        } else {
-            states.iter_mut().enumerate().map(execute).collect()
-        };
-        for (chain, result) in results.into_iter().enumerate() {
-            let output = result?;
-            let state = &mut states[chain];
-            let work = output.telemetry.total.clone();
-            state.position.copy_from_slice(&output.samples);
-            if let Some(accumulator) = &mut state.accumulator {
-                accumulator.update(&state.position);
-            }
-            if let (Some(dual), Some(acceptance)) =
-                (&mut state.dual, output.telemetry.acceptance_values[0])
-            {
-                state.active_step = dual.update(acceptance);
-            }
-            append_projected_transition(
-                &mut state.output,
-                output,
-                transition,
-                config.discarded,
-                &work,
-            )?;
-        }
-
-        if let Some(index) = window_index
-            && schedule.windows[index].end == transition + 1
-        {
+    let run_transitions = |pool: Option<&rayon::ThreadPool>| {
+        for transition in 0..transitions {
             run_control_check(run_control)?;
-            let mut pooled = ProjectedCovariance::new(global, specification, active_mass.path());
+            let window_index = schedule
+                .windows
+                .iter()
+                .position(|window| transition >= window.start && transition < window.end);
             for state in &mut states {
-                let summary = state.accumulator.take().expect("window accumulator exists");
-                pooled.covariance.merge(&summary.covariance)?;
+                if window_index.is_some() && state.accumulator.is_none() {
+                    state.accumulator = Some(ProjectedCovariance::new(
+                        global,
+                        specification,
+                        active_mass.path(),
+                    ));
+                }
             }
-            let sample_count = pooled.covariance.count;
-            let step_before = states[0].active_step;
-            let (outcome, candidate, condition, failures) = pooled.candidate(specification);
-            run_control_check(run_control)?;
-            if let Some(candidate) = candidate {
-                active_mass = candidate;
-                generation += 1;
-                if warmup.adapt_step_size && transition + 1 < config.discarded {
-                    for (chain, state) in states.iter_mut().enumerate() {
-                        if let Some(search) = &warmup.initial_step_search {
-                            let control = ExecutionControl {
-                                public: run_control,
-                                failed_chain: Some(&failed_chain),
-                                chain,
-                            };
-                            let cached =
-                                state.persistent.cached_state.as_ref().ok_or_else(|| {
-                                    Error::new(
-                                        ErrorKind::Internal,
-                                        "pooled barrier lost cached state",
-                                    )
-                                })?;
-                            let direct = DirectOriginalQMass::LowRankArrowhead(active_mass.clone());
-                            let momentum = direct
-                                .sample_momentum(&mut state.persistent.rng)
-                                .map_err(Error::internal)?;
-                            let mut search_work = WorkTotals::default();
-                            let (step, diagnostics) = search_step_from_evaluated(
-                                target,
-                                EvaluatedTransitionInput {
-                                    theta: cached.theta.clone(),
-                                    rho: momentum,
-                                    log_prob: cached.log_prob,
-                                    grad: cached.grad.clone(),
-                                },
-                                &direct,
-                                KernelTuning {
-                                    step_size: state.active_step,
-                                    ..config.tuning
-                                },
+            let mass = DirectOriginalQMass::LowRankArrowhead(active_mass.clone());
+            let execute = |(chain, state): (usize, &mut PooledProjectedChain)| {
+                let control = ExecutionControl {
+                    public: run_control,
+                    failed_chain: Some(&failed_chain),
+                    chain,
+                };
+                let mut one = config.clone();
+                one.discarded = 0;
+                one.retained = 1;
+                one.warmup = None;
+                one.capture_acceptance = true;
+                one.tuning.step_size = state.active_step;
+                let result = run_chain(
+                    target,
+                    dimension,
+                    &state.position,
+                    &identity,
+                    Some(&mass),
+                    false,
+                    &one,
+                    chain_seed(config.seed, chain),
+                    threads,
+                    &control,
+                    None,
+                    Some(&mut state.persistent),
+                )
+                .map_err(|error| error.at_chain(chain).at_transition(transition));
+                if result.is_err() {
+                    failed_chain.fetch_min(chain, Ordering::AcqRel);
+                }
+                result
+            };
+            let results: Vec<Result<ChainOutput, Error>> = if let Some(pool) = pool {
+                pool.install(|| states.par_iter_mut().enumerate().map(execute).collect())
+            } else {
+                states.iter_mut().enumerate().map(execute).collect()
+            };
+            for (chain, result) in results.into_iter().enumerate() {
+                let output = result?;
+                let state = &mut states[chain];
+                let work = output.telemetry.total.clone();
+                state.position.copy_from_slice(&output.samples);
+                if let Some(accumulator) = &mut state.accumulator {
+                    accumulator.update(&state.position);
+                }
+                if let (Some(dual), Some(acceptance)) =
+                    (&mut state.dual, output.telemetry.acceptance_values[0])
+                {
+                    state.active_step = dual.update(acceptance);
+                }
+                append_projected_transition(
+                    &mut state.output,
+                    output,
+                    transition,
+                    config.discarded,
+                    &work,
+                )?;
+            }
+
+            if let Some(index) = window_index
+                && schedule.windows[index].end == transition + 1
+            {
+                run_control_check(run_control)?;
+                let mut pooled =
+                    ProjectedCovariance::new(global, specification, active_mass.path());
+                for state in &mut states {
+                    let summary = state.accumulator.take().expect("window accumulator exists");
+                    pooled.covariance.merge(&summary.covariance)?;
+                }
+                let sample_count = pooled.covariance.count;
+                let step_before = states[0].active_step;
+                let (outcome, candidate, condition, failures) = pooled.candidate(specification);
+                run_control_check(run_control)?;
+                if let Some(candidate) = candidate {
+                    active_mass = candidate;
+                    generation += 1;
+                    if warmup.adapt_step_size && transition + 1 < config.discarded {
+                        for (chain, state) in states.iter_mut().enumerate() {
+                            if let Some(search) = &warmup.initial_step_search {
+                                let control = ExecutionControl {
+                                    public: run_control,
+                                    failed_chain: Some(&failed_chain),
+                                    chain,
+                                };
+                                let cached =
+                                    state.persistent.cached_state.as_ref().ok_or_else(|| {
+                                        Error::new(
+                                            ErrorKind::Internal,
+                                            "pooled barrier lost cached state",
+                                        )
+                                    })?;
+                                let direct =
+                                    DirectOriginalQMass::LowRankArrowhead(active_mass.clone());
+                                let momentum = direct
+                                    .sample_momentum(&mut state.persistent.rng)
+                                    .map_err(Error::internal)?;
+                                let mut search_work = WorkTotals::default();
+                                let (step, diagnostics) = search_step_from_evaluated(
+                                    target,
+                                    EvaluatedTransitionInput {
+                                        theta: cached.theta.clone(),
+                                        rho: momentum,
+                                        log_prob: cached.log_prob,
+                                        grad: cached.grad.clone(),
+                                    },
+                                    &direct,
+                                    KernelTuning {
+                                        step_size: state.active_step,
+                                        ..config.tuning
+                                    },
+                                    warmup.target_acceptance,
+                                    search,
+                                    &mut state.persistent.rng,
+                                    &control,
+                                    transition,
+                                    true,
+                                    &mut search_work,
+                                )
+                                .map_err(|error| error.at_chain(chain).at_transition(transition))?;
+                                state.active_step = step;
+                                let output = state.output.as_mut().expect("chain has transitioned");
+                                add_work(&mut output.telemetry.total, &search_work)?;
+                                add_work(&mut output.telemetry.discarded, &search_work)?;
+                                output.telemetry.step_searches.push(StepSearchEvent {
+                                    reason: StepSearchReason::MetricUpdate {
+                                        window_index: index,
+                                    },
+                                    search: diagnostics,
+                                });
+                            }
+                            state.dual = Some(DualAveraging::restart(
+                                state.active_step,
                                 warmup.target_acceptance,
-                                search,
-                                &mut state.persistent.rng,
-                                &control,
-                                transition,
-                                true,
-                                &mut search_work,
-                            )
-                            .map_err(|error| error.at_chain(chain).at_transition(transition))?;
-                            state.active_step = step;
-                            let output = state.output.as_mut().expect("chain has transitioned");
-                            add_work(&mut output.telemetry.total, &search_work)?;
-                            add_work(&mut output.telemetry.discarded, &search_work)?;
-                            output.telemetry.step_searches.push(StepSearchEvent {
-                                reason: StepSearchReason::MetricUpdate {
-                                    window_index: index,
-                                },
-                                search: diagnostics,
-                            });
+                                warmup.restart_reference_multiplier(),
+                            ));
                         }
-                        state.dual = Some(DualAveraging::restart(
-                            state.active_step,
-                            warmup.target_acceptance,
-                            warmup.restart_reference_multiplier(),
-                        ));
+                    }
+                }
+                updates.push(ProjectedMetricUpdate {
+                    window_index: index,
+                    transition,
+                    sample_count,
+                    generation,
+                    rank: specification.rank(),
+                    outcome,
+                    shrinkage: specification.shrinkage,
+                    ridge: specification.ridge,
+                    condition_estimate: condition,
+                    factorization_failures: failures,
+                    step_before,
+                    step_after_restart: states.first().map(|state| state.active_step),
+                });
+            }
+            if transition + 1 == config.discarded {
+                for state in &mut states {
+                    if let Some(dual) = &state.dual {
+                        state.active_step = dual.final_step();
                     }
                 }
             }
-            updates.push(ProjectedMetricUpdate {
-                window_index: index,
-                transition,
-                sample_count,
-                generation,
-                rank: specification.rank(),
-                outcome,
-                shrinkage: specification.shrinkage,
-                ridge: specification.ridge,
-                condition_estimate: condition,
-                factorization_failures: failures,
-                step_before,
-                step_after_restart: states.first().map(|state| state.active_step),
-            });
         }
-        if transition + 1 == config.discarded {
-            for state in &mut states {
-                if let Some(dual) = &state.dual {
-                    state.active_step = dual.final_step();
-                }
-            }
+        let mut outputs = Vec::with_capacity(chains);
+        let mut final_steps = Vec::with_capacity(chains);
+        for (chain, state) in states.into_iter().enumerate() {
+            let mut output = state
+                .output
+                .ok_or_else(|| Error::configuration("run requires at least one transition"))?;
+            output.metadata.algorithm_revision = PROJECTED_ARROWHEAD_REVISION;
+            output.metadata.base_seed = config.seed;
+            output.metadata.effective_seed = chain_seed(config.seed, chain);
+            output.metadata.thread_count = threads;
+            output.metadata.step_size = state.active_step;
+            output.metadata.tuning.step_size = state.active_step;
+            output.metadata.discarded = config.discarded;
+            output.metadata.retained = config.retained;
+            final_steps.push(state.active_step);
+            outputs.push(output);
         }
+        Ok(PooledProjectedArrowheadOutput {
+            chains: MultiChainOutput {
+                chains: outputs,
+                base_seed: config.seed,
+                algorithm_revision: PROJECTED_ARROWHEAD_REVISION,
+            },
+            metric_updates: updates,
+            final_mass: active_mass,
+            final_steps,
+        })
+    };
+    if threads == 1 {
+        run_transitions(None)
+    } else {
+        with_scoped_pool(threads, |pool| run_transitions(Some(pool)))?
     }
-    let mut outputs = Vec::with_capacity(chains);
-    let mut final_steps = Vec::with_capacity(chains);
-    for (chain, state) in states.into_iter().enumerate() {
-        let mut output = state
-            .output
-            .ok_or_else(|| Error::configuration("run requires at least one transition"))?;
-        output.metadata.algorithm_revision = PROJECTED_ARROWHEAD_REVISION;
-        output.metadata.base_seed = config.seed;
-        output.metadata.effective_seed = chain_seed(config.seed, chain);
-        output.metadata.thread_count = threads;
-        output.metadata.step_size = state.active_step;
-        output.metadata.tuning.step_size = state.active_step;
-        output.metadata.discarded = config.discarded;
-        output.metadata.retained = config.retained;
-        final_steps.push(state.active_step);
-        outputs.push(output);
-    }
-    Ok(PooledProjectedArrowheadOutput {
-        chains: MultiChainOutput {
-            chains: outputs,
-            base_seed: config.seed,
-            algorithm_revision: PROJECTED_ARROWHEAD_REVISION,
-        },
-        metric_updates: updates,
-        final_mass: active_mass,
-        final_steps,
-    })
 }
 
 pub fn preflight_chains_projected_arrowhead<T: Target>(

@@ -6,6 +6,7 @@ without the ``stan`` feature, or the Eight Schools model cannot be compiled
 """
 
 import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,27 @@ MODELS = Path(__file__).resolve().parents[2] / "bridgestan" / "models"
 Y = [28.0, 8.0, -3.0, 7.0, -1.0, 1.0, 18.0, 12.0]
 SIGMA = [15.0, 10.0, 16.0, 11.0, 9.0, 11.0, 10.0, 18.0]
 DATA = {"J": 8, "y": Y, "sigma": SIGMA}
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific safety gate")
+def test_windows_disables_python_native_bridgestan_paths():
+    message = "bypass the Rust owned-worker lifetime backend"
+    with pytest.raises(RuntimeError, match=message):
+        owalnuts.from_stan("unused.stan", DATA)
+    target = owalnuts.StanTarget(
+        model_so="unused.dll",
+        data=None,
+        dim=1,
+        parameter_names=None,
+    )
+    for operation in (
+        target.model,
+        lambda: target(np.zeros(1)),
+        target.constrained_names,
+        lambda: target.constrain(np.zeros((1, 1))),
+    ):
+        with pytest.raises(RuntimeError, match=message):
+            operation()
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +67,11 @@ def test_from_stan_reports_names_and_dimension(eight_schools):
     assert t.parameter_names is not None and len(t.parameter_names) == 10
     assert t.parameter_names[0] == "mu"
     assert "STAN_THREADS=true" not in t.info
+    assert t.compiled_threading == "serialised"
+    assert t.threading == "serialised"
+    assert t.execution in {"direct_serialised", "replicated_concurrent"}
+    assert t.requested_replicas == 1
+    assert t.effective_replicas == 1
     assert t.constrained_names() == list(t.parameter_names)
 
 

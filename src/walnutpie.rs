@@ -8133,6 +8133,14 @@ pub fn sample_block_dense<T: Target>(
     Ok(output)
 }
 
+#[cfg(test)]
+thread_local! {
+    #[allow(clippy::missing_const_for_thread_local)]
+    static SCOPED_POOL_BUILD_PROBE:
+        std::cell::RefCell<Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>> =
+        std::cell::RefCell::new(None);
+}
+
 /// Build a run-local Rayon pool whose operating-system threads are joined
 /// before this helper returns. Joining the scoped threads also completes their
 /// native TLS destructors before a caller can drop a target backed by a DLL.
@@ -8148,6 +8156,12 @@ fn with_scoped_pool_using<R>(
     worker_wrapper: impl Fn(rayon::ThreadBuilder) + Sync,
     operation: impl FnOnce(&rayon::ThreadPool) -> R,
 ) -> Result<R, Error> {
+    #[cfg(test)]
+    SCOPED_POOL_BUILD_PROBE.with(|probe| {
+        if let Some(counter) = probe.borrow().as_ref() {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }
+    });
     catch_unwind(AssertUnwindSafe(|| {
         rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
@@ -10926,6 +10940,72 @@ mod tests {
         )
         .unwrap();
         assert_eq!(dropped.load(Ordering::SeqCst), 4);
+    }
+
+    #[test]
+    fn projected_arrowhead_builds_one_pool_for_all_transitions() {
+        let basis = vec![
+            vec![1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![0.0, 0.0],
+            vec![0.0, 0.0],
+        ];
+        let global_lower = (0..6)
+            .map(|i| (0..6).map(|j| f64::from(i == j)).collect())
+            .collect();
+        let mass = LowRankArrowheadMass::new(
+            global_lower,
+            StructuredCovarianceBlock::ScaledAr1 {
+                scale: vec![1.0; 4],
+                rho: 0.2,
+            },
+            basis.clone(),
+            vec![vec![0.0; 2]; 6],
+        )
+        .unwrap();
+        let projected = ProjectedArrowheadWarmup::new(basis, nz(4), 0.1, 1.0e-6, 1.0e8).unwrap();
+        let config =
+            RunConfig::new(40, nz(4), 0x706f_6f6c).with_warmup(WarmupConfig::new(0.8).unwrap());
+        let positions = vec![vec![0.0; 10], vec![0.1; 10], vec![-0.1; 10], vec![0.2; 10]];
+        let sequential = sample_chains_projected_arrowhead(
+            &Gaussian(10),
+            &positions,
+            &mass,
+            &projected,
+            &config,
+            nz(1),
+            &RunControl::new(),
+        )
+        .unwrap();
+        let builds = Arc::new(AtomicUsize::new(0));
+        SCOPED_POOL_BUILD_PROBE.with(|probe| {
+            probe.replace(Some(Arc::clone(&builds)));
+        });
+        let parallel = sample_chains_projected_arrowhead(
+            &Gaussian(10),
+            &positions,
+            &mass,
+            &projected,
+            &config,
+            nz(4),
+            &RunControl::new(),
+        )
+        .unwrap();
+        SCOPED_POOL_BUILD_PROBE.with(|probe| drop(probe.take()));
+
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+        assert_eq!(sequential.final_mass(), parallel.final_mass());
+        assert_eq!(sequential.metric_updates(), parallel.metric_updates());
+        for (left, right) in sequential
+            .chains()
+            .chains()
+            .iter()
+            .zip(parallel.chains().chains())
+        {
+            assert_eq!(left.samples(), right.samples());
+            assert_eq!(left.diagnostics(), right.diagnostics());
+            assert_eq!(left.telemetry(), right.telemetry());
+        }
     }
 
     #[test]

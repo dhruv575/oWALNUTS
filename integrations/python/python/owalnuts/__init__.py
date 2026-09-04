@@ -10,7 +10,6 @@ marshals arrays and configuration.
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,7 +23,8 @@ from . import _owalnuts
 ALGORITHM_REVISION: str = _owalnuts.ALGORITHM_REVISION
 PAPER_ADAPTATION_REVISION: str = _owalnuts.PAPER_ADAPTATION_REVISION
 STOP_CODES: tuple[str, ...] = tuple(_owalnuts.STOP_CODES)
-#: Whether the extension was built with BridgeStan support (``from_stan``).
+#: Whether the extension was built with BridgeStan support. On Windows 0.2,
+#: ``from_stan`` remains disabled even when this is true.
 HAS_STAN: bool = bool(getattr(_owalnuts, "HAS_STAN", False))
 
 #: The ``owalnuts::sampler`` defaults this package inherits, read from the
@@ -129,6 +129,11 @@ class SampleResult:
     target_attached_seconds: float
     config: dict[str, Any] = field(default_factory=dict)
     refresh_updates: list[dict[str, Any]] | None = None
+    compiled_threading: str | None = None
+    threading: str | None = None
+    target_execution: str | None = None
+    requested_replicas: int | None = None
+    effective_replicas: int | None = None
     #: Unconstrained parameter names when the target provides them (Stan,
     #: ``from_cfunc(parameter_names=...)``); the default labels for
     #: ``summary`` and ``to_inferencedata``.
@@ -327,24 +332,36 @@ def from_cfunc(
 
 # ── Stan models (BridgeStan) ─────────────────────────────────────────────
 
+_WINDOWS_STAN_UNSUPPORTED = (
+    "owalnuts 0.2 disables Python from_stan and direct bridgestan.StanModel "
+    "operations on Windows because those Python-native calls bypass the Rust "
+    "owned-worker lifetime backend; use owalnuts-bridgestan from Rust, or run "
+    "the Python Stan integration on Linux/macOS"
+)
+
+
+def _require_python_stan_supported() -> None:
+    if sys.platform == "win32":
+        raise RuntimeError(_WINDOWS_STAN_UNSUPPORTED)
+
 
 @dataclass(frozen=True)
 class StanTarget:
     """A BridgeStan-compiled Stan model as a GIL-free oWALNUTS target.
 
     ``sample`` loads ``model_so`` through the Rust
-    ``owalnuts_bridgestan::ReplicatedStanTarget`` — one copy of the library
-    per thread, so a library built *without* ``STAN_THREADS`` (the
-    recommended build; see ``integrations/bridgestan/README.md``) still gives
-    real parallel chains — and evaluates it with the interpreter detached.
+    ``owalnuts_bridgestan::ReplicatedStanTarget`` and evaluates it with the
+    interpreter detached. Off Windows, independent snapshotted replicas give
+    parallel chains for a model built without ``STAN_THREADS``.
     Positions are Stan's unconstrained parameters (``bs_param_unc_names``);
     the log density is ``propto=False, jacobian=True``; a Stan exception or a
     nonfinite value is a zero-density (refined, then rejected) proposal.
 
-    The object is also a plain ``logp_and_grad`` callable (through the
-    ``bridgestan`` Python package), so it can be inspected or passed to any
-    code expecting the callable transport. ``constrain`` maps draws back to
-    the constrained parameters.
+    Off Windows the object is also a plain ``logp_and_grad`` callable through
+    the ``bridgestan`` Python package, and ``constrain`` maps draws back to
+    constrained parameters. owalnuts 0.2 disables those direct Python-native
+    paths and ``from_stan`` on Windows because they bypass the Rust owned
+    worker.
     """
 
     model_so: str
@@ -354,10 +371,16 @@ class StanTarget:
     seed: int = 1
     preload: tuple[str, ...] = ()
     info: str = ""
+    compiled_threading: str = ""
+    threading: str = ""
+    execution: str = ""
+    requested_replicas: int = 1
+    effective_replicas: int = 1
     _cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def model(self):
         """The ``bridgestan.StanModel`` for this library and data (lazy)."""
+        _require_python_stan_supported()
         if "model" not in self._cache:
             import bridgestan as bs
 
@@ -417,29 +440,24 @@ def from_stan(stan_file: "str | os.PathLike[str]", data: Any = None, *, seed: in
               preload: Sequence[str] = ()) -> StanTarget:
     """Compile a Stan program with the ``bridgestan`` package and wrap it.
 
-    ``pip install owalnuts[stan]``; BridgeStan downloads its own Stan sources
-    on first use and needs a C++17 toolchain and GNU make (on Windows the
-    mingw-w64 ``mingw32-make``/``g++``; ``MAKE`` is set to ``mingw32-make``
-    here when ``make`` is not on ``PATH``). ``stan_file`` may also be an
+    Linux/macOS only in owalnuts 0.2. ``pip install owalnuts[stan]``;
+    BridgeStan downloads its own Stan sources on first use and needs a C++17
+    toolchain and GNU make. ``stan_file`` may also be an
     already built ``*_model.so``/``.dll``/``.dylib``. ``data`` is a dict
     (numpy arrays allowed), a ``.json`` path, JSON text, or ``None``.
 
     The library is built **without** ``STAN_THREADS`` unless ``make_args``
-    says otherwise: that is the fast build on Windows/mingw-w64 (emulated TLS
-    makes a threaded build 9-16x slower per gradient) and ``sample`` gets
-    parallel chains from one library copy per thread regardless.
+    says otherwise; independent non-Windows replicas provide parallel chains.
     ``seed`` is the Stan model seed (construction and generated quantities);
     the sampling seed is ``sample(seed=...)``.
     """
+    _require_python_stan_supported()
     if not _owalnuts.HAS_STAN:
         raise RuntimeError("this owalnuts build was compiled without the `stan` feature")
     path = Path(stan_file)
     if path.suffix.lower() in {".so", ".dll", ".dylib"}:
         model_so = path
     else:
-        if sys.platform == "win32" and "MAKE" not in os.environ and shutil.which("make") is None \
-                and shutil.which("mingw32-make") is not None:
-            os.environ["MAKE"] = "mingw32-make"
         import bridgestan as bs
         import bridgestan.compile as bs_compile
 
@@ -453,6 +471,11 @@ def from_stan(stan_file: "str | os.PathLike[str]", data: Any = None, *, seed: in
         model_so=str(model_so), data=data_json, dim=int(info["dimension"]),
         parameter_names=tuple(names) if names else None, seed=int(seed),
         preload=tuple(preload), info=str(info["info"]),
+        compiled_threading=str(info["compiled_threading"]),
+        threading=str(info["threading"]),
+        execution=str(info["execution"]),
+        requested_replicas=int(info["requested_replicas"]),
+        effective_replicas=int(info["effective_replicas"]),
     )
 
 
@@ -628,6 +651,11 @@ def _result(raw: dict[str, Any], cfg: dict[str, Any]) -> SampleResult:
         target_attached_seconds=float(raw["target_attached_seconds"]),
         config=cfg,
         refresh_updates=raw.get("refresh_updates"),
+        compiled_threading=raw.get("compiled_threading"),
+        threading=raw.get("threading"),
+        target_execution=raw.get("execution"),
+        requested_replicas=raw.get("requested_replicas"),
+        effective_replicas=raw.get("effective_replicas"),
     )
 
 
@@ -929,10 +957,21 @@ def to_inferencedata(result: SampleResult, var_names: Sequence[str] | None = Non
         "zero_density_evaluations": retained("zero_density_evaluations").astype(np.int64),
     }
     dims = {"q": ["q_dim"]} if "q" in posterior else None
-    idata = az.from_dict(posterior=posterior, sample_stats=stats, dims=dims,
-                         attrs={"algorithm_revision": result.algorithm_revision,
-                                "sampler": "owalnuts", "wall_seconds": result.wall_seconds,
-                                "target_calls": result.target_calls})
+    attrs = {"algorithm_revision": result.algorithm_revision,
+             "sampler": "owalnuts", "wall_seconds": result.wall_seconds,
+             "target_calls": result.target_calls}
+    try:
+        # ArviZ <= 0.22 returns InferenceData from group keyword arguments.
+        idata = az.from_dict(posterior=posterior, sample_stats=stats, dims=dims, attrs=attrs)
+    except TypeError as error:
+        if "unexpected keyword argument 'posterior'" not in str(error):
+            raise
+        # ArviZ >= 1.0 accepts one nested group dictionary and returns DataTree.
+        idata = az.from_dict(
+            {"posterior": posterior, "sample_stats": stats},
+            dims=dims,
+            attrs={"/": attrs},
+        )
     return idata
 
 

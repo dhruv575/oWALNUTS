@@ -7,7 +7,7 @@
 //! `cargo test` works on a checkout without a C++ toolchain.
 
 use owalnuts::walnutpie::{Target, TargetErrorKind};
-use owalnuts_bridgestan::{StanTarget, Threading, default_preload};
+use owalnuts_bridgestan::{Execution, StanTarget, Threading, default_preload};
 use std::path::PathBuf;
 
 const DATA: &str = r#"{"J":8,"y":[28,8,-3,7,-1,1,18,12],"sigma":[15,10,16,11,9,11,10,18]}"#;
@@ -31,6 +31,21 @@ fn dimension_and_finite_evaluation() {
     assert!(lp.is_finite());
     assert!(g.iter().all(|x| x.is_finite()));
     assert_eq!(m.calls(), 1);
+    if cfg!(windows) {
+        assert_eq!(m.threading(), Threading::Serialised);
+    } else {
+        assert_eq!(m.threading(), m.compiled_threading());
+    }
+    assert_eq!(
+        m.execution(),
+        if cfg!(windows) {
+            Execution::OwnedSerialised
+        } else if m.threading() == Threading::Concurrent {
+            Execution::DirectConcurrent
+        } else {
+            Execution::DirectSerialised
+        }
+    );
 }
 
 #[test]
@@ -108,6 +123,23 @@ fn replicated_target_agrees_with_serial_and_counts_calls() {
     let pool = ReplicatedStanTarget::load(&so, &default_preload(), Some(DATA), 7, 4).expect("pool");
     assert_eq!(pool.requested_replicas(), 4);
     assert_eq!(pool.replicas(), if cfg!(windows) { 1 } else { 4 });
+    assert_eq!(pool.effective_replicas(), pool.replicas());
+    assert_eq!(
+        pool.threading(),
+        if cfg!(windows) {
+            Threading::Serialised
+        } else {
+            Threading::Concurrent
+        }
+    );
+    assert_eq!(
+        pool.execution(),
+        if cfg!(windows) {
+            Execution::OwnedSerialised
+        } else {
+            Execution::ReplicatedConcurrent
+        }
+    );
     assert_eq!(pool.dimension(), m.dimension());
     let points: Vec<Vec<f64>> = (0..64)
         .map(|i| {
@@ -211,6 +243,14 @@ fn external_real_model_owned_worker_has_exact_parallel_parity() {
             .expect("replicated load");
     assert_eq!(replicated.requested_replicas(), 4);
     assert_eq!(replicated.replicas(), if cfg!(windows) { 1 } else { 4 });
+    assert_eq!(replicated.effective_replicas(), replicated.replicas());
+    if cfg!(windows) {
+        assert_eq!(direct.threading(), Threading::Serialised);
+        assert_eq!(replicated.threading(), Threading::Serialised);
+        assert_eq!(direct.compiled_threading(), replicated.compiled_threading());
+        assert_eq!(direct.execution(), Execution::OwnedSerialised);
+        assert_eq!(replicated.execution(), Execution::OwnedSerialised);
+    }
     assert_eq!(direct.dimension(), replicated.dimension());
     assert_eq!(direct.info(), replicated.info());
     assert_eq!(direct.param_unc_names(), replicated.param_unc_names());

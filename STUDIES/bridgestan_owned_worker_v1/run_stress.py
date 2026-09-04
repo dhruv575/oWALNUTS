@@ -435,6 +435,7 @@ def parse_event_1000(event: dict[str, Any]) -> dict[str, Any] | None:
         "application_start_hex": r"(?im)^Faulting application start time:\s*(0x[0-9a-f]+)\s*$",
         "application_path": r"(?im)^Faulting application path:\s*(.+?)\s*$",
         "exception_code": r"(?im)^Exception code:\s*(0x[0-9a-f]+)\s*$",
+        "faulting_module": r"(?im)^Faulting module name:\s*([^,\r\n]+)",
         "report_id": r"(?im)^Report Id:\s*(.+?)\s*$",
     }
     values: dict[str, Any] = {}
@@ -503,6 +504,69 @@ def median_duration(records: list[dict[str, Any]]) -> float | None:
     return statistics.median(values) if values else None
 
 
+CLAIMED_PARITY_FIELDS = (
+    "sample_fingerprint_fnv1a64",
+    "target_calls",
+    "recoverable_failures",
+    "algorithm_revision",
+    "samples_observed",
+)
+
+PAIRED_EQUAL_FIELDS = (
+    "schema",
+    "status",
+    "shape",
+    "seed",
+    "model",
+    "data",
+    "diagnostic_only",
+    *CLAIMED_PARITY_FIELDS,
+    "diagnostic_checksum",
+    "all_retained_values_finite",
+    "dimension",
+    "requested_replicas",
+    "threads",
+    "chains",
+    "warmup_per_chain",
+    "retained_per_chain",
+    "threading",
+)
+
+
+def paired_invariant_differences(
+    comparator: dict[str, Any], owned: dict[str, Any]
+) -> dict[str, list[Any]]:
+    return {
+        field: [comparator.get(field), owned.get(field)]
+        for field in PAIRED_EQUAL_FIELDS
+        if comparator.get(field) != owned.get(field)
+    }
+
+
+def owned_effective_replica_violation(record: dict[str, Any]) -> str | None:
+    raw = record.get("raw_result")
+    if not isinstance(raw, dict):
+        return "raw output unavailable"
+    if raw.get("effective_replicas") != 1:
+        return f"effective_replicas={raw.get('effective_replicas')!r}, expected 1"
+    return None
+
+
+def correlated_signatures(
+    mode_records: list[dict[str, Any]],
+    correlations: dict[str, list[dict[str, Any]]],
+) -> dict[str, int]:
+    signatures: dict[str, int] = {}
+    for record in mode_records:
+        for correlation in correlations[record["case_id"]]:
+            parsed = correlation["parsed"]
+            exception = str(parsed.get("exception_code") or "unknown").lower()
+            module = str(parsed.get("faulting_module") or "unknown").lower()
+            key = f"{exception}/{module}"
+            signatures[key] = signatures.get(key, 0) + 1
+    return dict(sorted(signatures.items()))
+
+
 def analyze() -> dict[str, Any]:
     records = load_records()
     expected = {
@@ -554,6 +618,7 @@ def analyze() -> dict[str, Any]:
             "correlated_event_1000": sum(
                 bool(correlations[record["case_id"]]) for record in mode_records
             ),
+            "event_1000_signatures": correlated_signatures(mode_records, correlations),
             "nominal_success_event_faults": sum(
                 bool(record["process_success"]) and bool(correlations[record["case_id"]])
                 for record in mode_records
@@ -580,6 +645,7 @@ def analyze() -> dict[str, Any]:
 
     comparable = 0
     mismatches: list[dict[str, Any]] = []
+    mismatch_counts = {field: 0 for field in PAIRED_EQUAL_FIELDS}
     for case in arm_cases("comparator"):
         left_record = records.get(case_id("comparator", case))
         right_record = records.get(case_id("owned", case))
@@ -590,15 +656,15 @@ def analyze() -> dict[str, Any]:
         if left.get("status") != "ok" or right.get("status") != "ok":
             continue
         comparable += 1
-        left_fingerprint = left.get("sample_fingerprint_fnv1a64")
-        right_fingerprint = right.get("sample_fingerprint_fnv1a64")
-        if left_fingerprint != right_fingerprint:
+        differences = paired_invariant_differences(left, right)
+        if differences:
+            for field in differences:
+                mismatch_counts[field] += 1
             mismatches.append(
                 {
                     "shape": case["shape"],
                     "seed": case["seed"],
-                    "comparator": left_fingerprint,
-                    "owned": right_fingerprint,
+                    "differences": differences,
                 }
             )
 
@@ -613,12 +679,22 @@ def analyze() -> dict[str, Any]:
         if record["mode"] == "owned" and record["schedule"] == "paired"
     ]
     comparator_median = median_duration(paired_comparator)
-    owned_median = median_duration(paired_owned)
+    paired_owned_median = median_duration(paired_owned)
+    full_owned_median = by_mode.get("owned", {}).get("duration_seconds_median")
     overhead_ratio = (
-        owned_median / comparator_median
-        if owned_median is not None and comparator_median not in (None, 0.0)
+        paired_owned_median / comparator_median
+        if paired_owned_median is not None and comparator_median not in (None, 0.0)
         else None
     )
+    owned_records = [record for record in ordered if record["mode"] == "owned"]
+    effective_replica_violations = [
+        {
+            "case_id": record["case_id"],
+            "reason": violation,
+        }
+        for record in owned_records
+        if (violation := owned_effective_replica_violation(record)) is not None
+    ]
     owned = by_mode.get("owned", {})
     owned_complete = owned.get("recorded") == int(PROTOCOL["execution"]["children"]["owned"])
     accepted = (
@@ -630,6 +706,7 @@ def analyze() -> dict[str, Any]:
         and owned.get("missing_outputs") == 0
         and owned.get("incomplete_heartbeats") == 0
         and owned.get("correlated_event_1000") == 0
+        and not effective_replica_violations
         and not mismatches
     )
     n = int(owned.get("recorded", 0))
@@ -650,18 +727,38 @@ def analyze() -> dict[str, Any]:
         "parity": {
             "planned_paired_cells": len(arm_cases("comparator")),
             "comparable_successful_raw_cells": comparable,
+            "claimed_fields": list(CLAIMED_PARITY_FIELDS),
+            "equal_fields": list(PAIRED_EQUAL_FIELDS),
             "mismatch_count": len(mismatches),
+            "mismatch_counts_by_field": mismatch_counts,
             "mismatches": mismatches,
+        },
+        "owned_effective_replicas": {
+            "required": 1,
+            "checked_children": len(owned_records),
+            "violation_count": len(effective_replica_violations),
+            "violations": effective_replica_violations,
         },
         "performance": {
             "paired_comparator_median_seconds": comparator_median,
-            "paired_owned_median_seconds": owned_median,
+            "paired_owned_median_seconds": paired_owned_median,
+            "full_owned_median_seconds": full_owned_median,
             "owned_over_comparator_median_ratio": overhead_ratio,
             "interpretation": "descriptive process-level timing only",
         },
         "owned_zero_failure_one_sided_95_percent_upper_bound": upper,
+        "owned_zero_failure_one_sided_95_percent_upper_bound_percent": (
+            upper * 100.0 if upper is not None else None
+        ),
         "accepted": accepted,
-        "release_blocked": not accepted,
+        "mitigation_gate_blocked": not accepted,
+        "release_blocked": True,
+        "release_blockers": [
+            "Windows MSVC qualification",
+            "Linux and macOS BridgeStan qualification",
+            "cross-platform package/wheel matrix",
+            "Windows Python from_stan remains disabled",
+        ],
         "root_cause": "not established",
         "scope": PROTOCOL["acceptance"]["scope"],
         "diagnostic_only": True,

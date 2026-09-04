@@ -47,6 +47,7 @@ class StressProtocolTests(unittest.TestCase):
             "record_id": 123,
             "message": (
                 "Faulting application name: bridgestan-owned-worker-v1.exe\r\n"
+                "Faulting module name: libwinpthread-1.dll, version: 1.0\r\n"
                 "Exception code: 0xc0000374\r\n"
                 "Faulting process id: 0x91B8\r\n"
                 f"Faulting application start time: 0x{filetime:X}\r\n"
@@ -62,9 +63,54 @@ class StressProtocolTests(unittest.TestCase):
         parsed = run_stress.parse_event_1000(event)
         self.assertEqual(parsed["faulting_process_id"], 0x91B8)
         self.assertEqual(parsed["application_start_unix_ms"], unix_ms)
+        self.assertEqual(parsed["faulting_module"], "libwinpthread-1.dll")
         self.assertEqual(len(run_stress.correlated_event_1000(record, [event])), 1)
         record["child_pid"] += 1
         self.assertEqual(run_stress.correlated_event_1000(record, [event]), [])
+
+    def test_all_claimed_paired_invariants_are_compared(self) -> None:
+        self.assertEqual(
+            set(run_stress.CLAIMED_PARITY_FIELDS),
+            {
+                "sample_fingerprint_fnv1a64",
+                "target_calls",
+                "recoverable_failures",
+                "algorithm_revision",
+                "samples_observed",
+            },
+        )
+        self.assertTrue(
+            set(run_stress.CLAIMED_PARITY_FIELDS)
+            <= set(run_stress.PAIRED_EQUAL_FIELDS)
+        )
+        baseline = {
+            field: f"value-{index}"
+            for index, field in enumerate(run_stress.PAIRED_EQUAL_FIELDS)
+        }
+        self.assertEqual(
+            run_stress.paired_invariant_differences(baseline, dict(baseline)),
+            {},
+        )
+        for field in run_stress.PAIRED_EQUAL_FIELDS:
+            changed = dict(baseline)
+            changed[field] = "different"
+            self.assertEqual(
+                set(run_stress.paired_invariant_differences(baseline, changed)),
+                {field},
+            )
+
+    def test_owned_effective_replica_acceptance_requires_every_output(self) -> None:
+        self.assertIsNone(
+            run_stress.owned_effective_replica_violation(
+                {"raw_result": {"effective_replicas": 1}}
+            )
+        )
+        self.assertIsNotNone(
+            run_stress.owned_effective_replica_violation(
+                {"raw_result": {"effective_replicas": 4}}
+            )
+        )
+        self.assertIsNotNone(run_stress.owned_effective_replica_violation({}))
 
 
 if __name__ == "__main__":

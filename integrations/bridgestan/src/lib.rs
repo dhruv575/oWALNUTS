@@ -25,14 +25,17 @@
 //!   are treated the same way (see [`map_evaluation`]): CmdStan and nutpie
 //!   reject such a proposal rather than abort the run, and the posteriordb
 //!   benchmark (`STUDIES/posteriordb_bench_v1`) lost every `arma11` cell to
-//!   the previous fatal mapping. Only a failed dimension check remains fatal.
+//!   the previous fatal mapping. Dimension mismatches and owner-worker
+//!   disconnects remain fatal.
 //! * Thread safety: on Windows every BridgeStan native operation runs on one
 //!   owned OS thread per target. Caller and Rayon threads use a bounded
 //!   channel; drop sends shutdown and joins the owner after model destruction
 //!   and native TLS teardown. [`ReplicatedStanTarget`] deliberately has one
 //!   effective Windows worker regardless of its requested count. Off Windows,
 //!   `STAN_THREADS=true` permits direct concurrent evaluation; otherwise a
-//!   module-identity mutex serialises construction and evaluation.
+//!   module-identity mutex serialises setup and evaluation. `threading()`
+//!   reports effective call concurrency, `compiled_threading()` reports the
+//!   DLL capability, and [`Execution`] reports the detailed backend.
 //! * **Do not build with `STAN_THREADS=true` on Windows/mingw-w64.** GCC on
 //!   mingw-w64 implements `__thread` with emulated TLS (`__emutls_get_address`
 //!   on every access), and Stan Math touches its thread-local autodiff stack
@@ -40,7 +43,7 @@
 //!   (`STUDIES/posteriordb_bench_v1/artifacts/wall-gap/`): a threaded build
 //!   costs 9–16x more per gradient than the default build (arK 120 vs 12.8 µs,
 //!   hmm_example 445 vs 28 µs, eight schools 6.2 vs 0.59 µs); the default
-//!   build matches CmdStan's per-gradient cost. Build without `STAN_THREADS`
+//!   build matches CmdStan's per-gradient cost. Build without `STAN_THREADS`.
 //!   The Windows owned worker safely serialises calls from parallel samplers.
 //!   Off Windows, [`ReplicatedStanTarget`] loads one copy of the library per
 //!   concurrent thread and dispatches each call to a free replica.
@@ -134,11 +137,8 @@ fn load_library(path: &Path) -> Result<PlatformLibrary, libloading::Error> {
 
 #[cfg(windows)]
 fn load_library(path: &Path) -> Result<PlatformLibrary, libloading::Error> {
-    static LIBRARIES: OnceLock<Mutex<HashMap<PathBuf, Arc<Library>>>> = OnceLock::new();
-
     let key = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let mut libraries = LIBRARIES
-        .get_or_init(Default::default)
+    let mut libraries = resident_libraries()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(library) = libraries.get(&key) {
@@ -151,13 +151,83 @@ fn load_library(path: &Path) -> Result<PlatformLibrary, libloading::Error> {
     Ok(PlatformLibrary(library))
 }
 
-/// How concurrent evaluations are executed.
+#[cfg(windows)]
+fn resident_libraries() -> &'static Mutex<HashMap<PathBuf, Arc<Library>>> {
+    static LIBRARIES: OnceLock<Mutex<HashMap<PathBuf, Arc<Library>>>> = OnceLock::new();
+    LIBRARIES.get_or_init(Default::default)
+}
+
+/// Effective concurrency exposed by a target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Threading {
-    /// Library built with `STAN_THREADS=true`; evaluations run concurrently.
+    /// Calls may execute concurrently.
     Concurrent,
-    /// Library built without `STAN_THREADS`; evaluations are serialised.
+    /// Calls are serialized.
     Serialised,
+}
+
+fn stan_threading(compiled: Threading) -> Threading {
+    #[cfg(windows)]
+    {
+        let _ = compiled;
+        Threading::Serialised
+    }
+    #[cfg(not(windows))]
+    {
+        compiled
+    }
+}
+
+fn replicated_threading(compiled: Threading, effective_replicas: usize) -> Threading {
+    if effective_replicas > 1 {
+        Threading::Concurrent
+    } else {
+        stan_threading(compiled)
+    }
+}
+
+/// Effective execution backend used by this target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Execution {
+    /// Direct calls to one `STAN_THREADS=true` model.
+    DirectConcurrent,
+    /// Direct serialized calls to one non-`STAN_THREADS` model.
+    DirectSerialised,
+    /// Concurrent dispatch across independent non-Windows model modules.
+    ReplicatedConcurrent,
+    /// Bounded-channel dispatch to one serialized Windows owner thread.
+    OwnedSerialised,
+}
+
+fn stan_execution(threading: Threading) -> Execution {
+    #[cfg(windows)]
+    {
+        let _ = threading;
+        Execution::OwnedSerialised
+    }
+    #[cfg(not(windows))]
+    {
+        match threading {
+            Threading::Concurrent => Execution::DirectConcurrent,
+            Threading::Serialised => Execution::DirectSerialised,
+        }
+    }
+}
+
+fn replicated_execution(threading: Threading, effective_replicas: usize) -> Execution {
+    #[cfg(windows)]
+    {
+        let _ = (threading, effective_replicas);
+        Execution::OwnedSerialised
+    }
+    #[cfg(not(windows))]
+    {
+        if effective_replicas > 1 {
+            Execution::ReplicatedConcurrent
+        } else {
+            stan_execution(threading)
+        }
+    }
 }
 
 /// Errors from loading or constructing a model.
@@ -195,19 +265,19 @@ pub struct StanTarget {
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
-    threading: Threading,
+    compiled_threading: Threading,
     calls: AtomicUsize,
     recoverable: AtomicUsize,
 }
 
 struct NativeTarget {
-    loaded: ModelAndLibraries<ModelHandle, LoadedLibraries>,
+    loaded: Option<ModelAndLibraries<ModelHandle, LoadedLibraries>>,
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
-    threading: Threading,
+    compiled_threading: Threading,
     /// Shared by every target loaded from the same module. It serializes model
-    /// construction and non-STAN_THREADS evaluations.
+    /// setup/teardown and non-STAN_THREADS evaluations.
     serial: Arc<Mutex<()>>,
 }
 
@@ -233,7 +303,7 @@ struct ModelHandle {
 
 // SAFETY: BridgeStan models are immutable after construction; concurrent
 // `bs_log_density_gradient` calls are safe under STAN_THREADS=true and are
-// serialised by `StanTarget::serial` otherwise.
+// serialised by `NativeTarget::serial` otherwise.
 unsafe impl Send for ModelHandle {}
 unsafe impl Sync for ModelHandle {}
 
@@ -254,6 +324,10 @@ impl NativeTarget {
         data: Option<&str>,
         seed: u32,
     ) -> Result<Self, LoadError> {
+        let serial = module_lock(model_so);
+        let setup_guard = serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut preloaded = Vec::with_capacity(preload.len());
         for dep in preload {
             preloaded.push(load_library(dep)?);
@@ -281,19 +355,12 @@ impl NativeTarget {
         };
         let data_ptr = data_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
         let mut err: *mut c_char = std::ptr::null_mut();
-        let serial = module_lock(model_so);
-        let ptr = {
-            let _construct_guard = serial
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            // SAFETY: valid C string (or null) and a writable error slot.
-            let ptr = unsafe { construct(data_ptr, seed, &mut err) };
-            if ptr.is_null() {
-                let message = take_error(err, free_error);
-                return Err(LoadError::Construct(message));
-            }
-            ptr
-        };
+        // SAFETY: valid C string (or null) and a writable error slot.
+        let ptr = unsafe { construct(data_ptr, seed, &mut err) };
+        if ptr.is_null() {
+            let message = take_error(err, free_error);
+            return Err(LoadError::Construct(message));
+        }
         let model = ModelHandle {
             ptr,
             destruct,
@@ -318,7 +385,7 @@ impl NativeTarget {
                 "bs_param_unc_num returned {dimension}"
             )));
         }
-        let threading = if info.contains("STAN_THREADS=true") {
+        let compiled_threading = if info.contains("STAN_THREADS=true") {
             Threading::Concurrent
         } else {
             Threading::Serialised
@@ -329,34 +396,31 @@ impl NativeTarget {
                 // SAFETY: model pointer is valid; the string is owned by the model.
                 let raw = unsafe { names_fn(ptr) };
                 if raw.is_null() {
-                    return Err(LoadError::Invalid(
-                        "bs_param_unc_names returned a null pointer".into(),
-                    ));
+                    optional_names_failure("bs_param_unc_names returned a null pointer")?
+                } else {
+                    // SAFETY: the checked pointer names a NUL-terminated string.
+                    match unsafe { CStr::from_ptr(raw) }.to_str() {
+                        Ok(joined) => parse_optional_names(joined, dimension as usize)?,
+                        Err(_) => {
+                            optional_names_failure("bs_param_unc_names returned malformed UTF-8")?
+                        }
+                    }
                 }
-                // SAFETY: the checked pointer names a NUL-terminated string.
-                let joined = unsafe { CStr::from_ptr(raw) }.to_string_lossy();
-                let names: Vec<String> = joined.split(',').map(str::to_owned).collect();
-                if names.len() != dimension as usize || names.iter().any(String::is_empty) {
-                    return Err(LoadError::Invalid(format!(
-                        "bs_param_unc_names returned {} names for dimension {dimension}",
-                        names.len()
-                    )));
-                }
-                Some(names)
             }
         };
+        drop(setup_guard);
         Ok(Self {
-            loaded: ModelAndLibraries {
+            loaded: Some(ModelAndLibraries {
                 model,
                 _libraries: LoadedLibraries {
                     _library: library,
                     _preloaded: preloaded,
                 },
-            },
+            }),
             dimension: dimension as usize,
             info,
             unc_names,
-            threading,
+            compiled_threading,
             serial,
         })
     }
@@ -366,14 +430,19 @@ impl NativeTarget {
         position: &[f64],
         gradient: &mut [f64],
     ) -> Result<f64, TargetError> {
+        let model = &self
+            .loaded
+            .as_ref()
+            .expect("native model exists until drop")
+            .model;
         let mut value = f64::NAN;
         let mut err: *mut c_char = std::ptr::null_mut();
         // SAFETY: `position` and `gradient` have `dimension` elements (checked
         // by the caller), the model pointer is valid, and `err` is a writable
         // slot that we free if set.
         let rc = unsafe {
-            (self.loaded.model.log_density_gradient)(
-                self.loaded.model.ptr,
+            (model.log_density_gradient)(
+                model.ptr,
                 false,
                 true,
                 position.as_ptr(),
@@ -383,7 +452,7 @@ impl NativeTarget {
             )
         };
         if rc != 0 {
-            let message = take_error(err, self.loaded.model.free_error);
+            let message = take_error(err, model.free_error);
             Err(TargetError::recoverable(format!(
                 "stan exception: {message}"
             )))
@@ -393,7 +462,7 @@ impl NativeTarget {
     }
 
     fn evaluate(&self, position: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
-        match self.threading {
+        match self.compiled_threading {
             Threading::Concurrent => self.evaluate_unlocked(position, gradient),
             Threading::Serialised => {
                 let _guard = self
@@ -406,13 +475,38 @@ impl NativeTarget {
     }
 }
 
+impl Drop for NativeTarget {
+    fn drop(&mut self) {
+        let _teardown_guard = self
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        drop(self.loaded.take());
+    }
+}
+
+fn parse_optional_names(joined: &str, dimension: usize) -> Result<Option<Vec<String>>, LoadError> {
+    let names: Vec<String> = joined.split(',').map(str::to_owned).collect();
+    if names.len() != dimension || names.iter().any(String::is_empty) {
+        return optional_names_failure(format!(
+            "bs_param_unc_names returned {} names for dimension {dimension}",
+            names.len()
+        ));
+    }
+    Ok(Some(names))
+}
+
+fn optional_names_failure(_message: impl Into<String>) -> Result<Option<Vec<String>>, LoadError> {
+    Ok(None)
+}
+
 #[cfg(windows)]
 #[derive(Clone, Debug)]
 struct WorkerMetadata {
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
-    threading: Threading,
+    compiled_threading: Threading,
 }
 
 #[cfg(windows)]
@@ -449,7 +543,7 @@ impl OwnedBackend for NativeTarget {
             dimension: self.dimension,
             info: self.info.clone(),
             unc_names: self.unc_names.clone(),
-            threading: self.threading,
+            compiled_threading: self.compiled_threading,
         }
     }
 
@@ -585,7 +679,7 @@ impl StanTarget {
                 native.dimension,
                 native.info.clone(),
                 native.unc_names.clone(),
-                native.threading,
+                native.compiled_threading,
             );
             (native, metadata)
         };
@@ -603,7 +697,7 @@ impl StanTarget {
                     metadata.dimension,
                     metadata.info,
                     metadata.unc_names,
-                    metadata.threading,
+                    metadata.compiled_threading,
                 ),
             )
         };
@@ -615,7 +709,7 @@ impl StanTarget {
             dimension: metadata.0,
             info: metadata.1,
             unc_names: metadata.2,
-            threading: metadata.3,
+            compiled_threading: metadata.3,
             calls: AtomicUsize::new(0),
             recoverable: AtomicUsize::new(0),
         })
@@ -626,8 +720,22 @@ impl StanTarget {
         &self.info
     }
 
+    /// Effective call concurrency. Windows owned-one targets are always
+    /// serialized, even when the DLL was compiled with `STAN_THREADS=true`.
     pub fn threading(&self) -> Threading {
-        self.threading
+        stan_threading(self.compiled_threading)
+    }
+
+    /// Threading capability compiled into the model DLL.
+    pub fn compiled_threading(&self) -> Threading {
+        self.compiled_threading
+    }
+
+    /// Effective execution backend. Windows always reports
+    /// [`Execution::OwnedSerialised`], including for `STAN_THREADS=true`
+    /// libraries.
+    pub fn execution(&self) -> Execution {
+        stan_execution(self.compiled_threading)
     }
 
     /// Stan's unconstrained parameter names (`bs_param_unc_names`, one per
@@ -790,6 +898,38 @@ pub struct ReplicatedStanTarget {
     requested_replicas: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ReplicaMetadata {
+    dimension: usize,
+    unc_names: Option<Vec<String>>,
+    compiled_threading: Threading,
+}
+
+impl From<&StanTarget> for ReplicaMetadata {
+    fn from(target: &StanTarget) -> Self {
+        Self {
+            dimension: target.dimension,
+            unc_names: target.unc_names.clone(),
+            compiled_threading: target.compiled_threading,
+        }
+    }
+}
+
+fn validate_replica_metadata(metadata: &[ReplicaMetadata]) -> Result<(), LoadError> {
+    let Some(expected) = metadata.first() else {
+        return Err(LoadError::Invalid("no model replicas were loaded".into()));
+    };
+    for (index, observed) in metadata.iter().enumerate().skip(1) {
+        if observed != expected {
+            return Err(LoadError::Invalid(format!(
+                "replica {index} metadata/capability differs from replica 0: \
+                 expected {expected:?}, observed {observed:?}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(not(windows))]
 struct ReplicaCopies {
     dir: PathBuf,
@@ -818,15 +958,18 @@ impl ReplicaCopies {
             dir: dir.clone(),
             files: Vec::new(),
         };
-        if replicas > 1 {
+        if replicas > 0 {
             std::fs::create_dir_all(&dir).map_err(|e| LoadError::Invalid(e.to_string()))?;
             let stem = model_so
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "model.so".into());
-            for replica in 1..replicas {
+            let bytes =
+                std::fs::read(model_so).map_err(|error| LoadError::Invalid(error.to_string()))?;
+            for replica in 0..replicas {
                 let copy = dir.join(format!("replica{replica}-{stem}"));
-                std::fs::copy(model_so, &copy).map_err(|e| LoadError::Invalid(e.to_string()))?;
+                std::fs::write(&copy, &bytes)
+                    .map_err(|error| LoadError::Invalid(error.to_string()))?;
                 copies.files.push(copy);
             }
         }
@@ -1016,10 +1159,10 @@ impl ReplicatedStanTarget {
     /// Load `replicas` independent copies of `model_so` (see
     /// [`StanTarget::load`] for the other arguments). `replicas` should be at
     /// least the number of threads that will call the target concurrently.
-    /// Replica 0 is the original file; replicas 1.. are copies made under a
-    /// process-private cache. On Windows, same-content replica paths and
-    /// resident modules are reused for the life of the process; elsewhere the
-    /// copies are deleted on drop.
+    /// Off Windows every replica, including replica 0, is copied from one
+    /// in-memory source snapshot and deleted on drop. On Windows one
+    /// content-addressed cached copy and resident module is reused for the
+    /// life of the process.
     pub fn load(
         model_so: &Path,
         preload: &[PathBuf],
@@ -1034,11 +1177,13 @@ impl ReplicatedStanTarget {
         let effective_replicas = 1;
         let copies = ReplicaCopies::prepare(model_so, effective_replicas)?;
         let mut loaded = Vec::with_capacity(effective_replicas);
+        #[cfg(windows)]
         loaded.push(StanTarget::load(model_so, preload, data, seed)?);
         #[cfg(not(windows))]
         for copy in &copies.files {
             loaded.push(StanTarget::load(copy, preload, data, seed)?);
         }
+        validate_replica_metadata(&loaded.iter().map(ReplicaMetadata::from).collect::<Vec<_>>())?;
         let dimension = loaded[0].dimension();
         Ok(Self {
             replicas: loaded,
@@ -1050,6 +1195,11 @@ impl ReplicatedStanTarget {
 
     /// Effective replicas. This is always one on Windows.
     pub fn replicas(&self) -> usize {
+        self.effective_replicas()
+    }
+
+    /// Effective replica count after platform safety policy.
+    pub fn effective_replicas(&self) -> usize {
         self.replicas.len()
     }
 
@@ -1063,8 +1213,19 @@ impl ReplicatedStanTarget {
         self.replicas[0].info()
     }
 
+    /// Effective call concurrency after replica and platform policy.
     pub fn threading(&self) -> Threading {
-        self.replicas[0].threading()
+        replicated_threading(self.compiled_threading(), self.effective_replicas())
+    }
+
+    /// Threading capability compiled into the model library.
+    pub fn compiled_threading(&self) -> Threading {
+        self.replicas[0].compiled_threading()
+    }
+
+    /// Effective execution backend.
+    pub fn execution(&self) -> Execution {
+        replicated_execution(self.compiled_threading(), self.effective_replicas())
     }
 
     /// Stan's unconstrained parameter names (see [`StanTarget::param_unc_names`]).
@@ -1230,7 +1391,7 @@ mod tests {
                 dimension: 2,
                 info: "fake STAN_THREADS=false".into(),
                 unc_names: Some(vec!["a".into(), "b".into()]),
-                threading: Threading::Serialised,
+                compiled_threading: Threading::Serialised,
             }
         }
 
@@ -1298,6 +1459,85 @@ mod tests {
         assert_eq!(*log.lock().unwrap(), ["model", "libraries"]);
     }
 
+    #[test]
+    fn optional_parameter_names_are_none_when_null_or_malformed() {
+        assert_eq!(
+            parse_optional_names("alpha,beta", 2).unwrap(),
+            Some(vec!["alpha".into(), "beta".into()])
+        );
+        let malformed = parse_optional_names("alpha", 2);
+        assert_eq!(malformed.unwrap(), None);
+
+        let null = optional_names_failure("null optional names");
+        assert_eq!(null.unwrap(), None);
+    }
+
+    #[test]
+    fn replica_metadata_validation_covers_dimension_names_and_capability() {
+        let expected = ReplicaMetadata {
+            dimension: 2,
+            unc_names: Some(vec!["a".into(), "b".into()]),
+            compiled_threading: Threading::Serialised,
+        };
+        assert!(validate_replica_metadata(&[expected.clone(), expected.clone()]).is_ok());
+        for mismatched in [
+            ReplicaMetadata {
+                dimension: 3,
+                ..expected.clone()
+            },
+            ReplicaMetadata {
+                unc_names: None,
+                ..expected.clone()
+            },
+            ReplicaMetadata {
+                compiled_threading: Threading::Concurrent,
+                ..expected.clone()
+            },
+        ] {
+            assert!(validate_replica_metadata(&[expected.clone(), mismatched]).is_err());
+        }
+    }
+
+    #[test]
+    fn execution_distinguishes_capability_from_effective_backend() {
+        #[cfg(windows)]
+        {
+            assert_eq!(stan_threading(Threading::Concurrent), Threading::Serialised);
+            assert_eq!(
+                replicated_threading(Threading::Concurrent, 1),
+                Threading::Serialised
+            );
+            assert_eq!(
+                stan_execution(Threading::Concurrent),
+                Execution::OwnedSerialised
+            );
+            assert_eq!(
+                replicated_execution(Threading::Concurrent, 4),
+                Execution::OwnedSerialised
+            );
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(stan_threading(Threading::Concurrent), Threading::Concurrent);
+            assert_eq!(
+                replicated_threading(Threading::Serialised, 4),
+                Threading::Concurrent
+            );
+            assert_eq!(
+                stan_execution(Threading::Concurrent),
+                Execution::DirectConcurrent
+            );
+            assert_eq!(
+                stan_execution(Threading::Serialised),
+                Execution::DirectSerialised
+            );
+            assert_eq!(
+                replicated_execution(Threading::Serialised, 4),
+                Execution::ReplicatedConcurrent
+            );
+        }
+    }
+
     #[cfg(windows)]
     fn test_directory(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -1309,26 +1549,59 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn windows_library_registry_keeps_and_reuses_resident_handle() {
+    fn windows_library_registry_reuses_handle_across_concurrent_loads() {
+        let before = resident_libraries()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len();
         let first = load_library(Path::new("kernel32.dll")).expect("load kernel32");
         let identity = Arc::as_ptr(&first.0);
         drop(first);
-        let second = load_library(Path::new("kernel32.dll")).expect("reload kernel32");
-        assert_eq!(identity, Arc::as_ptr(&second.0));
-        assert!(
-            Arc::strong_count(&second.0) >= 2,
-            "the process registry retains its own strong reference"
-        );
+        thread::scope(|scope| {
+            let handles: Vec<_> = (0..16)
+                .map(|_| {
+                    scope.spawn(|| {
+                        (0..4)
+                            .map(|_| {
+                                let loaded = load_library(Path::new("kernel32.dll"))
+                                    .expect("reload kernel32");
+                                assert!(
+                                    Arc::strong_count(&loaded.0) >= 2,
+                                    "the process registry retains its own strong reference"
+                                );
+                                Arc::as_ptr(&loaded.0) as usize
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            for handle in handles {
+                assert!(
+                    handle
+                        .join()
+                        .unwrap()
+                        .into_iter()
+                        .all(|observed| observed == identity as usize)
+                );
+            }
+        });
+        let after = resident_libraries()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len();
+        assert!(after == before || after == before + 1);
     }
 
     #[cfg(windows)]
     #[test]
-    fn windows_replica_cache_reuses_copies_and_cleans_only_unleased_dirs() {
+    fn windows_replica_cache_handles_concurrent_reuse_replacement_and_cleanup() {
         let outer = test_directory("cache");
         let root = outer.join("cache");
         std::fs::create_dir_all(&outer).unwrap();
         let source = outer.join("source.dll");
-        std::fs::write(&source, b"not a real DLL; cache behavior only").unwrap();
+        let original_bytes = b"not a real DLL; cache behavior only";
+        let replacement_bytes = b"different real content of same-ish size";
+        std::fs::write(&source, original_bytes).unwrap();
 
         let cache = ProcessReplicaCache::create(&root).unwrap();
         let cache_dir = cache.dir.clone();
@@ -1336,6 +1609,31 @@ mod tests {
         let second = cache.model_copy(&source).unwrap();
         assert_eq!(first, second);
         assert!(first.exists());
+        let plateau_files = std::fs::read_dir(&cache.dir).unwrap().count();
+        thread::scope(|scope| {
+            let handles: Vec<_> = (0..16)
+                .map(|_| {
+                    scope.spawn(|| {
+                        (0..4)
+                            .map(|_| cache.model_copy(&source).unwrap())
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            for handle in handles {
+                assert!(
+                    handle
+                        .join()
+                        .unwrap()
+                        .into_iter()
+                        .all(|observed| observed == first)
+                );
+            }
+        });
+        assert_eq!(
+            std::fs::read_dir(&cache.dir).unwrap().count(),
+            plateau_files
+        );
 
         std::fs::write(&first, b"tampered cached model").unwrap();
         assert!(cache.model_copy(&source).is_err());
@@ -1343,9 +1641,12 @@ mod tests {
         let restored = cache.model_copy(&source).unwrap();
         assert_eq!(restored, first);
 
-        std::fs::write(&source, b"different real content of same-ish size").unwrap();
+        assert_eq!(std::fs::read(&restored).unwrap(), original_bytes);
+        std::fs::write(&source, replacement_bytes).unwrap();
         let changed = cache.model_copy(&source).unwrap();
         assert_ne!(changed, first);
+        assert_eq!(std::fs::read(&first).unwrap(), original_bytes);
+        assert_eq!(std::fs::read(&changed).unwrap(), replacement_bytes);
 
         cleanup_stale_cache_dirs(&root, Duration::ZERO);
         assert!(
@@ -1494,7 +1795,14 @@ mod tests {
         std::fs::write(&source, b"copy behavior only").unwrap();
         let copies = ReplicaCopies::prepare(&source, 4).unwrap();
         let copy_dir = copies.dir.clone();
-        assert_eq!(copies.files.len(), 3);
+        assert_eq!(copies.files.len(), 4);
+        std::fs::write(&source, b"replacement after snapshot").unwrap();
+        assert!(
+            copies
+                .files
+                .iter()
+                .all(|copy| std::fs::read(copy).unwrap() == b"copy behavior only")
+        );
         drop(copies);
         assert!(!copy_dir.exists());
         let _ = std::fs::remove_dir_all(outer);
