@@ -223,9 +223,12 @@ use rand::{Rng, SeedableRng};
 use rand_distr::StandardNormal;
 use rayon::prelude::*;
 
+#[cfg(feature = "research")]
+pub use crate::kernel::ReverseCoarseningOrder;
 use crate::kernel::{
     ContextKineticScope, Direction, EvaluatedTransitionInput, EvaluationPhase, FixedTuning,
-    InPlaceEval, MassOperator, OuterSelectionPolicy, Rejection, SelectedState, SpanStop,
+    InPlaceEval, MassOperator, OuterSelectionPolicy,
+    ReverseCoarseningOrder as KernelReverseCoarseningOrder, SelectedState, SpanStop,
     TransitionInput, TransitionRng, TransitionStop, TransitionTuning, TransitionWorkTelemetry,
     Uniform01, macro_leaf, take_evaluation_context,
     transition_w_from_evaluated_traced_with_telemetry_and_outer_policy,
@@ -233,7 +236,12 @@ use crate::kernel::{
     transition_w_traced_with_telemetry_and_outer_policy,
     transition_w_with_telemetry_and_outer_policy,
 };
-pub use crate::kernel::{ExhaustionRule, KernelOptions, UTurnRule};
+pub use crate::kernel::{ExhaustionRule, KernelOptions, Rejection, UTurnRule};
+#[cfg(feature = "research")]
+use crate::kernel::{
+    clear_generated_reverse_schedules, take_generated_leaf_outcomes,
+    take_generated_reverse_schedules,
+};
 use crate::types::{State, ValidationError};
 
 mod research;
@@ -299,6 +307,7 @@ pub struct KernelTuning {
     max_error: f64,
     divergence_threshold: f64,
     options: KernelOptions,
+    reverse_coarsening_order: KernelReverseCoarseningOrder,
 }
 
 // All floating-point fields are finite by construction.
@@ -314,6 +323,7 @@ impl Default for KernelTuning {
             max_error: DEFAULT_MAX_ERROR,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
             options: KernelOptions::default(),
+            reverse_coarsening_order: KernelReverseCoarseningOrder::FinestToCoarsest,
         }
     }
 }
@@ -344,6 +354,7 @@ impl KernelTuning {
             max_error,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
             options: KernelOptions::default(),
+            reverse_coarsening_order: KernelReverseCoarseningOrder::FinestToCoarsest,
         };
         tuning.max_leaves_per_transition()?;
         tuning.maximum_micro_steps()?;
@@ -374,6 +385,10 @@ impl KernelTuning {
     pub fn options(&self) -> KernelOptions {
         self.options
     }
+    #[cfg(feature = "research")]
+    pub fn reverse_coarsening_order(&self) -> ReverseCoarseningOrder {
+        self.reverse_coarsening_order
+    }
     /// Select opt-in kernel rule variants: the no-U-turn predicate
     /// ([`UTurnRule`]) and the treatment of a leaf that fails `max_error` at
     /// every refinement level ([`ExhaustionRule`]). The default options
@@ -382,6 +397,14 @@ impl KernelTuning {
     /// fingerprints. Measured in `STUDIES/kernel_efficiency_v1`.
     pub fn with_options(mut self, options: KernelOptions) -> Self {
         self.options = options;
+        self
+    }
+    /// Select reverse-coarsening traversal order for a deterministic target
+    /// that returns only finite evaluations or recoverable zero-density
+    /// points. Research-only; the default remains finest to coarsest.
+    #[cfg(feature = "research")]
+    pub fn with_reverse_coarsening_order(mut self, order: ReverseCoarseningOrder) -> Self {
+        self.reverse_coarsening_order = order;
         self
     }
     pub fn with_divergence_threshold(mut self, threshold: f64) -> Result<Self, Error> {
@@ -444,6 +467,7 @@ impl KernelTuning {
                 max_error: self.max_error,
                 divergence_threshold: self.divergence_threshold,
                 options: self.options,
+                reverse_coarsening_order: self.reverse_coarsening_order,
             },
             max_depth: self.max_depth,
         }
@@ -2854,9 +2878,16 @@ pub struct ProposalObservation {
     direction: Option<ProposalDirection>,
     refinement_level: Option<usize>,
     evaluation_in_attempt: usize,
+    leaf_attempt: Option<usize>,
+    micro_steps: Option<usize>,
+    step: Option<f64>,
+    reverse_schedule_index: Option<usize>,
     target_call: usize,
     phase_target_call: usize,
     coordinates: Box<[f64]>,
+    gradient: Box<[f64]>,
+    #[cfg(feature = "research")]
+    mid_step_momentum: Option<Box<[f64]>>,
     coordinate_dimension: usize,
     kinetic: f64,
     potential: Option<f64>,
@@ -2887,6 +2918,18 @@ impl ProposalObservation {
     pub fn evaluation_in_attempt(&self) -> usize {
         self.evaluation_in_attempt
     }
+    pub fn leaf_attempt(&self) -> Option<usize> {
+        self.leaf_attempt
+    }
+    pub fn micro_steps(&self) -> Option<usize> {
+        self.micro_steps
+    }
+    pub fn step(&self) -> Option<f64> {
+        self.step
+    }
+    pub fn reverse_schedule_index(&self) -> Option<usize> {
+        self.reverse_schedule_index
+    }
     pub fn target_call(&self) -> usize {
         self.target_call
     }
@@ -2895,6 +2938,16 @@ impl ProposalObservation {
     }
     pub fn coordinates(&self) -> &[f64] {
         &self.coordinates
+    }
+    pub fn gradient(&self) -> &[f64] {
+        &self.gradient
+    }
+    /// Momentum after the first half kick for a leapfrog micro-step. The
+    /// completed endpoint momentum is this vector plus half the recorded step
+    /// times the returned gradient.
+    #[cfg(feature = "research")]
+    pub fn mid_step_momentum(&self) -> Option<&[f64]> {
+        self.mid_step_momentum.as_deref()
     }
     pub fn coordinate_dimension(&self) -> usize {
         self.coordinate_dimension
@@ -2932,6 +2985,119 @@ impl ProposalObservation {
 /// panics are contained as run errors without exposing partial sampler output.
 pub trait ProposalObserver: Send + Sync {
     fn observe(&self, observation: &ProposalObservation);
+}
+
+/// One entry in the completely generated reverse schedule of a macro leaf.
+#[cfg(feature = "research")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReverseScheduleObservationEntry {
+    pub coarse_level: usize,
+    pub micro_steps: usize,
+    pub step: f64,
+}
+
+/// A reverse schedule generated before traversal for one accepted forward leaf.
+#[cfg(feature = "research")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReverseScheduleObservation {
+    pub leaf_attempt: usize,
+    pub accepted_forward_level: usize,
+    pub entries: Vec<ReverseScheduleObservationEntry>,
+}
+
+/// Outcome and intervention-independent accepted forward level for one leaf.
+#[cfg(feature = "research")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LeafOutcomeObservation {
+    pub leaf_attempt: usize,
+    pub direction: ProposalDirection,
+    pub accepted_forward_level: Option<usize>,
+    pub rejection: Option<Rejection>,
+}
+
+/// Exact per-transition work needed by research comparison harnesses.
+#[cfg(feature = "research")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComparisonWork {
+    pub target_calls_initial: usize,
+    pub target_calls_forward: usize,
+    pub target_calls_reverse: usize,
+    pub forward_refinement_attempts: usize,
+    pub forward_micro_steps_requested: usize,
+    pub forward_micro_steps_executed: usize,
+    pub reverse_coarsening_attempts: usize,
+    pub reverse_micro_steps_requested: usize,
+    pub reverse_micro_steps_executed: usize,
+    pub leaves_attempted: usize,
+    pub leaves_built: usize,
+    pub zero_density_evaluations: usize,
+    pub refinement_exhausted_rejections: usize,
+    pub reverse_coarser_accepted_rejections: usize,
+    pub invalid_forward_rejections: usize,
+    pub invalid_reverse_rejections: usize,
+}
+
+/// Complete adaptation state attached to one warmup transition.
+#[cfg(feature = "research")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComparisonAdaptation {
+    pub stage: WarmupPhase,
+    pub window_index: Option<usize>,
+    pub window_start: Option<usize>,
+    pub window_end: Option<usize>,
+    pub input_acceptance: Option<f64>,
+    pub active_step_before: f64,
+    pub active_step_after: f64,
+    pub dual_averaging_before: Option<DualAveragingTelemetry>,
+    pub dual_averaging_after: Option<DualAveragingTelemetry>,
+    pub metric_update: Option<MetricUpdateOutcome>,
+    pub installed_metric: Option<Vec<f64>>,
+}
+
+/// Direct typed record emitted once after each completed transition.
+#[cfg(feature = "research")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComparisonTransitionObservation {
+    pub chain: usize,
+    pub transition: usize,
+    pub discarded: bool,
+    pub selected_theta: Vec<f64>,
+    pub selected_rho: Vec<f64>,
+    pub selected_log_density: f64,
+    pub selected_gradient: Vec<f64>,
+    pub diagnostics: TransitionDiagnostics,
+    pub work: ComparisonWork,
+    pub reverse_schedules: Vec<ReverseScheduleObservation>,
+    pub leaf_outcomes: Vec<LeafOutcomeObservation>,
+    pub adaptation: Option<ComparisonAdaptation>,
+}
+
+/// Synchronous research observer for direct transition comparison records.
+#[cfg(feature = "research")]
+pub trait ComparisonObserver: Send + Sync {
+    fn observe(&self, observation: &ComparisonTransitionObservation);
+}
+
+#[cfg(feature = "research")]
+fn comparison_work(work: &TransitionWorkTelemetry) -> ComparisonWork {
+    ComparisonWork {
+        target_calls_initial: work.fused_calls.initial,
+        target_calls_forward: work.fused_calls.forward,
+        target_calls_reverse: work.fused_calls.reverse,
+        forward_refinement_attempts: work.forward_refinement_attempts,
+        forward_micro_steps_requested: work.forward_micro_steps_requested,
+        forward_micro_steps_executed: work.forward_micro_steps_executed,
+        reverse_coarsening_attempts: work.reverse_coarsening_attempts,
+        reverse_micro_steps_requested: work.reverse_micro_steps_requested,
+        reverse_micro_steps_executed: work.reverse_micro_steps_executed,
+        leaves_attempted: work.leaves_attempted,
+        leaves_built: work.leaves_built,
+        zero_density_evaluations: work.zero_density_evaluations,
+        refinement_exhausted_rejections: work.rejections.refinement_exhausted,
+        reverse_coarser_accepted_rejections: work.rejections.reverse_coarser_accepted,
+        invalid_forward_rejections: work.rejections.invalid_forward_evaluation,
+        invalid_reverse_rejections: work.rejections.invalid_reverse_evaluation,
+    }
 }
 
 /// Shared exact event ceiling and coordinate-prefix bound.
@@ -2978,6 +3144,8 @@ pub struct RunControl<'a> {
     cancellation: Option<&'a dyn Cancellation>,
     deadline: Option<Instant>,
     proposal_observations: Option<&'a ProposalObservationControl<'a>>,
+    #[cfg(feature = "research")]
+    comparison_observer: Option<&'a dyn ComparisonObserver>,
 }
 
 impl<'a> RunControl<'a> {
@@ -3000,6 +3168,12 @@ impl<'a> RunControl<'a> {
         observations: &'a ProposalObservationControl<'a>,
     ) -> Self {
         self.proposal_observations = Some(observations);
+        self
+    }
+
+    #[cfg(feature = "research")]
+    pub fn with_comparison_observer(mut self, observer: &'a dyn ComparisonObserver) -> Self {
+        self.comparison_observer = Some(observer);
         self
     }
 
@@ -5012,6 +5186,7 @@ struct ObservationInput<'a> {
     discarded: bool,
     context: Option<crate::kernel::EvaluationContext>,
     theta: &'a [f64],
+    gradient: &'a [f64],
     log_density: Option<f64>,
     outcome: ProposalTargetOutcome,
     target_call: usize,
@@ -5026,6 +5201,7 @@ fn emit_proposal_observation(
         discarded,
         context,
         theta,
+        gradient,
         log_density,
         outcome,
         target_call,
@@ -5042,6 +5218,10 @@ fn emit_proposal_observation(
         direction: None,
         refinement_level: None,
         evaluation_in_attempt: 0,
+        leaf_attempt: None,
+        micro_steps: None,
+        step: None,
+        reverse_schedule_index: None,
         kinetic: f64::NAN,
         initial_hamiltonian: None,
     });
@@ -5069,9 +5249,16 @@ fn emit_proposal_observation(
         }),
         refinement_level: context.refinement_level,
         evaluation_in_attempt: context.evaluation_in_attempt,
+        leaf_attempt: context.leaf_attempt,
+        micro_steps: context.micro_steps,
+        step: context.step,
+        reverse_schedule_index: context.reverse_schedule_index,
         target_call,
         phase_target_call,
         coordinates: theta[..theta.len().min(observations.maximum_coordinates)].into(),
+        gradient: gradient[..gradient.len().min(observations.maximum_coordinates)].into(),
+        #[cfg(feature = "research")]
+        mid_step_momentum: crate::kernel::take_evaluation_momentum().map(Into::into),
         coordinate_dimension: theta.len(),
         kinetic: context.kinetic,
         potential,
@@ -5174,10 +5361,10 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)?;
-        if let Some(source) = &self.target_source {
-            if !source.message().is_empty() {
-                write!(f, ": {}", source.message())?;
-            }
+        if let Some(source) = &self.target_source
+            && !source.message().is_empty()
+        {
+            write!(f, ": {}", source.message())?;
         }
         Ok(())
     }
@@ -6192,6 +6379,7 @@ fn search_step_from_evaluated<T: Target>(
                         discarded,
                         context,
                         theta,
+                        gradient: &gradient,
                         log_density: log_density.is_finite().then_some(log_density),
                         outcome,
                         target_call: telemetry.target_calls,
@@ -6210,6 +6398,8 @@ fn search_step_from_evaluated<T: Target>(
                 mass,
                 FixedTuning {
                     options: crate::kernel::KernelOptions::default(),
+                    reverse_coarsening_order:
+                        crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
                     step_size: step,
                     max_refinement_levels: 1,
                     min_micro_steps: tuning.min_micro_steps,
@@ -6428,6 +6618,8 @@ fn search_initial_step<T: Target>(
                 inverse_mass,
                 FixedTuning {
                     options: crate::kernel::KernelOptions::default(),
+                    reverse_coarsening_order:
+                        crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
                     step_size: step,
                     max_refinement_levels: 1,
                     min_micro_steps: tuning.min_micro_steps,
@@ -6590,6 +6782,7 @@ fn search_initial_step_stan<T: Target>(
             inverse_mass,
             FixedTuning {
                 options: crate::kernel::KernelOptions::default(),
+                reverse_coarsening_order: crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
                 step_size: step,
                 max_refinement_levels: 1,
                 min_micro_steps: tuning.min_micro_steps,
@@ -6935,6 +7128,10 @@ impl<'a, T: Target> ChainRun<'a, T> {
         let (rng, cached_state) = rng_slot.parts();
         while *next_transition < end {
             let transition_index = *next_transition;
+            #[cfg(feature = "research")]
+            clear_generated_reverse_schedules();
+            #[cfg(feature = "research")]
+            let comparison_dual_before = dual_averaging.as_ref().map(DualAveraging::telemetry);
             if let (Some(warmup), Some(schedule)) = (config.warmup.as_ref(), schedule.as_ref())
                 && let Some(initial_max_error) = warmup.initial_phase_max_error
                 && warmup.paper_adaptation.is_none()
@@ -7033,6 +7230,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                                 discarded: transition_index < config.discarded,
                                 context,
                                 theta,
+                                gradient: $gradient,
                                 log_density: $log,
                                 outcome: $outcome,
                                 target_call: observed_target_calls,
@@ -7297,6 +7495,50 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 .map_err(|error| error.at_transition(transition_index))?;
             let work =
                 work.ok_or_else(|| Error::new(ErrorKind::Internal, "missing transition work"))?;
+            #[cfg(feature = "research")]
+            let comparison_selected = control.public.comparison_observer.is_some().then(|| {
+                (
+                    result.selected.theta.clone(),
+                    result.selected_rho.clone(),
+                    result.selected.log_prob,
+                    result.selected.grad.clone(),
+                )
+            });
+            #[cfg(feature = "research")]
+            let comparison_schedules = take_generated_reverse_schedules()
+                .into_iter()
+                .map(|schedule| ReverseScheduleObservation {
+                    leaf_attempt: schedule.leaf_attempt,
+                    accepted_forward_level: schedule.accepted_forward_level,
+                    entries: schedule
+                        .entries
+                        .into_iter()
+                        .map(|entry| ReverseScheduleObservationEntry {
+                            coarse_level: entry.coarse_level,
+                            micro_steps: entry.micro_steps,
+                            step: entry.step,
+                        })
+                        .collect(),
+                })
+                .collect::<Vec<_>>();
+            #[cfg(feature = "research")]
+            let comparison_leaf_outcomes = take_generated_leaf_outcomes()
+                .into_iter()
+                .map(|outcome| LeafOutcomeObservation {
+                    leaf_attempt: outcome.leaf_attempt,
+                    direction: match outcome.direction {
+                        Direction::Forward => ProposalDirection::Forward,
+                        Direction::Backward => ProposalDirection::Backward,
+                    },
+                    accepted_forward_level: outcome.accepted_forward_level.or_else(|| {
+                        comparison_schedules
+                            .iter()
+                            .find(|schedule| schedule.leaf_attempt == outcome.leaf_attempt)
+                            .map(|schedule| schedule.accepted_forward_level)
+                    }),
+                    rejection: outcome.rejection,
+                })
+                .collect::<Vec<_>>();
             let unrefined_fraction = unrefined_leaf_fraction(&work);
             if use_persistent_cache {
                 *cached_state = Some(result.selected.clone());
@@ -7332,6 +7574,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 selected_index: internal.selected_index,
                 initial_index: internal.initial_index,
             };
+            #[cfg(feature = "research")]
+            let comparison_diagnostics = public.clone();
             let partition = if transition_index < config.discarded {
                 &mut telemetry.discarded
             } else {
@@ -7643,6 +7887,64 @@ impl<'a, T: Target> ChainRun<'a, T> {
                             unrefined_fraction,
                             max_error_after: active_tuning.max_error,
                         });
+                }
+            }
+            #[cfg(feature = "research")]
+            if let (Some(observer), Some((theta, rho, log_density, gradient))) =
+                (control.public.comparison_observer, comparison_selected)
+            {
+                let adaptation = if transition_index < config.discarded {
+                    let schedule = schedule.as_ref().expect("warmup schedule");
+                    let stage = schedule
+                        .phase_at(transition_index)
+                        .expect("warmup transition has a phase");
+                    let window_index = schedule.windows.iter().position(|window| {
+                        transition_index >= window.start && transition_index < window.end
+                    });
+                    let (window_start, window_end) = window_index
+                        .map(|index| {
+                            let window = &schedule.windows[index];
+                            (Some(window.start), Some(window.end))
+                        })
+                        .unwrap_or((None, None));
+                    let metric_update = telemetry
+                        .metric_updates
+                        .last()
+                        .filter(|update| update.transition == transition_index);
+                    Some(ComparisonAdaptation {
+                        stage,
+                        window_index,
+                        window_start,
+                        window_end,
+                        input_acceptance: acceptance,
+                        active_step_before: step_before_transition,
+                        active_step_after: active_tuning.step_size,
+                        dual_averaging_before: comparison_dual_before,
+                        dual_averaging_after: dual_averaging.as_ref().map(DualAveraging::telemetry),
+                        metric_update: metric_update.map(|update| update.outcome),
+                        installed_metric: metric_update
+                            .and_then(|update| update.mass_diagonal.clone()),
+                    })
+                } else {
+                    None
+                };
+                let observation = ComparisonTransitionObservation {
+                    chain: control.chain,
+                    transition: transition_index,
+                    discarded: transition_index < config.discarded,
+                    selected_theta: theta,
+                    selected_rho: rho,
+                    selected_log_density: log_density,
+                    selected_gradient: gradient,
+                    diagnostics: comparison_diagnostics,
+                    work: comparison_work(&work),
+                    reverse_schedules: comparison_schedules,
+                    leaf_outcomes: comparison_leaf_outcomes,
+                    adaptation,
+                };
+                if catch_unwind(AssertUnwindSafe(|| observer.observe(&observation))).is_err() {
+                    return Err(Error::new(ErrorKind::Panic, "comparison observer panicked")
+                        .at_transition(transition_index));
                 }
             }
             *next_transition += 1;

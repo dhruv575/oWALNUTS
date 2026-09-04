@@ -168,6 +168,7 @@ fn matches_every_validated_upstream_span_trace() {
         let initial_span = Span::from_state(initial, &inverse_mass).unwrap();
         let tuning = FixedTuning {
             options: crate::kernel::KernelOptions::default(),
+            reverse_coarsening_order: crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
             step_size: number(input, "step"),
             max_refinement_levels: usize_field(input, "max_step_halvings"),
             min_micro_steps: usize_field(input, "min_micro_steps"),

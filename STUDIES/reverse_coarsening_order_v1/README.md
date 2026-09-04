@@ -1,7 +1,6 @@
 # reverse_coarsening_order_v1 (WP37B)
 
-Status: **preregistered scaffold only — frozen before implementation, build, or
-evidence**.
+Status: **implementation and one-shot harness complete; no evidence launched**.
 
 Controlling review clarifications, in order:
 [`AMENDMENT-1.md`](AMENDMENT-1.md), then
@@ -44,5 +43,8 @@ are descriptive and cannot select results.
 
 Under the controlling amendment, passing can qualify only a later explicit
 Rust opt-in on `KernelTuning` and high-level `Tuning` for eligible targets.
-Every default remains `FinestToCoarsest`; Python is unchanged. This scaffold
-itself authorizes and contains no code or default change.
+Every default remains `FinestToCoarsest`; Python is unchanged. `study.py`
+prepares the authenticated static configuration, executes the ordered manifest
+with immutable launch markers, and applies the frozen mechanical gates. No
+evidence is launched until the core/harness and provenance commits are both
+complete.
