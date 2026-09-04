@@ -492,17 +492,23 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   replica; `threading()` reports serialized effective execution while
   `compiled_threading()` preserves the DLL capability and `execution()`
   names the backend. Model bytes use a verified SHA-256 cache and
-  module-global setup is locked; non-Windows replicas come from one source
-  snapshot. The first resident-DLL/scoped-pool diagnostic failed (8/180);
+  module-global setup is locked; a process-global Windows native-call mutex
+  additionally serializes all owner threads/models through setup, evaluation,
+  error free, and destruction. Non-Windows replica 0 preserves the original
+  `$ORIGIN`/`@loader_path` path while replicas 1..n use one source snapshot.
+  The first resident-DLL/scoped-pool diagnostic failed (8/180);
   the follow-up owned-one diagnostic had zero faults in 540 children
   (one-sided 95% upper bound 0.553229%) against 19/180 event-inclusive
   comparator faults, with exact invariants in all 167 comparable pairs.
   Sampling medians were 3.1–5.1x the four-replica comparator. Scope is one
   Windows GNU host and three short-run models; MSVC/Linux/macOS and more than
-  one Windows owner remain unqualified, so release publication stays blocked.
+  one effective Windows worker per target remain unqualified, so release
+  publication stays blocked.
   Python `from_stan` and direct Python `bridgestan.StanModel` call/name/
   constrain paths are disabled on Windows 0.2 because they bypass this Rust
-  owner backend. (`STUDIES/bridgestan_lifetime_v1`,
+  owner backend. Python `StanTarget.probe_*` metadata now names its one-load
+  scope; `SampleResult` alone reports the target actually used for sampling.
+  (`STUDIES/bridgestan_lifetime_v1`,
   `STUDIES/bridgestan_owned_worker_v1`)
 - **The Python package goes through `owalnuts::sampler` and inherits its
   defaults.** `integrations/python` built `KernelTuning` / `WarmupConfig` on

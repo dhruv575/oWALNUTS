@@ -11,10 +11,12 @@ cd ..                                   # integrations/
 python -m venv .venv-bs
 .\.venv-bs\Scripts\pip install bridgestan numpy
 $env:MAKE = "mingw32-make"              # GNU make from the mingw-w64 toolchain
-.\.venv-bs\Scripts\python -c "import bridgestan.compile as c; c.compile_model('bridgestan/models/eight_schools.stan', make_args=['STAN_THREADS=true']); c.compile_model('bridgestan/models/local_level.stan', make_args=['STAN_THREADS=true'])"
+.\.venv-bs\Scripts\python -c "import bridgestan.compile as c; c.compile_model('bridgestan/models/eight_schools.stan'); c.compile_model('bridgestan/models/local_level.stan')"
 ```
 
-The first build compiles Stan Math (~2 min); later models take ~20 s.
+The first build also builds Stan Math and can take substantially longer than
+later model builds; timing depends on the BridgeStan version, compiler, and
+host.
 
 ## Recommended build configuration
 
@@ -47,11 +49,16 @@ compiled with `STAN_THREADS=true`. `compiled_threading()` reports that
 separate DLL capability, while `execution()` identifies the detailed backend.
 Off Windows,
 `ReplicatedStanTarget::load(so, preload, data, seed, threads)` copies the
-library to distinct paths and dispatches calls to free replicas. On Windows
+library only for replicas 1 through n-1 and dispatches calls to free replicas.
+Replica 0 (and every single-replica load) retains the original path so
+`$ORIGIN`/`@loader_path` dependencies resolve exactly as they did for
+`StanTarget`. On Windows
 it records the requested count but deliberately uses one effective owned
 worker; `requested_replicas()` and `effective_replicas()` expose both values
 (`replicas()` remains an alias for the effective count).
-Multi-worker Windows execution is out of scope until separately qualified.
+More than one effective worker per Windows target remains out of scope.
+Multiple target instances may each own a worker, but the process-global
+native-call policy serializes those owners.
 
 ## Native-library lifetime
 
@@ -77,11 +84,15 @@ file counts plateau across repeated loads. Memory and cached files can still
 grow with each distinct model content or preload path used in one process.
 
 The model-module lock covers library/symbol setup, construction, the
-dimension/name/capability metadata snapshot, and model teardown. Off Windows every replicated
-path, including replica 0, is written from one in-memory source snapshot, so
-one target cannot mix source revisions. All replicas must agree on dimension,
-optional names, and compiled threading capability. Linux and macOS retain
-direct calls, unload-on-drop behavior, and per-target copy cleanup. For
+dimension/name/capability metadata snapshot, and model teardown. On Windows a
+second process-global native-call lock covers those operations, every
+evaluation, native error free, and destruction across all owner threads and
+model paths. This is the supported process-wide serialized policy. Off
+Windows replica 0 uses the original path while replicas 1 through n-1 share
+one in-memory source snapshot; a post-load byte check rejects a source
+revision change before any copy is loaded. All replicas must agree on
+dimension, optional names, and compiled threading capability. Linux and macOS
+retain direct calls, unload-on-drop behavior, and per-target copy cleanup. For
 compatibility with older BridgeStan builds, a missing, null, malformed, or
 wrong-length optional `bs_param_unc_names` result becomes `None` on every
 platform, including across the Windows worker transport.
@@ -111,10 +122,15 @@ which kernel v10 refines through exactly like the walnutpie reference.
 ## Verify and measure
 
 ```powershell
-cargo +1.88.0-x86_64-pc-windows-gnu test --release     # skips if models are not built
-cargo +1.88.0-x86_64-pc-windows-gnu run --release --features bench --bin bench
+cargo +1.88.0-x86_64-pc-windows-gnu test --release
+cargo +1.88.0-x86_64-pc-windows-gnu run --release --features bench --bin bench -- artifacts/bridgestan-benchmark-<run-id>.json
 cargo +1.88.0-x86_64-pc-windows-gnu run --release --bin wallgap -- model.so data.json [calls] [threads]
 ```
+
+The benchmark requires a new output path and refuses to overwrite it. Its JSON
+records `bs_model_info`, compiled capability, and effective backend from each
+library actually loaded; it does not use a hard-coded BridgeStan/compiler
+label.
 
 `wallgap` prints the us per `bs_log_density_gradient` call through
 `StanTarget`, with `threads` callers on one instance, and through

@@ -38,3 +38,14 @@ These strengthened checks do not change the verdict: all 540 owned children
 reported one effective replica, and all 167 comparable pairs match every
 listed invariant. The result remains limited to the registered short-run
 matrix and does not unblock the entire 0.2 release.
+
+## Comparator completeness clarification
+
+The final-review analyzer additionally requires exactly all 180 registered
+comparator process records before the historical owned-arm acceptance can be
+true. Every comparator child with a successful raw result must report four
+effective replicas; every owned child must continue to report one. A
+comparator child that faulted before publishing raw output cannot supply an
+observed effective count, so it remains an explicitly unobservable fault
+rather than being assigned a synthetic value. This is analysis-only: no
+992xxx/993xxx child or immutable execution artifact is rerun or rewritten.

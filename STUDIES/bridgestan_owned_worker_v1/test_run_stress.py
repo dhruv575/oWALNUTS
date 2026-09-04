@@ -112,6 +112,24 @@ class StressProtocolTests(unittest.TestCase):
         )
         self.assertIsNotNone(run_stress.owned_effective_replica_violation({}))
 
+    def test_comparator_effective_replica_acceptance_requires_four(self) -> None:
+        faulted_after_raw = {
+            "process_success": False,
+            "raw_result": {"status": "ok", "effective_replicas": 4},
+        }
+        self.assertTrue(run_stress.has_successful_raw(faulted_after_raw))
+        self.assertIsNone(
+            run_stress.effective_replica_violation(
+                faulted_after_raw, 4
+            )
+        )
+        self.assertIsNotNone(
+            run_stress.effective_replica_violation(
+                {"raw_result": {"effective_replicas": 1}}, 4
+            )
+        )
+        self.assertIsNotNone(run_stress.effective_replica_violation({}, 4))
+
 
 if __name__ == "__main__":
     unittest.main()

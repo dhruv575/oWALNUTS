@@ -1199,7 +1199,8 @@ mod stan {
     }
 
     /// Load a BridgeStan model library once and report its unconstrained
-    /// dimension, `bs_param_unc_names`, `bs_model_info` and threading mode.
+    /// dimension, names, model info, and explicitly probe-scoped backend
+    /// metadata. A later sample creates a distinct target from its run config.
     #[pyfunction]
     #[pyo3(signature = (model_so, data=None, seed=1, preload=None))]
     pub fn stan_model_info<'py>(
@@ -1221,10 +1222,10 @@ mod stan {
             "compiled_threading",
             threading_name(target.compiled_threading()),
         )?;
-        d.set_item("threading", threading_name(target.threading()))?;
-        d.set_item("execution", execution_name(target.execution()))?;
-        d.set_item("requested_replicas", target.requested_replicas())?;
-        d.set_item("effective_replicas", target.effective_replicas())?;
+        d.set_item("probe_threading", threading_name(target.threading()))?;
+        d.set_item("probe_execution", execution_name(target.execution()))?;
+        d.set_item("probe_requested_replicas", target.requested_replicas())?;
+        d.set_item("probe_effective_replicas", target.effective_replicas())?;
         Ok(d)
     }
 

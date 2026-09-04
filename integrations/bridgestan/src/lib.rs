@@ -30,8 +30,10 @@
 //! * Thread safety: on Windows every BridgeStan native operation runs on one
 //!   owned OS thread per target. Caller and Rayon threads use a bounded
 //!   channel; drop sends shutdown and joins the owner after model destruction
-//!   and native TLS teardown. [`ReplicatedStanTarget`] deliberately has one
-//!   effective Windows worker regardless of its requested count. Off Windows,
+//!   and native TLS teardown. One process-global native-call mutex additionally
+//!   serializes all owner threads and models. [`ReplicatedStanTarget`]
+//!   deliberately has one effective Windows worker regardless of its requested
+//!   count. Off Windows,
 //!   `STAN_THREADS=true` permits direct concurrent evaluation; otherwise a
 //!   module-identity mutex serialises setup and evaluation. `threading()`
 //!   reports effective call concurrency, `compiled_threading()` reports the
@@ -45,8 +47,9 @@
 //!   hmm_example 445 vs 28 µs, eight schools 6.2 vs 0.59 µs); the default
 //!   build matches CmdStan's per-gradient cost. Build without `STAN_THREADS`.
 //!   The Windows owned worker safely serialises calls from parallel samplers.
-//!   Off Windows, [`ReplicatedStanTarget`] loads one copy of the library per
-//!   concurrent thread and dispatches each call to a free replica.
+//!   Off Windows, [`ReplicatedStanTarget`] retains the original path for
+//!   replica 0, loads copies for replicas 1..n, and dispatches each call to a
+//!   free replica.
 //! * On Windows, model and preload DLLs are process-lifetime residents. This
 //!   prevents native TLS destructor callbacks from reaching unloaded code
 //!   after owner shutdown. Model objects are destructed on their owner. Models
@@ -157,6 +160,15 @@ fn resident_libraries() -> &'static Mutex<HashMap<PathBuf, Arc<Library>>> {
     LIBRARIES.get_or_init(Default::default)
 }
 
+/// Stan Math and mingw-w64 runtime state may be process-global even when model
+/// DLLs have distinct paths. Every native operation on Windows takes this lock
+/// in addition to the per-module lock. The order is always module then process.
+#[cfg(windows)]
+fn process_native_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(Default::default)
+}
+
 /// Effective concurrency exposed by a target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Threading {
@@ -195,7 +207,8 @@ pub enum Execution {
     DirectSerialised,
     /// Concurrent dispatch across independent non-Windows model modules.
     ReplicatedConcurrent,
-    /// Bounded-channel dispatch to one serialized Windows owner thread.
+    /// Bounded-channel dispatch to one Windows owner thread, with all owner
+    /// threads serialized by the process-global native-call policy.
     OwnedSerialised,
 }
 
@@ -328,6 +341,10 @@ impl NativeTarget {
         let setup_guard = serial
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        #[cfg(windows)]
+        let _process_guard = process_native_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut preloaded = Vec::with_capacity(preload.len());
         for dep in preload {
             preloaded.push(load_library(dep)?);
@@ -360,6 +377,9 @@ impl NativeTarget {
         if ptr.is_null() {
             let message = take_error(err, free_error);
             return Err(LoadError::Construct(message));
+        }
+        if !err.is_null() {
+            let _ = take_error(err, free_error);
         }
         let model = ModelHandle {
             ptr,
@@ -430,6 +450,10 @@ impl NativeTarget {
         position: &[f64],
         gradient: &mut [f64],
     ) -> Result<f64, TargetError> {
+        #[cfg(windows)]
+        let _process_guard = process_native_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let model = &self
             .loaded
             .as_ref()
@@ -457,6 +481,9 @@ impl NativeTarget {
                 "stan exception: {message}"
             )))
         } else {
+            if !err.is_null() {
+                let _ = take_error(err, model.free_error);
+            }
             map_evaluation(value, gradient)
         }
     }
@@ -479,6 +506,10 @@ impl Drop for NativeTarget {
     fn drop(&mut self) {
         let _teardown_guard = self
             .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        #[cfg(windows)]
+        let _process_guard = process_native_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         drop(self.loaded.take());
@@ -664,8 +695,10 @@ impl StanTarget {
     /// `stan/lib/stan_math/lib/tbb` must be resident before the model loads),
     /// and construct the model with CmdStan-JSON `data` and `seed`.
     ///
-    /// On Windows all native operations execute on one owned OS thread and
-    /// callers communicate with it through a bounded channel.
+    /// On Windows all native operations execute on one owned OS thread,
+    /// callers communicate with it through a bounded channel, and one
+    /// process-global native-call mutex serializes this owner with every other
+    /// BridgeStan owner in the process.
     pub fn load(
         model_so: &Path,
         preload: &[PathBuf],
@@ -932,48 +965,74 @@ fn validate_replica_metadata(metadata: &[ReplicaMetadata]) -> Result<(), LoadErr
 
 #[cfg(not(windows))]
 struct ReplicaCopies {
-    dir: PathBuf,
-    files: Vec<PathBuf>,
+    dir: Option<PathBuf>,
+    load_paths: Vec<PathBuf>,
+    copied_files: Vec<PathBuf>,
+    source_snapshot: Option<Vec<u8>>,
 }
 
 #[cfg(not(windows))]
 impl Drop for ReplicaCopies {
     fn drop(&mut self) {
-        for f in &self.files {
+        for f in &self.copied_files {
             let _ = std::fs::remove_file(f);
         }
-        let _ = std::fs::remove_dir(&self.dir);
+        if let Some(dir) = &self.dir {
+            let _ = std::fs::remove_dir(dir);
+        }
     }
 }
 
 #[cfg(not(windows))]
 impl ReplicaCopies {
     fn prepare(model_so: &Path, replicas: usize) -> Result<Self, LoadError> {
-        let dir = std::env::temp_dir().join(format!(
-            "owalnuts-bridgestan-{}-{}",
-            std::process::id(),
-            NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
-        ));
         let mut copies = Self {
-            dir: dir.clone(),
-            files: Vec::new(),
+            dir: None,
+            load_paths: Vec::with_capacity(replicas),
+            copied_files: Vec::with_capacity(replicas.saturating_sub(1)),
+            source_snapshot: None,
         };
         if replicas > 0 {
+            copies.load_paths.push(model_so.to_path_buf());
+        }
+        if replicas > 1 {
+            let dir = std::env::temp_dir().join(format!(
+                "owalnuts-bridgestan-{}-{}",
+                std::process::id(),
+                NEXT_POOL_ID.fetch_add(1, Ordering::Relaxed)
+            ));
             std::fs::create_dir_all(&dir).map_err(|e| LoadError::Invalid(e.to_string()))?;
+            copies.dir = Some(dir.clone());
             let stem = model_so
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "model.so".into());
             let bytes =
                 std::fs::read(model_so).map_err(|error| LoadError::Invalid(error.to_string()))?;
-            for replica in 0..replicas {
+            for replica in 1..replicas {
                 let copy = dir.join(format!("replica{replica}-{stem}"));
                 std::fs::write(&copy, &bytes)
                     .map_err(|error| LoadError::Invalid(error.to_string()))?;
-                copies.files.push(copy);
+                copies.load_paths.push(copy.clone());
+                copies.copied_files.push(copy);
             }
+            copies.source_snapshot = Some(bytes);
         }
         Ok(copies)
+    }
+
+    fn validate_original_unchanged(&self, model_so: &Path) -> Result<(), LoadError> {
+        let Some(expected) = &self.source_snapshot else {
+            return Ok(());
+        };
+        let observed =
+            std::fs::read(model_so).map_err(|error| LoadError::Invalid(error.to_string()))?;
+        if observed.as_slice() != expected.as_slice() {
+            return Err(LoadError::Invalid(
+                "model source changed while replica 0 and its copies were loaded".into(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -1159,10 +1218,12 @@ impl ReplicatedStanTarget {
     /// Load `replicas` independent copies of `model_so` (see
     /// [`StanTarget::load`] for the other arguments). `replicas` should be at
     /// least the number of threads that will call the target concurrently.
-    /// Off Windows every replica, including replica 0, is copied from one
-    /// in-memory source snapshot and deleted on drop. On Windows one
-    /// content-addressed cached copy and resident module is reused for the
-    /// life of the process.
+    /// Off Windows replica 0 (and a single-replica target) uses the caller's
+    /// original path so `$ORIGIN`/`@loader_path` dependency lookup is
+    /// preserved. Replicas 1 through n-1 are written from one in-memory source
+    /// snapshot and deleted on drop; the source is re-read after replica 0
+    /// loads to reject a mixed-revision target. On Windows one content-addressed
+    /// cached copy and resident module is reused for the life of the process.
     pub fn load(
         model_so: &Path,
         preload: &[PathBuf],
@@ -1180,8 +1241,11 @@ impl ReplicatedStanTarget {
         #[cfg(windows)]
         loaded.push(StanTarget::load(model_so, preload, data, seed)?);
         #[cfg(not(windows))]
-        for copy in &copies.files {
-            loaded.push(StanTarget::load(copy, preload, data, seed)?);
+        for (index, path) in copies.load_paths.iter().enumerate() {
+            loaded.push(StanTarget::load(path, preload, data, seed)?);
+            if index == 0 {
+                copies.validate_original_unchanged(model_so)?;
+            }
         }
         validate_replica_metadata(&loaded.iter().map(ReplicaMetadata::from).collect::<Vec<_>>())?;
         let dimension = loaded[0].dimension();
@@ -1377,50 +1441,88 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[derive(Default)]
+    struct NativeActivity {
+        active: AtomicUsize,
+        maximum: AtomicUsize,
+    }
+
+    #[cfg(windows)]
+    struct NativeActivityCall<'a>(&'a AtomicUsize);
+
+    #[cfg(windows)]
+    impl Drop for NativeActivityCall<'_> {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    #[cfg(windows)]
+    impl NativeActivity {
+        fn call<R>(&self, operation: impl FnOnce() -> R) -> R {
+            let _guard = process_native_lock()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+            let _active_call = NativeActivityCall(&self.active);
+            self.maximum.fetch_max(active, Ordering::SeqCst);
+            thread::yield_now();
+            operation()
+        }
+    }
+
+    #[cfg(windows)]
     struct FakeBackend {
         log: OperationLog,
         active: Arc<AtomicUsize>,
+        native_activity: Arc<NativeActivity>,
     }
 
     #[cfg(windows)]
     impl OwnedBackend for FakeBackend {
         fn metadata(&self) -> WorkerMetadata {
-            log_operation(&self.log, "metadata");
-            log_operation(&self.log, "names");
-            WorkerMetadata {
-                dimension: 2,
-                info: "fake STAN_THREADS=false".into(),
-                unc_names: Some(vec!["a".into(), "b".into()]),
-                compiled_threading: Threading::Serialised,
-            }
+            self.native_activity.call(|| {
+                log_operation(&self.log, "metadata");
+                log_operation(&self.log, "names");
+                WorkerMetadata {
+                    dimension: 2,
+                    info: "fake STAN_THREADS=false".into(),
+                    unc_names: Some(vec!["a".into(), "b".into()]),
+                    compiled_threading: Threading::Serialised,
+                }
+            })
         }
 
         fn evaluate(&mut self, position: &[f64]) -> WorkerReply {
-            log_operation(&self.log, "gradient");
-            if position.first() == Some(&99.0) {
-                panic!("fake native panic");
-            }
-            let mut gradient = position.iter().map(|value| -*value).collect();
-            if position.first().is_some_and(|value| *value < 0.0) {
-                log_operation(&self.log, "error_free");
-                return WorkerReply {
+            self.native_activity.call(|| {
+                log_operation(&self.log, "gradient");
+                if position.first() == Some(&99.0) {
+                    panic!("fake native panic");
+                }
+                let mut gradient = position.iter().map(|value| -*value).collect();
+                if position.first().is_some_and(|value| *value < 0.0) {
+                    log_operation(&self.log, "error_free");
+                    return WorkerReply {
+                        gradient,
+                        outcome: WorkerOutcome::Recoverable("fake domain error".into()),
+                    };
+                }
+                gradient.resize(2, 0.0);
+                WorkerReply {
                     gradient,
-                    outcome: WorkerOutcome::Recoverable("fake domain error".into()),
-                };
-            }
-            gradient.resize(2, 0.0);
-            WorkerReply {
-                gradient,
-                outcome: WorkerOutcome::Success(-0.5 * position.iter().sum::<f64>()),
-            }
+                    outcome: WorkerOutcome::Success(-0.5 * position.iter().sum::<f64>()),
+                }
+            })
         }
     }
 
     #[cfg(windows)]
     impl Drop for FakeBackend {
         fn drop(&mut self) {
-            log_operation(&self.log, "model_destruct");
-            self.active.fetch_sub(1, Ordering::SeqCst);
+            self.native_activity.call(|| {
+                log_operation(&self.log, "model_destruct");
+                self.active.fetch_sub(1, Ordering::SeqCst);
+            });
         }
     }
 
@@ -1429,15 +1531,30 @@ mod tests {
         log: OperationLog,
         active: Arc<AtomicUsize>,
     ) -> (OwnedClient, WorkerMetadata) {
+        start_fake_worker_with_activity(log, active, Arc::default())
+    }
+
+    #[cfg(windows)]
+    fn start_fake_worker_with_activity(
+        log: OperationLog,
+        active: Arc<AtomicUsize>,
+        native_activity: Arc<NativeActivity>,
+    ) -> (OwnedClient, WorkerMetadata) {
         start_owned_worker(move || {
             OWNER_TLS_PROBE.with(|probe| {
                 probe.replace(Some(OwnerTlsProbe(Arc::clone(&log))));
             });
-            for operation in ["preload", "library_load", "symbol_load", "construct"] {
-                log_operation(&log, operation);
-            }
-            active.fetch_add(1, Ordering::SeqCst);
-            Ok(FakeBackend { log, active })
+            native_activity.call(|| {
+                for operation in ["preload", "library_load", "symbol_load", "construct"] {
+                    log_operation(&log, operation);
+                }
+                active.fetch_add(1, Ordering::SeqCst);
+            });
+            Ok(FakeBackend {
+                log,
+                active,
+                native_activity,
+            })
         })
         .unwrap()
     }
@@ -1737,6 +1854,60 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn process_native_lock_serializes_multiple_owner_threads() {
+        const OWNERS: usize = 4;
+        let active_workers = Arc::new(AtomicUsize::new(0));
+        let native_activity = Arc::new(NativeActivity::default());
+        let clients = (0..OWNERS)
+            .map(|_| {
+                start_fake_worker_with_activity(
+                    Arc::new(Mutex::new(Vec::new())),
+                    Arc::clone(&active_workers),
+                    Arc::clone(&native_activity),
+                )
+                .0
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(active_workers.load(Ordering::SeqCst), OWNERS);
+
+        let start = Arc::new(std::sync::Barrier::new(OWNERS));
+        let before_drop = Arc::new(std::sync::Barrier::new(OWNERS));
+        thread::scope(|scope| {
+            let handles = clients
+                .into_iter()
+                .enumerate()
+                .map(|(owner, client)| {
+                    let start = Arc::clone(&start);
+                    let before_drop = Arc::clone(&before_drop);
+                    scope.spawn(move || {
+                        start.wait();
+                        for call in 0..32 {
+                            let mut gradient = [0.0; 2];
+                            client
+                                .evaluate(&[owner as f64, call as f64], &mut gradient)
+                                .unwrap();
+                        }
+                        before_drop.wait();
+                        drop(client);
+                    })
+                })
+                .collect::<Vec<_>>();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+
+        assert_eq!(active_workers.load(Ordering::SeqCst), 0);
+        assert_eq!(native_activity.active.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            native_activity.maximum.load(Ordering::SeqCst),
+            1,
+            "native setup, evaluation, error free, and destruction must never overlap"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn owner_panic_becomes_fatal_and_drop_does_not_panic() {
         let log = Arc::new(Mutex::new(Vec::new()));
         let active = Arc::new(AtomicUsize::new(0));
@@ -1784,7 +1955,7 @@ mod tests {
 
     #[cfg(not(windows))]
     #[test]
-    fn non_windows_replica_copies_are_deleted_on_drop() {
+    fn non_windows_replica_zero_keeps_original_path_and_copies_are_deleted() {
         let outer = std::env::temp_dir().join(format!(
             "owalnuts-bridgestan-test-copy-{}-{}",
             std::process::id(),
@@ -1793,18 +1964,35 @@ mod tests {
         std::fs::create_dir_all(&outer).unwrap();
         let source = outer.join("source.so");
         std::fs::write(&source, b"copy behavior only").unwrap();
+
+        let single = ReplicaCopies::prepare(&source, 1).unwrap();
+        assert_eq!(single.load_paths, [source.clone()]);
+        assert!(single.copied_files.is_empty());
+        assert!(single.dir.is_none());
+        drop(single);
+        assert_eq!(std::fs::read(&source).unwrap(), b"copy behavior only");
+
         let copies = ReplicaCopies::prepare(&source, 4).unwrap();
-        let copy_dir = copies.dir.clone();
-        assert_eq!(copies.files.len(), 4);
+        let copy_dir = copies.dir.clone().unwrap();
+        assert_eq!(copies.load_paths.len(), 4);
+        assert_eq!(copies.load_paths[0], source);
+        assert_eq!(copies.copied_files.len(), 3);
+        assert_eq!(&copies.load_paths[1..], copies.copied_files.as_slice());
+        assert!(copies.validate_original_unchanged(&source).is_ok());
         std::fs::write(&source, b"replacement after snapshot").unwrap();
+        assert!(copies.validate_original_unchanged(&source).is_err());
         assert!(
             copies
-                .files
+                .copied_files
                 .iter()
                 .all(|copy| std::fs::read(copy).unwrap() == b"copy behavior only")
         );
         drop(copies);
         assert!(!copy_dir.exists());
+        assert_eq!(
+            std::fs::read(&source).unwrap(),
+            b"replacement after snapshot"
+        );
         let _ = std::fs::remove_dir_all(outer);
     }
 }

@@ -134,11 +134,14 @@ target.constrained_names()           # their names; include_tp=/include_gq= as i
 
 Off Windows, the library is built **without** `STAN_THREADS` unless
 `make_args=["STAN_THREADS=true"]` is passed. The Rust
-`owalnuts_bridgestan::ReplicatedStanTarget` loads one snapshotted copy per
-effective replica and runs with the interpreter detached. Rust metadata
-distinguishes effective `threading`, `compiled_threading`, `execution`,
-`requested_replicas`, and `effective_replicas`; these fields are retained on `StanTarget`/`SampleResult`
-where that backend is used. Positions
+`owalnuts_bridgestan::ReplicatedStanTarget` keeps replica 0 at the original
+model path, copies replicas 1 through n-1, and runs with the interpreter
+detached. `StanTarget.compiled_threading` is a library capability;
+`probe_threading`, `probe_execution`, `probe_requested_replicas`, and
+`probe_effective_replicas` describe only the one-replica metadata probe made
+by `from_stan`. They do not predict later sampling. `SampleResult.threading`,
+`target_execution`, `requested_replicas`, and `effective_replicas` report the
+target actually created for that sampling run. Positions
 are Stan's unconstrained parameters (`propto=False, jacobian=True`); a Stan
 exception or nonfinite value is a zero-density proposal (refined, then
 rejected), as in CmdStan. `data` is a dict (numpy arrays allowed), a

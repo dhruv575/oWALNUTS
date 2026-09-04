@@ -543,13 +543,27 @@ def paired_invariant_differences(
     }
 
 
-def owned_effective_replica_violation(record: dict[str, Any]) -> str | None:
+def effective_replica_violation(
+    record: dict[str, Any], expected: int
+) -> str | None:
     raw = record.get("raw_result")
     if not isinstance(raw, dict):
         return "raw output unavailable"
-    if raw.get("effective_replicas") != 1:
-        return f"effective_replicas={raw.get('effective_replicas')!r}, expected 1"
+    if raw.get("effective_replicas") != expected:
+        return (
+            f"effective_replicas={raw.get('effective_replicas')!r}, "
+            f"expected {expected}"
+        )
     return None
+
+
+def owned_effective_replica_violation(record: dict[str, Any]) -> str | None:
+    return effective_replica_violation(record, 1)
+
+
+def has_successful_raw(record: dict[str, Any]) -> bool:
+    raw = record.get("raw_result")
+    return isinstance(raw, dict) and raw.get("status") == "ok"
 
 
 def correlated_signatures(
@@ -695,10 +709,32 @@ def analyze() -> dict[str, Any]:
         for record in owned_records
         if (violation := owned_effective_replica_violation(record)) is not None
     ]
+    comparator_records = [
+        record for record in ordered if record["mode"] == "comparator"
+    ]
+    comparator_effective_replica_violations = [
+        {
+            "case_id": record["case_id"],
+            "reason": violation,
+        }
+        for record in comparator_records
+        if has_successful_raw(record)
+        and (
+            violation := effective_replica_violation(record, 4)
+        )
+        is not None
+    ]
+    comparator = by_mode.get("comparator", {})
+    comparator_complete = (
+        comparator.get("recorded")
+        == int(PROTOCOL["execution"]["children"]["comparator"])
+    )
     owned = by_mode.get("owned", {})
     owned_complete = owned.get("recorded") == int(PROTOCOL["execution"]["children"]["owned"])
     accepted = (
-        owned_complete
+        comparator_complete
+        and owned_complete
+        and not missing
         and bool(capture.get("available"))
         and owned.get("faults_including_correlated_event_1000") == 0
         and owned.get("nonzero_exits") == 0
@@ -706,6 +742,7 @@ def analyze() -> dict[str, Any]:
         and owned.get("missing_outputs") == 0
         and owned.get("incomplete_heartbeats") == 0
         and owned.get("correlated_event_1000") == 0
+        and not comparator_effective_replica_violations
         and not effective_replica_violations
         and not mismatches
     )
@@ -738,6 +775,21 @@ def analyze() -> dict[str, Any]:
             "checked_children": len(owned_records),
             "violation_count": len(effective_replica_violations),
             "violations": effective_replica_violations,
+        },
+        "comparator_effective_replicas": {
+            "required": 4,
+            "required_record_count": int(
+                PROTOCOL["execution"]["children"]["comparator"]
+            ),
+            "recorded_children": len(comparator_records),
+            "checked_successful_raw_children": sum(
+                has_successful_raw(record) for record in comparator_records
+            ),
+            "unobservable_without_successful_raw": sum(
+                not has_successful_raw(record) for record in comparator_records
+            ),
+            "violation_count": len(comparator_effective_replica_violations),
+            "violations": comparator_effective_replica_violations,
         },
         "performance": {
             "paired_comparator_median_seconds": comparator_median,

@@ -68,10 +68,13 @@ def test_from_stan_reports_names_and_dimension(eight_schools):
     assert t.parameter_names[0] == "mu"
     assert "STAN_THREADS=true" not in t.info
     assert t.compiled_threading == "serialised"
-    assert t.threading == "serialised"
-    assert t.execution in {"direct_serialised", "replicated_concurrent"}
-    assert t.requested_replicas == 1
-    assert t.effective_replicas == 1
+    assert t.probe_threading == "serialised"
+    assert t.probe_execution == "direct_serialised"
+    assert t.probe_requested_replicas == 1
+    assert t.probe_effective_replicas == 1
+    assert not hasattr(t, "execution")
+    assert not hasattr(t, "requested_replicas")
+    assert not hasattr(t, "effective_replicas")
     assert t.constrained_names() == list(t.parameter_names)
 
 
@@ -96,6 +99,11 @@ def test_sample_stan_parallel_chains_and_constrain(eight_schools):
     assert result.samples.shape == (4, 500, 10)
     assert result.parameter_names == list(eight_schools.parameter_names)
     assert result.target_calls > 0
+    assert result.compiled_threading == "serialised"
+    assert result.threading == "concurrent"
+    assert result.target_execution == "replicated_concurrent"
+    assert result.requested_replicas == 4
+    assert result.effective_replicas == 4
     rows = {r["name"]: r for r in result.summary()}
     assert set(rows) == set(eight_schools.parameter_names)
     assert rows["mu"]["mean"] == pytest.approx(4.4, abs=1.5)

@@ -11009,6 +11009,45 @@ mod tests {
     }
 
     #[test]
+    fn direct_original_q_builds_one_scoped_pool_per_run() {
+        let positions = vec![
+            vec![0.0, 0.0],
+            vec![0.1, -0.1],
+            vec![-0.2, 0.2],
+            vec![0.3, -0.3],
+        ];
+        let mass =
+            DirectOriginalQMass::Dense(DenseMass::identity(nz(2)).expect("identity dense mass"));
+        let config = RunConfig::new(3, nz(4), 0x6469_7265_6374);
+        let sequential =
+            sample_chains_direct_original_q(&Gaussian(2), &positions, &mass, &config, nz(1))
+                .unwrap();
+
+        let builds = Arc::new(AtomicUsize::new(0));
+        SCOPED_POOL_BUILD_PROBE.with(|probe| {
+            probe.replace(Some(Arc::clone(&builds)));
+        });
+        let parallel =
+            sample_chains_direct_original_q(&Gaussian(2), &positions, &mass, &config, nz(4))
+                .unwrap();
+        SCOPED_POOL_BUILD_PROBE.with(|probe| drop(probe.take()));
+
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+        assert_eq!(sequential.base_seed(), parallel.base_seed());
+        assert_eq!(
+            sequential.algorithm_revision(),
+            parallel.algorithm_revision()
+        );
+        for (left, right) in sequential.chains().iter().zip(parallel.chains()) {
+            assert_eq!(left.samples(), right.samples());
+            assert_eq!(left.diagnostics(), right.diagnostics());
+            assert_eq!(left.telemetry(), right.telemetry());
+            assert_eq!(left.metadata().thread_count(), 1);
+            assert_eq!(right.metadata().thread_count(), 4);
+        }
+    }
+
+    #[test]
     fn two_hit_state_resets_on_clean_skip_change_and_restart() {
         assert_eq!(
             canonical_rescue_criterion(true, true),

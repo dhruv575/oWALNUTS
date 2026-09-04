@@ -48,13 +48,44 @@ process codes, PIDs/start times, atomic heartbeats, raw output, stdout/stderr,
 timeouts, Event 1000/1001, and path/PID/application-start-time correlations.
 A correlated Event 1000 turns nominal process success into a study fault.
 
-The strengthened derived acceptance requires zero faults of every registered
-class, `effective_replicas == 1` in every owned output, and zero mismatches in
-all five claimed parity fields (fingerprint, target/recoverable counters,
-algorithm revision, and sample count) among paired successful outputs.
+The strengthened derived acceptance requires all 180 comparator records,
+four effective replicas in every successful comparator raw output, zero
+faults of every registered owned class, `effective_replicas == 1` in every
+owned output, and zero mismatches in all five claimed parity fields
+(fingerprint, target/recoverable counters, algorithm revision, and sample
+count) among paired successful outputs.
 Performance is descriptive. Zero faults in all 540 owned children gives a
 one-sided 95% binomial upper bound of 0.553229% (0.553% in prose); scope remains
 limited to the registered models, short run shape, BridgeStan build, and host.
+
+## Final implementation qualification
+
+`FINAL-QUALIFICATION.md` is the append-only protocol for a fresh fixed-only
+matrix over the final process-global serialization implementation. It freezes
+540 ordinary two-run parity children and 180 four-target concurrent children.
+The 992xxx/993xxx children are immutable and are not inputs to this launch.
+
+Before launch, the final child and analyzer are checked with:
+
+```powershell
+cargo +1.88.0-x86_64-pc-windows-gnu test --locked --bin final_qualification
+cargo +1.88.0-x86_64-pc-windows-gnu build --locked --release --bin final_qualification
+python -m unittest -v test_final_qualification.py
+python run_final_qualification.py verify --binary .\target\release\final_qualification.exe
+python run_final_qualification.py prepare --binary .\target\release\final_qualification.exe
+```
+
+The one permitted launch command is:
+
+```powershell
+python run_final_qualification.py run --binary .\target\release\final_qualification.exe
+```
+
+The runner refuses any existing final launch/process record and cannot resume.
+It validates the frozen WP35 asset hashes, records the final source/binary
+identity, verifies historical raw Git objects against `14b1791`, launches
+exclusively, and captures/correlates Windows events. Status before execution:
+preregistered, not yet run.
 
 ## Verdict
 

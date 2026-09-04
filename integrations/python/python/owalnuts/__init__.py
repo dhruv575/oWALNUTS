@@ -130,6 +130,7 @@ class SampleResult:
     config: dict[str, Any] = field(default_factory=dict)
     refresh_updates: list[dict[str, Any]] | None = None
     compiled_threading: str | None = None
+    #: Effective metadata from the target actually used for this sample run.
     threading: str | None = None
     target_execution: str | None = None
     requested_replicas: int | None = None
@@ -361,7 +362,9 @@ class StanTarget:
     the ``bridgestan`` Python package, and ``constrain`` maps draws back to
     constrained parameters. owalnuts 0.2 disables those direct Python-native
     paths and ``from_stan`` on Windows because they bypass the Rust owned
-    worker.
+    worker. ``probe_*`` fields describe only the one-replica Rust load used to
+    discover model metadata. They do not predict a later ``sample`` call;
+    ``SampleResult`` reports that run's actual requested/effective execution.
     """
 
     model_so: str
@@ -372,10 +375,10 @@ class StanTarget:
     preload: tuple[str, ...] = ()
     info: str = ""
     compiled_threading: str = ""
-    threading: str = ""
-    execution: str = ""
-    requested_replicas: int = 1
-    effective_replicas: int = 1
+    probe_threading: str = ""
+    probe_execution: str = ""
+    probe_requested_replicas: int = 1
+    probe_effective_replicas: int = 1
     _cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def model(self):
@@ -472,10 +475,10 @@ def from_stan(stan_file: "str | os.PathLike[str]", data: Any = None, *, seed: in
         parameter_names=tuple(names) if names else None, seed=int(seed),
         preload=tuple(preload), info=str(info["info"]),
         compiled_threading=str(info["compiled_threading"]),
-        threading=str(info["threading"]),
-        execution=str(info["execution"]),
-        requested_replicas=int(info["requested_replicas"]),
-        effective_replicas=int(info["effective_replicas"]),
+        probe_threading=str(info["probe_threading"]),
+        probe_execution=str(info["probe_execution"]),
+        probe_requested_replicas=int(info["probe_requested_replicas"]),
+        probe_effective_replicas=int(info["probe_effective_replicas"]),
     )
 
 
