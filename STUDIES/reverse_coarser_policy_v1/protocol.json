@@ -1,0 +1,95 @@
+{
+  "schema": "reverse-coarser-policy-v1",
+  "status": "FROZEN_BEFORE_FIRST_CELL",
+  "frozen_utc": "2026-09-05",
+  "purpose": "WP39. refinement_role_v1 (WP34) found that the four posteriordb models where oWALNUTS is furthest behind CmdStan per gradient are exactly those where the reverse-coarsening check ends the most transitions (10-54 % of retained transitions), while the check's own gradient cost is negligible (target_calls_reverse < 1 % of retained calls). The cost is orbit truncation: the failed doubling is discarded and the orbit ends early. ReverseCoarserPolicy::ZeroWeightBeyond (kernel commit e5a6617, research-only) keeps the failed leaf's endpoint and every leaf beyond it in that direction at zero weight and lets the orbit run on; selection is restricted to states connected to the current one through passing leaves, so the transition stays exact (tests/reverse_coarser_policy.rs). Does it pay per gradient on posteriordb, and is it exact on the funnel?",
+  "arms": {
+    "stop": "Tuning::default() + Adaptation::default(): ReverseCoarserPolicy::StopOrbit, the shipped sampler (bit-identical to refinement_role_v1's `da` at equal seeds)",
+    "beyond": "Tuning::default().reverse_coarser_policy(ReverseCoarserPolicy::ZeroWeightBeyond) + Adaptation::default()"
+  },
+  "arms_order": ["stop", "beyond"],
+  "common": "Tuning::default() (h0 0.5, depth 10, min_micro_steps 1, eight refinement levels, delta 1, MomentumSum, divergence threshold 1000); Adaptation::default() (dual averaging 0.8 on the coarse-endpoint statistic, Stan regularisation, DEFAULT_WARMUP_EXHAUSTION); Metric::diagonal(); Init::uniform(); Limits::admit_worst_case(); four threads; cached initial evaluation; no per-model tuning; no source change between arms",
+  "external": {
+    "root": "../../../owalnuts-wt/posteriordb-v6/STUDIES/posteriordb_bench_v6",
+    "what": "BridgeStan 2.9.0 libraries compiled without STAN_THREADS for posteriordb_bench_v6 (models/) and its posteriordb checkout; reused, not recompiled"
+  },
+  "cmdstan_reference": "posteriordb_bench_v5 artifacts (CmdStan 2.39.0 defaults, seeds 87101-87103), cited not rerun",
+  "run_order": "models in listed order; arms stop then beyond; seeds ascending; strictly sequential; then the funnel rows for both arms",
+  "side_checks": {
+    "funnel": "Neal's 10-D funnel at the sampler defaults plus the arm's policy: 4 x 2,000 / 20,000, starts omega in {-3, -1, 1, 3}, per-seed MCSE z of P(omega < -5) (exact 0.0478), gate |z| <= 2 on every seed for `beyond` (and reported for `stop`); src/bin/funnel.rs"
+  },
+  "target_models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "gp_pois_regr-gp_pois_regr",
+    "mcycle_gp-accel_gp"
+  ],
+  "predictions": {
+    "P1": "beyond has zero reverse-coarser stops on every cell (by construction) and continued-leaf counts equal to stop's rejection counts within seed noise; adapted h within 0.95-1.05x of stop's on every model (the acceptance statistic does not see the zero-weight leaves)",
+    "P2": "on the four target models beyond is 1.15-2.0x stop per gradient, largest on accel_gp (rc stop 54 % in WP34) and smallest on the noncentered eight schools (10 %); leaves per orbit rise by 1/(1 - rc stop) or less",
+    "P3": "on the thirteen control models (rc stop 0.8-7 %) beyond is within 0.95-1.05x of stop; the geomean over 17 lands at 1.05-1.20",
+    "P4": "funnel |z| <= 2 on every seed for both arms; beyond's omega ESS per call within 0.9-1.2x of stop's",
+    "P5": "gates: beyond passes at least as many of the 51 cells as stop; max rank R-hat and |z| against the reference unchanged in distribution",
+    "risk": "the zero-weight tail can make orbits run to the depth cap on the target models (WP34: accel_gp depth histogram concentrated at 9-10); if depth-cap stops rise above 20 % of transitions on a model the per-gradient gain there will be below P2 and this is the mechanism to report"
+  },
+  "decision_rules_text": "flip the sampler default to ZeroWeightBeyond iff C1 geomean of the per-model seed-median ratio (beyond/stop of min bulk ESS per gradient, all target calls) over 17 models >= 1.10, C2 no model < 0.90, C3 beyond passes >= as many gates as stop over the 51 cells, C4 funnel |z| <= 2 on every seed for beyond, C5 geomean over the four target models >= 1.15. Otherwise: keep StopOrbit as the default and the opt-in stays research-only. Report all cells; no reruns; failures are results; nothing tuned after seeing results.",
+  "decision_rule": {
+    "geomean_min": 1.10,
+    "per_model_min": 0.90,
+    "targets_geomean_min": 1.15
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "cmdstan_healthy_models": [
+    "eight_schools-eight_schools_noncentered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra"
+  ],
+  "seeds": [91101, 91102, 91103],
+  "seed_provenance": "grep-verified unused in the repository (outside vendored site-packages) before the freeze",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "cell_timeout_seconds": 2700,
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  }
+}

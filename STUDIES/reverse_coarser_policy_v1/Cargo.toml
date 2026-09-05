@@ -1,0 +1,21 @@
+[package]
+name = "reverse-coarser-policy-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "oWALNUTS arms of the preregistered reverse-coarser policy study (WP39): does continuing the orbit at zero weight past a failed reverse-coarsening check (ReverseCoarserPolicy::ZeroWeightBeyond) beat ending it (StopOrbit)? posteriordb v5 protocol, funnel tail mass"
+
+[dependencies]
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "posteriordb-cell"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]
