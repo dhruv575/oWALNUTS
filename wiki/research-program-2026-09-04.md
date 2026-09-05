@@ -265,6 +265,27 @@ models (0.67–0.95x).
    not the policy. A renewed qualification needs a fresh preregistration with
    a paired health gate and fresh seeds. Until then `Abort` stays the default
    and `RejectLeaf` is unsupported.
+3b. **Reverse-coarsening as orbit truncation: measured on 2026-09-05, not
+   qualified (WP39).** WP34's data said the reverse check's cost is not its
+   gradients (below 1 % of retained calls) but the truncation: the failed
+   doubling is discarded and the orbit ends. A research-only
+   `ReverseCoarserPolicy::ZeroWeightBeyond` (kernel `e5a6617`; the default
+   `StopOrbit` and every fingerprint unchanged) keeps the failed leaf's
+   endpoint and everything beyond it at zero weight and lets the orbit run
+   on; it is exact (selection restricted to the component connected through
+   passing leaves; tests and the funnel side check agree). Preregistered on
+   the 17 posteriordb models with fresh seeds it reached geomean **0.981x**
+   the shipped policy per gradient (rule 1.10), **0.904x** on the four
+   target models (rule 1.15), `accel_gp` 0.61x; the noncentered eight
+   schools and `lotka_volterra` gained 1.30x, `gp_pois_regr` 1.14x. The
+   paired comparison was confounded: the shipped `CurrentCoarseEndpoint`
+   statistic averages over every built leaf, zero-weight leaves included,
+   so dual averaging installed a 3–30 % larger step under the new policy,
+   which multiplied the refined and failing leaves and paid for them as
+   zero-weight tails (57 % of `accel_gp`'s built leaves). A WP39B that
+   restricts the adaptation mean to positive-weight leaves, or fixes the
+   step at the `stop` arm's adapted value, is the clean test of the
+   truncation hypothesis. `StopOrbit` stays the default.
 4. **Further target-adaptive `delta` research, after reverse-coarsening.**
    WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
    fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.
