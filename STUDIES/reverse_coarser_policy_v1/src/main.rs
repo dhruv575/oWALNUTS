@@ -20,7 +20,7 @@
 mod arms;
 
 use arms::Arm;
-use owalnuts::sampler::{Init, Limits, Metric, Sampler, uniform_starts};
+use owalnuts::sampler::{Init, Limits, Metric, Sampler, Target, uniform_starts};
 use owalnuts::walnutpie::{ALGORITHM_REVISION, StopReason};
 use owalnuts_bridgestan::{ReplicatedStanTarget, default_preload};
 use serde_json::json;
