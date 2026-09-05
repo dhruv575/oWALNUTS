@@ -758,13 +758,30 @@ pub enum ReverseCoarseningOrder {
 /// zero-weight set and the same weights are reproduced (a failed leaf is
 /// always traversed in the direction it was built), which is the condition
 /// the multinomial orbit selection needs. When no leaf fails the check the
-/// two policies are bit-identical. Research-only; the default is
+/// policies are bit-identical. Research-only; the default is
 /// [`Self::StopOrbit`].
+///
+/// [`Self::ZeroWeightBeyondAdaptSelected`] builds the same orbit as
+/// [`Self::ZeroWeightBeyond`] (identical draws and work at a fixed step) but
+/// withholds the zero-weight leaves built *beyond* a failed one from the
+/// step-size adaptation statistic: the leaves that feed dual averaging are
+/// the weighted ones plus the failed leaf itself, the set [`Self::StopOrbit`]
+/// averages over. `STUDIES/reverse_coarser_policy_v1` found that counting the
+/// zero-weight tail dilutes the failed leaf's low value and lets dual
+/// averaging install a 3-30 % larger step.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ReverseCoarserPolicy {
     #[default]
     StopOrbit,
     ZeroWeightBeyond,
+    ZeroWeightBeyondAdaptSelected,
+}
+
+impl ReverseCoarserPolicy {
+    /// Whether a failed reverse check continues the orbit at zero weight.
+    pub fn continues_beyond(self) -> bool {
+        !matches!(self, Self::StopOrbit)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -886,6 +903,10 @@ pub enum BuildLeafResult {
         accepted_trajectory_adaptation_value: Option<f64>,
         /// Joint log density of the built endpoint (`-H` at the leaf end).
         end_log_joint: f64,
+        /// Whether `adaptation_value` feeds the step-size statistic; false
+        /// only for a zero-weight leaf built beyond a failed one under
+        /// [`ReverseCoarserPolicy::ZeroWeightBeyondAdaptSelected`].
+        adapts_step: bool,
     },
     Stopped {
         rejection: Rejection,
@@ -1066,6 +1087,9 @@ where
             if zero_weight {
                 increment(&mut work.zero_weight_leaves)?;
             }
+            let adapts_step = check_reverse
+                || tuning.reverse_coarser_policy
+                    != ReverseCoarserPolicy::ZeroWeightBeyondAdaptSelected;
             increment(&mut work.leaves_built)?;
             if let Some(level) = result.selected_refinement_level {
                 if work.histograms.refinement_level_built.len() <= level {
@@ -1090,6 +1114,7 @@ where
                 adaptation_value: result.adaptation_value,
                 accepted_trajectory_adaptation_value: result.accepted_trajectory_adaptation_value,
                 end_log_joint,
+                adapts_step,
             })
         }
         (None, Some(rejection)) => Ok(BuildLeafResult::Stopped {
@@ -1231,6 +1256,7 @@ where
                     adaptation_value,
                     accepted_trajectory_adaptation_value,
                     end_log_joint,
+                    adapts_step,
                     ..
                 } => {
                     *cumulative_evaluations =
@@ -1242,7 +1268,7 @@ where
                         true,
                         *cumulative_evaluations,
                     );
-                    event.adaptation_value = Some(adaptation_value);
+                    event.adaptation_value = adapts_step.then_some(adaptation_value);
                     event.accepted_trajectory_adaptation_value =
                         accepted_trajectory_adaptation_value;
                     event.end_log_joint = Some(end_log_joint);
@@ -3353,7 +3379,7 @@ where
     let initial_h = -joint_log_density(start, mass);
     observe_initial_energy(work, initial_h);
     let leaf_attempt = work.leaves_attempted.saturating_sub(1);
-    let continue_beyond = tuning.reverse_coarser_policy == ReverseCoarserPolicy::ZeroWeightBeyond;
+    let continue_beyond = tuning.reverse_coarser_policy.continues_beyond();
     let signed_step = match direction {
         Direction::Forward => tuning.step_size,
         Direction::Backward => -tuning.step_size,

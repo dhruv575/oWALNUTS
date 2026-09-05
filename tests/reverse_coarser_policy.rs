@@ -171,3 +171,81 @@ fn zero_weight_beyond_never_stops_and_keeps_the_target_exact() {
         }
     }
 }
+
+/// Without step adaptation the `AdaptSelected` variant builds the same orbits
+/// as `ZeroWeightBeyond`: identical draws and work.
+#[test]
+fn adapt_selected_is_bit_identical_to_zero_weight_beyond_at_a_fixed_step() {
+    let target = Diagonal(vec![1.0, 1.0, 0.45, 0.35]);
+    let starts = vec![vec![0.3, -0.2, 0.1, 0.05], vec![-0.4, 0.5, -0.1, 0.02]];
+    let run = |policy| {
+        Sampler::new()
+            .warmup(0)
+            .draws(400)
+            .chains(2)
+            .seed(29)
+            .metric(Metric::fixed_diagonal(vec![1.0; 4]))
+            .adaptation(Adaptation::None)
+            .tuning(
+                Tuning::new()
+                    .step_size(0.55)
+                    .max_depth(6)
+                    .reverse_coarser_policy(policy),
+            )
+            .run(&target, &starts)
+            .unwrap()
+    };
+    let beyond = run(ReverseCoarserPolicy::ZeroWeightBeyond);
+    let selected = run(ReverseCoarserPolicy::ZeroWeightBeyondAdaptSelected);
+    assert!(
+        totals(&beyond).2 > 0,
+        "the step must produce continued leaves"
+    );
+    assert_eq!(
+        beyond.draws().collect::<Vec<_>>(),
+        selected.draws().collect::<Vec<_>>()
+    );
+    assert_eq!(beyond.total_target_calls(), selected.total_target_calls());
+    assert_eq!(totals(&beyond), totals(&selected));
+}
+
+/// With dual averaging on, keeping the zero-weight tail out of the statistic
+/// removes its dilution of the failed leaf's low value, so `AdaptSelected`
+/// installs a smaller step than `ZeroWeightBeyond` on a target where the
+/// check fails often.
+#[test]
+fn adapt_selected_installs_a_smaller_step_than_zero_weight_beyond() {
+    let target = Diagonal(vec![1.0, 1.0, 0.45, 0.35]);
+    let starts = vec![
+        vec![0.3, -0.2, 0.1, 0.05],
+        vec![-0.4, 0.5, -0.1, 0.02],
+        vec![0.1, 0.1, 0.2, -0.05],
+        vec![-0.2, -0.3, -0.15, 0.04],
+    ];
+    let median_step = |policy| {
+        let posterior = Sampler::new()
+            .warmup(600)
+            .draws(100)
+            .chains(4)
+            .seed(31)
+            .metric(Metric::fixed_diagonal(vec![1.0; 4]))
+            .adaptation(Adaptation::DualAveraging { target_accept: 0.8 })
+            .tuning(Tuning::new().max_depth(6).reverse_coarser_policy(policy))
+            .run(&target, &starts)
+            .unwrap();
+        let mut steps: Vec<f64> = posterior
+            .chains()
+            .iter()
+            .map(|c| c.metadata().tuning().step_size())
+            .collect();
+        steps.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        (steps[1] + steps[2]) / 2.0
+    };
+    let stop = median_step(ReverseCoarserPolicy::StopOrbit);
+    let beyond = median_step(ReverseCoarserPolicy::ZeroWeightBeyond);
+    let selected = median_step(ReverseCoarserPolicy::ZeroWeightBeyondAdaptSelected);
+    assert!(
+        selected < beyond,
+        "AdaptSelected step {selected:.4} should be below ZeroWeightBeyond's {beyond:.4} (StopOrbit {stop:.4})"
+    );
+}

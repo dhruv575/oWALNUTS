@@ -623,7 +623,9 @@ impl Tuning {
     /// reverse-coarsening check. Research-only; the default remains
     /// `StopOrbit` (the leaf ends the orbit like a divergence).
     /// `ZeroWeightBeyond` continues the orbit with the failed leaf and every
-    /// leaf beyond it at zero weight. See `STUDIES/reverse_coarser_policy_v1`.
+    /// leaf beyond it at zero weight; `ZeroWeightBeyondAdaptSelected` does the
+    /// same but keeps the zero-weight tail out of the step-size statistic.
+    /// See `STUDIES/reverse_coarser_policy_v1` and `_v2`.
     #[cfg(feature = "research")]
     pub fn reverse_coarser_policy(mut self, policy: ReverseCoarserPolicy) -> Self {
         self.reverse_coarser_policy = policy;

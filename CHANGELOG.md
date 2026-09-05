@@ -193,7 +193,13 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   leaf fails the check are bit-identical under either policy; fingerprints
   unchanged. Motivated by the WP34 finding that 26-59% of refinement
   attempts fail the check on the posteriordb models furthest behind CmdStan;
-  measured in `STUDIES/reverse_coarser_policy_v1` (WP39).
+  measured in `STUDIES/reverse_coarser_policy_v1` (WP39): exact but not
+  faster (geomean 0.981x) because the shipped `CurrentCoarseEndpoint`
+  statistic averages over every built leaf, zero-weight tail included, and
+  dual averaging installed a 3-30 % larger step. The third variant
+  `ZeroWeightBeyondAdaptSelected` builds the same orbits (bit-identical at a
+  fixed step) but withholds the zero-weight tail from the step statistic;
+  measured in `STUDIES/reverse_coarser_policy_v2` (WP39B).
 - **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
   rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
   the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views
