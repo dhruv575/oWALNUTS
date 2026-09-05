@@ -282,10 +282,21 @@ models (0.67–0.95x).
    statistic averages over every built leaf, zero-weight leaves included,
    so dual averaging installed a 3–30 % larger step under the new policy,
    which multiplied the refined and failing leaves and paid for them as
-   zero-weight tails (57 % of `accel_gp`'s built leaves). A WP39B that
-   restricts the adaptation mean to positive-weight leaves, or fixes the
-   step at the `stop` arm's adapted value, is the clean test of the
-   truncation hypothesis. `StopOrbit` stays the default.
+   zero-weight tails (57 % of `accel_gp`'s built leaves). **WP39B (2026-09-05,
+   `STUDIES/reverse_coarser_policy_v2`) ran both clean tests and closed the
+   line.** `ZeroWeightBeyondAdaptSelected` (kernel `cfb1e93`, the tail
+   withheld from the step statistic) matched the shipped step on average
+   (1.011x) and reached geomean **0.878x** over 17, **0.703x** on the four
+   targets (centered eight schools 0.35x, `accel_gp` 0.66x; only the
+   noncentered eight schools gained, 1.19x). At an identical fixed step the
+   untruncated orbit was 0.908x on the targets (noncentered 1.21x, the other
+   three below 1). Two designs agree: past a failed reverse check the orbit
+   is worth carrying only where the failure region is small. The fixed-step
+   arms were a poor design (step fixed from the first warmup transition;
+   2–8x warmup gradients, `arma11` never built a leaf) and are reported as
+   such. `StopOrbit` stays the default; no further work on this line. The
+   remaining per-gradient gap on smooth models (`sblrc`, `kidiq`, `arK`,
+   reverse-coarser stops about 1 % of transitions) has a different cause.
 4. **Further target-adaptive `delta` research, after reverse-coarsening.**
    WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
    fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.
