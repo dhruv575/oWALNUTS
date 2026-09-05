@@ -532,6 +532,20 @@ impl Span {
         mass_dimension: usize,
         momentum_sum: bool,
     ) -> Result<Self, ValidationError> {
+        Self::from_leaf_state_weighted(state, log_joint, mass_dimension, momentum_sum, log_joint)
+    }
+
+    /// [`Self::from_leaf_state`] with an explicit selection weight:
+    /// `-inf` for a zero-weight leaf under
+    /// [`ReverseCoarserPolicy::ZeroWeightBeyond`], otherwise the joint log
+    /// density.
+    fn from_leaf_state_weighted(
+        state: Rc<State>,
+        log_joint: f64,
+        mass_dimension: usize,
+        momentum_sum: bool,
+        log_weight: f64,
+    ) -> Result<Self, ValidationError> {
         if state.theta.len() != mass_dimension {
             return Err(ValidationError(
                 "state and diagonal inverse mass dimensions must match and be nonzero".into(),
@@ -555,7 +569,7 @@ impl Span {
             backward: endpoint.clone(),
             selected: Rc::clone(&endpoint.state),
             forward: endpoint,
-            log_weight: log_joint,
+            log_weight,
             rho_sum,
             states: 1,
             selected_offset: 0,
@@ -730,6 +744,29 @@ pub enum ReverseCoarseningOrder {
     CoarsestToFinest,
 }
 
+/// What a transition does with a leaf that fails the reverse-coarsening
+/// check (a coarser level would have been selected from its endpoint).
+///
+/// The frozen `v10` kernel ([`Self::StopOrbit`]) treats the leaf like a
+/// divergence: the doubling that contains it is discarded and the orbit
+/// ends. [`Self::ZeroWeightBeyond`] instead keeps the leaf's forward endpoint
+/// as an orbit state of zero weight, and every further leaf built in that
+/// direction is also built (without its reverse check) at zero weight, so the
+/// orbit continues to its U-turn or depth cap. The selected state is drawn
+/// only among the states connected to the initial state by leaves whose
+/// reverse checks passed; from any such state the same orbit, the same
+/// zero-weight set and the same weights are reproduced (a failed leaf is
+/// always traversed in the direction it was built), which is the condition
+/// the multinomial orbit selection needs. When no leaf fails the check the
+/// two policies are bit-identical. Research-only; the default is
+/// [`Self::StopOrbit`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ReverseCoarserPolicy {
+    #[default]
+    StopOrbit,
+    ZeroWeightBeyond,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ReverseScheduleEntry {
     coarse_level: usize,
@@ -778,6 +815,8 @@ pub struct FixedTuning {
     pub options: KernelOptions,
     /// Research-only reverse schedule traversal order.
     pub reverse_coarsening_order: ReverseCoarseningOrder,
+    /// Research-only treatment of a leaf that fails the reverse check.
+    pub reverse_coarser_policy: ReverseCoarserPolicy,
 }
 
 /// Why a deterministic leaf was rejected.
@@ -975,6 +1014,7 @@ where
         mass,
         tuning,
         direction,
+        &mut false,
         eval,
         &mut TransitionWorkTelemetry::default(),
         &mut workspace,
@@ -988,6 +1028,7 @@ fn build_leaf_observed<E, M: MassOperator + ?Sized>(
     mass: &M,
     tuning: FixedTuning,
     direction: Direction,
+    poison: &mut bool,
     eval: &mut E,
     work: &mut TransitionWorkTelemetry,
     workspace: &mut Workspace,
@@ -1000,11 +1041,13 @@ where
         Direction::Backward => &last_span.backward.state,
     };
     increment(&mut work.leaves_attempted)?;
+    let check_reverse = !*poison;
     let result = macro_leaf_in_workspace(
         start,
         mass,
         tuning,
         direction,
+        check_reverse,
         eval,
         work,
         workspace,
@@ -1014,7 +1057,15 @@ where
     record_generated_leaf_outcome(work.leaves_attempted.saturating_sub(1), direction, &result);
     let end_log_joint = result.end_log_joint;
     match (result.end_state, result.rejection) {
-        (Some(state), None) => {
+        (Some(state), rejection @ (None | Some(Rejection::ReverseCoarserAccepted))) => {
+            if rejection.is_some() {
+                *poison = true;
+                increment(&mut work.reverse_coarser_continuations)?;
+            }
+            let zero_weight = *poison;
+            if zero_weight {
+                increment(&mut work.zero_weight_leaves)?;
+            }
             increment(&mut work.leaves_built)?;
             if let Some(level) = result.selected_refinement_level {
                 if work.histograms.refinement_level_built.len() <= level {
@@ -1023,11 +1074,16 @@ where
                 increment(&mut work.histograms.refinement_level_built[level])?;
             }
             Ok(BuildLeafResult::Built {
-                span: Span::from_leaf_state(
+                span: Span::from_leaf_state_weighted(
                     state,
                     end_log_joint,
                     mass.dimension(),
                     tuning.options.u_turn == UTurnRule::MomentumSum,
+                    if zero_weight {
+                        f64::NEG_INFINITY
+                    } else {
+                        end_log_joint
+                    },
                 )?,
                 micro_steps: result.micro_steps,
                 evaluations: result.evaluations,
@@ -1075,12 +1131,14 @@ where
     let mut leaves_attempted = 0;
     let mut leaves_built = 0;
     let mut work = TransitionWorkTelemetry::default();
+    let mut poison = false;
     build_span_counted_inner(
         rng,
         last_span,
         mass,
         tuning,
         direction,
+        &mut poison,
         depth,
         leaves,
         eval,
@@ -1117,12 +1175,14 @@ where
     let mut events = Vec::new();
     let mut evaluations = 0;
     let mut work = TransitionWorkTelemetry::default();
+    let mut poison = false;
     let result = build_span_inner(
         rng,
         last_span,
         mass,
         tuning,
         direction,
+        &mut poison,
         depth,
         leaves,
         eval,
@@ -1140,6 +1200,7 @@ fn build_span_inner<E, R, M: MassOperator + ?Sized>(
     mass: &M,
     tuning: FixedTuning,
     direction: Direction,
+    poison: &mut bool,
     depth: usize,
     leaves: usize,
     eval: &mut E,
@@ -1161,7 +1222,9 @@ where
     ));
     if depth == 0 {
         return Ok(
-            match build_leaf_observed(last_span, mass, tuning, direction, eval, work, workspace)? {
+            match build_leaf_observed(
+                last_span, mass, tuning, direction, poison, eval, work, workspace,
+            )? {
                 BuildLeafResult::Built {
                     span,
                     evaluations,
@@ -1225,6 +1288,7 @@ where
         mass,
         tuning,
         direction,
+        poison,
         depth - 1,
         leaves / 2,
         eval,
@@ -1254,6 +1318,7 @@ where
         mass,
         tuning,
         direction,
+        poison,
         depth - 1,
         leaves / 2,
         eval,
@@ -1345,6 +1410,7 @@ fn build_span_counted_inner<E, R, M: MassOperator + ?Sized>(
     mass: &M,
     tuning: FixedTuning,
     direction: Direction,
+    poison: &mut bool,
     depth: usize,
     leaves: usize,
     eval: &mut E,
@@ -1363,7 +1429,9 @@ where
             .checked_add(1)
             .ok_or_else(|| ValidationError("leaf count overflowed usize".into()))?;
         return Ok(
-            match build_leaf_observed(last_span, mass, tuning, direction, eval, work, workspace)? {
+            match build_leaf_observed(
+                last_span, mass, tuning, direction, poison, eval, work, workspace,
+            )? {
                 BuildLeafResult::Built {
                     span, evaluations, ..
                 } => {
@@ -1400,6 +1468,7 @@ where
         mass,
         tuning,
         direction,
+        poison,
         depth - 1,
         leaves / 2,
         eval,
@@ -1423,6 +1492,7 @@ where
         mass,
         tuning,
         direction,
+        poison,
         depth - 1,
         leaves / 2,
         eval,
@@ -1925,6 +1995,11 @@ pub struct TransitionDiagnostics {
     pub selected_refinement_level: Option<usize>,
     pub refinement_attempts: usize,
     pub reverse_coarser_rejections: usize,
+    /// Leaves that failed the reverse check and were continued at zero
+    /// weight ([`ReverseCoarserPolicy::ZeroWeightBeyond`]).
+    pub reverse_coarser_continuations: usize,
+    /// Leaves built at zero weight under that policy.
+    pub zero_weight_leaves: usize,
     /// States in the final orbit (the initial state plus every leaf merged
     /// into it; leaves of a stopped subtree are not part of the orbit).
     pub orbit_states: usize,
@@ -2002,6 +2077,13 @@ pub struct TransitionWorkTelemetry {
     pub reverse_micro_steps_executed: usize,
     pub leaves_attempted: usize,
     pub leaves_built: usize,
+    /// Leaves whose reverse-coarsening check failed and that were built at
+    /// zero weight under [`ReverseCoarserPolicy::ZeroWeightBeyond`]; counted
+    /// in both `leaves_built` and `rejections.reverse_coarser_accepted`.
+    pub reverse_coarser_continuations: usize,
+    /// Leaves built at zero weight: the continued leaves and every leaf
+    /// built beyond one in the same direction.
+    pub zero_weight_leaves: usize,
     /// Fused calls that returned a zero-density point (`-inf` log density
     /// with a finite gradient). Such calls refine like any over-tolerance
     /// micro-step; they never stop a transition by themselves.
@@ -2052,7 +2134,8 @@ impl TransitionWorkTelemetry {
                     checked_add_work(
                         checked_add_work(
                             self.rejections.refinement_exhausted,
-                            self.rejections.reverse_coarser_accepted,
+                            self.rejections.reverse_coarser_accepted
+                                - self.reverse_coarser_continuations,
                         )?,
                         checked_add_work(
                             self.rejections.invalid_forward_evaluation,
@@ -2093,6 +2176,8 @@ impl TransitionWorkTelemetry {
         add!(reverse_micro_steps_executed);
         add!(leaves_attempted);
         add!(leaves_built);
+        add!(reverse_coarser_continuations);
+        add!(zero_weight_leaves);
         add!(zero_density_evaluations);
         add!(rejections.refinement_exhausted);
         add!(rejections.reverse_coarser_accepted);
@@ -2609,6 +2694,8 @@ where
         tuning.leaf.options.u_turn == UTurnRule::MomentumSum,
     )?;
 
+    let mut poison_forward = false;
+    let mut poison_backward = false;
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
     let mut initial_index = 0usize;
@@ -2621,6 +2708,10 @@ where
                 uniform_draws: &mut counts.uniform_draws,
             };
             counted_rng.direction()?
+        };
+        let poison = match direction {
+            Direction::Forward => &mut poison_forward,
+            Direction::Backward => &mut poison_backward,
         };
         let shift = u32::try_from(depth - 1)
             .map_err(|_| ValidationError("transition depth overflows leaf count".into()))?;
@@ -2640,6 +2731,7 @@ where
                 mass,
                 tuning.leaf,
                 direction,
+                poison,
                 depth - 1,
                 leaves,
                 eval,
@@ -2739,6 +2831,8 @@ where
                 selected_refinement_level: work.selected_refinement_level,
                 refinement_attempts: work.forward_refinement_attempts,
                 reverse_coarser_rejections: work.rejections.reverse_coarser_accepted,
+                reverse_coarser_continuations: work.reverse_coarser_continuations,
+                zero_weight_leaves: work.zero_weight_leaves,
                 orbit_states,
                 selected_index,
                 initial_index,
@@ -2816,6 +2910,8 @@ where
         ));
     }
 
+    let mut poison_forward = false;
+    let mut poison_backward = false;
     let mut final_depth = 0;
     let mut final_stop = TransitionStop::MaxDepth;
     let mut final_direction = None;
@@ -2842,6 +2938,10 @@ where
         direction_event.flag = Some(direction == Direction::Forward);
         trace(direction_event);
 
+        let poison = match direction {
+            Direction::Forward => &mut poison_forward,
+            Direction::Backward => &mut poison_backward,
+        };
         let shift = u32::try_from(depth - 1)
             .map_err(|_| ValidationError("transition depth overflows leaf count".into()))?;
         let leaves = 1usize
@@ -2861,6 +2961,7 @@ where
                 mass,
                 tuning.leaf,
                 direction,
+                poison,
                 depth - 1,
                 leaves,
                 eval,
@@ -3026,6 +3127,8 @@ where
         selected_refinement_level: work.selected_refinement_level,
         refinement_attempts: work.forward_refinement_attempts,
         reverse_coarser_rejections: work.rejections.reverse_coarser_accepted,
+        reverse_coarser_continuations: work.reverse_coarser_continuations,
+        zero_weight_leaves: work.zero_weight_leaves,
         orbit_states: span_accum.states,
         selected_index: span_accum.selected_offset,
         initial_index,
@@ -3215,6 +3318,7 @@ where
         mass,
         tuning,
         direction,
+        true,
         eval,
         work,
         &mut workspace,
@@ -3230,6 +3334,7 @@ fn macro_leaf_in_workspace<E, M: MassOperator + ?Sized, S>(
     mass: &M,
     tuning: FixedTuning,
     direction: Direction,
+    check_reverse: bool,
     eval: &mut E,
     work: &mut TransitionWorkTelemetry,
     workspace: &mut Workspace,
@@ -3248,6 +3353,7 @@ where
     let initial_h = -joint_log_density(start, mass);
     observe_initial_energy(work, initial_h);
     let leaf_attempt = work.leaves_attempted.saturating_sub(1);
+    let continue_beyond = tuning.reverse_coarser_policy == ReverseCoarserPolicy::ZeroWeightBeyond;
     let signed_step = match direction {
         Direction::Forward => tuning.step_size,
         Direction::Backward => -tuning.step_size,
@@ -3371,214 +3477,270 @@ where
             work.accepted_forward_micro_steps =
                 checked_add_work(work.accepted_forward_micro_steps, micro_steps)?;
             let mut reverse_evaluations = 0;
-            // Complete the repeated-arithmetic schedule before either arm
-            // traverses it. The incumbent below intentionally retains its
-            // source-baseline loop; conformance telemetry records this list.
-            let reverse_schedule =
-                generate_reverse_schedule(level, micro_steps, step, tuning.min_micro_steps);
-            #[cfg(feature = "research")]
-            record_generated_reverse_schedule(leaf_attempt, level, &reverse_schedule);
-            match tuning.reverse_coarsening_order {
-                ReverseCoarseningOrder::FinestToCoarsest => {
-                    // Keep the source-baseline incumbent integration and
-                    // short-circuit body verbatim; coarse_level is telemetry.
-                    let mut coarse_steps = micro_steps;
-                    let mut coarse_step = step;
-                    let mut coarse_level = level;
-                    let mut schedule_index = 0usize;
-                    while coarse_steps / 2 >= tuning.min_micro_steps {
-                        coarse_steps /= 2;
-                        coarse_step *= 2.0;
-                        coarse_level -= 1;
-                        increment(&mut work.reverse_coarsening_attempts)?;
-                        work.reverse_micro_steps_requested =
-                            checked_add_work(work.reverse_micro_steps_requested, coarse_steps)?;
-                        record_histogram(&mut work.histograms.reverse_micro_steps, coarse_steps)?;
-                        copy_state(reversed, candidate);
-                        for momentum in &mut reversed.rho {
-                            *momentum = -*momentum;
-                        }
-                        let reverse_initial_h = -forward_log_joint;
-                        let integration = integrate(
-                            reversed,
-                            coarse_step,
-                            coarse_steps,
-                            mass,
-                            reverse_initial_h,
-                            EvaluationPhase::Reverse,
-                            match direction {
-                                Direction::Forward => Direction::Backward,
-                                Direction::Backward => Direction::Forward,
-                            },
-                            coarse_level,
-                            leaf_attempt,
-                            Some(schedule_index),
-                            eval,
-                            velocity,
-                        );
-                        schedule_index += 1;
-                        let attempted = integration.attempted;
-                        let valid = integration.valid;
-                        work.zero_density_evaluations = checked_add_work(
-                            work.zero_density_evaluations,
-                            integration.zero_density,
-                        )?;
-                        work.reverse_micro_steps_executed =
-                            checked_add_work(work.reverse_micro_steps_executed, attempted)?;
-                        work.fused_calls.reverse =
-                            checked_add_work(work.fused_calls.reverse, attempted)?;
-                        reverse_evaluations =
-                            checked_add_evaluations(reverse_evaluations, attempted)?;
-                        if !valid {
-                            observe_energy_range(
-                                work,
-                                integration.minimum,
-                                integration.maximum,
+            if check_reverse {
+                // Complete the repeated-arithmetic schedule before either arm
+                // traverses it. The incumbent below intentionally retains its
+                // source-baseline loop; conformance telemetry records this list.
+                let reverse_schedule =
+                    generate_reverse_schedule(level, micro_steps, step, tuning.min_micro_steps);
+                #[cfg(feature = "research")]
+                record_generated_reverse_schedule(leaf_attempt, level, &reverse_schedule);
+                match tuning.reverse_coarsening_order {
+                    ReverseCoarseningOrder::FinestToCoarsest => {
+                        // Keep the source-baseline incumbent integration and
+                        // short-circuit body verbatim; coarse_level is telemetry.
+                        let mut coarse_steps = micro_steps;
+                        let mut coarse_step = step;
+                        let mut coarse_level = level;
+                        let mut schedule_index = 0usize;
+                        while coarse_steps / 2 >= tuning.min_micro_steps {
+                            coarse_steps /= 2;
+                            coarse_step *= 2.0;
+                            coarse_level -= 1;
+                            increment(&mut work.reverse_coarsening_attempts)?;
+                            work.reverse_micro_steps_requested =
+                                checked_add_work(work.reverse_micro_steps_requested, coarse_steps)?;
+                            record_histogram(
+                                &mut work.histograms.reverse_micro_steps,
+                                coarse_steps,
+                            )?;
+                            copy_state(reversed, candidate);
+                            for momentum in &mut reversed.rho {
+                                *momentum = -*momentum;
+                            }
+                            let reverse_initial_h = -forward_log_joint;
+                            let integration = integrate(
+                                reversed,
+                                coarse_step,
+                                coarse_steps,
+                                mass,
                                 reverse_initial_h,
+                                EvaluationPhase::Reverse,
+                                match direction {
+                                    Direction::Forward => Direction::Backward,
+                                    Direction::Backward => Direction::Forward,
+                                },
+                                coarse_level,
+                                leaf_attempt,
+                                Some(schedule_index),
+                                eval,
+                                velocity,
                             );
-                            increment(&mut work.rejections.invalid_reverse_evaluation)?;
-                            return Ok(MacroLeafOutcome {
-                                end_state: None,
-                                micro_steps,
-                                evaluations: checked_add_evaluations(
+                            schedule_index += 1;
+                            let attempted = integration.attempted;
+                            let valid = integration.valid;
+                            work.zero_density_evaluations = checked_add_work(
+                                work.zero_density_evaluations,
+                                integration.zero_density,
+                            )?;
+                            work.reverse_micro_steps_executed =
+                                checked_add_work(work.reverse_micro_steps_executed, attempted)?;
+                            work.fused_calls.reverse =
+                                checked_add_work(work.fused_calls.reverse, attempted)?;
+                            reverse_evaluations =
+                                checked_add_evaluations(reverse_evaluations, attempted)?;
+                            if !valid {
+                                observe_energy_range(
+                                    work,
+                                    integration.minimum,
+                                    integration.maximum,
+                                    reverse_initial_h,
+                                );
+                                increment(&mut work.rejections.invalid_reverse_evaluation)?;
+                                return Ok(MacroLeafOutcome {
+                                    end_state: None,
+                                    micro_steps,
+                                    evaluations: checked_add_evaluations(
+                                        forward_evaluations,
+                                        reverse_evaluations,
+                                    )?,
                                     forward_evaluations,
                                     reverse_evaluations,
-                                )?,
-                                forward_evaluations,
-                                reverse_evaluations,
-                                adaptation_value: last_adaptation_value,
-                                accepted_trajectory_adaptation_value: None,
-                                end_log_joint: f64::NAN,
-                                rejection: Some(Rejection::InvalidEvaluation),
-                                selected_refinement_level: None,
-                                refinement_attempts: level + 1,
-                                initial_hamiltonian: initial_h,
-                                minimum_hamiltonian: work.minimum_hamiltonian,
-                                maximum_hamiltonian: work.maximum_hamiltonian,
-                                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
-                            });
-                        }
-                        if integration.endpoint_error <= tuning.max_error {
-                            increment(&mut work.reverse_coarsening_accepted)?;
-                            increment(&mut work.rejections.reverse_coarser_accepted)?;
-                            return Ok(MacroLeafOutcome {
-                                end_state: None,
-                                micro_steps,
-                                evaluations: checked_add_evaluations(
+                                    adaptation_value: last_adaptation_value,
+                                    accepted_trajectory_adaptation_value: None,
+                                    end_log_joint: f64::NAN,
+                                    rejection: Some(Rejection::InvalidEvaluation),
+                                    selected_refinement_level: None,
+                                    refinement_attempts: level + 1,
+                                    initial_hamiltonian: initial_h,
+                                    minimum_hamiltonian: work.minimum_hamiltonian,
+                                    maximum_hamiltonian: work.maximum_hamiltonian,
+                                    maximum_absolute_energy_error: work
+                                        .maximum_absolute_energy_error,
+                                });
+                            }
+                            if integration.endpoint_error <= tuning.max_error {
+                                increment(&mut work.reverse_coarsening_accepted)?;
+                                increment(&mut work.rejections.reverse_coarser_accepted)?;
+                                if continue_beyond {
+                                    if let Some(forward) = last_integration {
+                                        observe_energy_range(
+                                            work,
+                                            forward.minimum,
+                                            forward.maximum,
+                                            initial_h,
+                                        );
+                                    }
+                                }
+                                return Ok(MacroLeafOutcome {
+                                    end_state: if continue_beyond {
+                                        Some(materialize(candidate))
+                                    } else {
+                                        None
+                                    },
+                                    micro_steps,
+                                    evaluations: checked_add_evaluations(
+                                        forward_evaluations,
+                                        reverse_evaluations,
+                                    )?,
                                     forward_evaluations,
                                     reverse_evaluations,
-                                )?,
-                                forward_evaluations,
-                                reverse_evaluations,
-                                adaptation_value: last_adaptation_value,
-                                accepted_trajectory_adaptation_value: None,
-                                end_log_joint: f64::NAN,
-                                rejection: Some(Rejection::ReverseCoarserAccepted),
-                                selected_refinement_level: None,
-                                refinement_attempts: level + 1,
-                                initial_hamiltonian: initial_h,
-                                minimum_hamiltonian: work.minimum_hamiltonian,
-                                maximum_hamiltonian: work.maximum_hamiltonian,
-                                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
-                            });
+                                    adaptation_value: last_adaptation_value,
+                                    accepted_trajectory_adaptation_value: None,
+                                    end_log_joint: if continue_beyond {
+                                        forward_log_joint
+                                    } else {
+                                        f64::NAN
+                                    },
+                                    rejection: Some(Rejection::ReverseCoarserAccepted),
+                                    selected_refinement_level: if continue_beyond {
+                                        Some(level)
+                                    } else {
+                                        None
+                                    },
+                                    refinement_attempts: level + 1,
+                                    initial_hamiltonian: initial_h,
+                                    minimum_hamiltonian: work.minimum_hamiltonian,
+                                    maximum_hamiltonian: work.maximum_hamiltonian,
+                                    maximum_absolute_energy_error: work
+                                        .maximum_absolute_energy_error,
+                                });
+                            }
                         }
                     }
-                }
-                ReverseCoarseningOrder::CoarsestToFinest => {
-                    for (schedule_index, entry) in reverse_schedule.iter().enumerate().rev() {
-                        let coarse_level = entry.coarse_level;
-                        let coarse_steps = entry.micro_steps;
-                        let coarse_step = entry.step;
-                        increment(&mut work.reverse_coarsening_attempts)?;
-                        work.reverse_micro_steps_requested =
-                            checked_add_work(work.reverse_micro_steps_requested, coarse_steps)?;
-                        record_histogram(&mut work.histograms.reverse_micro_steps, coarse_steps)?;
-                        copy_state(reversed, candidate);
-                        for momentum in &mut reversed.rho {
-                            *momentum = -*momentum;
-                        }
-                        let reverse_initial_h = -forward_log_joint;
-                        let integration = integrate(
-                            reversed,
-                            coarse_step,
-                            coarse_steps,
-                            mass,
-                            reverse_initial_h,
-                            EvaluationPhase::Reverse,
-                            match direction {
-                                Direction::Forward => Direction::Backward,
-                                Direction::Backward => Direction::Forward,
-                            },
-                            coarse_level,
-                            leaf_attempt,
-                            Some(schedule_index),
-                            eval,
-                            velocity,
-                        );
-                        let attempted = integration.attempted;
-                        let valid = integration.valid;
-                        work.zero_density_evaluations = checked_add_work(
-                            work.zero_density_evaluations,
-                            integration.zero_density,
-                        )?;
-                        work.reverse_micro_steps_executed =
-                            checked_add_work(work.reverse_micro_steps_executed, attempted)?;
-                        work.fused_calls.reverse =
-                            checked_add_work(work.fused_calls.reverse, attempted)?;
-                        reverse_evaluations =
-                            checked_add_evaluations(reverse_evaluations, attempted)?;
-                        if !valid {
-                            observe_energy_range(
-                                work,
-                                integration.minimum,
-                                integration.maximum,
+                    ReverseCoarseningOrder::CoarsestToFinest => {
+                        for (schedule_index, entry) in reverse_schedule.iter().enumerate().rev() {
+                            let coarse_level = entry.coarse_level;
+                            let coarse_steps = entry.micro_steps;
+                            let coarse_step = entry.step;
+                            increment(&mut work.reverse_coarsening_attempts)?;
+                            work.reverse_micro_steps_requested =
+                                checked_add_work(work.reverse_micro_steps_requested, coarse_steps)?;
+                            record_histogram(
+                                &mut work.histograms.reverse_micro_steps,
+                                coarse_steps,
+                            )?;
+                            copy_state(reversed, candidate);
+                            for momentum in &mut reversed.rho {
+                                *momentum = -*momentum;
+                            }
+                            let reverse_initial_h = -forward_log_joint;
+                            let integration = integrate(
+                                reversed,
+                                coarse_step,
+                                coarse_steps,
+                                mass,
                                 reverse_initial_h,
+                                EvaluationPhase::Reverse,
+                                match direction {
+                                    Direction::Forward => Direction::Backward,
+                                    Direction::Backward => Direction::Forward,
+                                },
+                                coarse_level,
+                                leaf_attempt,
+                                Some(schedule_index),
+                                eval,
+                                velocity,
                             );
-                            increment(&mut work.rejections.invalid_reverse_evaluation)?;
-                            return Ok(MacroLeafOutcome {
-                                end_state: None,
-                                micro_steps,
-                                evaluations: checked_add_evaluations(
+                            let attempted = integration.attempted;
+                            let valid = integration.valid;
+                            work.zero_density_evaluations = checked_add_work(
+                                work.zero_density_evaluations,
+                                integration.zero_density,
+                            )?;
+                            work.reverse_micro_steps_executed =
+                                checked_add_work(work.reverse_micro_steps_executed, attempted)?;
+                            work.fused_calls.reverse =
+                                checked_add_work(work.fused_calls.reverse, attempted)?;
+                            reverse_evaluations =
+                                checked_add_evaluations(reverse_evaluations, attempted)?;
+                            if !valid {
+                                observe_energy_range(
+                                    work,
+                                    integration.minimum,
+                                    integration.maximum,
+                                    reverse_initial_h,
+                                );
+                                increment(&mut work.rejections.invalid_reverse_evaluation)?;
+                                return Ok(MacroLeafOutcome {
+                                    end_state: None,
+                                    micro_steps,
+                                    evaluations: checked_add_evaluations(
+                                        forward_evaluations,
+                                        reverse_evaluations,
+                                    )?,
                                     forward_evaluations,
                                     reverse_evaluations,
-                                )?,
-                                forward_evaluations,
-                                reverse_evaluations,
-                                adaptation_value: last_adaptation_value,
-                                accepted_trajectory_adaptation_value: None,
-                                end_log_joint: f64::NAN,
-                                rejection: Some(Rejection::InvalidEvaluation),
-                                selected_refinement_level: None,
-                                refinement_attempts: level + 1,
-                                initial_hamiltonian: initial_h,
-                                minimum_hamiltonian: work.minimum_hamiltonian,
-                                maximum_hamiltonian: work.maximum_hamiltonian,
-                                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
-                            });
-                        }
-                        if integration.endpoint_error <= tuning.max_error {
-                            increment(&mut work.reverse_coarsening_accepted)?;
-                            increment(&mut work.rejections.reverse_coarser_accepted)?;
-                            return Ok(MacroLeafOutcome {
-                                end_state: None,
-                                micro_steps,
-                                evaluations: checked_add_evaluations(
+                                    adaptation_value: last_adaptation_value,
+                                    accepted_trajectory_adaptation_value: None,
+                                    end_log_joint: f64::NAN,
+                                    rejection: Some(Rejection::InvalidEvaluation),
+                                    selected_refinement_level: None,
+                                    refinement_attempts: level + 1,
+                                    initial_hamiltonian: initial_h,
+                                    minimum_hamiltonian: work.minimum_hamiltonian,
+                                    maximum_hamiltonian: work.maximum_hamiltonian,
+                                    maximum_absolute_energy_error: work
+                                        .maximum_absolute_energy_error,
+                                });
+                            }
+                            if integration.endpoint_error <= tuning.max_error {
+                                increment(&mut work.reverse_coarsening_accepted)?;
+                                increment(&mut work.rejections.reverse_coarser_accepted)?;
+                                if continue_beyond {
+                                    if let Some(forward) = last_integration {
+                                        observe_energy_range(
+                                            work,
+                                            forward.minimum,
+                                            forward.maximum,
+                                            initial_h,
+                                        );
+                                    }
+                                }
+                                return Ok(MacroLeafOutcome {
+                                    end_state: if continue_beyond {
+                                        Some(materialize(candidate))
+                                    } else {
+                                        None
+                                    },
+                                    micro_steps,
+                                    evaluations: checked_add_evaluations(
+                                        forward_evaluations,
+                                        reverse_evaluations,
+                                    )?,
                                     forward_evaluations,
                                     reverse_evaluations,
-                                )?,
-                                forward_evaluations,
-                                reverse_evaluations,
-                                adaptation_value: last_adaptation_value,
-                                accepted_trajectory_adaptation_value: None,
-                                end_log_joint: f64::NAN,
-                                rejection: Some(Rejection::ReverseCoarserAccepted),
-                                selected_refinement_level: None,
-                                refinement_attempts: level + 1,
-                                initial_hamiltonian: initial_h,
-                                minimum_hamiltonian: work.minimum_hamiltonian,
-                                maximum_hamiltonian: work.maximum_hamiltonian,
-                                maximum_absolute_energy_error: work.maximum_absolute_energy_error,
-                            });
+                                    adaptation_value: last_adaptation_value,
+                                    accepted_trajectory_adaptation_value: None,
+                                    end_log_joint: if continue_beyond {
+                                        forward_log_joint
+                                    } else {
+                                        f64::NAN
+                                    },
+                                    rejection: Some(Rejection::ReverseCoarserAccepted),
+                                    selected_refinement_level: if continue_beyond {
+                                        Some(level)
+                                    } else {
+                                        None
+                                    },
+                                    refinement_attempts: level + 1,
+                                    initial_hamiltonian: initial_h,
+                                    minimum_hamiltonian: work.minimum_hamiltonian,
+                                    maximum_hamiltonian: work.maximum_hamiltonian,
+                                    maximum_absolute_energy_error: work
+                                        .maximum_absolute_energy_error,
+                                });
+                            }
                         }
                     }
                 }
@@ -4091,6 +4253,7 @@ mod tests {
                 leaf: FixedTuning {
                     options: KernelOptions::default(),
                     reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
+                    reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
                     step_size: 0.03,
                     max_refinement_levels: 1,
                     min_micro_steps: 1,
@@ -4131,6 +4294,7 @@ mod tests {
         FixedTuning {
             options: KernelOptions::default(),
             reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
+            reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
             step_size,
             max_refinement_levels: levels,
             min_micro_steps: min_steps,

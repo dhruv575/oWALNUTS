@@ -146,6 +146,7 @@ fn matches_every_validated_upstream_transition_trace() {
                     options: crate::kernel::KernelOptions::default(),
                     reverse_coarsening_order:
                         crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
+                    reverse_coarser_policy: crate::kernel::ReverseCoarserPolicy::StopOrbit,
                     step_size: number(input, "step"),
                     max_refinement_levels: usize_field(input, "max_step_halvings"),
                     min_micro_steps: usize_field(input, "min_micro_steps"),

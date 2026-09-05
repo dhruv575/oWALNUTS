@@ -228,6 +228,7 @@ use rayon::prelude::*;
 
 #[cfg(feature = "research")]
 pub use crate::kernel::ReverseCoarseningOrder;
+pub use crate::kernel::ReverseCoarserPolicy;
 
 /// What a transition does when the integrator hands the target a position
 /// that is not finite (the momentum or the drift overflowed).
@@ -330,6 +331,7 @@ pub struct KernelTuning {
     options: KernelOptions,
     reverse_coarsening_order: KernelReverseCoarseningOrder,
     nonfinite_position: NonfinitePositionPolicy,
+    reverse_coarser_policy: ReverseCoarserPolicy,
 }
 
 // All floating-point fields are finite by construction.
@@ -347,6 +349,7 @@ impl Default for KernelTuning {
             options: KernelOptions::default(),
             reverse_coarsening_order: KernelReverseCoarseningOrder::FinestToCoarsest,
             nonfinite_position: NonfinitePositionPolicy::Abort,
+            reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
         }
     }
 }
@@ -379,6 +382,7 @@ impl KernelTuning {
             options: KernelOptions::default(),
             reverse_coarsening_order: KernelReverseCoarseningOrder::FinestToCoarsest,
             nonfinite_position: NonfinitePositionPolicy::Abort,
+            reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
         };
         tuning.max_leaves_per_transition()?;
         tuning.maximum_micro_steps()?;
@@ -435,6 +439,21 @@ impl KernelTuning {
     /// is [`NonfinitePositionPolicy::Abort`].
     pub fn nonfinite_position(&self) -> NonfinitePositionPolicy {
         self.nonfinite_position
+    }
+    /// How a transition treats a leaf that fails the reverse-coarsening
+    /// check; the default is [`ReverseCoarserPolicy::StopOrbit`].
+    pub fn reverse_coarser_policy(&self) -> ReverseCoarserPolicy {
+        self.reverse_coarser_policy
+    }
+    /// Select the treatment of a leaf that fails the reverse-coarsening
+    /// check. Research-only; the default remains
+    /// [`ReverseCoarserPolicy::StopOrbit`]. Bit-identical to the default on
+    /// every transition in which no leaf fails the check; measured in
+    /// `STUDIES/reverse_coarser_policy_v1`.
+    #[cfg(feature = "research")]
+    pub fn with_reverse_coarser_policy(mut self, policy: ReverseCoarserPolicy) -> Self {
+        self.reverse_coarser_policy = policy;
+        self
     }
     /// Select the treatment of a nonfinite integrator position. Research-only;
     /// the default remains [`NonfinitePositionPolicy::Abort`], and any run in
@@ -505,6 +524,7 @@ impl KernelTuning {
                 divergence_threshold: self.divergence_threshold,
                 options: self.options,
                 reverse_coarsening_order: self.reverse_coarsening_order,
+                reverse_coarser_policy: self.reverse_coarser_policy,
             },
             max_depth: self.max_depth,
         }
@@ -4739,11 +4759,26 @@ pub struct WorkTotals {
     refinement_exhaustion_stops: usize,
     reverse_coarser_stops: usize,
     reverse_coarser_rejections: usize,
+    reverse_coarser_continuations: usize,
+    zero_weight_leaves: usize,
     accepted_forward_micro_steps: usize,
     refinement_level_built: Vec<usize>,
 }
 
 impl WorkTotals {
+    /// Leaves that failed the reverse-coarsening check and were continued at
+    /// zero weight under [`ReverseCoarserPolicy::ZeroWeightBeyond`]; always
+    /// zero under the default policy.
+    pub fn reverse_coarser_continuations(&self) -> usize {
+        self.reverse_coarser_continuations
+    }
+    /// Leaves built at zero weight under
+    /// [`ReverseCoarserPolicy::ZeroWeightBeyond`] (the continued leaves and
+    /// every leaf beyond one in the same direction); always zero under the
+    /// default policy.
+    pub fn zero_weight_leaves(&self) -> usize {
+        self.zero_weight_leaves
+    }
     /// Micro-steps (target calls) of the leaves that were accepted, i.e. the
     /// target calls attached to a built leaf; the rest of
     /// [`Self::target_calls_total`] went to the initial evaluation, rejected
@@ -4910,6 +4945,11 @@ impl WorkTotals {
             reverse_coarser_rejections,
             diagnostics.reverse_coarser_rejections
         );
+        add!(
+            reverse_coarser_continuations,
+            work.reverse_coarser_continuations
+        );
+        add!(zero_weight_leaves, work.zero_weight_leaves);
         add!(
             accepted_forward_micro_steps,
             work.accepted_forward_micro_steps
@@ -6461,6 +6501,7 @@ fn search_step_from_evaluated<T: Target>(
                     options: crate::kernel::KernelOptions::default(),
                     reverse_coarsening_order:
                         crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
+                    reverse_coarser_policy: crate::kernel::ReverseCoarserPolicy::StopOrbit,
                     step_size: step,
                     max_refinement_levels: 1,
                     min_micro_steps: tuning.min_micro_steps,
@@ -6681,6 +6722,7 @@ fn search_initial_step<T: Target>(
                     options: crate::kernel::KernelOptions::default(),
                     reverse_coarsening_order:
                         crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
+                    reverse_coarser_policy: crate::kernel::ReverseCoarserPolicy::StopOrbit,
                     step_size: step,
                     max_refinement_levels: 1,
                     min_micro_steps: tuning.min_micro_steps,
@@ -6844,6 +6886,7 @@ fn search_initial_step_stan<T: Target>(
             FixedTuning {
                 options: crate::kernel::KernelOptions::default(),
                 reverse_coarsening_order: crate::kernel::ReverseCoarseningOrder::FinestToCoarsest,
+                reverse_coarser_policy: crate::kernel::ReverseCoarserPolicy::StopOrbit,
                 step_size: step,
                 max_refinement_levels: 1,
                 min_micro_steps: tuning.min_micro_steps,
@@ -8640,6 +8683,8 @@ fn add_work(left: &mut WorkTotals, right: &WorkTotals) -> Result<(), Error> {
     add!(maximum_depth_stops);
     add!(recoverable_target_failures);
     add!(nonfinite_position_rejections);
+    add!(reverse_coarser_continuations);
+    add!(zero_weight_leaves);
     Ok(())
 }
 

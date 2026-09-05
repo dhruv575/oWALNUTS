@@ -70,6 +70,8 @@ use rand::{Rng, SeedableRng, rngs::SmallRng};
 pub use crate::walnutpie::NonfinitePositionPolicy;
 #[cfg(feature = "research")]
 pub use crate::walnutpie::ReverseCoarseningOrder;
+#[cfg(feature = "research")]
+pub use crate::walnutpie::ReverseCoarserPolicy;
 pub use crate::walnutpie::{
     Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
     StructuredBlockMass, StructuredCovarianceBlock, StructuredMetricRefresh,
@@ -527,6 +529,8 @@ pub struct Tuning {
     reverse_coarsening_order: ReverseCoarseningOrder,
     #[cfg(feature = "research")]
     nonfinite_position: NonfinitePositionPolicy,
+    #[cfg(feature = "research")]
+    reverse_coarser_policy: ReverseCoarserPolicy,
 }
 
 impl Default for Tuning {
@@ -546,6 +550,8 @@ impl Default for Tuning {
             reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
             #[cfg(feature = "research")]
             nonfinite_position: NonfinitePositionPolicy::Abort,
+            #[cfg(feature = "research")]
+            reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
         }
     }
 }
@@ -613,6 +619,16 @@ impl Tuning {
         self.nonfinite_position = policy;
         self
     }
+    /// Select how a transition treats a leaf that fails the
+    /// reverse-coarsening check. Research-only; the default remains
+    /// `StopOrbit` (the leaf ends the orbit like a divergence).
+    /// `ZeroWeightBeyond` continues the orbit with the failed leaf and every
+    /// leaf beyond it at zero weight. See `STUDIES/reverse_coarser_policy_v1`.
+    #[cfg(feature = "research")]
+    pub fn reverse_coarser_policy(mut self, policy: ReverseCoarserPolicy) -> Self {
+        self.reverse_coarser_policy = policy;
+        self
+    }
 
     /// The validated `walnutpie` tuning this configures.
     pub fn to_kernel(&self) -> Result<KernelTuning, Error> {
@@ -633,6 +649,8 @@ impl Tuning {
         let tuning = tuning.with_reverse_coarsening_order(self.reverse_coarsening_order);
         #[cfg(feature = "research")]
         let tuning = tuning.with_nonfinite_position(self.nonfinite_position);
+        #[cfg(feature = "research")]
+        let tuning = tuning.with_reverse_coarser_policy(self.reverse_coarser_policy);
         Ok(tuning)
     }
 }

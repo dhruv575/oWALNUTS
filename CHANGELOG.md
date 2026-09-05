@@ -179,6 +179,21 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   the event never occurs are bit-identical under either policy; fingerprints
   unchanged. Motivated by `STUDIES/sspd_target_fatal_diag_v1`; qualified as
   an opt-in only by `STUDIES/nonfinite_position_policy_v1` (WP38).
+- **Research-only `ReverseCoarserPolicy`.** `KernelTuning::
+  with_reverse_coarser_policy` / `sampler::Tuning::reverse_coarser_policy`
+  select what a transition does when a refined leaf fails the reverse
+  coarsening check. The default `StopOrbit` is the frozen behaviour (the
+  doubling is discarded and the orbit ends). The opt-in `ZeroWeightBeyond`
+  keeps that leaf's forward endpoint and every leaf beyond it in the same
+  direction at zero weight, skipping their reverse checks, and lets the
+  orbit run to its U-turn or depth cap; selection is restricted to the
+  states connected to the current one through passing leaves, so the
+  transition stays exact. Counted in `WorkTotals::
+  reverse_coarser_continuations` / `zero_weight_leaves`. Runs in which no
+  leaf fails the check are bit-identical under either policy; fingerprints
+  unchanged. Motivated by the WP34 finding that 26-59% of refinement
+  attempts fail the check on the posteriordb models furthest behind CmdStan;
+  measured in `STUDIES/reverse_coarser_policy_v1` (WP39).
 - **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
   rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
   the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views
