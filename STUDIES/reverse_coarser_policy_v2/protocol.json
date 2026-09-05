@@ -1,0 +1,99 @@
+{
+  "schema": "reverse-coarser-policy-v2",
+  "status": "FROZEN_BEFORE_FIRST_CELL",
+  "frozen_utc": "2026-09-05",
+  "purpose": "WP39B. reverse_coarser_policy_v1 (WP39) found ReverseCoarserPolicy::ZeroWeightBeyond exact but not faster (geomean 0.981x StopOrbit), and identified the confound: the shipped CurrentCoarseEndpoint statistic averages exp(-|dH|) over every built leaf, zero-weight leaves included, so continuing past a failed leaf dilutes its low value and dual averaging installed a 3-30 % larger step, which multiplied refinements and failures and paid for them as zero-weight tails. Two questions, one study: (a) the deployable one - does ZeroWeightBeyondAdaptSelected (kernel cfb1e93; same orbits, the zero-weight tail withheld from the step statistic) pay under the shipped adaptation? (b) the mechanism - at an identical fixed step, does not truncating the orbit pay (the WP34 hypothesis), separated from the step?",
+  "arms": {
+    "stop": "Tuning::default() + Adaptation::default(): StopOrbit, the shipped sampler",
+    "beyond-adapt": "Tuning::default().reverse_coarser_policy(ZeroWeightBeyondAdaptSelected) + Adaptation::default()",
+    "stop-fixed": "StopOrbit with the step fixed at the stop cell's median adapted step for the same model and seed; Adaptation::Custom(WarmupConfig::new(0.8).with_step_size_adaptation(false).with_mass_adaptation(true) + default regularisation and exhaustion rule)",
+    "beyond-fixed": "ZeroWeightBeyond (bit-identical to ZeroWeightBeyondAdaptSelected at a fixed step) with the same fixed step and warmup"
+  },
+  "arms_order": ["stop", "beyond-adapt", "stop-fixed", "beyond-fixed"],
+  "common": "Tuning::default() (h0 0.5, depth 10, min_micro_steps 1, eight refinement levels, delta 1, MomentumSum, divergence threshold 1000); Adaptation::default() (dual averaging 0.8 on the coarse-endpoint statistic, Stan regularisation, DEFAULT_WARMUP_EXHAUSTION); Metric::diagonal(); Init::uniform(); Limits::admit_worst_case(); four threads; cached initial evaluation; no per-model tuning; no source change between arms; the fixed-step arms replace step adaptation by the stop cell's adapted step (initial step search off, mass windows unchanged)",
+  "external": {
+    "root": "../../../owalnuts-wt/posteriordb-v6/STUDIES/posteriordb_bench_v6",
+    "what": "BridgeStan 2.9.0 libraries compiled without STAN_THREADS for posteriordb_bench_v6 (models/) and its posteriordb checkout; reused, not recompiled"
+  },
+  "cmdstan_reference": "posteriordb_bench_v5 artifacts (CmdStan 2.39.0 defaults, seeds 87101-87103), cited not rerun",
+  "run_order": "models in listed order; arms in arms_order (stop first so its adapted step exists for the fixed pair); seeds ascending; strictly sequential; then the funnel rows for stop and beyond-adapt",
+  "side_checks": {
+    "funnel": "Neal's 10-D funnel at the sampler defaults plus the arm's policy: 4 x 2,000 / 20,000, starts omega in {-3, -1, 1, 3}, per-seed MCSE z of P(omega < -5) (exact 0.0478), gate |z| <= 2 on every seed for beyond-adapt (and reported for stop); src/bin/funnel.rs"
+  },
+  "target_models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "gp_pois_regr-gp_pois_regr",
+    "mcycle_gp-accel_gp"
+  ],
+  "predictions": {
+    "P1": "beyond-adapt's adapted h is within 0.95-1.05x of stop's on every model (geomean within 0.98-1.02): the dilution was the whole cause of WP39's step rise",
+    "P2": "beyond-adapt is 1.10-1.35x stop on the noncentered eight schools and gp_pois_regr and 0.95-1.10x on the controls; centered eight schools and accel_gp are 0.8-1.2x (the zero-weight tail still costs gradients where the failure region is large); geomean over 17 in 1.00-1.10, below C1",
+    "P3": "stop-fixed is within 0.95-1.05x of stop per gradient (fixing the step at the adapted value costs nothing), so the fixed pair is a fair mechanism test",
+    "P4": "beyond-fixed vs stop-fixed: the truncation hypothesis predicts >= 1.15x geomean on the four targets with controls within 0.95-1.05x; the alternative (the zero-weight tail costs what truncation saved) predicts 0.9-1.1x on the targets with accel_gp below 1; expected: the alternative on accel_gp, the hypothesis on the other three",
+    "P5": "funnel |z| <= 2 on every seed for stop and beyond-adapt; gates for beyond-adapt >= stop",
+    "risk": "accel_gp: 58 % of stop's transitions end in a reverse-coarser stop; at the same step beyond-fixed will carry a large zero-weight tail, and if leaves per orbit rise more than 1/(1-0.58) the model loses even without the step confound"
+  },
+  "decision_rules_text": "Decision (deployable): flip the sampler default to ZeroWeightBeyondAdaptSelected iff C1 geomean over 17 of the seed-median ratio beyond-adapt/stop (min bulk ESS per target call) >= 1.10, C2 no model < 0.90, C3 gates >= stop over 51 cells, C4 funnel |z| <= 2 every seed for beyond-adapt, C5 target-model geomean >= 1.15; otherwise StopOrbit stays. Mechanism (reported, no default consequence): the truncation hypothesis is supported iff M1 beyond-fixed/stop-fixed geomean over the four targets >= 1.15 and M2 the controls' geomean is within 1.05x of 1. Report all cells; no reruns; failures are results; nothing tuned after seeing results.",
+  "decision_rule": {
+    "geomean_min": 1.10,
+    "per_model_min": 0.90,
+    "targets_geomean_min": 1.15,
+    "mechanism_targets_min": 1.15,
+    "mechanism_controls_band": 1.05
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "cmdstan_healthy_models": [
+    "eight_schools-eight_schools_noncentered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra"
+  ],
+  "seeds": [92101, 92102, 92103],
+  "seed_provenance": "grep-verified unused in the repository (outside vendored site-packages and float digits) before the freeze",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "cell_timeout_seconds": 2700,
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  }
+}

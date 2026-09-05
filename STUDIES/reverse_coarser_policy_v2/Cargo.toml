@@ -1,0 +1,21 @@
+[package]
+name = "reverse-coarser-policy-v2"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "oWALNUTS arms of the preregistered reverse-coarser policy study, second round (WP39B): ZeroWeightBeyondAdaptSelected under the shipped adaptation, plus a fixed-step pair that isolates orbit truncation from the step"
+
+[dependencies]
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "posteriordb-cell"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]
