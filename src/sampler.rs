@@ -232,6 +232,10 @@ impl fmt::Debug for Metric {
 /// posteriordb models but lost 12-16 % on three of them and failed the
 /// R-hat gate on two, so it did not meet the preregistered rule for a
 /// default.
+// `Custom(WarmupConfig)` is a few hundred bytes against the unit variants;
+// the enum is built once per run, and boxing the variant would change the
+// public constructor.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Adaptation {

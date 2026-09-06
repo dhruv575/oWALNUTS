@@ -1236,6 +1236,9 @@ pub struct WarmupConfig {
     initial_phase_max_error: Option<f64>,
     minimum_step: Option<f64>,
     warmup_exhaustion: Option<ExhaustionRule>,
+    warmup_reverse_coarser_policy: Option<ReverseCoarserPolicy>,
+    skip_single_leaf_reverse_coarser_statistic: bool,
+    dual_averaging_max_descent: Option<f64>,
     step_floor_relative_to_search: Option<f64>,
     max_window_shrink: Option<f64>,
     chain_rescue: Option<ChainRescueConfig>,
@@ -1258,6 +1261,9 @@ impl Default for WarmupConfig {
             initial_phase_max_error: None,
             minimum_step: None,
             warmup_exhaustion: None,
+            warmup_reverse_coarser_policy: None,
+            skip_single_leaf_reverse_coarser_statistic: false,
+            dual_averaging_max_descent: None,
             step_floor_relative_to_search: None,
             max_window_shrink: None,
             chain_rescue: None,
@@ -1409,6 +1415,63 @@ impl WarmupConfig {
 
     pub fn warmup_exhaustion_rule(&self) -> Option<ExhaustionRule> {
         self.warmup_exhaustion
+    }
+
+    /// Use `policy` as the reverse-coarser policy for the discarded (warmup)
+    /// transitions only; retained transitions keep the tuning's own
+    /// [`KernelTuning::reverse_coarser_policy`]. Research-only. Under the
+    /// shipped `StopOrbit` a first leaf that fails the reverse-coarsening
+    /// check ends the orbit with one state, and the dual-averaging
+    /// statistic of that transition is that single leaf's value (0.02–0.4
+    /// against a normal transition's 0.8 over hundreds of leaves), which
+    /// cuts the step 3–10x in one update and costs 5–10 depth-10 orbits to
+    /// recover; on the posteriordb models 20–47 such crashes per chain per
+    /// 1,000 warmup transitions account for 20–66 % of warmup gradients.
+    /// With [`ReverseCoarserPolicy::ZeroWeightBeyond`] here, warmup builds
+    /// the orbit Stan's NUTS would and averages the statistic over it.
+    /// Adaptation does not need the reversibility of the frozen kernel, so
+    /// the retained draws are unaffected. Off by default.
+    pub fn with_warmup_reverse_coarser_policy(mut self, policy: ReverseCoarserPolicy) -> Self {
+        self.warmup_reverse_coarser_policy = Some(policy);
+        self
+    }
+
+    pub fn warmup_reverse_coarser_policy(&self) -> Option<ReverseCoarserPolicy> {
+        self.warmup_reverse_coarser_policy
+    }
+
+    /// Research-only. Withhold from dual averaging the statistic of a warmup
+    /// transition whose orbit is a single leaf that failed the
+    /// reverse-coarsening check (see
+    /// [`Self::with_warmup_reverse_coarser_policy`] for the crash it causes).
+    /// The orbits are unchanged; only the step statistic of those
+    /// transitions is treated as missing. Diagonal driver only. Off by default.
+    pub fn with_skip_single_leaf_reverse_coarser_statistic(mut self, enabled: bool) -> Self {
+        self.skip_single_leaf_reverse_coarser_statistic = enabled;
+        self
+    }
+
+    pub fn skip_single_leaf_reverse_coarser_statistic(&self) -> bool {
+        self.skip_single_leaf_reverse_coarser_statistic
+    }
+
+    /// Research-only. Bound each dual-averaging update so the step never
+    /// falls below `1 / factor` of its previous value in one transition
+    /// (the dual-averaging state itself is unchanged; only the installed
+    /// step is bounded, and the averaged step follows the bounded value).
+    /// Must be finite and at least one. Diagonal driver only. Off by default.
+    pub fn with_dual_averaging_max_descent(mut self, factor: f64) -> Result<Self, Error> {
+        if !factor.is_finite() || factor < 1.0 {
+            return Err(Error::configuration(
+                "dual-averaging max descent factor must be finite and at least one",
+            ));
+        }
+        self.dual_averaging_max_descent = Some(factor);
+        Ok(self)
+    }
+
+    pub fn dual_averaging_max_descent(&self) -> Option<f64> {
+        self.dual_averaging_max_descent
     }
 
     /// Floor the adapted step: after every dual-averaging update the step
@@ -5522,6 +5585,9 @@ struct DualAveraging {
     log_step_bar: f64,
     h_bar: f64,
     iteration: usize,
+    /// Research-only bound on the per-update descent of `log_step`
+    /// (`ln factor`); `None` is the unbounded Hoffman–Gelman update.
+    max_descent: Option<f64>,
 }
 
 fn acceptance_summary(values: impl Iterator<Item = f64>) -> AcceptanceStatisticSummary {
@@ -5572,6 +5638,7 @@ impl DualAveraging {
             log_step_bar: step.ln(),
             h_bar: 0.0,
             iteration: 0,
+            max_descent: None,
         }
     }
 
@@ -5580,7 +5647,11 @@ impl DualAveraging {
         let t = self.iteration as f64;
         let eta = 1.0 / (t + 10.0);
         self.h_bar = (1.0 - eta) * self.h_bar + eta * (self.target - acceptance);
-        self.log_step = self.mu - t.sqrt() / 0.05 * self.h_bar;
+        let proposed = self.mu - t.sqrt() / 0.05 * self.h_bar;
+        self.log_step = match self.max_descent {
+            Some(bound) => proposed.max(self.log_step - bound),
+            None => proposed,
+        };
         let weight = t.powf(-0.75);
         self.log_step_bar = weight * self.log_step + (1.0 - weight) * self.log_step_bar;
         self.log_step.exp().clamp(f64::MIN_POSITIVE, 1.0e6)
@@ -7256,6 +7327,15 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     config.tuning.options.exhaustion
                 };
             }
+            if let Some(warmup) = config.warmup.as_ref()
+                && let Some(policy) = warmup.warmup_reverse_coarser_policy
+            {
+                active_tuning.reverse_coarser_policy = if transition_index < config.discarded {
+                    policy
+                } else {
+                    config.tuning.reverse_coarser_policy
+                };
+            }
             let step_before_transition = active_tuning.step_size;
             previous_position.copy_from_slice(position);
             control
@@ -7786,11 +7866,21 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     Some(paper) if paper.exhausted_as_zero => unrefined_fraction.or(Some(0.0)),
                     _ => unrefined_fraction,
                 };
+                let single_leaf_reverse_coarser = diagnostics.last().is_some_and(|d| {
+                    d.stop() == StopReason::ReverseCoarserAccepted && d.orbit_states() == 1
+                });
                 let step_statistic = if let Some(paper) = warmup.paper_adaptation.as_ref() {
                     paper_window.step_statistic(paper.step_statistic, unrefined_fraction)
+                } else if warmup.skip_single_leaf_reverse_coarser_statistic
+                    && single_leaf_reverse_coarser
+                {
+                    None
                 } else {
                     acceptance
                 };
+                if let Some(dual) = dual_averaging.as_mut() {
+                    dual.max_descent = warmup.dual_averaging_max_descent.map(f64::ln);
+                }
                 if warmup.adapt_step_size
                     && let (Some(dual), Some(statistic)) = (dual_averaging.as_mut(), step_statistic)
                 {
@@ -8836,6 +8926,9 @@ pub fn sample_dense_with_control<T: Target>(
             if let Some(rule) = warmup.warmup_exhaustion {
                 transition_config.tuning.options.exhaustion = rule;
             }
+            if let Some(policy) = warmup.warmup_reverse_coarser_policy {
+                transition_config.tuning.reverse_coarser_policy = policy;
+            }
             transition_config.tuning.step_size = *active_step;
             segment_index += 1;
             let output = sample_dense_fixed(
@@ -9659,6 +9752,9 @@ fn run_structured_refresh_chain<T: Target>(
         one.acceptance_statistic = warmup.dual_averaging_acceptance;
         if let Some(rule) = warmup.warmup_exhaustion {
             one.tuning.options.exhaustion = rule;
+        }
+        if let Some(policy) = warmup.warmup_reverse_coarser_policy {
+            one.tuning.reverse_coarser_policy = policy;
         }
         one.tuning.step_size = active_step;
         let direct = DirectOriginalQMass::StructuredPath(active_mass.clone());
