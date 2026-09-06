@@ -297,6 +297,30 @@ models (0.67–0.95x).
    such. `StopOrbit` stays the default; no further work on this line. The
    remaining per-gradient gap on smooth models (`sblrc`, `kidiq`, `arK`,
    reverse-coarser stops about 1 % of transitions) has a different cause.
+3c. **The smooth-model gap is warmup, and four warmup levers do not close
+   it (WP40, 2026-09-05, `STUDIES/warmup_gap_diag_v1`, instrumentation
+   only).** Per-transition telemetry on the 17 models shows warmup
+   gradients at 1.56x CmdStan's on the 14 healthy models while sampling
+   gradients per effective sample are about 1.05x; the initial fast phase
+   alone is 2.07x. Two mechanisms: a single-leaf orbit ending in a
+   reverse-coarser rejection hands dual averaging a statistic of 0.02–0.36
+   and cuts the step 3–10x (21–46 crashes per chain, each followed by 5–10
+   depth-10 recovery orbits), and from `h0 = 0.5` the first iterates climb
+   to `h` of 1–6 on fully refined leaves before overshooting to about
+   0.006. Research-only `WarmupConfig` options were added and measured
+   with fresh exploratory seeds: warmup-only untruncated orbits
+   (0.82–0.91x; crashes gone, warmup gradients up 11–17 %), Stan's
+   doubling step search (0.88x), skipping the single-leaf statistic
+   (1.02x overall, 0.82x on the targets), a descent bound (0.73x,
+   `arma11` R-hat 1.26), a NUTS initial phase (0.93x; `lotka_volterra`
+   1.5x, `accel_gp` 0.24x), and the best combination, NUTS initial phase
+   plus skip: **1.05x** overall, 1.15x on the 13 controls, **0.78x** on
+   the four targets. Every arm that saves warmup gradients ends at a
+   larger adapted step and loses on the target models: the warmup gap and
+   the robustness lead are the same behaviour. Nothing preregistered; no
+   default change; the options stay research-only. The open kernel
+   question is a step statistic that tells one failed refined leaf from a
+   too-large step without raising the final step.
 4. **Further target-adaptive `delta` research, after reverse-coarsening.**
    WP37A mechanically nonqualified the preregistered naive adaptive-to-2 path:
    fixed2 did not meet the funnel gross-safety and absolute healthy-count gates.

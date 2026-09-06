@@ -200,6 +200,20 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
   `ZeroWeightBeyondAdaptSelected` builds the same orbits (bit-identical at a
   fixed step) but withholds the zero-weight tail from the step statistic;
   measured in `STUDIES/reverse_coarser_policy_v2` (WP39B).
+- **Research-only warmup options, measured and not adopted.**
+  `WarmupConfig::with_warmup_reverse_coarser_policy` (a
+  `ReverseCoarserPolicy` for warmup transitions only),
+  `with_skip_single_leaf_reverse_coarser_statistic` (a single-leaf orbit
+  that ends in a reverse-coarser rejection contributes no dual-averaging
+  statistic) and `with_dual_averaging_max_descent` (a per-iteration bound
+  on how far the log step may fall). All default off and are bit-identical
+  when off; fingerprints unchanged. `STUDIES/warmup_gap_diag_v1` (WP40)
+  traced the warmup-included per-gradient gap to CmdStan on healthy models
+  to warmup (1.56x CmdStan's warmup gradients: single-leaf reverse-coarser
+  step crashes and an initial-phase overshoot) and measured these options
+  with the existing Stan step search and a NUTS initial phase: the best
+  combination is 1.05x overall and 0.78x on the four target models, because
+  every arm that saves warmup gradients ends at a larger step.
 - **Diagnostics and CmdStan export.** `owalnuts::diagnostics` computes
   rank-normalised folded split R-hat, bulk/tail/quantile/mean ESS, MCSE of
   the mean, and type-7 quantiles per parameter from `&[&[f64]]` chain views

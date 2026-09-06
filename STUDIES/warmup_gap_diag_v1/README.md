@@ -1,0 +1,110 @@
+# warmup_gap_diag_v1 (WP40-WARMUP-GAP) — where the per-gradient gap to CmdStan on smooth models comes from, and four warmup levers that do not close it
+
+Instrumentation study, **not preregistered**, run 2026-09-05 on `main`
+(baseline `53a4ef2`, the WP39B result). It is a diagnosis plus an exploratory
+sweep of research-only warmup options; nothing here qualifies a default
+change and no seed used here may be reused by a later decision study.
+
+## Question
+
+After WP39B closed the reverse-coarsening line, the remaining gap on
+CmdStan-healthy posteriordb models was: sampling-only ESS per gradient
+0.95x CmdStan, warmup-included 0.735x. Where do the extra gradients go, and
+does any warmup-side change recover them?
+
+## Diagnosis (per-transition warmup telemetry, `src/main.rs`, 17 models x 4 chains x 1,000/1,000, seed 92101)
+
+- Warmup gradients are **1.56x CmdStan's** on the 14 healthy models, against
+  sampling gradients per effective sample of about 1.05x. Warmup is the gap.
+- Per window, pooled: the initial fast phase (75 transitions) is **2.07x**
+  CmdStan (24 % of the excess); the slow mass windows are 1.14–1.27x (kernel
+  level: 5–8 % more leaves per transition and an 8 % smaller adapted step);
+  the terminal fast window is 1.01x.
+- **Step-crash mechanism.** A single-leaf orbit that ends in a
+  reverse-coarser rejection feeds dual averaging a statistic of 0.02–0.36
+  (the mean of `exp(-|dH|)` over the coarsest attempt of one leaf), which
+  cuts the step 3–10x in one iteration; recovery takes 5–10 depth-10 orbits
+  of 1,023 gradients each. The `crash` column in the tables counts these per
+  chain: 21–46 per chain on every model under the shipped defaults.
+- **Initial-phase pathology.** From `h0 = 0.5` with an identity metric,
+  dual averaging's first iterates climb to `h` of 1–6 because fully refined
+  leaves still report an acceptable statistic; each of the first 3–4
+  transitions then costs about 1,146 gradients (eight refinement levels per
+  leaf), after which dual averaging overshoots down to about 0.006 and pays
+  1,023-gradient depth-10 orbits until it recovers.
+
+## Arms (research-only `WarmupConfig` options, all off by default)
+
+| arm | option |
+|---|---|
+| `beyond-warmup` | `with_warmup_reverse_coarser_policy(ZeroWeightBeyond)` (warmup only) |
+| `adaptsel-warmup` | `with_warmup_reverse_coarser_policy(ZeroWeightBeyondAdaptSelected)` |
+| `stan-search` | `with_initial_step_search(InitialStepSearchConfig::stan())` |
+| `skip` | `with_skip_single_leaf_reverse_coarser_statistic(true)`: a single-leaf orbit ending in a reverse-coarser rejection contributes no dual-averaging statistic |
+| `descent2`, `descent1.5` | `with_dual_averaging_max_descent(f)`: the log step may fall at most `ln f` per iteration |
+| `initnuts` | `with_initial_phase_max_error(1000.0)`: the initial fast phase runs without refinement (plain NUTS leaves) |
+
+## Result: none of the levers meets the bar (geomean >= 1.10x with no model < 0.90x)
+
+Seed medians of min bulk ESS per gradient (warmup included), ratio to the
+shipped defaults; `targets` = both eight schools, `gp_pois_regr`,
+`accel_gp`; full tables in `artifacts/sweep{1,2,3}-table.txt`.
+
+| arm | seeds | geomean 17 | targets | controls | warmup grads | adapted step | worst |
+|---|---|---:|---:|---:|---:|---:|---|
+| `beyond-warmup` | 92101 | 0.823 | 0.654 | 0.883 | 1.113 | 1.125 | 0.23 |
+| `adaptsel-warmup` | 92101 | 0.913 | 0.806 | 0.949 | 1.169 | 1.021 | 0.44 |
+| `stan-search` | 92101 | 0.882 | 0.748 | 0.927 | 0.987 | 0.972 | 0.43 |
+| `skip` | 92101, 92102 | **1.021** | 0.817 | 1.093 | 0.905 | 1.095 | 0.63 `gp_pois_regr` |
+| `descent2` | 92101, 92102 | 0.726 | 0.541 | 0.795 | 1.296 | 1.053 | 0.15 `accel_gp`; `arma11` R-hat 1.26 |
+| `skip+descent2` | 92101, 92102 | 0.740 | 0.641 | 0.773 | 1.179 | 1.133 | 0.16 |
+| `initnuts` | 92101, 92102 | 0.933 | 0.614 | 1.061 | 0.963 | 0.997 | 0.24 `accel_gp` |
+| `initnuts+skip` | 92101, 92102 | **1.051** | 0.783 | **1.151** | 0.863 | 1.094 | 0.48 `accel_gp` |
+
+What the arms show:
+
+- The warmup-only orbit policies remove every step crash but raise warmup
+  gradients 11–17 %: the untruncated orbits are longer than the crashes they
+  prevent.
+- `skip` removes every crash, cuts warmup gradients 10 % and is 1.09x on the
+  13 controls, but the adapted step ends about 10 % larger and the GP
+  models, whose min-ESS coordinate is step-sensitive, lose (0.63, 0.81).
+- The descent bound is harmful: it keeps the step high through the
+  divergence region and `arma11` fails its R-hat gate.
+- `initnuts` fixes the initial phase where it was pathological
+  (`lotka_volterra` 1.52x, `hmm_drive_0` 1.15x, `nes2000` 1.17x) and is bad
+  where refinement carried the initial phase (`accel_gp` 0.24x,
+  `gp_pois_regr` 0.55x). Combined with `skip` it is the best arm, 1.15x on
+  the controls, and still 0.78x on the targets.
+- Stan's doubling step search helps the three models whose initial phase
+  was the pathology above and breaks `arma11`, `kidiq` and `accel_gp` by
+  installing a near-zero step.
+
+Every arm that recovers warmup gradients does so by ending at a larger
+step, and every such arm loses on the four target models. The warmup gap and
+the target-model robustness lead come from the same behaviour: the shipped
+statistic reacts to a single failed refined leaf by cutting the step hard.
+
+## Decision
+
+No default change. The four `WarmupConfig` options stay research-only and
+documented as measured-and-not-adopted. A decision study on
+`initnuts+skip` restricted to the control class is not worth preregistering
+at 1.15x with 0.78x on the targets; the next question is a step statistic
+that distinguishes "one refined leaf failed" from "the step is too large"
+without ending at a larger step, which is a kernel question and not a
+warmup-schedule one.
+
+## Files
+
+`src/main.rs` (profiler: per-transition warmup checkpoints, diagnostics,
+retained draws, call counts, arm parsing), `Cargo.toml`, `gen_sweep.py`
+(writes a detached `.cmd` batch; env `ARMS`, `SEEDS`, `TAG`, `EXE`,
+`SWEEP_ROOT`), `analyze_sweep.py <TAG> <arms,csv>` (ArviZ 0.23.4 bulk ESS
+and rank R-hat, seed medians, geomeans), `artifacts/sweep1-table.txt`
+(68 cells, seed 92101), `artifacts/sweep2-table.txt` (136 cells, two seeds),
+`artifacts/sweep3-table.txt` (68 new cells plus the sweep2 defaults, two
+seeds). Raw per-cell JSON (draws and telemetry, about 1 GB) was not
+committed. Models: BridgeStan libraries from `posteriordb_bench_v6`,
+`Init::uniform()`, `Metric::diagonal()`, `Limits::admit_worst_case()`, four
+threads.
