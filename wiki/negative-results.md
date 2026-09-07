@@ -52,6 +52,9 @@ where one was established. Details are in the
   overshot (`lotka_volterra` 1.5x) and breaks `accel_gp` (0.24x).
 - **Stan's doubling initial step search at the sampler defaults** (WP40):
   0.88x; installs a near-zero step on `arma11`, `kidiq`, `accel_gp`.
+- **A higher acceptance target (0.85, 0.9) with the skip statistic** (WP40
+  addendum): 0.90 to 0.96x; `accel_gp` 0.52 to 0.65x; the higher target is
+  paid during sampling on every model (0.89 to 0.94x sampling-only).
 
 ## Kernel rules
 

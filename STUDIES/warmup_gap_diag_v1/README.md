@@ -85,6 +85,19 @@ step, and every such arm loses on the four target models. The warmup gap and
 the target-model robustness lead come from the same behaviour: the shipped
 statistic reacts to a single failed refined leaf by cutting the step hard.
 
+## Addendum (2026-09-06): a higher acceptance target does not restore the targets (sweep4)
+
+WP40's reading was that the target models prefer a smaller step per se, because the crash-driven step cut is uniform across models (2.6 to 5.8 % of warmup transitions on every model, crash statistic median about 0.2) rather than target-specific. If that were the whole story, pairing the `skip` statistic (no crashes) with a higher acceptance target (a smaller step by design) should keep the controls' gain and give the targets back their step. Sweep4 tested this: arms `t0.85`, `skip+t0.85`, `skip+t0.9`, `initnuts+skip+t0.85`, 17 models x 2 seeds (92101, 92102), scored against the sweep2 defaults (`artifacts/sweep4-table.txt`).
+
+| arm | geomean vs default | targets | controls | sampling-only | warmup gradients | adapted step | worst model |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `t0.85` | 0.958 | 1.032 | 0.936 | 0.936 | 1.151 | 0.906 | `accel_gp` 0.65 |
+| `skip+t0.85` | 0.945 | 0.977 | 0.935 | 0.936 | 1.071 | 1.003 | `accel_gp` 0.62 |
+| `skip+t0.9` | 0.904 | 0.906 | 0.903 | 0.929 | 1.214 | 0.858 | `accel_gp` 0.52 |
+| `initnuts+skip+t0.85` | 0.937 | 0.754 | 1.001 | 0.887 | 1.025 | 0.969 | `accel_gp` 0.38 |
+
+Not supported. A higher target buys back the step on average (`skip+t0.85` lands at 1.003x the shipped step) and still loses: `accel_gp` is 0.52 to 0.65x in every arm and `gp_pois_regr` is at best 1.17x (`t0.85` alone), so the targets' preference is not for a smaller step of the same kind. The centered eight schools gains 1.3 to 1.65x under any 0.85 target, and the three 0.85 arms without `initnuts` put `arma11` at R-hat 1.26, so the higher target also costs a gate on the escape model. The controls lose 6 to 10 % in every arm except the `initnuts` combination, where the targets fall to 0.75. Sampling-only efficiency is 0.89 to 0.94x in every arm: the higher target is paid during sampling on every model, and the crash removal does not compensate. The acceptance-target line is closed with the schedule levers; the open question is unchanged (a statistic that distinguishes one failed refined leaf from a too-large step), and no arm from this study is a preregistration candidate.
+
 ## Decision
 
 No default change. The four `WarmupConfig` options stay research-only and
@@ -103,7 +116,7 @@ retained draws, call counts, arm parsing), `Cargo.toml`, `gen_sweep.py`
 `SWEEP_ROOT`), `analyze_sweep.py <TAG> <arms,csv>` (ArviZ 0.23.4 bulk ESS
 and rank R-hat, seed medians, geomeans), `artifacts/sweep1-table.txt`
 (68 cells, seed 92101), `artifacts/sweep2-table.txt` (136 cells, two seeds),
-`artifacts/sweep3-table.txt` (68 new cells plus the sweep2 defaults, two
+`artifacts/sweep3-table.txt`, `artifacts/sweep4-table.txt` (68 new cells plus the sweep2 defaults, two
 seeds). Raw per-cell JSON (draws and telemetry, about 1 GB) was not
 committed. Models: BridgeStan libraries from `posteriordb_bench_v6`,
 `Init::uniform()`, `Metric::diagonal()`, `Limits::admit_worst_case()`, four

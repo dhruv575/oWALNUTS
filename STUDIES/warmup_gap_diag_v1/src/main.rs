@@ -1,6 +1,6 @@
 //! Per-transition warmup profile of the shipped defaults (plus research arms) on a BridgeStan model.
 //! Usage: warmup-profile <model.so> <data.json> <seed> <out.json> [arm]
-//! arms: default | beyond-warmup | adaptsel-warmup | stan-search | beyond-warmup+stan-search
+//! arms: default | beyond-warmup | adaptsel-warmup | stan-search | skip | initnuts | descent2 | descent1.5 | tN (acceptance target N, e.g. t0.85); parts joined with +
 #![forbid(unsafe_code)]
 use owalnuts::sampler::{
     Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric,
@@ -31,7 +31,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         1,
         CHAINS,
     )?;
-    let mut warmup = WarmupConfig::new(0.8)?
+    let target_accept = arm
+        .split('+')
+        .find_map(|p| p.strip_prefix('t').and_then(|v| v.parse::<f64>().ok()))
+        .unwrap_or(0.8);
+    let mut warmup = WarmupConfig::new(target_accept)?
         .with_mass_adaptation(true)
         .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
         .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
@@ -39,6 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for part in arm.split('+') {
         warmup = match part {
             "default" => warmup,
+            p if p.starts_with('t') && p[1..].parse::<f64>().is_ok() => warmup,
             "beyond-warmup" => {
                 warmup.with_warmup_reverse_coarser_policy(ReverseCoarserPolicy::ZeroWeightBeyond)
             }

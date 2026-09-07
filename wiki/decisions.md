@@ -50,6 +50,7 @@ kernel. Full evidence for each study is in the
 | `ZeroWeightBeyondAdaptSelected` | WP39B | 0.878x; fixed-step 0.908x on targets | the untruncated orbit pays only on the noncentered eight schools |
 | `NonfinitePositionPolicy::RejectLeaf` | WP38 | not qualified | health gate measured the target, not the policy |
 | warmup-only untruncated orbits, skip single-leaf statistic, descent bound, NUTS initial phase, Stan step search | WP40 `warmup_gap_diag_v1` | best combination 1.05x overall, 0.78x on targets | every arm that saves warmup gradients ends at a larger step |
+| acceptance target 0.85 or 0.9 with the skip statistic | WP40 addendum | 0.90 to 0.96x, `accel_gp` 0.52 to 0.65x | the higher target costs sampling efficiency on every model and does not restore the targets |
 | resident DLL + joined Rayon workers (Windows) | `bridgestan_lifetime_v1` | 8/180 faults | rejected under the zero-fault gate |
 
 ## Documented opt-ins that are recommended for specific targets

@@ -181,8 +181,10 @@ research-only, off by default, and bit-identical when off.
   where it protects the stiff targets. Kernel-level, needs a preregistration
   with fresh seeds and the four targets as the deciding class.
 - Whether the target models' preference for a smaller step is better served
-  by a higher acceptance target than by crash noise (a sweep of `skip` with
-  targets 0.85 and 0.9 was launched after WP40; not yet scored).
+  by a higher acceptance target than by crash noise. Measured 2026-09-06 (WP40
+  addendum, sweep4): no. `skip` with targets 0.85 and 0.9 is 0.90 to 0.96x
+  overall, `accel_gp` 0.52 to 0.65x, sampling-only 0.89 to 0.94x on every
+  model. The targets do not want a smaller step of the same kind.
 - The per-chain funnel step collapse at the defaults (one chain per seed at
   `h ~ 0.01`, WP28/WP32), the same mode as the `arma11` post-escape crawl.
 - The initial-phase overshoot from `h0 = 0.5` on an identity metric: no arm

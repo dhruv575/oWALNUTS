@@ -6,9 +6,10 @@ Ordered by expected value. Each names the evidence that opened it.
    too-large step.** WP40 showed the healthy-model gap is warmup: single-leaf
    reverse-coarser rejections cut the step 3 to 10x on every model at the same
    rate, and every fix that saved warmup gradients ended at a larger step and
-   lost on the GP and eight-schools targets. A sweep pairing the skip
-   statistic with acceptance targets of 0.85 and 0.9 is the current probe.
-   Any adoption needs a preregistered decision study on fresh seeds with the
+   lost on the GP and eight-schools targets. Pairing the skip statistic with
+   acceptance targets of 0.85 and 0.9 (WP40 addendum, 2026-09-06) also loses,
+   so a smaller step of the same kind is not what the targets want; the
+   statistic itself has to change. Any adoption needs a preregistered decision study on fresh seeds with the
    four targets as the deciding class.
 2. **`diamonds` at the depth-10 cap** (WP31, WP32): 246 to 539 capped draws
    per seed at step 0.003 to 0.005 in every arm; not a metric floor case.
