@@ -230,8 +230,9 @@ models (0.67–0.95x).
    real-model gates) is green, after pinning Linux-specific kernel
    fingerprints. A manual wheels dispatch built and tested the Windows,
    manylinux x86_64/aarch64 and macOS x86_64/arm64 wheels, the sdist and the
-   optional Linux backends. What remains is owner action: the PyPI trusted
-   publisher, the `v0.2.0` tag and `cargo publish`. Expert Rust `StanTarget`
+   optional Linux backends. On 2026-09-05 `v0.2.0` was tagged and 0.2.0
+   was published to crates.io and, through the trusted publisher, to PyPI;
+   `pip install owalnuts` verified in a clean venv. Expert Rust `StanTarget`
    use is mitigation-qualified only on Windows GNU; Windows Python
    `from_stan` and direct Python BridgeStan remain disabled.
 3. **Reverse-coarsening: WP37B archived, a fresh protocol is needed.** WP37B
