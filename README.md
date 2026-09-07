@@ -343,6 +343,10 @@ the facade keeps the frozen replay defaults so pinned fingerprints hold.
 
 ## Research record
 
+- [`wiki/README.md`](wiki/README.md): the wiki map. Start with the
+  [decisions register](wiki/decisions.md), the
+  [negative results](wiki/negative-results.md) and the topic pages under
+  [`wiki/findings/`](wiki/findings/).
 - [`wiki/release-0.2.0.md`](wiki/release-0.2.0.md): this release's changes,
   validation tables and limitations; [`CHANGELOG.md`](CHANGELOG.md) for the
   upgrade notes.
