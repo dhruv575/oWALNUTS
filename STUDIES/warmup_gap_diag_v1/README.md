@@ -87,7 +87,7 @@ statistic reacts to a single failed refined leaf by cutting the step hard.
 
 ## Addendum (2026-09-06): a higher acceptance target does not restore the targets (sweep4)
 
-WP40's reading was that the target models prefer a smaller step per se, because the crash-driven step cut is uniform across models (2.6 to 5.8 % of warmup transitions on every model, crash statistic median about 0.2) rather than target-specific. If that were the whole story, pairing the `skip` statistic (no crashes) with a higher acceptance target (a smaller step by design) should keep the controls' gain and give the targets back their step. Sweep4 tested this: arms `t0.85`, `skip+t0.85`, `skip+t0.9`, `initnuts+skip+t0.85`, 17 models x 2 seeds (92101, 92102), scored against the sweep2 defaults (`artifacts/sweep4-table.txt`).
+WP40's reading was that the target models prefer a smaller step per se, because the crash-driven step cut is uniform across models (2.6 to 5.8 % of warmup transitions on every model, crash statistic median about 0.2) rather than target-specific. If that were the whole story, pairing the `skip` statistic (no crashes) with a higher acceptance target (a smaller step by design) should keep the controls' gain and give the targets back their step. Sweep4 tested this: arms `t0.85`, `skip+t0.85`, `skip+t0.9`, `initnuts+skip+t0.85`, 17 models x 2 seeds (92101, 92102), scored against the sweep2 defaults (`artifacts/sweep4-table.txt`, `artifacts/screen1-table.txt`; `run_parallel.py` (four-wide tiered launcher)).
 
 | arm | geomean vs default | targets | controls | sampling-only | warmup gradients | adapted step | worst model |
 |---|---:|---:|---:|---:|---:|---:|---|
@@ -97,6 +97,22 @@ WP40's reading was that the target models prefer a smaller step per se, because 
 | `initnuts+skip+t0.85` | 0.937 | 0.754 | 1.001 | 0.887 | 1.025 | 0.969 | `accel_gp` 0.38 |
 
 Not supported. A higher target buys back the step on average (`skip+t0.85` lands at 1.003x the shipped step) and still loses: `accel_gp` is 0.52 to 0.65x in every arm and `gp_pois_regr` is at best 1.17x (`t0.85` alone), so the targets' preference is not for a smaller step of the same kind. The centered eight schools gains 1.3 to 1.65x under any 0.85 target, and the three 0.85 arms without `initnuts` put `arma11` at R-hat 1.26, so the higher target also costs a gate on the escape model. The controls lose 6 to 10 % in every arm except the `initnuts` combination, where the targets fall to 0.75. Sampling-only efficiency is 0.89 to 0.94x in every arm: the higher target is paid during sampling on every model, and the crash removal does not compensate. The acceptance-target line is closed with the schedule levers; the open question is unchanged (a statistic that distinguishes one failed refined leaf from a too-large step), and no arm from this study is a preregistration candidate.
+
+## Addendum 2 (2026-09-07): a floored crash statistic, and why the GP targets cannot be separated from the crash (screen1)
+
+The last statistic-side design: keep the single-leaf reverse-coarser transition in dual averaging but feed it `max(statistic, floor)` instead of the raw 0.02 to 0.36, so one failed refined leaf still pushes the step down and cannot cut it 3 to 10x in one update (`WarmupConfig::with_single_leaf_reverse_coarser_statistic_floor`, research-only, off by default, bit-identical when off). Floors 0.3, 0.5 and 0.8 were screened on the four targets plus five fast controls (`arK`, `arma11`, `kidiq`, `nes2000`, `sblrc`), seeds 92101 and 92102, four cells in parallel (`run_parallel.py`, about 20 minutes), against the sweep2 defaults (`artifacts/screen1-table.txt`).
+
+| arm | geomean over 9 | targets | controls | sampling-only | warmup gradients | adapted step | worst |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `floor0.3` | 0.947 | 0.908 | 0.979 | 0.984 | 0.991 | 1.035 | `accel_gp` 0.60 |
+| `floor0.5` | 1.014 | 0.974 | 1.048 | 1.058 | 0.932 | 1.068 | `accel_gp` 0.63 |
+| `floor0.8` | 0.879 | 0.710 | 1.043 | 0.928 | 0.897 | 1.166 | `accel_gp` 0.30 |
+
+`floor0.5` is the best statistic-side arm measured in this study (controls 1.048 with `arK` 1.14, `nes2000` 1.10, `kidiq` 1.05, noncentered eight schools 1.10; warmup gradients down 7 %) and it is still far from the bar, because `gp_pois_regr` is 0.73 and `accel_gp` 0.63.
+
+The per-seed cells show why no statistic can do better. On `gp_pois_regr` the shipped step is 0.026 to 0.029 and the worst-parameter bulk ESS is 887 and 994; every arm that ends at 0.029 to 0.031 lands at 554 to 625. On `accel_gp` the shipped step is 0.0079 to 0.0081 with worst-parameter ESS 475 to 658 and rank R-hat 1.01 to 1.02; every arm that ends at 0.0084 to 0.0099 lands at 39 to 492 with R-hat 1.01 to 1.075. A 5 to 20 % larger step halves to tenths the worst-parameter ESS on both GP models. The crashes therefore are not noise the targets tolerate: on these two models the acceptance-0.8 fixed point sits at a step that is too large for the slowest coordinate, and the crash-driven step cut is what puts the shipped sampler under it. Any statistic that removes the cut, floors it, or replaces it with a higher target (sweep4) moves both GP models onto the wrong side of that step, and the effect on `accel_gp` is amplified by a worst-parameter ESS that is itself unstable at two seeds (39 to 658).
+
+Direction closed. The healthy-model warmup gap and the GP-target lead share one cause, and the only lever that separates them is per-model (the step the slowest coordinate needs), which is a metric question, not a step-statistic question. The floor option stays research-only alongside the others.
 
 ## Decision
 

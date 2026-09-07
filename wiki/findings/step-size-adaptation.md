@@ -185,6 +185,10 @@ research-only, off by default, and bit-identical when off.
   addendum, sweep4): no. `skip` with targets 0.85 and 0.9 is 0.90 to 0.96x
   overall, `accel_gp` 0.52 to 0.65x, sampling-only 0.89 to 0.94x on every
   model. The targets do not want a smaller step of the same kind.
+  A floored crash statistic (2026-09-07, addendum 2) is the best
+  statistic-side arm at 1.01x and loses both GP targets; their
+  worst-parameter ESS halves for a 5 to 20 % larger step, so the crash is
+  what puts the shipped step where those models need it. Line closed.
 - The per-chain funnel step collapse at the defaults (one chain per seed at
   `h ~ 0.01`, WP28/WP32), the same mode as the `arma11` post-escape crawl.
 - The initial-phase overshoot from `h0 = 0.5` on an identity metric: no arm

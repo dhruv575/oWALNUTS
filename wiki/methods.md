@@ -81,4 +81,9 @@ programme documents restate the older versions.
   diagnostic trees immutable.
 - Long runs are launched detached and watched through a done marker; the
   host kills foreground and background waiters under memory pressure.
+- Profiler cells use four threads; run them four wide on the 16-core machine
+  (`STUDIES/warmup_gap_diag_v1/run_parallel.py`) and screen on the four
+  deciding targets plus five fast controls before any 17-model sweep. A
+  three-arm, two-seed screen takes about 20 minutes; a serial 17-model sweep
+  of four arms took about five hours.
 - Telemetry checkpoints are zero-indexed.

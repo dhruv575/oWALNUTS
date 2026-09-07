@@ -2,15 +2,16 @@
 
 Ordered by expected value. Each names the evidence that opened it.
 
-1. **A dual-averaging statistic that separates one failed refined leaf from a
-   too-large step.** WP40 showed the healthy-model gap is warmup: single-leaf
-   reverse-coarser rejections cut the step 3 to 10x on every model at the same
-   rate, and every fix that saved warmup gradients ended at a larger step and
-   lost on the GP and eight-schools targets. Pairing the skip statistic with
-   acceptance targets of 0.85 and 0.9 (WP40 addendum, 2026-09-06) also loses,
-   so a smaller step of the same kind is not what the targets want; the
-   statistic itself has to change. Any adoption needs a preregistered decision study on fresh seeds with the
-   four targets as the deciding class.
+1. **The step the GP targets need is per-model, not a statistic.** WP40 and
+   its two addenda (2026-09-06, 2026-09-07) showed that the healthy-model
+   warmup gap and the GP-target lead share one cause: the acceptance-0.8
+   fixed point sits above the step that `gp_pois_regr` and `accel_gp`'s
+   slowest coordinate needs, and the crash-driven step cut is what puts the
+   shipped sampler under it. Every statistic-side fix (skip, floor, higher
+   target, descent bound, NUTS initial phase) moves both GP models to the
+   wrong side of that step. Closed as a step-statistic line. The lever that
+   could separate them is the metric on the slowest coordinate, which is
+   unmeasured on these two models.
 2. **`diamonds` at the depth-10 cap** (WP31, WP32): 246 to 539 capped draws
    per seed at step 0.003 to 0.005 in every arm; not a metric floor case.
 3. **The funnel's per-chain step collapse at the defaults** (WP28, WP32): one
@@ -45,4 +46,4 @@ Ordered by expected value. Each names the evidence that opened it.
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the
 default (WP22, WP23); full scale non-centering (WP17); chain rescue as a
-default (WP36); warmup-schedule levers for the healthy-model gap (WP40).
+default (WP36); warmup-schedule and step-statistic levers for the healthy-model gap (WP40 and addenda).

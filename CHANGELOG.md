@@ -348,6 +348,8 @@ checksummed study under `STUDIES/` (study codes in brackets). Summary in
 - `examples/kernel_bench.rs` (kernel hot-path microbenchmark) and
   `tests/kernel_fingerprint.rs` (bit-exact run fingerprints in both build
   profiles).
+  `with_single_leaf_reverse_coarser_statistic_floor` (feed such a transition
+  `max(statistic, floor)`; WP40 addendum 2, best 1.01x, not adopted).
 
 ### Changed
 

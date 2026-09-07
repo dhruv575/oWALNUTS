@@ -55,6 +55,9 @@ where one was established. Details are in the
 - **A higher acceptance target (0.85, 0.9) with the skip statistic** (WP40
   addendum): 0.90 to 0.96x; `accel_gp` 0.52 to 0.65x; the higher target is
   paid during sampling on every model (0.89 to 0.94x sampling-only).
+- **A floored crash statistic** (WP40 addendum 2): floor 0.5 is the best
+  statistic-side arm at 1.01x on the screen and still loses both GP targets,
+  because a 5 to 20 % larger step halves their worst-parameter ESS.
 
 ## Kernel rules
 

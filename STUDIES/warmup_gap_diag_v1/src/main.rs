@@ -1,6 +1,6 @@
 //! Per-transition warmup profile of the shipped defaults (plus research arms) on a BridgeStan model.
 //! Usage: warmup-profile <model.so> <data.json> <seed> <out.json> [arm]
-//! arms: default | beyond-warmup | adaptsel-warmup | stan-search | skip | initnuts | descent2 | descent1.5 | tN (acceptance target N, e.g. t0.85); parts joined with +
+//! arms: default | beyond-warmup | adaptsel-warmup | stan-search | beyond-warmup+stan-search
 #![forbid(unsafe_code)]
 use owalnuts::sampler::{
     Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric,
@@ -55,6 +55,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             "initnuts" => warmup.with_initial_phase_max_error(1000.0)?,
             "descent2" => warmup.with_dual_averaging_max_descent(2.0)?,
             "descent1.5" => warmup.with_dual_averaging_max_descent(1.5)?,
+            p if p.starts_with("floor") && p[5..].parse::<f64>().is_ok() => {
+                warmup.with_single_leaf_reverse_coarser_statistic_floor(p[5..].parse::<f64>()?)?
+            }
             other => return Err(format!("unknown arm part {other}").into()),
         };
     }

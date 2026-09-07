@@ -1238,6 +1238,7 @@ pub struct WarmupConfig {
     warmup_exhaustion: Option<ExhaustionRule>,
     warmup_reverse_coarser_policy: Option<ReverseCoarserPolicy>,
     skip_single_leaf_reverse_coarser_statistic: bool,
+    single_leaf_reverse_coarser_statistic_floor: Option<f64>,
     dual_averaging_max_descent: Option<f64>,
     step_floor_relative_to_search: Option<f64>,
     max_window_shrink: Option<f64>,
@@ -1263,6 +1264,7 @@ impl Default for WarmupConfig {
             warmup_exhaustion: None,
             warmup_reverse_coarser_policy: None,
             skip_single_leaf_reverse_coarser_statistic: false,
+            single_leaf_reverse_coarser_statistic_floor: None,
             dual_averaging_max_descent: None,
             step_floor_relative_to_search: None,
             max_window_shrink: None,
@@ -1453,6 +1455,30 @@ impl WarmupConfig {
 
     pub fn skip_single_leaf_reverse_coarser_statistic(&self) -> bool {
         self.skip_single_leaf_reverse_coarser_statistic
+    }
+
+    /// Research-only. Instead of withholding the statistic of a single-leaf
+    /// reverse-coarser transition (see
+    /// [`Self::with_skip_single_leaf_reverse_coarser_statistic`]), feed dual
+    /// averaging `max(statistic, floor)` for it, so one failed refined leaf
+    /// still pushes the step down but cannot cut it by more than one
+    /// bounded update. `floor` must lie in `[0, 1]`. Diagonal driver only.
+    /// Off by default; ignored when the skip option is on.
+    pub fn with_single_leaf_reverse_coarser_statistic_floor(
+        mut self,
+        floor: f64,
+    ) -> Result<Self, Error> {
+        if !(0.0..=1.0).contains(&floor) {
+            return Err(Error::configuration(
+                "single-leaf reverse-coarser statistic floor must lie in [0, 1]",
+            ));
+        }
+        self.single_leaf_reverse_coarser_statistic_floor = Some(floor);
+        Ok(self)
+    }
+
+    pub fn single_leaf_reverse_coarser_statistic_floor(&self) -> Option<f64> {
+        self.single_leaf_reverse_coarser_statistic_floor
     }
 
     /// Research-only. Bound each dual-averaging update so the step never
@@ -7875,6 +7901,10 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     && single_leaf_reverse_coarser
                 {
                     None
+                } else if let Some(floor) = warmup.single_leaf_reverse_coarser_statistic_floor
+                    && single_leaf_reverse_coarser
+                {
+                    acceptance.map(|value| value.max(floor))
                 } else {
                     acceptance
                 };
