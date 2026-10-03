@@ -1,0 +1,109 @@
+{
+  "plan": {
+    "model": "flow",
+    "fixture": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\fixtures\\flow-15.json",
+    "arm": "autodiff-noncentered",
+    "seed": 99210016,
+    "warmup": 1000,
+    "tiers": [
+      1000,
+      2000,
+      4000,
+      8000
+    ],
+    "chains": 4,
+    "timeout_per_tier": 1800,
+    "relative_mcse": 0.02,
+    "names": [
+      "beta_bar",
+      "tau",
+      "mu_h",
+      "sigma_h",
+      "h_terminal"
+    ],
+    "cpus": [
+      0
+    ],
+    "reference_script": null,
+    "phase": "exploratory",
+    "restart_policy": "Independent full run per tier, same declared seed; all costs charged"
+  },
+  "attempts": [
+    {
+      "draws": 1000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\flow-15-autodiff-noncentered\\draws-1000\\autodiff-noncentered-report.json",
+      "call_seconds_including_reporting": 6.227116700029001,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "beta_bar: endpoint MCSE exceeds threshold",
+          "tau: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.03886228547939894,
+        "ratios": {
+          "beta_bar": 0.020651184301518254,
+          "tau": 0.03886228547939894,
+          "mu_h": 0.015455246059272195,
+          "sigma_h": 0.015247924680465187,
+          "h_terminal": 0.01611178633490641,
+          "forecast_0": 0.017866263149820694,
+          "forecast_1": 0.017703951597113052,
+          "forecast_2": 0.016072118964828935,
+          "forecast_3": 0.014342883655550627
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "beta_bar",
+          "tau",
+          "mu_h",
+          "sigma_h",
+          "h_terminal"
+        ],
+        "forecast_rows": 4,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 2000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\flow-15-autodiff-noncentered\\draws-2000\\autodiff-noncentered-report.json",
+      "call_seconds_including_reporting": 8.356024499982595,
+      "screen": {
+        "pass": true,
+        "reasons": [],
+        "max_endpoint_mcse_over_width": 0.01941817185146109,
+        "ratios": {
+          "beta_bar": 0.012454185082593178,
+          "tau": 0.01941817185146109,
+          "mu_h": 0.010202542860336146,
+          "sigma_h": 0.011841668427408351,
+          "h_terminal": 0.011135248252573112,
+          "forecast_0": 0.012523578661181017,
+          "forecast_1": 0.010921376672380669,
+          "forecast_2": 0.009941306127244892,
+          "forecast_3": 0.010534944540188858
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "beta_bar",
+          "tau",
+          "mu_h",
+          "sigma_h",
+          "h_terminal"
+        ],
+        "forecast_rows": 4,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    }
+  ],
+  "precision_pass": true,
+  "qualified": false,
+  "attempted_draws_per_chain": 3000,
+  "selected_draws_per_chain": 2000,
+  "cumulative_fit_and_report_seconds": 14.583141200011596,
+  "tier_controller_seconds": 14.583717899979092,
+  "timing_scope": "All full-restart fits, diagnostics, prediction and per-cell report writes. CLI total separately includes controller imports/setup; package install/build reported separately."
+}

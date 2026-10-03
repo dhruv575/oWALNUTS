@@ -168,9 +168,17 @@ it is healthy, but beta_bar and tau endpoint-MCSE/width ratios are .024873 and
 .021651. Its 72.654 seconds are charged as an unsuccessful procedure.
 Flow-19 overlaps creation of a separate Git worktree; its timing is flagged as
 potentially affected by host activity and is not an isolated timing measurement.
-All integrity checks in `flow-complete-audit.json` pass. The local-level portion
-is still running; its completed shared failure is reviewed separately in
-`LOCAL_BREADTH_FAILURE_REVIEW.md`.
+All integrity checks in `flow-complete-audit.json` pass. The full batch is now
+terminal. Local-level candidates pass 14/24 cases: nine fail convergence and
+one fails precision despite healthy diagnostics. References pass 3/6 cases.
+In reference pairs 00, 13 and 16, both arms fail, so their speed ratios are null.
+The three successful pairs have descriptive driver-cost ratios 3.858, 4.914 and
+2.938. All candidate costs (355.738 seconds) and reference costs (355.145 seconds)
+remain counted, including unsuccessful attempts. The full 60-cell audit finds
+no source, fixture, configuration, start, truth-field or cost discrepancies.
+This is evidence against broad reliability of the current centered local recipe,
+not a powered calibration result. The shared failure and follow-up trace analysis
+are reviewed in `LOCAL_BREADTH_FAILURE_REVIEW.md`.
 
 The existing public Python/JAX interface was built in an isolated Python 3.14
 environment with the pinned Rust toolchain. Its adapter test and two study

@@ -1,0 +1,136 @@
+{
+  "plan": {
+    "model": "local_level",
+    "fixture": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\fixtures\\local_level-11.json",
+    "arm": "autodiff",
+    "seed": 99510012,
+    "warmup": 1000,
+    "tiers": [
+      1000,
+      2000,
+      4000,
+      8000
+    ],
+    "chains": 4,
+    "timeout_per_tier": 1800,
+    "relative_mcse": 0.02,
+    "names": [
+      "h_initial",
+      "h_terminal",
+      "h_mean",
+      "sigma_obs",
+      "sigma_rw"
+    ],
+    "cpus": [
+      0
+    ],
+    "reference_script": null,
+    "phase": "exploratory",
+    "restart_policy": "Independent full run per tier, same declared seed; all costs charged"
+  },
+  "attempts": [
+    {
+      "draws": 1000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-11-autodiff\\draws-1000\\autodiff-report.json",
+      "call_seconds_including_reporting": 1.4832220000680536,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "h_terminal: endpoint MCSE exceeds threshold",
+          "sigma_obs: endpoint MCSE exceeds threshold",
+          "sigma_rw: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.03085413934345059,
+        "ratios": {
+          "h_initial": 0.017706756484070052,
+          "h_terminal": 0.02008902289119199,
+          "h_mean": 0.012960679604020637,
+          "sigma_obs": 0.03085413934345059,
+          "sigma_rw": 0.025574048932356038,
+          "forecast_0": 0.011683360756502328
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 2000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-11-autodiff\\draws-2000\\autodiff-report.json",
+      "call_seconds_including_reporting": 2.173795699956827,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "sigma_obs: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.02033060046558447,
+        "ratios": {
+          "h_initial": 0.014372805998164113,
+          "h_terminal": 0.014146546326524444,
+          "h_mean": 0.008131629440491577,
+          "sigma_obs": 0.02033060046558447,
+          "sigma_rw": 0.013845490280550344,
+          "forecast_0": 0.0104102186730882
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 4000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-11-autodiff\\draws-4000\\autodiff-report.json",
+      "call_seconds_including_reporting": 3.5903633000561967,
+      "screen": {
+        "pass": true,
+        "reasons": [],
+        "max_endpoint_mcse_over_width": 0.014080652874489915,
+        "ratios": {
+          "h_initial": 0.009500218213583055,
+          "h_terminal": 0.00902435416507596,
+          "h_mean": 0.006206189747101044,
+          "sigma_obs": 0.014080652874489915,
+          "sigma_rw": 0.010732207449770883,
+          "forecast_0": 0.005126528007592229
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    }
+  ],
+  "precision_pass": true,
+  "qualified": false,
+  "attempted_draws_per_chain": 7000,
+  "selected_draws_per_chain": 4000,
+  "cumulative_fit_and_report_seconds": 7.247381000081077,
+  "tier_controller_seconds": 7.248287199996412,
+  "timing_scope": "All full-restart fits, diagnostics, prediction and per-cell report writes. CLI total separately includes controller imports/setup; package install/build reported separately."
+}

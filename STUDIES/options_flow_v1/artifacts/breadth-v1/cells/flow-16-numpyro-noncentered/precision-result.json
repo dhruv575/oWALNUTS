@@ -1,0 +1,111 @@
+{
+  "plan": {
+    "model": "flow",
+    "fixture": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\fixtures\\flow-16.json",
+    "arm": "numpyro-noncentered",
+    "seed": 99210017,
+    "warmup": 1000,
+    "tiers": [
+      1000,
+      2000,
+      4000,
+      8000
+    ],
+    "chains": 4,
+    "timeout_per_tier": 1800,
+    "relative_mcse": 0.02,
+    "names": [
+      "beta_bar",
+      "tau",
+      "mu_h",
+      "sigma_h",
+      "h_terminal"
+    ],
+    "cpus": [
+      0
+    ],
+    "reference_script": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\optimized_reference.py",
+    "phase": "exploratory",
+    "restart_policy": "Independent full run per tier, same declared seed; all costs charged"
+  },
+  "attempts": [
+    {
+      "draws": 1000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\flow-16-numpyro-noncentered\\draws-1000\\numpyro-noncentered-report.json",
+      "call_seconds_including_reporting": 26.50169940001797,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "beta_bar: endpoint MCSE exceeds threshold",
+          "tau: endpoint MCSE exceeds threshold",
+          "sigma_h: endpoint MCSE exceeds threshold",
+          "forecast_1: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.03768234896910565,
+        "ratios": {
+          "beta_bar": 0.03768234896910565,
+          "tau": 0.02444365838095361,
+          "mu_h": 0.014870086792596356,
+          "sigma_h": 0.021740855644827143,
+          "h_terminal": 0.012936723068940897,
+          "forecast_0": 0.017311845479129104,
+          "forecast_1": 0.021432193169581778,
+          "forecast_2": 0.01852474371190577,
+          "forecast_3": 0.018229434715374113
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "beta_bar",
+          "tau",
+          "mu_h",
+          "sigma_h",
+          "h_terminal"
+        ],
+        "forecast_rows": 4,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 2000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\flow-16-numpyro-noncentered\\draws-2000\\numpyro-noncentered-report.json",
+      "call_seconds_including_reporting": 30.473022800055332,
+      "screen": {
+        "pass": true,
+        "reasons": [],
+        "max_endpoint_mcse_over_width": 0.017688755406518313,
+        "ratios": {
+          "beta_bar": 0.017688755406518313,
+          "tau": 0.01575716793094487,
+          "mu_h": 0.009763767276655,
+          "sigma_h": 0.012510025307870067,
+          "h_terminal": 0.009043137553951473,
+          "forecast_0": 0.013532375278034948,
+          "forecast_1": 0.012463018103586864,
+          "forecast_2": 0.013653300314750665,
+          "forecast_3": 0.012794636623585251
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "beta_bar",
+          "tau",
+          "mu_h",
+          "sigma_h",
+          "h_terminal"
+        ],
+        "forecast_rows": 4,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    }
+  ],
+  "precision_pass": true,
+  "qualified": false,
+  "attempted_draws_per_chain": 3000,
+  "selected_draws_per_chain": 2000,
+  "cumulative_fit_and_report_seconds": 56.9747222000733,
+  "tier_controller_seconds": 56.975263400003314,
+  "timing_scope": "All full-restart fits, diagnostics, prediction and per-cell report writes. CLI total separately includes controller imports/setup; package install/build reported separately."
+}

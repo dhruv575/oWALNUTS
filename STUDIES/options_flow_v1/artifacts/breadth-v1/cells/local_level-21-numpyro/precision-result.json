@@ -1,0 +1,169 @@
+{
+  "plan": {
+    "model": "local_level",
+    "fixture": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\fixtures\\local_level-21.json",
+    "arm": "numpyro",
+    "seed": 99510022,
+    "warmup": 1000,
+    "tiers": [
+      1000,
+      2000,
+      4000,
+      8000
+    ],
+    "chains": 4,
+    "timeout_per_tier": 1800,
+    "relative_mcse": 0.02,
+    "names": [
+      "h_initial",
+      "h_terminal",
+      "h_mean",
+      "sigma_obs",
+      "sigma_rw"
+    ],
+    "cpus": [
+      0
+    ],
+    "reference_script": null,
+    "phase": "exploratory",
+    "restart_policy": "Independent full run per tier, same declared seed; all costs charged"
+  },
+  "attempts": [
+    {
+      "draws": 1000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-21-numpyro\\draws-1000\\numpyro-report.json",
+      "call_seconds_including_reporting": 14.40270189999137,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "fit is missing, failed or unhealthy",
+          "sigma_rw: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.04413921707015756,
+        "ratios": {
+          "h_initial": 0.013408012073955011,
+          "h_terminal": 0.015218928263189026,
+          "h_mean": 0.016568035705967595,
+          "sigma_obs": 0.013536198835221579,
+          "sigma_rw": 0.04413921707015756,
+          "forecast_0": 0.013361372295778976
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 2000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-21-numpyro\\draws-2000\\numpyro-report.json",
+      "call_seconds_including_reporting": 15.723207300063223,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "fit is missing, failed or unhealthy",
+          "sigma_rw: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.033900498832749454,
+        "ratios": {
+          "h_initial": 0.010322972451349341,
+          "h_terminal": 0.00989190980907044,
+          "h_mean": 0.009643246468150412,
+          "sigma_obs": 0.00841777233997573,
+          "sigma_rw": 0.033900498832749454,
+          "forecast_0": 0.008924658412372931
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 4000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-21-numpyro\\draws-4000\\numpyro-report.json",
+      "call_seconds_including_reporting": 18.61051889997907,
+      "screen": {
+        "pass": false,
+        "reasons": [
+          "fit is missing, failed or unhealthy",
+          "sigma_rw: endpoint MCSE exceeds threshold"
+        ],
+        "max_endpoint_mcse_over_width": 0.024861120744501503,
+        "ratios": {
+          "h_initial": 0.0068936439901097135,
+          "h_terminal": 0.007085992935973195,
+          "h_mean": 0.007212662827373554,
+          "sigma_obs": 0.006157437870904229,
+          "sigma_rw": 0.024861120744501503,
+          "forecast_0": 0.006327297875134722
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    },
+    {
+      "draws": 8000,
+      "report": "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\breadth-v1\\cells\\local_level-21-numpyro\\draws-8000\\numpyro-report.json",
+      "call_seconds_including_reporting": 23.690929899923503,
+      "screen": {
+        "pass": true,
+        "reasons": [],
+        "max_endpoint_mcse_over_width": 0.015999103868454614,
+        "ratios": {
+          "h_initial": 0.00535960630014964,
+          "h_terminal": 0.004868442358548079,
+          "h_mean": 0.004604589117843575,
+          "sigma_obs": 0.005504744554710807,
+          "sigma_rw": 0.015999103868454614,
+          "forecast_0": 0.005699378116698658
+        },
+        "threshold": 0.02,
+        "parameter_functionals": [
+          "h_initial",
+          "h_terminal",
+          "h_mean",
+          "sigma_obs",
+          "sigma_rw"
+        ],
+        "forecast_rows": 1,
+        "qualified": false
+      },
+      "status": "completed",
+      "controller_exception": false
+    }
+  ],
+  "precision_pass": true,
+  "qualified": false,
+  "attempted_draws_per_chain": 15000,
+  "selected_draws_per_chain": 8000,
+  "cumulative_fit_and_report_seconds": 72.42735799995717,
+  "tier_controller_seconds": 72.42866540001705,
+  "timing_scope": "All full-restart fits, diagnostics, prediction and per-cell report writes. CLI total separately includes controller imports/setup; package install/build reported separately."
+}
