@@ -219,8 +219,17 @@ result = owalnuts.sample(target, 3, threads=4)   # real parallel chains
 
 PyMC models get the same transport with
 `owalnuts.from_pymc(model, gil_free=True)` (numba required; verified against
-the ordinary compiled path before use; shared-variable values are
-snapshotted at compile time). Nonfinite densities or gradients during proposals
+the ordinary compiled path before use). This path uses PyMC's
+`freeze_dims_and_data` to compile a separate snapshot of `pm.Data` values and
+mutable dimensions. The original model remains updateable: after `pm.set_data`,
+an existing target still represents its original data, and calling
+`from_pymc(model, gil_free=True)` again creates a target for the new data.
+Keep the data unchanged while constructing a target. Shared graph inputs that
+the official transform cannot freeze, such as an unregistered
+`pytensor.shared` used directly in a potential, are explicitly rejected; use
+`pm.Data` or the callable `gil_free=False` path instead. Unsupported snapshot
+transforms or changed parameter layouts also fail before sampling.
+Nonfinite densities or gradients during proposals
 become recoverable zero-density evaluations, matching the callable adapter's
 default; an invalid initial point still fails verification.
 Measured on Eight Schools: ~31,000 min-bulk

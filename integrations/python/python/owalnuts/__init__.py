@@ -836,8 +836,10 @@ def _pymc_layout(model) -> tuple[np.ndarray, int, list[str], Callable[[np.ndarra
 def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str], Callable[[np.ndarray], dict[str, np.ndarray]]]:
     """nutpie-style transport: PyMC's numba-compiled joint logp/grad wrapped
     in a ``numba.cfunc`` with the RawTarget ABI, verified against the ordinary
-    compiled function before use. Shared-variable values are snapshotted at
-    compile time. Nonfinite log densities or gradients become recoverable
+    compiled function before use. PyMC Data and mutable dimensions are frozen
+    on a separate model at compile time; later changes require a new target.
+    Unsupported shared graph inputs are rejected rather than left unbound.
+    Nonfinite log densities or gradients become recoverable
     zero-density evaluations, matching the callable transport's default.
     Raises ``NotImplementedError`` when the PyTensor numba
     backend cannot supply a wrappable jit function.
@@ -845,10 +847,69 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
     import ctypes
 
     import numba
+    from pytensor.compile import SharedVariable
+    try:
+        from pytensor.graph.traversal import graph_inputs
+    except ImportError:  # Older PyTensor versions exported this from basic.
+        from pytensor.graph.basic import graph_inputs
 
-    fn = model.logp_dlogp_function(ravel_inputs=True, mode="NUMBA")
-    fn.set_extra_values({})
     q0, dim, names, unravel = _pymc_layout(model)
+    original_initial = model.initial_point()
+    shared_inputs = any(isinstance(var, SharedVariable) for var in graph_inputs([model.logp()]))
+    shared_dimensions = any(isinstance(var, SharedVariable) for var in model.dim_lengths.values())
+    frozen_model = model
+    if shared_inputs or shared_dimensions:
+        try:
+            from pymc.model.transform import freeze_dims_and_data
+        except ImportError:
+            raise NotImplementedError(
+                "gil_free=True requires PyMC freeze_dims_and_data for shared data; "
+                "upgrade PyMC or use gil_free=False"
+            ) from None
+        try:
+            frozen_model = freeze_dims_and_data(model)
+        except Exception as error:
+            raise NotImplementedError(
+                "could not snapshot PyMC data and dimensions without changing the model; "
+                "use supported constant initial values or gil_free=False"
+            ) from error
+
+    # The official transform freezes named pm.Data and dimensions. An external
+    # pytensor.shared used directly in a Potential can survive that transform.
+    remaining_shared = [var for var in graph_inputs([frozen_model.logp()])
+                        if isinstance(var, SharedVariable)]
+    if remaining_shared:
+        shared_names = ", ".join(var.name or "<unnamed>" for var in remaining_shared)
+        raise NotImplementedError(
+            "gil_free=True cannot snapshot these remaining shared graph inputs: "
+            + shared_names + "; register them as pm.Data or use gil_free=False"
+        )
+
+    # Rebuilding a graph need not preserve free-RV insertion order. Bind its
+    # value variables explicitly in the original public unconstrained layout.
+    frozen_values = {var.name: var for var in frozen_model.value_vars}
+    frozen_initial = original_initial if frozen_model is model else frozen_model.initial_point()
+    if set(frozen_values) != set(names) or any(
+        name not in frozen_initial
+        or np.shape(frozen_initial[name]) != np.shape(original_initial[name])
+        or not np.array_equal(frozen_initial[name], original_initial[name], equal_nan=True)
+        for name in names
+    ):
+        raise NotImplementedError(
+            "freezing PyMC data changed the unconstrained layout or initial values; "
+            "use gil_free=False"
+        )
+    fn = frozen_model.logp_dlogp_function(
+        grad_vars=[frozen_values[name] for name in names],
+        initial_point=frozen_initial, ravel_inputs=True, mode="NUMBA",
+    )
+    fn.set_extra_values({})
+    compiled_inputs = fn._pytensor_function.maker.fgraph.inputs
+    if len(compiled_inputs) != 1 or any(isinstance(var, SharedVariable) for var in compiled_inputs):
+        raise NotImplementedError(
+            "PyTensor NUMBA function has inputs beyond the raveled position after freezing; "
+            "use gil_free=False"
+        )
     inner = getattr(getattr(fn._pytensor_function, "vm", None), "jit_fn", None)
     if inner is None:
         raise NotImplementedError(
@@ -929,7 +990,7 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
         dim=dim,
         user_data=0,
         parameter_names=None,
-        keep_alive=(raw, inner, fn),
+        keep_alive=(raw, inner, fn, frozen_model),
     )
     return target, dim, q0, names, unravel
 

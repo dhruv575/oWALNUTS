@@ -541,3 +541,118 @@ def test_from_pymc_gil_free_still_rejects_invalid_initial_point():
         pm.Potential("boundary", -pt.sqrt(x)-pt.exp(x))
     with pytest.raises(NotImplementedError, match="disagreed"):
         owalnuts.from_pymc(model, gil_free=True)
+
+
+def _evaluate_raw_pymc_target(target, q):
+    """Evaluate the public raw target without adding stochastic sampling noise."""
+    import ctypes
+    q = np.ascontiguousarray(q, dtype=np.float64)
+    gradient = np.full(q.size, np.nan)
+    prototype = ctypes.CFUNCTYPE(
+        ctypes.c_double, ctypes.c_ssize_t, ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double), ctypes.c_void_p,
+    )
+    value = prototype(target.address)(
+        q.size, q.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+        gradient.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), None,
+    )
+    return value, gradient
+
+
+def test_from_pymc_gil_free_snapshots_data_and_dimensions_without_mutation():
+    pytest.importorskip("numba")
+    pm = pytest.importorskip("pymc")
+    pytest.importorskip("pymc.model.transform.optimization")
+    x_a = np.array([-1., .5, 2.])
+    y_a = np.array([.1, -.3, 1.2])
+    with pm.Model(coords={"obs": np.arange(3)}) as model:
+        x = pm.Data("x", x_a, dims="obs")
+        y = pm.Data("observations", y_a, dims="obs")
+        # Explicit transformed initial values and insertion order must survive
+        # graph cloning, not just an all-zero scalar-model initial position.
+        sigma = pm.HalfNormal("sigma", 1., initval=.7)
+        beta = pm.Normal("beta", 0., 1., initval=.2)
+        pm.Normal("likelihood", beta*x, sigma, observed=y, dims="obs")
+    original_vars = dict(model.named_vars)
+    original_initial = {name: value.copy() for name, value in model.initial_point().items()}
+    expected_a, dim, q0, names, _ = owalnuts.from_pymc(model)
+    probes = [q0.copy(), q0+np.array([.13, -.21])]
+    reference_a = [expected_a(probe) for probe in probes]
+    target_a, dim_a, q_a, names_a, _ = owalnuts.from_pymc(model, gil_free=True)
+    assert dim_a == dim and names_a == names
+    np.testing.assert_array_equal(q_a, q0)
+    assert all(model.named_vars[name] is variable for name, variable in original_vars.items())
+    np.testing.assert_array_equal(x.get_value(), x_a)
+    np.testing.assert_array_equal(y.get_value(), y_a)
+    assert model.dim_lengths["obs"].eval() == 3
+    for name, value in model.initial_point().items():
+        np.testing.assert_array_equal(value, original_initial[name])
+    for probe, (value, grad) in zip(probes, reference_a):
+        got, got_grad = _evaluate_raw_pymc_target(target_a, probe)
+        np.testing.assert_allclose(got, value, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(got_grad, grad, rtol=1e-10, atol=1e-10)
+
+    # Also mutate the existing backing buffers, not only set_data's replacement
+    # arrays. A snapshot that aliases shared storage would otherwise pass below.
+    x.get_value(borrow=True)[...] = [5., 6., 7.]
+    y.get_value(borrow=True)[...] = [-4., -5., -6.]
+    for probe, (value, grad) in zip(probes, reference_a):
+        got, got_grad = _evaluate_raw_pymc_target(target_a, probe)
+        np.testing.assert_allclose(got, value, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(got_grad, grad, rtol=1e-10, atol=1e-10)
+
+    # Updating data AND its dimension must affect only newly compiled targets.
+    x_b = np.array([2., 3., 4., 5.])
+    y_b = np.array([-1., 2., .5, -2.])
+    with model:
+        pm.set_data({"x": x_b, "observations": y_b}, coords={"obs": np.arange(4)})
+    expected_b, _, q_b, names_b, _ = owalnuts.from_pymc(model)
+    target_b, dim_b, raw_q_b, raw_names_b, _ = owalnuts.from_pymc(model, gil_free=True)
+    assert dim_b == dim and raw_names_b == names_b == names
+    np.testing.assert_array_equal(raw_q_b, q_b)
+    assert all(model.named_vars[name] is variable for name, variable in original_vars.items())
+    np.testing.assert_array_equal(x.get_value(), x_b)
+    np.testing.assert_array_equal(y.get_value(), y_b)
+    assert model.dim_lengths["obs"].eval() == 4
+    for name, value in model.initial_point().items():
+        np.testing.assert_array_equal(value, original_initial[name])
+    for probe, (old_value, old_grad) in zip(probes, reference_a):
+        still_a, still_a_grad = _evaluate_raw_pymc_target(target_a, probe)
+        np.testing.assert_allclose(still_a, old_value, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(still_a_grad, old_grad, rtol=1e-10, atol=1e-10)
+        new_value, new_grad = expected_b(probe)
+        got_b, got_b_grad = _evaluate_raw_pymc_target(target_b, probe)
+        np.testing.assert_allclose(got_b, new_value, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(got_b_grad, new_grad, rtol=1e-10, atol=1e-10)
+        assert not np.isclose(got_b, still_a)
+
+
+def test_from_pymc_gil_free_rejects_unregistered_shared_inputs():
+    pytest.importorskip("numba")
+    pm = pytest.importorskip("pymc")
+    pytensor = pytest.importorskip("pytensor")
+    external = pytensor.shared(np.array([1., 2.]), name="external_data")
+    with pm.Model() as model:
+        mu = pm.Normal("mu", 0., 1.)
+        pm.Potential("external_likelihood", -.5*((external-mu)**2).sum())
+    with pytest.raises(NotImplementedError, match="snapshot.*shared|snapshot PyMC"):
+        owalnuts.from_pymc(model, gil_free=True)
+    np.testing.assert_array_equal(external.get_value(), [1., 2.])
+
+
+def test_from_pymc_gil_free_ordinary_model_still_supported(monkeypatch):
+    pytest.importorskip("numba")
+    pm = pytest.importorskip("pymc")
+    with pm.Model() as model:
+        pm.Normal("x", 0., 1., initval=.3)
+    # No snapshot transform is needed when there are no shared inputs or dims.
+    import pymc.model.transform
+    def unexpected_freeze(*args, **kwargs):
+        raise AssertionError("ordinary model should not require graph cloning")
+    monkeypatch.setattr(pymc.model.transform, "freeze_dims_and_data", unexpected_freeze)
+    target, dim, q0, names, _ = owalnuts.from_pymc(model, gil_free=True)
+    assert dim == 1 and names == ["x"]
+    np.testing.assert_array_equal(q0, [.3])
+    value, gradient = _evaluate_raw_pymc_target(target, np.array([.8]))
+    np.testing.assert_allclose(value, -.5*LOG_2PI-.5*.8**2, rtol=1e-12)
+    np.testing.assert_allclose(gradient, [-.8], rtol=1e-12)
