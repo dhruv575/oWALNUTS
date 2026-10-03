@@ -159,6 +159,19 @@ No source or binary is changed during this run.
 
 ## Design implications
 
+The completed flow portion of `breadth-v1` has 23/24 candidate precision
+successes and 6/6 prespecified reference successes. The six matched driver-cost
+ratios (reference/candidate) are 3.714, 1.350, 3.426, 1.575, 1.204 and 1.900.
+These are descriptive cold full-restart results, not a population speed claim.
+The failed candidate, flow-22, remains in the 24-case denominator: at 8000 draws
+it is healthy, but beta_bar and tau endpoint-MCSE/width ratios are .024873 and
+.021651. Its 72.654 seconds are charged as an unsuccessful procedure.
+Flow-19 overlaps creation of a separate Git worktree; its timing is flagged as
+potentially affected by host activity and is not an isolated timing measurement.
+All integrity checks in `flow-complete-audit.json` pass. The local-level portion
+is still running; its completed shared failure is reviewed separately in
+`LOCAL_BREADTH_FAILURE_REVIEW.md`.
+
 The existing public Python/JAX interface was built in an isolated Python 3.14
 environment with the pinned Rust toolchain. Its adapter test and two study
 target/coordinate checks pass. A T=128 local-level pilot using the same fixture,
