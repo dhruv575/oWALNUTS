@@ -211,5 +211,5 @@ def main():
     report_path.write_text(json.dumps(clean(report),indent=2,allow_nan=False))
     (a.out/'invocation-timing.json').write_text(json.dumps(dict(seconds_including_imports_and_report=time.perf_counter()-STARTED)))
     print(json.dumps({k:report.get(k) for k in ['status','healthy','end_to_end_seconds','error']}))
-    return int(report['status']!='completed' or (a.tiers and not report.get('precision_pass',False)))
+    return int(report['status']!='completed' or (bool(a.tiers) and not report.get('precision_pass',False)))
 if __name__=='__main__':raise SystemExit(main())
