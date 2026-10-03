@@ -1,0 +1,51 @@
+{
+  "schema": "options-flow-workflow-v1",
+  "status": "DRAFT_NOT_QUALIFICATION",
+  "objective": "Useful, demanding uncertainty estimation with a material verified improvement in time or effort",
+  "tracks": {
+    "implementation": "Independent normalized density/gradient parity, transformation identity, predictive semantics and leakage rejection",
+    "synthetic": "Prior-predictive SBC plus fixed-parameter recovery, explicitly distinct",
+    "performance": "Matched centered and noncentered physical posteriors, default configurations and declared candidates",
+    "application": "Local-level option-price model from the sibling application; conditional anchor semantics must be explicit",
+    "market": "Timestamped historical data with documented rights and availability; currently unavailable"
+  },
+  "initial_model": {
+    "likelihood": "StudentT(nu=5, alpha_g + beta_g*x_tg, exp(h_t/2))",
+    "alpha": "0.3*z_alpha_g; z_alpha_g~Normal(0,1)",
+    "beta": "beta_bar + exp(log_tau)*z_beta_g; z_beta_g~Normal(0,1)",
+    "globals": {"beta_bar": [0,0.5], "log_tau": [-1,0.5], "mu_h": [-1,1], "log_sigma_h": [-1.5,0.5]},
+    "latent": "Stationary AR1 with rho=.95, mean mu_h, innovation SD exp(log_sigma_h)",
+    "restriction": "Shared volatility, fixed persistence/tail parameter and balanced panel are initial restrictions, not market facts"
+  },
+  "proposed_computational_gates": {
+    "chains": 4,
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "max_retained_divergences": 0,
+    "scope": "All physical model parameters and frozen decision functionals",
+    "interval_precision": "Freeze a scale-relative endpoint-MCSE tolerance after pilot, before evidence",
+    "failures": "Errors, crashes, timeouts, missing output and unhealthy fits stay in denominator"
+  },
+  "qualification_design_pending": [
+    "Power analysis and simultaneous calibration equivalence criterion",
+    "Fresh grep-verified generator and sampling seeds disjoint from pilots",
+    "Dataset dimensions and difficult regimes after bounded exploratory screen",
+    "Matched hardware allocation and balanced sequential arm order",
+    "Budget tiers and fair time-to-health rule including every attempted tier",
+    "Material speed threshold and predictive noninferiority margins",
+    "Real-data source and operational forecast origins",
+    "No-flow model ablation and simple historical baseline, with paired predictive score uncertainty",
+    "Cold/warm timings, reusable user interface and observed onboarding evidence",
+    "Committed source/data hashes before qualification execution"
+  ],
+  "forbidden_inferences": [
+    "Synthetic calibration proves real-market forecasting utility",
+    "A nonsignificant SBC test proves calibration",
+    "Latent-value intervals are observed-price prediction intervals",
+    "Future observed covariates are known at the training cutoff",
+    "Two unhealthy samplers establish posterior agreement",
+    "Fused target calls and reference leapfrog counts are identical work units",
+    "A pilot winner justifies changing shipped defaults"
+  ]
+}

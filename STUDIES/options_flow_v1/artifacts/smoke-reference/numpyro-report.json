@@ -1,0 +1,25 @@
+{
+  "arm": "numpyro",
+  "seed": 101,
+  "phase": "exploratory",
+  "fixture_sha256": "00b08badaa3af15e10839878b4d61d5e35513ca8e3c2341062ba4524cc875f8d",
+  "settings": {
+    "warmup": 10,
+    "draws": 10,
+    "chains": 2
+  },
+  "command": [
+    "C:\\Users\\dhruv\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+    "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\reference.py",
+    "STUDIES\\options_flow_v1\\artifacts\\smoke-reference\\data.json",
+    "STUDIES\\options_flow_v1\\artifacts\\smoke-reference\\numpyro-raw.json",
+    "101",
+    "10",
+    "10",
+    "2"
+  ],
+  "status": "failed",
+  "process_seconds": 5.841251599951647,
+  "error": "_DiagnosticsBase._ess_tail() missing 1 required positional argument: 'prob'",
+  "traceback": "Traceback (most recent call last):\n  File \"C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\run.py\", line 33, in execute\n    report['evaluation']=summarize(q,fixture,predictive_seed=seed+130000)\n                         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\evaluate.py\", line 16, in summarize\n    'tail_ess':float(az.ess(v,method='tail')),'mean_mcse':float(az.mcse(v,method='mean')),\n                     ~~~~~~^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\dhruv\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\arviz_stats\\sampling_diagnostics.py\", line 109, in ess\n    return get_array_function(\"ess\")(\n           ~~~~~~~~~~~~~~~~~~~~~~~~~^\n        data,\n        ^^^^^\n    ...<4 lines>...\n        draw_axis=draw_axis,\n        ^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"C:\\Users\\dhruv\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\arviz_stats\\base\\array.py\", line 185, in ess\n    return ess_array(ary, **func_kwargs)\n  File \"C:\\Users\\dhruv\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\arviz_stats\\base\\stats_utils.py\", line 72, in _ufunc\n    aux = np.asarray(func(*arys_idx, *args[n_input:], **kwargs))[index]\n                     ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: _DiagnosticsBase._ess_tail() missing 1 required positional argument: 'prob'\n"
+}
