@@ -21,17 +21,31 @@ from precision_tiers import precision_screen
 from run import clean
 
 
+def local_configuration(data,chains,coordinates='centered'):
+    from local_level import validate,log_density
+    from local_observation_residual import canonical_starts,to_residual,to_canonical,log_density as residual_density
+    validate(data)
+    initial=canonical_starts(data,chains)
+    if coordinates == 'centered':
+        return initial,initial.copy(),lambda q:-log_density(q,data,jnp,gammaln),lambda q:q
+    if coordinates == 'observation_residual':
+        return initial,to_residual(initial,data),lambda q:-residual_density(q,data,jnp),lambda q:to_canonical(q,data)
+    raise ValueError('Unknown local coordinates')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--fixture', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--model', choices=['flow','local_level'], required=True)
+    p.add_argument('--coordinates',choices=['centered','observation_residual'],default='centered',help='Local-level coordinates; flow retains historical process-noncentered recipe')
     p.add_argument('--seed', type=int, required=True)
     p.add_argument('--warmup', type=int, default=1000)
     p.add_argument('--chains', type=int, default=4)
     p.add_argument('--batch-size', type=int, default=1000)
     p.add_argument('--tiers', type=int, nargs='+', default=[1000,2000,4000,8000])
     a = p.parse_args()
+    if a.model == 'flow' and a.coordinates != 'centered':p.error('Observation residual coordinates support local_level only')
     if (min(a.warmup,a.chains,a.batch_size)<1 or not a.tiers
             or any(v<a.batch_size or v%a.batch_size for v in a.tiers)
             or any(b<=c for c,b in zip(a.tiers,a.tiers[1:]))):
@@ -39,7 +53,9 @@ def main():
     a.out.mkdir(parents=True, exist_ok=False)
     fixture = json.loads(a.fixture.read_text())
     data = fixture['data']
-    plan = dict(model=a.model, seed=a.seed, warmup=a.warmup, chains=a.chains,
+    coordinate_label='noncentered' if a.model=='flow' else a.coordinates
+    arm='numpyro-continuation' if a.coordinates=='centered' else 'numpyro-continuation-observation-residual'
+    plan = dict(model=a.model,coordinates=coordinate_label,arm=arm, seed=a.seed, warmup=a.warmup, chains=a.chains,
         batch_size=a.batch_size, tiers=a.tiers, relative_mcse=.02,
         fixture_sha256=hashlib.sha256(a.fixture.read_bytes()).hexdigest(),
         source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest()
@@ -62,15 +78,8 @@ def main():
             potential = lambda q: -noncentered_log_density(q,data)
             canonical = lambda q: np.asarray(jax.vmap(jax.vmap(lambda v:canonical_noncentered(v,data)))(q))
         else:
-            from local_level import validate,log_density
             from run_local_level import evaluate
-            validate(data)
-            initial = np.asarray([np.r_[np.asarray(data['y'])+(c-(a.chains-1)/2)*.02,
-                np.log(.08)+(c-(a.chains-1)/2)*.02,np.log(.12)-(c-(a.chains-1)/2)*.02]
-                for c in range(a.chains)])
-            starts = initial.copy()
-            potential = lambda q: -log_density(q,data,jnp,gammaln)
-            canonical = lambda q: q
+            initial,starts,potential,canonical=local_configuration(data,a.chains,a.coordinates)
         sampler = ContinuedReference(potential, starts, a.seed, a.warmup,a.batch_size)
         sampler.adapt()
         passed = False
@@ -79,7 +88,7 @@ def main():
                 sampler.append()
             q = canonical(sampler.samples)
             evaluation = evaluate(q,fixture,a.seed+130000)
-            report = dict(arm='numpyro-continuation',status='completed',phase='exploratory',
+            report = dict(arm=arm,coordinates=coordinate_label,status='completed',phase='exploratory',
                 qualified=False,seed=a.seed,settings=dict(warmup=a.warmup,draws=tier,chains=a.chains),
                 fixture_sha256=plan['fixture_sha256'],source_sha256=plan['source_sha256'],
                 evaluation=evaluation,retained_divergences=sampler.divergences,
@@ -97,6 +106,7 @@ def main():
                 break
         (a.out/'numpyro-continuation-raw.json').write_text(json.dumps(clean(dict(
             canonical_draws=q.tolist(),initial_positions=initial.tolist(),
+            sampling_initial_positions=starts.tolist(),coordinates=coordinate_label,
             seed=a.seed,checkpoints=sampler.checkpoints)),allow_nan=False))
         report.update(plan=plan,attempts=attempts,precision_pass=passed,
                       end_to_end_seconds=time.perf_counter()-STARTED)

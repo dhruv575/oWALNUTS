@@ -39,11 +39,22 @@ def canonical_starts(data,chains):
     return np.array([np.r_[np.asarray(data['y'])+(c-(chains-1)/2)*.02,
        np.log(.08)+(c-(chains-1)/2)*.02,np.log(.12)-(c-(chains-1)/2)*.02] for c in range(chains)])
 
-def compile_target(data):
-    start=time.perf_counter();model=build_model(data)
+def coordinate_transport(data, coordinates='centered'):
+    if coordinates == 'centered':return lambda q:np.asarray(q),lambda q:np.asarray(q)
+    if coordinates != 'observation_residual':raise ValueError('Unknown local coordinates')
+    from local_observation_residual import to_residual,to_canonical
+    return lambda q:to_residual(q,data),lambda q:to_canonical(q,data)
+
+def compile_target(data, coordinates='centered'):
+    coordinate_transport(data,coordinates)
+    start=time.perf_counter()
+    if coordinates == 'observation_residual':
+        from local_observation_residual import build_model as residual_model
+        model=residual_model(data);expected_names=['position']
+    else:model=build_model(data);expected_names=['q']
     target,dim,initial,names,unravel=owalnuts.from_pymc(model,gil_free=True)
-    if dim!=len(data['y'])+2 or names!=['q']:raise ValueError('Unexpected PyMC canonical layout')
-    return target,dict(compile_seconds=time.perf_counter()-start,dimension=dim,names=names,initial=initial.tolist())
+    if dim!=len(data['y'])+2 or names!=expected_names:raise ValueError('Unexpected PyMC layout')
+    return target,dict(compile_seconds=time.perf_counter()-start,dimension=dim,names=names,initial=initial.tolist(),coordinates=coordinates)
 
 def evaluate_cfunc(target,q):
     q=np.ascontiguousarray(q,dtype=np.float64);gradient=np.empty_like(q)
@@ -52,13 +63,18 @@ def evaluate_cfunc(target,q):
     value=caller(len(q),q.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),gradient.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),None)
     return float(value),gradient
 
-def parity(target,data,points):
+def parity(target,data,points,coordinates='centered'):
     import jax
     jax.config.update('jax_enable_x64',True)
     import jax.numpy as jnp
     from jax.scipy.special import gammaln
     from local_level import log_density
-    value_grad=jax.jit(jax.value_and_grad(lambda q:log_density(q,data,jnp,gammaln)))
+    if coordinates == 'observation_residual':
+        from local_observation_residual import log_density as residual_density
+        density=lambda q:residual_density(q,data,jnp)
+    elif coordinates == 'centered':density=lambda q:log_density(q,data,jnp,gammaln)
+    else:raise ValueError('Unknown local coordinates')
+    value_grad=jax.jit(jax.value_and_grad(density))
     rows=[]
     for q in points:
         value,gradient=evaluate_cfunc(target,q);ref,grad=value_grad(jnp.asarray(q))
@@ -68,11 +84,13 @@ def parity(target,data,points):
         rows.append(row)
     return dict(passed=True,cases=rows)
 
-def sample_fit(target,fixture,starts,seed,warmup,draws):
+def sample_fit(target,fixture,starts,seed,warmup,draws,coordinates='centered'):
+    to_sampling,to_canonical=coordinate_transport(fixture['data'],coordinates)
+    sampling_starts=to_sampling(starts)
     ts=time.perf_counter();cpu=time.process_time()
-    result=owalnuts.sample(target,dim=starts.shape[1],init=starts,chains=len(starts),warmup=warmup,draws=draws,seed=seed,threads=1)
+    result=owalnuts.sample(target,dim=starts.shape[1],init=sampling_starts,chains=len(starts),warmup=warmup,draws=draws,seed=seed,threads=1)
     sampling_seconds=time.perf_counter()-ts;sampling_cpu_seconds=time.process_time()-cpu
-    q=np.asarray(result.samples)
+    q=to_canonical(np.asarray(result.samples))
     if q.shape!=(len(starts),draws,starts.shape[1]) or not np.isfinite(q).all():raise ValueError('Invalid posterior samples')
     from run_local_level import evaluate
     ts=time.perf_counter();evaluation=evaluate(q,fixture,seed+130000);evaluation_seconds=time.perf_counter()-ts
@@ -81,18 +99,19 @@ def sample_fit(target,fixture,starts,seed,warmup,draws):
       sampling_seconds=sampling_seconds,sampling_cpu_seconds=sampling_cpu_seconds,sampler_health=health,
       target_calls=result.target_calls,retained_divergences=health['divergences'],
       healthy=evaluation['computational_screen_pass'] and health['divergences']==0)
-    raw=dict(canonical_draws=q.tolist(),initial_positions=starts.tolist(),sampler_health=health)
+    raw=dict(canonical_draws=q.tolist(),initial_positions=starts.tolist(),sampling_initial_positions=sampling_starts.tolist(),coordinates=coordinates,sampler_health=health)
     return report,raw
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--fixture',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--seed',type=int,required=True);p.add_argument('--warmup',type=int,default=1000);p.add_argument('--draws',type=int,default=1000)
+    p.add_argument('--coordinates',choices=['centered','observation_residual'],default='centered')
     p.add_argument('--tiers',type=int,nargs='+',help='Reuse compiled target, fully restart adaptation/sampling at each retained tier');p.add_argument('--chains',type=int,default=4);p.add_argument('--compile-only',action='store_true');a=p.parse_args()
     if min(a.warmup,a.draws,a.chains)<1:p.error('Positive counts required')
     if a.compile_only and a.tiers:p.error('--compile-only and --tiers cannot be combined')
     if a.tiers and (any(n<4 for n in a.tiers) or any(b<=v for v,b in zip(a.tiers,a.tiers[1:]))):p.error('Strictly increasing tiers >=4 required')
     a.out.mkdir(parents=True,exist_ok=False);fixture=json.loads(a.fixture.read_text());data=fixture['data']
-    report=dict(status='running',phase='exploratory',qualified=False,arm='python-pymc-cfunc',model='local_level',seed=a.seed,
+    report=dict(status='running',phase='exploratory',qualified=False,arm='python-pymc-cfunc' if a.coordinates=='centered' else 'python-pymc-cfunc-observation-residual',coordinates=a.coordinates,model='local_level',seed=a.seed,
       fixture_sha256=hashlib.sha256(a.fixture.read_bytes()).hexdigest(),extension_path=extension.__file__,
       extension_sha256=hashlib.sha256(Path(extension.__file__).read_bytes()).hexdigest(),
       adapter_source_sha256=hashlib.sha256(Path(owalnuts.__file__).read_bytes()).hexdigest(),
@@ -103,17 +122,18 @@ def main():
     report_path=a.out/'python-pymc-report.json';report_path.write_text(json.dumps(report,indent=2))
     active_draws=None
     try:
-        target,metadata=compile_target(data);report['compilation']=metadata
+        target,metadata=compile_target(data,a.coordinates);report['compilation']=metadata
         starts=canonical_starts(data,a.chains)
-        points=[starts[0],starts[-1],starts[0]+np.random.default_rng(818).normal(0,.01,len(starts[0]))]
-        ts=time.perf_counter();report['parity']=parity(target,data,points);report['parity_seconds']=time.perf_counter()-ts
+        sampling_starts=coordinate_transport(data,a.coordinates)[0](starts)
+        points=[sampling_starts[0],sampling_starts[-1],sampling_starts[0]+np.random.default_rng(818).normal(0,.01,len(starts[0]))]
+        ts=time.perf_counter();report['parity']=parity(target,data,points,a.coordinates);report['parity_seconds']=time.perf_counter()-ts
         if not a.compile_only:
             from run import clean
             from precision_tiers import precision_screen
             attempts=[]
             for draws in (a.tiers or [a.draws]):
                 fit_start=time.perf_counter();active_draws=draws
-                fit,raw=sample_fit(target,fixture,starts,a.seed,a.warmup,draws)
+                fit,raw=sample_fit(target,fixture,starts,a.seed,a.warmup,draws,a.coordinates)
                 fit_dir=a.out/f'draws-{draws}' if a.tiers else a.out
                 fit_dir.mkdir(exist_ok=True)
                 (fit_dir/'python-pymc-raw.json').write_text(json.dumps(raw,allow_nan=False))
@@ -139,5 +159,5 @@ def main():
     report_path.write_text(json.dumps(clean(report),indent=2,allow_nan=False))
     (a.out/'invocation-timing.json').write_text(json.dumps(dict(seconds_including_imports_and_report=time.perf_counter()-STARTED)))
     print(json.dumps({k:report.get(k) for k in ['status','healthy','end_to_end_seconds','error']}))
-    return int(report['status']!='completed' or (a.tiers and not report.get('precision_pass',False)))
+    return int(report['status']!='completed' or (bool(a.tiers) and not report.get('precision_pass',False)))
 if __name__=='__main__':raise SystemExit(main())
