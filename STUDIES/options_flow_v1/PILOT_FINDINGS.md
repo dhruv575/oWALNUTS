@@ -159,6 +159,19 @@ No source or binary is changed during this run.
 
 ## Design implications
 
+The compiled public PyMC flow route passes independent normalized-density and
+gradient checks at T=128 and T=1000. Its first practical comparison nevertheless
+loses to the optimized NumPyro continuation workflow: both first pass at 2000
+draws, but wrapper costs are 52.968 versus 35.341 seconds, respectively. The
+candidate takes 1.499 times as long. Both check all 14 reported flow functionals
+and all four observed forecasts, with identical canonical starts, fixture and
+seed. The candidate compiles once but restarts warmup and sampling at each tier;
+the reference warms up once and continues fixed retained batches. Existing disk
+caches are retained, and candidate parity preparation is separately recorded.
+This is one reused development fixture under explicitly different practical
+execution policies; it does not support a Python speed advantage. The complete
+audit is `artifacts/python-flow-workflow-99771001-audit.json`.
+
 The completed flow portion of `breadth-v1` has 23/24 candidate precision
 successes and 6/6 prespecified reference successes. The six matched driver-cost
 ratios (reference/candidate) are 3.714, 1.350, 3.426, 1.575, 1.204 and 1.900.

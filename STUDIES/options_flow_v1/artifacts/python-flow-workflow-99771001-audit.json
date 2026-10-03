@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-03T23:19:13.830630+00:00",
+  "phase": "exploratory",
+  "qualified": false,
+  "plan_sha256": "d5e4a300509ebdd90a7aebd3273b8212297021d38d687d4a7d894131d18d2c72",
+  "checks": {
+    "fixture_hash": true,
+    "current_source_snapshot": true,
+    "reference_source": true,
+    "reference_fixture": true,
+    "reference_settings": true,
+    "reference_cpu": true,
+    "reference_enclosing_clocks": true,
+    "reference_1000_scope": true,
+    "reference_1000_ratios": true,
+    "reference_1000_gate": true,
+    "reference_2000_scope": true,
+    "reference_2000_ratios": true,
+    "reference_2000_gate": true,
+    "reference_2000_starts": true,
+    "reference_2000_raw_shape_finite": true,
+    "reference_first_pass_stopping": true,
+    "candidate_source": true,
+    "candidate_fixture": true,
+    "candidate_settings": true,
+    "candidate_cpu": true,
+    "candidate_enclosing_clocks": true,
+    "candidate_1000_scope": true,
+    "candidate_1000_ratios": true,
+    "candidate_1000_gate": true,
+    "candidate_1000_starts": true,
+    "candidate_1000_raw_shape_finite": true,
+    "candidate_1000_sampling_starts_inverse": true,
+    "candidate_2000_scope": true,
+    "candidate_2000_ratios": true,
+    "candidate_2000_gate": true,
+    "candidate_2000_starts": true,
+    "candidate_2000_raw_shape_finite": true,
+    "candidate_2000_sampling_starts_inverse": true,
+    "candidate_first_pass_stopping": true,
+    "reference_continuation": true,
+    "reference_costs": true,
+    "candidate_costs": true,
+    "full_tier_plans": true,
+    "extension_binding": true,
+    "adapter_binding": true,
+    "parity_binding": true,
+    "historical_failure_preserved": true,
+    "execution_order": true,
+    "predictive_seed": true
+  },
+  "comparison_valid_for_declared_scope": true,
+  "results": {
+    "reference": {
+      "attempts": [
+        {
+          "draws": 1000,
+          "healthy": true,
+          "precision_pass": false,
+          "max_endpoint_ratio": 0.02405424198059543
+        },
+        {
+          "draws": 2000,
+          "healthy": true,
+          "precision_pass": true,
+          "max_endpoint_ratio": 0.018104764384350828
+        }
+      ],
+      "selected_draws_per_chain": 2000,
+      "canonical_coordinates": 140,
+      "raw_health_note": "All stored coordinate and functional diagnostics rechecked; estimators not independently recomputed from draws."
+    },
+    "candidate": {
+      "attempts": [
+        {
+          "draws": 1000,
+          "healthy": true,
+          "precision_pass": false,
+          "max_endpoint_ratio": 0.03305234965310101
+        },
+        {
+          "draws": 2000,
+          "healthy": true,
+          "precision_pass": true,
+          "max_endpoint_ratio": 0.018175201005203517
+        }
+      ],
+      "selected_draws_per_chain": 2000,
+      "canonical_coordinates": 140,
+      "raw_health_note": "All stored coordinate and functional diagnostics rechecked; estimators not independently recomputed from draws."
+    }
+  },
+  "costs": {
+    "reference": {
+      "worker_invocation_seconds": 34.68873369996436,
+      "affinity_wrapper_seconds": 35.34108909999486,
+      "internal_report_seconds": 34.68743519997224
+    },
+    "candidate": {
+      "worker_invocation_seconds": 52.35674850002397,
+      "affinity_wrapper_seconds": 52.967746400041506,
+      "internal_report_seconds": 52.35560130001977
+    }
+  },
+  "candidate_over_reference_wrapper_time": 1.4987581806031327,
+  "reference_over_candidate_wrapper_time": 0.6672190437002842,
+  "preparation_costs_excluded_from_planned_process_cold_pair": {
+    "historical_failed_preflight_wrapper_seconds": 8.890635900082998,
+    "successful_preflight_wrapper_seconds": 5.265855500008911
+  },
+  "artifact_sha256": {
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-reference-99771001\\numpyro-continuation-report.json": "92b24d77736643f55c67b8eab65735891841949bfdf92b1e493ea9eb1d53e9d0",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-reference-99771001\\numpyro-continuation-raw.json": "c1817ac8ab7ebb6137e11b583ba7aef81233c2c143b9e90cfc03ea9db5ee9fec",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-candidate-99771001\\python-pymc-flow-report.json": "1fc6d260fc0ba679985152b74167cce772cfcab72b0d339ae0e288acbeed8324",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-candidate-99771001\\draws-1000\\python-pymc-flow-raw.json": "0f6a52462fe4713933dc7c1d8eee8d1705dd2a72ea1eb6df7fd0d3d16942dcf4",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-candidate-99771001\\draws-2000\\python-pymc-flow-raw.json": "e354e06c4ac54abc231c7ec092c6bb1fe38f8f545751720f5213e9c1b8c32455"
+  },
+  "limitations": [
+    "Single reused synthetic development fixture, one chain-seed cohort; no calibration or general speed claim.",
+    "Declared distinct execution policies: reference one warmup with continuation; candidate compile once and restart each tier; all realized attempt costs retained.",
+    "Caches retained and candidate parity preparation explicitly prewarmed compilation; process-cold comparison is not compiler-cache-cold or first-install cost.",
+    "CPU affinity is not exclusive CPU allocation.",
+    "Byte binding of extension established; independent rebuild provenance not rederived.",
+    "Stored MCSE and diagnostic statistics rechecked against gates, not independently reestimated; passing precision is an estimated stopping rule."
+  ]
+}

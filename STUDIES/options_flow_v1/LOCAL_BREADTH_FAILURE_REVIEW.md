@@ -127,3 +127,27 @@ estimator matter. The independent endpoint-replication experiment in
 `ENDPOINT_VALIDATION_PLAN.md` is the appropriate next validation of that claim;
 an arbitrary geometry change or threshold relaxation is not established by
 these observations. The original cell remains failed under the declared policy.
+
+### Post-run scale diagnosis (exploratory)
+
+`artifacts/local-00-scale-diagnostic-v1.json` binds both 8000-draw raw inputs
+and reports by SHA256. No new sampling was performed. The diagnostic uses
+observations and retained draws, not generating truth. Both posterior fits
+remain unhealthy; neither is treated as a reference truth.
+
+The pooled correlation of log observation scale with log residual RMS is
+0.988 in both fits (within-chain correlations 0.981–0.992). After dividing
+residuals by observation scale, that correlation falls to −0.116 for AD and
+−0.104 for NumPyro. Log observation scale autocorrelation at lag 100 reaches
+0.579 and 0.565 respectively. The fraction of each chain below observation
+scale 0.02 ranges from 3.4–19.3% for AD and 4.2–18.2% for NumPyro. These
+descriptive cutoffs were chosen after observing the failure, not used as gates.
+
+This supports testing observation-residual coordinates
+`h = y + exp(log_sigma_obs)*z`: the exact Jacobian cancels the observation
+scale normalizer, making its Student-t factor independent of observation
+scale. It does not establish faster mixing: the latent random-walk prior now
+couples these coordinates, and the observed log-scale correlation remains
+−0.423 (AD) and −0.441 (NumPyro). The candidate therefore needs independent
+normalized-density and gradient parity followed by a frozen paired experiment.
+Existing centered results and failure denominators remain unchanged.

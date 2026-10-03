@@ -9,7 +9,7 @@ def manifest(root):
     root=Path(root).resolve(); entries=[]; skipped=[]
     for path in sorted(root.rglob('*-raw.json')):
         report=path.with_name(path.name.replace('-raw.json','-report.json'))
-        if not report.exists() and path.name=='python-pymc-raw.json':
+        if not report.exists() and path.name in ('python-pymc-raw.json','python-pymc-flow-raw.json'):
             # Compile-once PyMC tiers store each immutable fit under this name.
             report=path.with_name('fit-report.json')
         if not report.exists():

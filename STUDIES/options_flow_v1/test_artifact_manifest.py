@@ -10,11 +10,13 @@ class ManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
             (root/'python-pymc-raw.json').write_text('{"canonical_draws":[]}')
+            (root/'python-pymc-flow-raw.json').write_text('{"canonical_draws":[]}')
             report=root/'fit-report.json'
             report.write_text(json.dumps({'status':'running'}))
             self.assertEqual(manifest(root)['entries'],[])
             report.write_text(json.dumps({'status':'completed'}))
             result=manifest(root)
+            self.assertEqual(len(result['entries']),2)
             self.assertEqual(result['entries'][0]['report_path'],'fit-report.json')
             self.assertEqual(result['skipped'],[])
 
