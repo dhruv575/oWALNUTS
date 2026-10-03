@@ -172,6 +172,32 @@ This is one reused development fixture under explicitly different practical
 execution policies; it does not support a Python speed advantage. The complete
 audit is `artifacts/python-flow-workflow-99771001-audit.json`.
 
+Profiling identified substantial forward/reverse Scan overhead. The tested
+bounded block-prefix recurrence keeps O(T) work and automatic gradients while
+reducing target-only call cost roughly fourfold at T128 and eightfold at T1000.
+Block size 32 passes compiled density/gradient parity through T1000 and explicit
+recurrence tests, with scalar fallback outside its declared rho range. A fresh
+sampler-seed comparison on the same development dataset reverses execution order
+and uses this implementation: both workflows first pass at 2000 draws, with
+candidate/reference wrapper costs 17.155/36.525 seconds, or a 2.129 ratio. The
+same prewarmed-cache policy applies; candidate parity preparation is separately
+recorded. This is a measured practical-workflow improvement on one reused
+fixture, not a reliability or calibration qualification. See the independent
+`python-flow-workflow-99771002-audit.json`; the original scalar loss is retained.
+
+The separate eight-cell local experiment compares centered and observation-
+residual coordinates in both public PyMC/oWALNUTS and NumPyro continuation, on
+two preselected development fixtures and fresh seeds. Both centered workflows
+fail both cases within the fixed cap. Residual PyMC/oWALNUTS passes both at 4000
+draws (12.016 and 12.331 wrapper seconds). Residual NumPyro passes case 01 in
+31.201 seconds, giving a 2.530 ratio only for that successful matched pair.
+Its case 00 passes parameter diagnostics and endpoint precision but records four
+retained divergences, so the overall gate fails. All centered-versus-residual
+speed ratios remain null: this is a descriptive improvement in successful fits,
+not a time-to-success ratio against failed runs. All eight cells and costs are
+preserved in `local-residual-workflow-v1/audit.json`. Fresh prior breadth remains
+necessary before selecting a broadly reliable local recipe.
+
 The completed flow portion of `breadth-v1` has 23/24 candidate precision
 successes and 6/6 prespecified reference successes. The six matched driver-cost
 ratios (reference/candidate) are 3.714, 1.350, 3.426, 1.575, 1.204 and 1.900.

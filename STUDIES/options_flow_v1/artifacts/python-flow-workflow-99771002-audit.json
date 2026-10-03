@@ -1,0 +1,104 @@
+{
+  "phase": "exploratory",
+  "qualified": false,
+  "created_utc": "2026-10-03T23:30:54.688159+00:00",
+  "checks": {
+    "fixture": true,
+    "current_sources": true,
+    "candidate_binding": true,
+    "candidate_cpu": true,
+    "candidate_clocks": true,
+    "candidate_1000_scope": true,
+    "candidate_1000_screen": true,
+    "candidate_1000_raw": true,
+    "candidate_1000_starts": true,
+    "candidate_1000_inverse_starts": true,
+    "candidate_2000_scope": true,
+    "candidate_2000_screen": true,
+    "candidate_2000_raw": true,
+    "candidate_2000_starts": true,
+    "candidate_2000_inverse_starts": true,
+    "candidate_first_pass": true,
+    "reference_binding": true,
+    "reference_cpu": true,
+    "reference_clocks": true,
+    "reference_1000_scope": true,
+    "reference_1000_screen": true,
+    "reference_2000_scope": true,
+    "reference_2000_screen": true,
+    "reference_2000_raw": true,
+    "reference_2000_starts": true,
+    "reference_first_pass": true,
+    "block32": true,
+    "parity": true,
+    "extension": true,
+    "adapter": true,
+    "tiers": true,
+    "continuation": true,
+    "ref_cost": true,
+    "candidate_cost": true,
+    "reversed_execution_order": true
+  },
+  "comparison_valid_for_declared_scope": true,
+  "results": {
+    "candidate": [
+      {
+        "draws": 1000,
+        "healthy": true,
+        "precision_pass": false,
+        "max_endpoint_ratio": 0.024061911649348646
+      },
+      {
+        "draws": 2000,
+        "healthy": true,
+        "precision_pass": true,
+        "max_endpoint_ratio": 0.01667978764683213
+      }
+    ],
+    "reference": [
+      {
+        "draws": 1000,
+        "healthy": true,
+        "precision_pass": false,
+        "max_endpoint_ratio": 0.02610715938510995
+      },
+      {
+        "draws": 2000,
+        "healthy": true,
+        "precision_pass": true,
+        "max_endpoint_ratio": 0.015618806726183423
+      }
+    ]
+  },
+  "costs": {
+    "candidate": {
+      "worker_invocation_seconds": 16.558998900000006,
+      "wrapper_seconds": 17.155273400014266,
+      "internal_seconds": 16.557836300111376
+    },
+    "reference": {
+      "worker_invocation_seconds": 35.83981599996332,
+      "wrapper_seconds": 36.525267900084145,
+      "internal_seconds": 35.837739199982025
+    }
+  },
+  "candidate_over_reference_wrapper_time": 0.4696823428357317,
+  "reference_over_candidate_wrapper_time": 2.1290985604492767,
+  "preparation_wrapper_seconds_excluded_as_planned": 11.411981800105423,
+  "artifact_sha256": {
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-workflow-99771002-plan.json": "a5567012503638a9160ede9fecdd1b7a6b0533aa002bb1a820d20cd89764ebdd",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-candidate-99771002\\python-pymc-flow-report.json": "3f87a5a46d747c69e75f8c7eabfd06bc9bd42bd3383be01bd062ebf487fa5e56",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-candidate-99771002\\draws-1000\\python-pymc-flow-raw.json": "3564f113f066e503674bca1533ec34ee6aa3ea54a115126fc632b49fc504b4bc",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-candidate-99771002\\draws-2000\\python-pymc-flow-raw.json": "dca6c00b15cd41319f580eacdf3acbe8b9ab00c68e49f866043cfa1f84537ee6",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-reference-99771002\\numpyro-continuation-report.json": "e8bff782b0399b6cc677b5f308eda8ecba417e3fc96137513dd4e1ea4f5480c2",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-reference-99771002\\numpyro-continuation-raw.json": "3706c2e64b7f43826c06a0f4ed4275d18fb4f33399ea61d8e9a1268ff55cdd24",
+    "C:\\dev\\oWALNUTS\\STUDIES\\options_flow_v1\\artifacts\\python-flow-parity-99771002\\python-pymc-flow-report.json": "4b5d6de67044cda1b2ce36d283bd054b7a899579d18a1c22238ec6dda716aa8f"
+  },
+  "limitations": [
+    "One reused synthetic fixture, fresh chain seed; no calibration or broad speed claim.",
+    "Candidate block_size32 compile-once/full restart vs one-warmup reference continuation; reversed candidate-first order declared.",
+    "Process-cold with retained caches prewarmed by parity; not compiler-cache-cold.",
+    "All attempts included; diagnostic and MCSE gates recomputed from stored statistics, not statistically reestimated.",
+    "CPU0 affinity does not guarantee exclusive hardware; extension bytes bound, rebuild provenance not independently rederived."
+  ]
+}
