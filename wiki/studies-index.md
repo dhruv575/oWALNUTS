@@ -30,6 +30,7 @@ evidence cell. Every study has a ledger entry in the
 | `neal_funnel_intervention_pilot_v2` | pre-WP2 | yes | Longer warmup plus initial step search is falsified; no selection. |
 | `nonfinite_position_policy_v1` | WP38 | yes | `NOT_QUALIFIED`; the health gate failed on the target for both arms. |
 | `numpyro_comparisons_v10_v1` | WP14 | yes | sspd-05 timing claim supported at a corrected 4x; per-work efficiency is parity; NumPyro under-covers the funnel neck. |
+| [`options_flow_v1`](../STUDIES/options_flow_v1/README.md) | application workflow, 2026-10-03 | no | Exploratory uncertainty/precision and Python-interface tests; no broad speed or market-calibration qualification. PyMC nonfinite transport fixed; fixed Fisher geometry failed its screen. |
 | `outer_selection_bps_vs_multinomial_v1` | WP3-1 | yes | Biased progressive selection confirmed at 1.745x over exact multinomial; default stands. |
 | `paper_adaptation_robust_v1` | post-WP22 | yes | `zero-wide` clears the bar (7/7 models, 1.036x DA) and becomes paper-adaptation v4. |
 | `paper_funnel_adaptive_v1` | WP7 | yes | Rule satisfied narrowly by A2 on bulk only; not recommended as a documented default. |
