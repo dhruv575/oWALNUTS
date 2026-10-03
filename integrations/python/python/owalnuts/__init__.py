@@ -837,7 +837,9 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
     """nutpie-style transport: PyMC's numba-compiled joint logp/grad wrapped
     in a ``numba.cfunc`` with the RawTarget ABI, verified against the ordinary
     compiled function before use. Shared-variable values are snapshotted at
-    compile time. Raises ``NotImplementedError`` when the PyTensor numba
+    compile time. Nonfinite log densities or gradients become recoverable
+    zero-density evaluations, matching the callable transport's default.
+    Raises ``NotImplementedError`` when the PyTensor numba
     backend cannot supply a wrappable jit function.
     """
     import ctypes
@@ -860,10 +862,21 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
         def raw(dim_, x_ptr, grad_ptr, _user):
             x = numba.carray(x_ptr, (n,))
             logp, grad = inner(x)
+            value = extract(logp)
             g = numba.carray(grad_ptr, (n,))
+            finite = np.isfinite(value)
             for i in range(n):
                 g[i] = grad[i]
-            return extract(logp)
+                if not np.isfinite(grad[i]):
+                    finite = False
+            if not finite:
+                # PyTensor may return a finite density but an overflowing
+                # derivative on a coarse proposal. Match callable transport's
+                # default recoverable policy without weakening the raw ABI.
+                for i in range(n):
+                    g[i] = 0.0
+                return -np.inf
+            return value
 
         return raw
 

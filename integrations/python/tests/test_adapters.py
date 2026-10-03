@@ -494,3 +494,50 @@ def test_version_and_printed_summary():
     assert "theta.1" in text and "theta.2" in text and text.splitlines()[-1].startswith("health:")
     assert repr(result).startswith("SampleResult(chains=4, draws=200, dim=2")
     assert owalnuts.format_summary(result.summary()) == text.rsplit("\n", 1)[0]
+
+
+def test_from_pymc_gil_free_recovers_nonfinite_density_and_gradient():
+    """Boundary derivatives and overflow must refine, not abort raw sampling."""
+    import ctypes
+    pytest.importorskip("numba")
+    pm = pytest.importorskip("pymc")
+    pt = pytest.importorskip("pytensor.tensor")
+    with pm.Model() as model:
+        x = pm.Flat("x", initval=np.float64(1.0))
+        pm.Potential("positive_density", -pt.sqrt(x)-pt.exp(x))
+    target, dim, _, _, _ = owalnuts.from_pymc(model, gil_free=True)
+    prototype = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_ssize_t,
+        ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_void_p)
+    caller = prototype(target.address)
+    def evaluate(value):
+        q = np.array([value], dtype=np.float64)
+        grad = np.full(1, 123.0)
+        logp = caller(dim, q.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                      grad.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), None)
+        return logp, grad
+    logp, grad = evaluate(1.0)
+    np.testing.assert_allclose(logp, -1.0-math.e, rtol=1e-12)
+    np.testing.assert_allclose(grad, [-0.5-math.e], rtol=1e-12)
+    # x=0 has finite logp=-1 but an infinite derivative. x<0 is outside
+    # the density's domain; x=1000 overflows its exponential.
+    for invalid in (0.0, -1.0, 1000.0):
+        logp, grad = evaluate(invalid)
+        assert logp == -np.inf
+        np.testing.assert_array_equal(grad, np.zeros(1))
+    result = owalnuts.sample(target, dim, init=np.full((2, 1), 0.1), chains=2,
+        warmup=80, draws=100, seed=19, threads=1,
+        tuning=owalnuts.Tuning(step_size=0.5, max_depth=6))
+    assert np.isfinite(result.samples).all()
+    assert (result.samples > 0).all()
+    assert sum(int(c["work_total"]["zero_density_evaluations"]) for c in result.chains) > 0
+
+
+def test_from_pymc_gil_free_still_rejects_invalid_initial_point():
+    pytest.importorskip("numba")
+    pm = pytest.importorskip("pymc")
+    pt = pytest.importorskip("pytensor.tensor")
+    with pm.Model() as model:
+        x = pm.Flat("x", initval=np.float64(0.0))
+        pm.Potential("boundary", -pt.sqrt(x)-pt.exp(x))
+    with pytest.raises(NotImplementedError, match="disagreed"):
+        owalnuts.from_pymc(model, gil_free=True)

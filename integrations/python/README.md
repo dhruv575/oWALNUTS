@@ -220,7 +220,10 @@ result = owalnuts.sample(target, 3, threads=4)   # real parallel chains
 PyMC models get the same transport with
 `owalnuts.from_pymc(model, gil_free=True)` (numba required; verified against
 the ordinary compiled path before use; shared-variable values are
-snapshotted at compile time). Measured on Eight Schools: ~31,000 min-bulk
+snapshotted at compile time). Nonfinite densities or gradients during proposals
+become recoverable zero-density evaluations, matching the callable adapter's
+default; an invalid initial point still fails verification.
+Measured on Eight Schools: ~31,000 min-bulk
 ESS/s at 4 threads — parity with nutpie — vs ~2,300 through the GIL path.
 The callback must be thread-safe, deterministic, write every gradient
 element on finite returns, and never raise across the ABI.
