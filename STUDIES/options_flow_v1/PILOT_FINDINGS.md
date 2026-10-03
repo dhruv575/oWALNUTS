@@ -134,6 +134,29 @@ Qualification still needs independent datasets, fixed precision rules,
 calibration, and a steady-state repeated-fit comparison so compiler startup
 cannot establish the whole advantage.
 
+## Interim breadth evidence (run still active)
+
+The frozen `breadth-v1` plan contains 48 prior-generated datasets and 60 fits,
+including 12 reference fits selected before execution. At the first independently
+audited three flow comparisons, every candidate and reference reached the fixed
+health and 2% endpoint-MCSE gates. Full cell-driver costs include lower tiers
+that did not reach precision:
+
+| Preselected flow fixture | AD selected draws/chain | NumPyro selected draws/chain | AD seconds | NumPyro seconds |
+|---|---:|---:|---:|---:|
+| 00 | 2000 | 2000 | 14.048 | 52.178 |
+| 05 | 4000 | 2000 | 41.136 | 55.549 |
+| 08 | 2000 | 2000 | 14.961 | 51.258 |
+
+The first-pair and flow-05/08 audit JSON files verify sources, executables,
+canonical dispersed starts, fixture identities, reported truth, precision gates
+and cumulative costs. These are cold full-restart workflows, not the compilation-
+reusing or adaptation-continuing Python workflows. The different selected tier
+on fixture 05 illustrates why fixed-draw speed alone would misstate useful
+performance. This interim subset cannot support an aggregate speed, reliability
+or calibration claim; all 60 intended cells remain in the final denominator.
+No source or binary is changed during this run.
+
 ## Design implications
 
 The existing public Python/JAX interface was built in an isolated Python 3.14
