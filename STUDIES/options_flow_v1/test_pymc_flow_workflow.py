@@ -11,6 +11,22 @@ else:
 
 @unittest.skipIf(workflow is None, 'Optional public PyMC environment unavailable')
 class FlowWorkflowTests(unittest.TestCase):
+    def test_block_prefix_values_and_automatic_gradients(self):
+        import pytensor
+        import pytensor.tensor as pt
+        for t in [1,8,33,128,1000]:
+            for rho in [.5,.95,.9999,0.,-.4,.01]:
+                z=pt.vector('z');mu=pt.scalar('mu');sig=pt.scalar('sig')
+                scalar=workflow.ar_path(z,mu,sig,np.float64(rho),t,0)
+                for block in [16,32]:
+                    blocked=workflow.ar_path(z,mu,sig,np.float64(rho),t,block)
+                    direction=np.random.default_rng(t).normal(size=t)
+                    outputs=[scalar,blocked]+pt.grad(pt.sum(scalar*direction),[z,mu,sig])+pt.grad(pt.sum(blocked*direction),[z,mu,sig])
+                    fn=pytensor.function([z,mu,sig],outputs,mode='FAST_COMPILE')
+                    actual=fn(np.random.default_rng(t+1).normal(size=t),-.8,.3)
+                    np.testing.assert_allclose(actual[0],actual[1],rtol=1e-11,atol=1e-11)
+                    for a,b in zip(actual[2:5],actual[5:]):np.testing.assert_allclose(a,b,rtol=1e-10,atol=1e-10)
+
     def data(self, t=8, g=2):
         rng = np.random.default_rng(612)
         return dict(y=rng.normal(size=(t,g)), x=rng.normal(size=(t,g)), nu=5., rho=.95)
@@ -62,19 +78,26 @@ class FlowWorkflowTests(unittest.TestCase):
     def test_parity_evidence_binding(self):
         import copy
         data=self.data(1,1)
-        report=dict(model='flow',arm='python-pymc-flow-noncentered',adapter_source_sha256='adapter',
+        report=dict(compilation={'block_size':0},model='flow',arm='python-pymc-flow-noncentered',adapter_source_sha256='adapter',
             extension_sha256='extension',source_sha256={'worker':'hash'},software={'python':'version'})
         evidence=dict(report,status='completed',parity={'passed':True,'cases':[{'value_error':0}]},
-                      compilation={'data_sha256':workflow.data_hash(data)})
+                      compilation={'data_sha256':workflow.data_hash(data),'block_size':0})
         self.assertTrue(workflow.validate_parity_evidence(evidence,report,data))
         for key in report:
             invalid=copy.deepcopy(evidence);invalid[key]='mismatch'
             with self.assertRaises(ValueError):workflow.validate_parity_evidence(invalid,report,data)
         for change in [{'status':'failed'},{'parity':{'passed':False}},
-                       {'parity':{'passed':True,'cases':[]}}, {'compilation':{'data_sha256':'wrong'}}]:
+                       {'parity':{'passed':True,'cases':[]}}, {'compilation':{'data_sha256':'wrong','block_size':0}},
+                       {'compilation':{'data_sha256':workflow.data_hash(data),'block_size':32}}]:
             invalid=copy.deepcopy(evidence);invalid.update(change)
             with self.assertRaises(ValueError):workflow.validate_parity_evidence(invalid,report,data)
         with self.assertRaises(ValueError):workflow.validate_parity_evidence({},report,data)
+
+    def test_invalid_block_sizes(self):
+        for t in [1,8]:
+            for rho in [0.,.95]:
+                for block in [True,False,1,64,16.0]:
+                    with self.assertRaises(ValueError):workflow.ar_path(None,None,None,rho,t,block)
 
     def test_rejects_bad_inputs(self):
         data=self.data()

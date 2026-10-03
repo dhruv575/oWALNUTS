@@ -43,7 +43,32 @@ def to_canonical(u,data):
     return q
 
 
-def build_model(data):
+def ar_path(z,mu,sig,rho,t,block_size=0):
+    if isinstance(block_size,bool) or not isinstance(block_size,(int,np.integer)) or block_size not in (0,16,32):raise ValueError('Block size must be 0, 16 or 32')
+    first=mu+sig*z[0]/np.sqrt(np.float64(1)-rho*rho)
+    if t==1:return first[None]
+    if block_size and .5 <= float(rho) < 1:
+        # Bound all inverse powers to at most 31; never inverse-power the full path.
+        if block_size not in (16,32):raise ValueError('Block size must be 16 or 32')
+        blocks=(t+block_size-1)//block_size;length=blocks*block_size
+        innovations=pt.concatenate([z[:1]/np.sqrt(np.float64(1)-rho*rho),z[1:],pt.zeros((length-t,),dtype='float64')])
+        power=np.power(rho,np.arange(block_size,dtype=np.float64))
+        within=pt.cumsum(innovations.reshape((blocks,block_size))/power[None,:],axis=1)*power[None,:]
+        if blocks>1:
+            ends,_=pytensor.scan(fn=lambda local,previous,r:local+r*previous,
+                sequences=[within[:,-1]],outputs_info=[pt.as_tensor_variable(np.float64(0))],
+                non_sequences=[pt.as_tensor_variable(np.float64(rho**block_size))],strict=True)
+            previous=pt.concatenate([pt.zeros((1,),dtype='float64'),ends[:-1]])
+        else:previous=pt.zeros((1,),dtype='float64')
+        centered=within+previous[:,None]*(rho*power)[None,:]
+        return mu+sig*centered.reshape((length,))[:t]
+    tail,updates=pytensor.scan(fn=lambda zi,previous,m,s,r:m+r*(previous-m)+s*zi,
+        sequences=[z[1:]],outputs_info=[first],non_sequences=[mu,sig,pt.as_tensor_variable(rho)],strict=True)
+    if updates:raise ValueError('Unexpected state updates in deterministic flow scan')
+    return pt.concatenate([first[None],tail])
+
+
+def build_model(data,block_size=0):
     frozen=snapshot(data);y,x=frozen['y'],frozen['x'];t,g=y.shape;k=4+2*g
     rho=frozen['rho'];nu=frozen['nu']
     provided=data.get('initial_positions')
@@ -56,15 +81,7 @@ def build_model(data):
     with pm.Model() as model:
         q=pm.Flat('q',shape=k+t,initval=initial)
         mu=q[2];sig=pt.exp(q[3]);z=q[k:]
-        first=mu+sig*z[0]/np.sqrt(np.float64(1)-rho*rho)
-        if t>1:
-            tail,updates=pytensor.scan(
-                fn=lambda zi,previous,m,s,r:m+r*(previous-m)+s*zi,
-                sequences=[z[1:]],outputs_info=[first],
-                non_sequences=[mu,sig,pt.as_tensor_variable(rho)],strict=True)
-            if updates:raise ValueError('Unexpected state updates in deterministic flow scan')
-            h=pt.concatenate([first[None],tail])
-        else:h=first[None]
+        h=ar_path(z,mu,sig,rho,t,block_size)
         lp=pt.sum(pm.logp(pm.Normal.dist(mu=np.array([0.,-1.,-1.,-1.5]),sigma=np.array([.5,.5,1.,.5])),q[:4]))
         lp+=pt.sum(pm.logp(pm.Normal.dist(mu=np.float64(0),sigma=np.float64(1)),q[4:]))
         location=np.float64(.3)*q[4:4+g]+(q[0]+pt.exp(q[1])*q[4+g:k])*x
@@ -73,15 +90,15 @@ def build_model(data):
     return model
 
 
-def compile_target(data):
-    start=time.perf_counter();model=build_model(data)
+def compile_target(data,block_size=0):
+    start=time.perf_counter();model=build_model(data,block_size)
     with warnings.catch_warnings():
         warnings.filterwarnings('error',message='.*object mode.*')
         target,dim,initial,names,unravel=owalnuts.from_pymc(model,gil_free=True)
     y,_=validate(data)
     if dim!=4+2*y.shape[1]+y.shape[0] or names!=['q']:raise ValueError('Unexpected PyMC flow layout')
     return target,dict(compile_seconds=time.perf_counter()-start,dimension=dim,names=names,
-        initial=initial.tolist(),data_sha256=data_hash(data),data_policy='immutable constants; rebuild target when data changes',
+        initial=initial.tolist(),block_size=block_size,data_sha256=data_hash(data),data_policy='immutable constants; rebuild target when data changes',
         compilation_scope='model construction and public adapter compilation combined; existing disk caches may be reused')
 
 
@@ -128,12 +145,16 @@ def validate_parity_evidence(evidence,report,data):
     """Fail closed: only completed passing evidence for this exact target build."""
     if not isinstance(evidence,dict) or evidence.get('status')!='completed':
         raise ValueError('Parity evidence must be a completed report')
+    if not isinstance(evidence.get('compilation'),dict) or not isinstance(report.get('compilation'),dict) or not isinstance(evidence.get('parity'),dict):
+        raise ValueError('Parity evidence metadata must be objects')
     if evidence.get('parity',{}).get('passed') is not True:
         raise ValueError('Parity evidence must contain an actual passing parity check')
     if not evidence['parity'].get('cases'):
         raise ValueError('Parity evidence contains no tested points')
     if evidence.get('compilation',{}).get('data_sha256')!=data_hash(data):
         raise ValueError('Parity evidence data hash mismatch')
+    if evidence.get('compilation',{}).get('block_size')!=report.get('compilation',{}).get('block_size') or 'block_size' not in evidence.get('compilation',{}):
+        raise ValueError('Parity evidence block size mismatch')
     for key in ['model','arm','adapter_source_sha256','extension_sha256','source_sha256','software']:
         if key not in evidence or key not in report or evidence[key]!=report[key]:
             raise ValueError('Parity evidence mismatch: '+key)
@@ -143,6 +164,7 @@ def validate_parity_evidence(evidence,report,data):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--fixture',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--seed',type=int,required=True);p.add_argument('--warmup',type=int,default=1000);p.add_argument('--draws',type=int,default=1000)
+    p.add_argument('--block-size',type=int,choices=[0,16,32],default=0)
     p.add_argument('--precision-names',nargs='+',default=['beta_bar','tau','mu_h','sigma_h','h_terminal'])
     p.add_argument('--expected-cpus',help='Expected inherited CPU list; enforce externally with hardware_control.py')
     p.add_argument('--skip-runtime-parity',action='store_true',help='Production timing only: requires --parity-evidence for prevalidated source/data')
@@ -158,7 +180,7 @@ def main():
       extension_sha256=hashlib.sha256(Path(extension.__file__).read_bytes()).hexdigest(),
       adapter_source_sha256=hashlib.sha256(Path(owalnuts.__file__).read_bytes()).hexdigest(),
       precision_plan=dict(tiers=a.tiers,threshold=.02,names=a.precision_names,forecast_scope='all reported rows; required',policy='Compile once; full warmup and retained restart per tier; all attempts charged') if a.tiers else None,
-      settings=dict(warmup=a.warmup,draws=a.draws,chains=a.chains,threads=1,chain_execution='sequential'),
+      settings=dict(block_size=a.block_size,warmup=a.warmup,draws=a.draws,chains=a.chains,threads=1,chain_execution='sequential'),
       software=dict(python=sys.version,pymc=pm.__version__,pytensor=pytensor.__version__,numba=numba.__version__,numpy=np.__version__,algorithm_revision=owalnuts.ALGORITHM_REVISION),
       source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in Path(__file__).parent.glob('*.py')})
     report_path=a.out/'python-pymc-flow-report.json';report_path.write_text(json.dumps(report,indent=2))
@@ -167,7 +189,7 @@ def main():
         from hardware_control import get_affinity,parse_cpus
         realized=list(get_affinity());report['hardware_control']=dict(realized_cpus=realized,enforcement='External wrapper required; worker checks expected inherited mask',expected_cpus=a.expected_cpus)
         if a.expected_cpus is not None and sorted(realized)!=sorted(parse_cpus(a.expected_cpus)):raise ValueError('Inherited CPU affinity differs from expected mask')
-        target,metadata=compile_target(data);report['compilation']=metadata
+        target,metadata=compile_target(data,a.block_size);report['compilation']=metadata
         starts=canonical_starts(data,a.chains)
         sampling_starts=to_noncentered(starts,data)
         points=[sampling_starts[0],sampling_starts[-1],sampling_starts[0]+np.random.default_rng(818).normal(0,.01,len(starts[0]))]
