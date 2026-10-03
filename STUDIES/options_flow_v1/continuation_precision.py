@@ -1,0 +1,114 @@
+"""Exploratory time to interval precision with one NumPyro warmup and continuation.
+
+Fixed-size retained batches reuse compilation and frozen adaptation. Every
+batch, diagnostic check and serialization is charged. This is a different
+execution policy from precision_tiers.py and must be labeled as such.
+"""
+import time
+STARTED = time.perf_counter()
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import traceback
+
+import numpy as np
+import jax
+import jax.numpy as jnp
+from jax.scipy.special import gammaln
+from reference_continuation import ContinuedReference
+from precision_tiers import precision_screen
+from run import clean
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--fixture', type=Path, required=True)
+    p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--model', choices=['flow','local_level'], required=True)
+    p.add_argument('--seed', type=int, required=True)
+    p.add_argument('--warmup', type=int, default=1000)
+    p.add_argument('--chains', type=int, default=4)
+    p.add_argument('--batch-size', type=int, default=1000)
+    p.add_argument('--tiers', type=int, nargs='+', default=[1000,2000,4000,8000])
+    a = p.parse_args()
+    if (min(a.warmup,a.chains,a.batch_size)<1 or not a.tiers
+            or any(v<a.batch_size or v%a.batch_size for v in a.tiers)
+            or any(b<=c for c,b in zip(a.tiers,a.tiers[1:]))):
+        p.error('Positive settings and increasing tiers divisible by batch size required')
+    a.out.mkdir(parents=True, exist_ok=False)
+    fixture = json.loads(a.fixture.read_text())
+    data = fixture['data']
+    plan = dict(model=a.model, seed=a.seed, warmup=a.warmup, chains=a.chains,
+        batch_size=a.batch_size, tiers=a.tiers, relative_mcse=.02,
+        fixture_sha256=hashlib.sha256(a.fixture.read_bytes()).hexdigest(),
+        source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest()
+                       for f in Path(__file__).parent.glob('*.py')},
+        execution='One full warmup; fixed retained batches continue chain state with frozen step size and metric',
+        phase='exploratory', qualified=False)
+    (a.out/'plan.json').write_text(json.dumps(plan, indent=2))
+    report_path = a.out/'numpyro-continuation-report.json'
+    report_path.write_text(json.dumps(dict(status='running', phase='exploratory', plan=plan)))
+    attempts = []
+    try:
+        if a.model == 'flow':
+            from model import validate
+            from flow_starts import canonical_starts, to_noncentered
+            from optimized_reference import noncentered_log_density, canonical_noncentered
+            from evaluate import summarize as evaluate
+            validate(data)
+            initial = canonical_starts(data,a.chains)
+            starts = to_noncentered(initial,data)
+            potential = lambda q: -noncentered_log_density(q,data)
+            canonical = lambda q: np.asarray(jax.vmap(jax.vmap(lambda v:canonical_noncentered(v,data)))(q))
+        else:
+            from local_level import validate,log_density
+            from run_local_level import evaluate
+            validate(data)
+            initial = np.asarray([np.r_[np.asarray(data['y'])+(c-(a.chains-1)/2)*.02,
+                np.log(.08)+(c-(a.chains-1)/2)*.02,np.log(.12)-(c-(a.chains-1)/2)*.02]
+                for c in range(a.chains)])
+            starts = initial.copy()
+            potential = lambda q: -log_density(q,data,jnp,gammaln)
+            canonical = lambda q: q
+        sampler = ContinuedReference(potential, starts, a.seed, a.warmup,a.batch_size)
+        sampler.adapt()
+        passed = False
+        for tier in a.tiers:
+            while len(sampler.chunks)*a.batch_size < tier:
+                sampler.append()
+            q = canonical(sampler.samples)
+            evaluation = evaluate(q,fixture,a.seed+130000)
+            report = dict(arm='numpyro-continuation',status='completed',phase='exploratory',
+                qualified=False,seed=a.seed,settings=dict(warmup=a.warmup,draws=tier,chains=a.chains),
+                fixture_sha256=plan['fixture_sha256'],source_sha256=plan['source_sha256'],
+                evaluation=evaluation,retained_divergences=sampler.divergences,
+                healthy=evaluation['computational_screen_pass'] and sampler.divergences==0,
+                warmup_seconds=sampler.warmup_seconds,checkpoints=sampler.checkpoints.copy(),
+                warmup_cpu_seconds=sampler.warmup_cpu_seconds,
+                end_to_end_seconds=time.perf_counter()-STARTED)
+            screen = precision_screen(report)
+            (a.out/f'draws-{tier}-report.json').write_text(json.dumps(clean(report),indent=2,allow_nan=False))
+            attempts.append(dict(draws=tier,screen=screen,
+                cumulative_seconds_including_tier_report=time.perf_counter()-STARTED))
+            print(tier,screen['pass'],screen['max_endpoint_mcse_over_width'],flush=True)
+            if screen['pass']:
+                passed=True
+                break
+        (a.out/'numpyro-continuation-raw.json').write_text(json.dumps(clean(dict(
+            canonical_draws=q.tolist(),initial_positions=initial.tolist(),
+            seed=a.seed,checkpoints=sampler.checkpoints)),allow_nan=False))
+        report.update(plan=plan,attempts=attempts,precision_pass=passed,
+                      end_to_end_seconds=time.perf_counter()-STARTED)
+    except Exception as exc:
+        report=dict(status='failed',phase='exploratory',qualified=False,plan=plan,
+                    error=str(exc),traceback=traceback.format_exc(),attempts=attempts,
+                    end_to_end_seconds=time.perf_counter()-STARTED)
+    report_path.write_text(json.dumps(clean(report),indent=2,allow_nan=False))
+    (a.out/'invocation-timing.json').write_text(json.dumps(dict(
+        seconds_including_imports_and_output=time.perf_counter()-STARTED,
+        precision_pass=report.get('precision_pass',False),qualified=False)))
+    return 0 if report.get('precision_pass') else 2
+
+
+if __name__ == '__main__': raise SystemExit(main())

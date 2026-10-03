@@ -11,6 +11,7 @@ from jax.scipy.special import gammaln
 import numpyro
 from numpyro.infer import MCMC,NUTS
 from model import log_density,validate
+from flow_starts import canonical_starts,to_noncentered
 
 
 def canonical_noncentered(q,data):
@@ -36,11 +37,12 @@ def noncentered_log_density(q,data):
 def run(data,seed,warmup,draws,chains,starts=None,noncentered=False):
     validate(data); g=len(data['y'][0]); t=len(data['y']); dim=4+2*g+t
     if starts is None:
-        starts=np.tile(np.r_[0.,-1.,-1.,-1.5,np.zeros(2*g),np.full(t,-1.)],(chains,1))
+        starts=canonical_starts(data,chains)
     def canonical(q):
         return canonical_noncentered(q,data) if noncentered else q
+    initial_positions=np.asarray(starts).copy()
     if noncentered:
-        starts=starts.copy();starts[:,4+2*g:]=0.
+        starts=to_noncentered(starts,data)
     def potential(q):
         return -noncentered_log_density(q,data) if noncentered else -log_density(q,data,jnp,gammaln)
     kernel=NUTS(potential_fn=potential,target_accept_prob=.8,max_tree_depth=10)
@@ -53,7 +55,7 @@ def run(data,seed,warmup,draws,chains,starts=None,noncentered=False):
     samples=mcmc.get_samples(group_by_chain=True); jax.block_until_ready(samples)
     if noncentered:samples=jax.vmap(jax.vmap(canonical))(samples);jax.block_until_ready(samples)
     sample_seconds=time.perf_counter()-ts; extra=mcmc.get_extra_fields(group_by_chain=True)
-    return {'arm':'numpyro-noncentered' if noncentered else 'numpyro','seed':seed,'chains':[{'draws':np.asarray(samples[c]).tolist(),
+    return {'arm':'numpyro-noncentered' if noncentered else 'numpyro','seed':seed,'initial_positions':initial_positions.tolist(),'chains':[{'draws':np.asarray(samples[c]).tolist(),
             'retained_divergences':int(np.asarray(extra['diverging'][c]).sum()),
             'retained_leapfrogs':int(np.asarray(extra['num_steps'][c]).sum()),'max_depth_rate':float(np.mean(np.asarray(extra['num_steps'][c]) >= 2**10-1))} for c in range(chains)],
             'wall_seconds':time.perf_counter()-start,'timing_seconds':{'density_compilation':None,

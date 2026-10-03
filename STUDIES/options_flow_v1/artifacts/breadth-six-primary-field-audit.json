@@ -1,0 +1,40 @@
+{
+  "checks": [
+    {
+      "model": "flow",
+      "path": "artifacts\\dynamic-matched-autodiff\\0\\autodiff-noncentered-report.json",
+      "six_primary_names": [
+        "beta_bar",
+        "tau",
+        "mu_h",
+        "sigma_h",
+        "h_terminal",
+        "next_observed_y"
+      ],
+      "truth_or_observed_field_gaps": [],
+      "report_phase": "exploratory",
+      "healthy": true
+    },
+    {
+      "model": "local_level",
+      "path": "artifacts\\local-confirmatory-exploratory-99062003-autodiff\\draws-4000\\autodiff-report.json",
+      "six_primary_names": [
+        "h_initial",
+        "h_terminal",
+        "h_mean",
+        "sigma_obs",
+        "sigma_rw",
+        "next_observed_log_price"
+      ],
+      "truth_or_observed_field_gaps": [],
+      "report_phase": "exploratory",
+      "healthy": true
+    }
+  ],
+  "qualified": false,
+  "remaining_semantic_gaps": [
+    "Flow predictive output currently conditions on generated future x, whereas proposed qualification review selected x_next=0; finalize estimand before freeze.",
+    "Current reports are exploratory and do not bind protocol_sha256 or declare prior_predictive; fixture plus frozen manifest must supply checked generator identity.",
+    "Coverage fields alone do not establish rank SBC, independence, or calibrated endpoint MCSE."
+  ]
+}

@@ -5,6 +5,19 @@ Recommendations below are hypotheses, not qualified improvements. The relevant
 comparison is time to the same healthy interval precision against the optimized
 NumPyro implementation, including construction/adaptation overhead.
 
+### Subsequent exploratory result: fixed Fisher screen
+
+The six-arm T=128 screen in `artifacts/geometry-screen-128` subsequently tested
+native, autodiff and NumPyro fixed Fisher coordinates, with and without mean
+shear. All six failed the computational health screen: minimum bulk ESS was
+approximately 227–280, dominated by the innovation-scale direction, despite zero
+reported divergences. For example, native Fisher-shear reached R-hat 1.0062 but
+bulk ESS 275; autodiff Fisher-shear reached R-hat 1.0132 and bulk ESS 261. These
+results do not support promoting either fixed Fisher candidate. A demanding
+T=1,000 sampling comparison has not been established by this short-path screen.
+The construction and checks below remain useful as a documented negative
+experiment; they are not evidence of a faster usable workflow.
+
 ## The geometry we can exploit exactly
 
 The centered layout is `g=(beta_bar,log_tau,mu_h,log_sigma_h,z_alpha,z_beta)`

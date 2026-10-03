@@ -90,6 +90,7 @@ mod tests {
                     x: vec![vec![0.8, -0.2]; 7],
                     nu: 5.0,
                     rho: 0.95,
+                    initial_positions: None,
                 },
                 nc,
             };

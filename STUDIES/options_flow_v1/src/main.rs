@@ -1,6 +1,7 @@
 //! Exact normalized hierarchical Student-t stochastic-volatility target.
 mod bench_eval;
 mod flow_autodiff;
+mod flow_geometry;
 use owalnuts::sampler::{Limits, Metric, Sampler, Target, TargetError};
 use serde::Deserialize;
 use serde_json::json;
@@ -12,6 +13,8 @@ struct Data {
     x: Vec<Vec<f64>>,
     nu: f64,
     rho: f64,
+    #[serde(default)]
+    initial_positions: Option<Vec<Vec<f64>>>,
 }
 impl Data {
     fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -30,6 +33,17 @@ impl Data {
         {
             return Err("invalid rectangular finite data, nu>2 and |rho|<1 required".into());
         }
+        if self.initial_positions.as_ref().is_some_and(|starts| {
+            starts.is_empty()
+                || starts.iter().any(|q| {
+                    q.len() != 4 + 2 * g + self.y.len() || q.iter().any(|v| !v.is_finite())
+                })
+        }) {
+            return Err(
+                "initial_positions must be a nonempty finite canonical chain-by-dimension matrix"
+                    .into(),
+            );
+        }
         Ok(())
     }
 }
@@ -45,6 +59,26 @@ fn normal(v: f64, m: f64, s: f64) -> (f64, f64) {
     )
 }
 impl Model {
+    fn initial_positions(&self, chains: usize) -> Result<Vec<Vec<f64>>, TargetError> {
+        if chains == 0 {
+            return Err(TargetError::new("positive chain count required"));
+        }
+        if let Some(starts) = &self.data.initial_positions {
+            if starts.len() != chains {
+                return Err(TargetError::new(
+                    "initial_positions row count must match chains",
+                ));
+            }
+            return Ok(starts.clone());
+        }
+        let k = 4 + 2 * self.data.y[0].len();
+        let mut q = vec![0.0; self.dimension()];
+        q[1] = -1.0;
+        q[2] = -1.0;
+        q[3] = -1.5;
+        q[k..].fill(-1.0);
+        Ok(vec![q; chains])
+    }
     fn sampling_coordinates(&self, c: &[f64]) -> Vec<f64> {
         let mut q = c.to_vec();
         if self.nc {
@@ -176,6 +210,107 @@ impl Target for Model {
         Ok(lp)
     }
 }
+enum Backend<'a> {
+    Hand(&'a Model),
+    Autodiff(owalnuts_autodiff::AutodiffTarget<flow_autodiff::Density<'a>>),
+}
+impl Target for Backend<'_> {
+    fn dimension(&self) -> usize {
+        match self {
+            Self::Hand(m) => m.dimension(),
+            Self::Autodiff(m) => m.dimension(),
+        }
+    }
+    fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+        match self {
+            Self::Hand(m) => m.log_density_gradient(q, g),
+            Self::Autodiff(m) => m.log_density_gradient(q, g),
+        }
+    }
+}
+struct FlowTarget<'a> {
+    model: &'a Model,
+    backend: Backend<'a>,
+    geometry: Option<flow_geometry::FixedGeometry>,
+}
+impl<'a> FlowTarget<'a> {
+    fn new(model: &'a Model, arm: &str) -> Result<Self, TargetError> {
+        if !matches!(
+            arm,
+            "diagonal"
+                | "dense"
+                | "noncentered"
+                | "autodiff"
+                | "autodiff-dense"
+                | "autodiff-noncentered"
+                | "fisher"
+                | "fisher-shear"
+                | "autodiff-fisher"
+                | "autodiff-fisher-shear"
+        ) {
+            return Err(TargetError::new("unknown flow arm"));
+        }
+        let geometry = if arm.contains("fisher") {
+            Some(flow_geometry::FixedGeometry::new(
+                model.data.y.len(),
+                model.data.y[0].len(),
+                model.data.rho,
+                model.data.nu,
+                arm.ends_with("shear"),
+            )?)
+        } else {
+            None
+        };
+        if geometry.is_some() && model.nc {
+            return Err(TargetError::new(
+                "Fisher transform requires centered base model",
+            ));
+        }
+        let backend = if arm.starts_with("autodiff") {
+            Backend::Autodiff(flow_autodiff::target(model))
+        } else {
+            Backend::Hand(model)
+        };
+        Ok(Self {
+            model,
+            backend,
+            geometry,
+        })
+    }
+    fn canonical(&self, q: &[f64]) -> Vec<f64> {
+        match &self.geometry {
+            Some(g) => g.canonical(q),
+            None => self.model.canonical(q),
+        }
+    }
+    fn sampling_coordinates(&self, q: &[f64]) -> Vec<f64> {
+        match &self.geometry {
+            Some(g) => g.transformed(q),
+            None => self.model.sampling_coordinates(q),
+        }
+    }
+    fn geometry_metadata(&self) -> serde_json::Value {
+        self.geometry
+            .as_ref()
+            .map(|g| g.metadata())
+            .unwrap_or(serde_json::Value::Null)
+    }
+}
+impl Target for FlowTarget<'_> {
+    fn dimension(&self) -> usize {
+        self.model.dimension()
+    }
+    fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+        match &self.geometry {
+            Some(geometry) => flow_geometry::AffineTarget {
+                base: &self.backend,
+                geometry,
+            }
+            .log_density_gradient(q, g),
+            None => self.backend.log_density_gradient(q, g),
+        }
+    }
+}
 fn main() -> Result<(), Box<dyn Error>> {
     let a: Vec<String> = env::args().skip(1).collect();
     if a.first().map(String::as_str) == Some("--bench-eval") {
@@ -188,21 +323,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         let data: Data = serde_json::from_slice(&fs::read(&a[1])?)?;
         data.validate()?;
         let arm = &a[2];
-        if !matches!(
-            arm.as_str(),
-            "diagonal"
-                | "dense"
-                | "noncentered"
-                | "autodiff"
-                | "autodiff-dense"
-                | "autodiff-noncentered"
-        ) {
-            return Err("unknown benchmark arm".into());
-        }
         let model = Model {
             data,
             nc: arm.ends_with("noncentered"),
         };
+        let target = FlowTarget::new(&model, arm)?;
         let k = 4 + 2 * model.data.y[0].len();
         let canonical: Vec<Vec<f64>> = if let Some(path) = a.get(5) {
             serde_json::from_slice(&fs::read(path)?)?
@@ -219,14 +344,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let positions: Vec<_> = canonical
             .iter()
-            .map(|q| model.sampling_coordinates(q))
+            .map(|q| target.sampling_coordinates(q))
             .collect();
         let iterations = a[3].parse()?;
-        let mut result = if arm.starts_with("autodiff") {
-            bench_eval::benchmark(&flow_autodiff::target(&model), &positions, iterations, true)?
-        } else {
-            bench_eval::benchmark(&model, &positions, iterations, false)?
-        };
+        let mut result =
+            bench_eval::benchmark(&target, &positions, iterations, arm.starts_with("autodiff"))?;
+        result["geometry"] = target.geometry_metadata();
         result["arm"] = json!(arm);
         result["model"] = json!("options_flow");
         result["position_source"] = json!(
@@ -246,12 +369,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
         let q: Vec<f64> = serde_json::from_slice(&fs::read(a.get(2).ok_or("missing q")?)?)?;
         let mut grad = vec![0.0; model.dimension()];
-        let lp = if a.get(3).is_some_and(|s| s.starts_with("autodiff")) {
-            flow_autodiff::target(&model).log_density_gradient(&q, &mut grad)?
-        } else {
-            model.log_density_gradient(&q, &mut grad)?
-        };
-        println!("{}", json!({"logp":lp,"gradient":grad}));
+        let target = FlowTarget::new(&model, a.get(3).map(String::as_str).unwrap_or("diagonal"))?;
+        let lp = target.log_density_gradient(&q, &mut grad)?;
+        println!(
+            "{}",
+            json!({"logp":lp,"gradient":grad,"geometry":target.geometry_metadata()})
+        );
         return Ok(());
     }
     if a.len() < 2 {
@@ -259,7 +382,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let arm = a.get(2).map(String::as_str).unwrap_or("diagonal");
     let metric = match arm {
-        "diagonal" | "noncentered" | "autodiff" | "autodiff-noncentered" => Metric::diagonal(),
+        "diagonal"
+        | "noncentered"
+        | "autodiff"
+        | "autodiff-noncentered"
+        | "fisher"
+        | "fisher-shear"
+        | "autodiff-fisher"
+        | "autodiff-fisher-shear" => Metric::diagonal(),
         "dense" | "autodiff-dense" => Metric::dense(),
         _ => return Err("unknown arm".into()),
     };
@@ -285,15 +415,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         data,
         nc: arm.ends_with("noncentered"),
     };
-    let k = 4 + 2 * model.data.y[0].len();
-    let mut initial = vec![0.0; model.dimension()];
-    initial[1] = -1.0;
-    initial[2] = -1.0;
-    initial[3] = -1.5;
-    if !model.nc {
-        initial[k..].fill(-1.0);
-    }
-    let starts = vec![initial; chains];
+    let setup_started = Instant::now();
+    let target = FlowTarget::new(&model, arm)?;
+    let target_setup_seconds = setup_started.elapsed().as_secs_f64();
+    let canonical_starts = model.initial_positions(chains)?;
+    let starts: Vec<_> = canonical_starts
+        .iter()
+        .map(|q| target.sampling_coordinates(q))
+        .collect();
     let start = Instant::now();
     let sampler = Sampler::new()
         .warmup(warmup)
@@ -303,20 +432,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .seed(seed)
         .metric(metric)
         .limits(Limits::new().admit_worst_case());
-    let p = if arm.starts_with("autodiff") {
-        sampler.run(&flow_autodiff::target(&model), &starts)?
-    } else {
-        sampler.run(&model, &starts)?
-    };
+    let p = sampler.run(&target, &starts)?;
     let wall_seconds = start.elapsed().as_secs_f64();
     let output:Vec<_>=p.chains().iter().map(|c| {
         let t=c.telemetry();let r=t.retained();
-        json!({"draws":(0..draws).map(|i|model.canonical(c.sample(i).unwrap())).collect::<Vec<_>>(),"warmup_calls":t.discarded().target_calls_total(),"retained_calls":r.target_calls_total(),"retained_divergences":r.divergences(),"retained_rc_stops":r.reverse_coarser_stops(),"depths":c.diagnostics().iter().map(|d|d.depth()).collect::<Vec<_>>(),"final_step":c.metadata().tuning().step_size()})
+        json!({"draws":(0..draws).map(|i|target.canonical(c.sample(i).unwrap())).collect::<Vec<_>>(),"warmup_calls":t.discarded().target_calls_total(),"retained_calls":r.target_calls_total(),"retained_divergences":r.divergences(),"retained_rc_stops":r.reverse_coarser_stops(),"depths":c.diagnostics().iter().map(|d|d.depth()).collect::<Vec<_>>(),"final_step":c.metadata().tuning().step_size()})
     }).collect();
     fs::write(
         &a[1],
         serde_json::to_vec(
-            &json!({"schema_version":1,"sampler":"owalnuts","threads":1,"arm":arm,"seed":seed,"warmup":warmup,"draws":draws,"wall_seconds":wall_seconds,"coordinates":"centered","initial_positions":starts.iter().map(|q|model.canonical(q)).collect::<Vec<_>>(),"chains":output}),
+            &json!({"schema_version":1,"sampler":"owalnuts","threads":1,"arm":arm,"seed":seed,"warmup":warmup,"draws":draws,"wall_seconds":wall_seconds,"target_setup_seconds":target_setup_seconds,"geometry":target.geometry_metadata(),"coordinates":"centered","initial_positions":canonical_starts,"chains":output}),
         )?,
     )?;
     Ok(())
@@ -332,6 +457,7 @@ mod tests {
                 x: vec![vec![0.8, -0.2]; 7],
                 nu: 5.0,
                 rho: 0.95,
+                initial_positions: None,
             },
             nc,
         }
@@ -382,5 +508,53 @@ mod tests {
         let mut m = model(false);
         m.data.x.pop();
         assert!(m.data.validate().is_err());
+    }
+    #[test]
+    fn supplied_canonical_starts_survive_every_transform() {
+        for arm in [
+            "diagonal",
+            "dense",
+            "noncentered",
+            "autodiff",
+            "autodiff-dense",
+            "autodiff-noncentered",
+            "fisher",
+            "fisher-shear",
+            "autodiff-fisher",
+            "autodiff-fisher-shear",
+        ] {
+            let mut m = model(arm.ends_with("noncentered"));
+            let starts: Vec<Vec<f64>> = (0..3)
+                .map(|chain| {
+                    (0..m.dimension())
+                        .map(|i| -0.7 + ((i + chain * 3) as f64 * 0.21).sin())
+                        .collect()
+                })
+                .collect();
+            m.data.initial_positions = Some(starts.clone());
+            m.data.validate().unwrap();
+            assert_eq!(m.initial_positions(3).unwrap(), starts);
+            assert!(m.initial_positions(4).is_err());
+            let target = FlowTarget::new(&m, arm).unwrap();
+            for q in &starts {
+                let restored = target.canonical(&target.sampling_coordinates(q));
+                for (a, b) in q.iter().zip(restored) {
+                    assert!((a - b).abs() < 1e-12, "arm {arm}");
+                }
+            }
+        }
+    }
+    #[test]
+    fn rejects_invalid_initial_matrix() {
+        let mut m = model(false);
+        for starts in [vec![], vec![vec![0.0]], vec![vec![f64::NAN; m.dimension()]]] {
+            m.data.initial_positions = Some(starts);
+            assert!(m.data.validate().is_err());
+        }
+        m.data.initial_positions = None;
+        let starts = m.initial_positions(4).unwrap();
+        assert_eq!(starts.len(), 4);
+        assert_eq!(starts[0][..4], [0.0, -1.0, -1.0, -1.5]);
+        assert!(m.initial_positions(0).is_err());
     }
 }

@@ -19,7 +19,7 @@ def clean(value):
 
 
 def execute(fixture_path,out,arm,exe,seed,warmup,draws,chains,timeout,require_attestation=False,cpus=None,reference_script=None):
-    if arm not in ('numpyro','numpyro-noncentered','diagonal','dense','noncentered','autodiff','autodiff-noncentered','autodiff-dense'):
+    if arm not in ('numpyro','numpyro-noncentered','diagonal','dense','noncentered','autodiff','autodiff-noncentered','autodiff-dense','numpyro-fisher','numpyro-fisher-shear','fisher','fisher-shear','autodiff-fisher','autodiff-fisher-shear'):
         raise ValueError('Unknown arm')
     if min(warmup,draws,chains)<1 or timeout<=0:
         raise ValueError('Positive iteration/chain counts and timeout required')
@@ -32,13 +32,14 @@ def execute(fixture_path,out,arm,exe,seed,warmup,draws,chains,timeout,require_at
             raise ValueError('Output directory already belongs to different data')
     else:
         with data_path.open('x',encoding='utf-8') as handle:json.dump(fixture['data'],handle,allow_nan=False)
-    command=([sys.executable,str(reference_script or HERE/'reference.py'),str(data_path),str(raw_path),str(seed),str(warmup),str(draws),str(chains)]+(['noncentered'] if arm=='numpyro-noncentered' else [])
+    chosen_reference=Path(reference_script) if reference_script else HERE/('geometry_reference.py' if arm.startswith('numpyro-fisher') else 'reference.py')
+    command=([sys.executable,str(chosen_reference),str(data_path),str(raw_path),str(seed),str(warmup),str(draws),str(chains)]+([arm.removeprefix('numpyro-')] if arm.startswith('numpyro-') else [])
              if arm.startswith('numpyro') else [str(exe),str(data_path),str(raw_path),arm,str(seed),str(warmup),str(draws),str(chains)])
     affinity_path=out/f'{arm}-affinity.json'
     if cpus is not None:command=wrapper_command(command,cpus,affinity_path,timeout)
     report={'arm':arm,'seed':seed,'phase':'exploratory','fixture_sha256':hashlib.sha256(Path(fixture_path).read_bytes()).hexdigest(),
             'settings':{'warmup':warmup,'draws':draws,'chains':chains,'chain_execution':'sequential','cpus':cpus},'command':command,'status':'failed'}
-    report['reference_implementation']=str(reference_script or HERE/'reference.py') if arm.startswith('numpyro') else None
+    report['reference_implementation']=str(chosen_reference) if arm.startswith('numpyro') else None
     report['environment']={'python':platform.python_version(),'platform':platform.platform(),'thread_environment':{k:os.environ.get(k) for k in ['OMP_NUM_THREADS','MKL_NUM_THREADS','OPENBLAS_NUM_THREADS','XLA_FLAGS']}}
     source_files=sorted(HERE.glob('*.py'))+sorted((HERE/'src').rglob('*.rs'))+[HERE/'Cargo.toml',HERE/'Cargo.lock']
     report['source_hash_note']='Current sources at launch, not attestation that existing binary was built from them.'

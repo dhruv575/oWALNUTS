@@ -43,11 +43,16 @@ covariates. Future covariates must either be available at forecast issuance,
 declared scenarios, or integrated over a forecast model. Realized future flow
 cannot silently be used as a tradable forecast input.
 
+Parameter intervals here are Bayesian posterior credible intervals. Future
+observation intervals additionally integrate latent evolution and observation
+noise. Neither is automatically a frequentist confidence interval: repeated-data
+coverage and real held-out performance are separate empirical checks.
+
 ## Application connection
 
 The sibling `optionsWALNUTS` application contains an option-price local-level
-model and chain-snapshot ingestion. It is being inspected read-only to identify
-an additional application fixture. Option-chain snapshots, minute prices, and
+model and chain-snapshot ingestion. Read-only inspection supplied a separate
+local-level fixture with an independently checked implementation. Option-chain snapshots, minute prices, and
 signed order flow are different datasets. A real options-flow validation track
 requires timestamped observations with documented information availability;
 neither the synthetic generator nor the sibling application's name proves that
@@ -130,6 +135,25 @@ planning calculation, not an achieved calibration result; joint all-functional
 power and the selected calibration scope still need a frozen decision.
 
 ## Writing a density-only model efficiently
+
+The public Python routes are measured separately. `python_callback.py` uses
+`owalnuts.from_jax` for the flow and local models; `pymc_workflow.py` expresses
+the local model in PyMC and uses its generated gradients through the existing
+Numba cfunc adapter. Run them in an environment containing the source-built
+Python extension and their optional dependencies. PyMC's `--tiers` option
+compiles the target once and charges every full sampling restart. The independent
+`continuation_precision.py` reference instead reuses frozen NumPyro adaptation
+across retained batches. These execution policies are explicit in results;
+neither failed precision check becomes a speed win.
+
+`breadth.py plan spec.json output` prepares 24 independent prior-generated
+T=128 datasets per model, with optional six preselected reference checks per
+model. It launches no sampling. Flow fixtures require independent dataset,
+chain and initialization seeds and contain four dispersed canonical starts.
+`breadth.py run output` executes the frozen exploratory plan;
+`breadth.py summarize output` retains missing and failed cells in the expected
+denominator. Source and binary changes require a new plan. This small screen
+checks feasibility and failure modes, not powered calibration equivalence.
 
 Start with `src/flow_autodiff.rs` or `src/local_autodiff.rs`: implement the
 generic `Model::log_density<S: Scalar>` and wrap it with `AutodiffTarget`.

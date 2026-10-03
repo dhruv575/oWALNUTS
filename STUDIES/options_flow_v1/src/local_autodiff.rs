@@ -23,8 +23,8 @@ impl owalnuts_autodiff::Model for Density<'_> {
             let first = q[0] * 1.5 + data.anchor;
             let mut innovations = Vec::with_capacity(n);
             innovations.push(first);
-            for t in 1..n {
-                innovations.push(rw * q[t] * data.dt[t - 1].sqrt());
+            for (&innovation, &dt) in q[1..n].iter().zip(&data.dt) {
+                innovations.push(rw * innovation * dt.sqrt());
             }
             cumsum(&innovations)
         } else {

@@ -136,6 +136,54 @@ cannot establish the whole advantage.
 
 ## Design implications
 
+The existing public Python/JAX interface was built in an isolated Python 3.14
+environment with the pinned Rust toolchain. Its adapter test and two study
+target/coordinate checks pass. A T=128 local-level pilot using the same fixture,
+seed 99062002, four chains and 1,000/1,000 iterations passes health diagnostics.
+Its CPU-0 wrapper time is 13.062 seconds, including 0.241 seconds for the first
+density call and 10.088 seconds of sampling over 130,833 target calls
+(`python-jax-local-99062002`). This is close to the earlier NumPyro cold timing;
+the much faster Rust generic-autodiff timing cannot be generalized to the
+Python/JAX callback path. Extension binary identity is recorded, but this pilot
+does not claim build attestation or equal interval precision. Existing compiled
+Python model adapters are a separate adoption investigation.
+
+That investigation found a concrete bug in the existing PyMC compiled adapter:
+PyTensor can produce a finite log density with a nonfinite gradient on a coarse
+proposal. The raw callback previously aborted; it now returns the established
+recoverable zero-density signal, matching the ordinary callable default. Focused
+tests cover invalid-domain proposals, derivative overflow, unchanged finite
+values, recoverable sampling and invalid initial points. This is a Python adapter
+fix; the raw ABI and sampler kernel are unchanged.
+
+The PyMC local model uses automatically generated derivatives. Explicit float64
+distribution constants restore normalized-density/gradient agreement to roughly
+6.3e-13/1.6e-13 on the checked points. The fixed public path samples 130,558
+target evaluations in 0.636 seconds, but that short pilot misses convergence
+and is not an eligible usable-result timing.
+
+A separate predeclared exploratory workflow pair (`best-workflow-99062004-plan.json`)
+gives each framework a practical execution policy: NumPyro continues fixed-size
+retained batches after one warmup; PyMC/oWALNUTS compiles its target once and
+charges every full sampling restart. Continuation reproduces uninterrupted
+samples bit-for-bit in tests and keeps step size and metric fixed. On the same
+local fixture and fresh seed 99062004, both finish healthy but miss the 2%
+endpoint precision requirement at the planned 8,000-draw cap. NumPyro's worst
+ratio is 0.03256; PyMC/oWALNUTS's is 0.02286. Their wrapper costs, 75.957 and
+18.176 seconds, are costs of **incomplete-to-target workflows**, not a speedup
+ratio. No failed run is replaced or relabeled as passing. This illustrates why
+the earlier single-fixture Rust speed result cannot establish broad reliability.
+
+The fixed prior-Fisher geometry candidate and its mean-shear variant were
+checked independently against JAX through T=1000 (12 cases; maximum density
+error 3.82e-11, gradient error 1.14e-12). The matched T=128 sampling screen
+(`geometry-screen-128`) then failed for all six combinations of transform and
+native/autodiff/NumPyro implementation: minimum bulk ESS was only 227–280,
+dominated by the innovation scale, despite zero divergences. No speed comparison
+is eligible. Whitening the path at a fixed reference scale does not remove the
+centered scale/path coupling. This candidate does not replace the stronger
+tested noncentered flow recipe; long-path geometry benefits remain unestablished.
+
 - Geometry matters immediately: noncentering fixes the first pilot's slow scale
   parameter in both samplers. This is evidence for a reusable model workflow,
   not yet for a kernel change.

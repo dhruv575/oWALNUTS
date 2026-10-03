@@ -7,7 +7,7 @@ def compare(directory,reference_override=None):
     rows=[]
     for arm,r in reports.items():
         if arm.startswith('numpyro'):continue
-        reference=reference_override or ('numpyro-noncentered' if arm.endswith('noncentered') else 'numpyro')
+        reference=reference_override or ('numpyro-fisher-shear' if arm.endswith('fisher-shear') else 'numpyro-fisher' if arm.endswith('fisher') else 'numpyro-noncentered' if arm.endswith('noncentered') else 'numpyro')
         ref=reports.get(reference)
         row={'arm':arm,'reference':reference,'comparable':False}
         if ref and r.get('status')=='completed' and ref.get('status')=='completed':

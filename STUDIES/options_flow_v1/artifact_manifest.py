@@ -9,6 +9,9 @@ def manifest(root):
     root=Path(root).resolve(); entries=[]; skipped=[]
     for path in sorted(root.rglob('*-raw.json')):
         report=path.with_name(path.name.replace('-raw.json','-report.json'))
+        if not report.exists() and path.name=='python-pymc-raw.json':
+            # Compile-once PyMC tiers store each immutable fit under this name.
+            report=path.with_name('fit-report.json')
         if not report.exists():
             skipped.append({'path':str(path.relative_to(root)),'reason':'no report'})
             continue
@@ -24,6 +27,7 @@ def manifest(root):
             raise RuntimeError(f'Artifact changed while hashing: {path}')
         entries.append({'path':str(path.relative_to(root)).replace('\\','/'),
             'bytes':after.st_size,'sha256':digest.hexdigest(),'cell_status':result['status'],
+            'report_path':str(report.relative_to(root)).replace('\\','/'),
             'report_sha256':hashlib.sha256(report.read_bytes()).hexdigest()})
     return {'schema':'options-flow-raw-artifacts-v1','entries':entries,'skipped':skipped,
         'scope':'Local raw-array integrity only; does not establish scientific qualification.'}

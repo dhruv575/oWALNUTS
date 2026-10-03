@@ -6,6 +6,18 @@ from artifact_manifest import manifest
 
 
 class ManifestTests(unittest.TestCase):
+    def test_pymc_tier_reports_bind_their_raw_draws(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            (root/'python-pymc-raw.json').write_text('{"canonical_draws":[]}')
+            report=root/'fit-report.json'
+            report.write_text(json.dumps({'status':'running'}))
+            self.assertEqual(manifest(root)['entries'],[])
+            report.write_text(json.dumps({'status':'completed'}))
+            result=manifest(root)
+            self.assertEqual(result['entries'][0]['report_path'],'fit-report.json')
+            self.assertEqual(result['skipped'],[])
+
     def test_running_cells_excluded_and_terminal_failures_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
