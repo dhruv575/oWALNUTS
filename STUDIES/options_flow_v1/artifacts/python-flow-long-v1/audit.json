@@ -1,0 +1,206 @@
+{
+  "phase": "exploratory",
+  "qualified": false,
+  "created_utc": "2026-10-04T00:04:33.783277+00:00",
+  "expected_sampling_denominator": 2,
+  "completed": 2,
+  "successful": 1,
+  "checks": {
+    "current_source": true,
+    "fixture_bytes": true,
+    "candidate_source": true,
+    "candidate_input": true,
+    "candidate_cpu0": true,
+    "candidate_clocks": true,
+    "candidate_1000_scope": true,
+    "candidate_1000_gate": true,
+    "candidate_1000_raw_starts": true,
+    "candidate_2000_scope": true,
+    "candidate_2000_gate": true,
+    "candidate_2000_raw_starts": true,
+    "candidate_4000_scope": true,
+    "candidate_4000_gate": true,
+    "candidate_4000_raw_starts": true,
+    "candidate_8000_scope": true,
+    "candidate_8000_gate": true,
+    "candidate_8000_raw_starts": true,
+    "candidate_stopping": true,
+    "reference_source": true,
+    "reference_input": true,
+    "reference_cpu0": true,
+    "reference_clocks": true,
+    "reference_1000_scope": true,
+    "reference_1000_gate": true,
+    "reference_2000_scope": true,
+    "reference_2000_gate": true,
+    "reference_4000_scope": true,
+    "reference_4000_gate": true,
+    "reference_8000_scope": true,
+    "reference_8000_gate": true,
+    "reference_8000_raw_starts": true,
+    "reference_stopping": true,
+    "parity": true,
+    "block32": true,
+    "extension": true,
+    "adapter": true,
+    "candidate_costs": true,
+    "continuation": true,
+    "reference_costs": true,
+    "order": true
+  },
+  "integrity_checks_pass": true,
+  "results": {
+    "candidate": {
+      "attempts": [
+        {
+          "draws": 1000,
+          "convergence": true,
+          "divergences": 0,
+          "healthy": true,
+          "endpoint_precision_only": false,
+          "pass": false,
+          "max_endpoint_ratio": 0.04439305574201683,
+          "reasons": [
+            "beta_bar: endpoint MCSE exceeds threshold",
+            "tau: endpoint MCSE exceeds threshold"
+          ]
+        },
+        {
+          "draws": 2000,
+          "convergence": true,
+          "divergences": 0,
+          "healthy": true,
+          "endpoint_precision_only": false,
+          "pass": false,
+          "max_endpoint_ratio": 0.03554141599625621,
+          "reasons": [
+            "beta_bar: endpoint MCSE exceeds threshold",
+            "tau: endpoint MCSE exceeds threshold"
+          ]
+        },
+        {
+          "draws": 4000,
+          "convergence": true,
+          "divergences": 0,
+          "healthy": true,
+          "endpoint_precision_only": false,
+          "pass": false,
+          "max_endpoint_ratio": 0.02474028358736377,
+          "reasons": [
+            "tau: endpoint MCSE exceeds threshold"
+          ]
+        },
+        {
+          "draws": 8000,
+          "convergence": true,
+          "divergences": 0,
+          "healthy": true,
+          "endpoint_precision_only": true,
+          "pass": true,
+          "max_endpoint_ratio": 0.016402758621919724,
+          "reasons": []
+        }
+      ],
+      "success": true,
+      "internal_seconds": 822.0317550000036,
+      "worker_seconds": 822.037347799982,
+      "wrapper_seconds": 822.9401521000545,
+      "wrapper_returncode": 0
+    },
+    "reference": {
+      "attempts": [
+        {
+          "draws": 1000,
+          "convergence": true,
+          "divergences": 1,
+          "healthy": false,
+          "endpoint_precision_only": false,
+          "pass": false,
+          "max_endpoint_ratio": 0.0255896563810374,
+          "reasons": [
+            "fit is missing, failed or unhealthy",
+            "beta_bar: endpoint MCSE exceeds threshold",
+            "tau: endpoint MCSE exceeds threshold"
+          ]
+        },
+        {
+          "draws": 2000,
+          "convergence": true,
+          "divergences": 3,
+          "healthy": false,
+          "endpoint_precision_only": true,
+          "pass": false,
+          "max_endpoint_ratio": 0.01952600728372563,
+          "reasons": [
+            "fit is missing, failed or unhealthy"
+          ]
+        },
+        {
+          "draws": 4000,
+          "convergence": true,
+          "divergences": 5,
+          "healthy": false,
+          "endpoint_precision_only": true,
+          "pass": false,
+          "max_endpoint_ratio": 0.01360673174055437,
+          "reasons": [
+            "fit is missing, failed or unhealthy"
+          ]
+        },
+        {
+          "draws": 8000,
+          "convergence": true,
+          "divergences": 9,
+          "healthy": false,
+          "endpoint_precision_only": true,
+          "pass": false,
+          "max_endpoint_ratio": 0.009207872917280289,
+          "reasons": [
+            "fit is missing, failed or unhealthy"
+          ]
+        }
+      ],
+      "success": false,
+      "internal_seconds": 327.87651079997886,
+      "worker_seconds": 327.8811874999665,
+      "wrapper_seconds": 328.8950544000836,
+      "wrapper_returncode": 2
+    }
+  },
+  "candidate_preparation_wrapper_seconds": 12.306748799979687,
+  "candidate_preparation_plus_workflow_wrapper_seconds": 835.2469009000342,
+  "eligible_time_to_success_ratio": null,
+  "host_activity": {
+    "status": "potential_host_contention",
+    "affected_invocation": "root session 99054: python-flow-long-v1 NumPyro reference; candidate not yet launched",
+    "utc_interval": {
+      "start": "2026-10-03T23:37:00Z",
+      "end": "2026-10-03T23:42:20Z",
+      "precision": "Conservative enclosing interval; exact tool timestamps unavailable to this agent; broad scan ran approximately 10 seconds before interruption"
+    },
+    "command": "rg -n '997800(0[1-9]|1[0-9]|2[0-4])|998100(0[1-9]|1[0-9]|2[0-4])|999400(0[1-9]|1[0-9]|2[0-4])' STUDIES/options_flow_v1 -g '*.json' -g '*.py' -g '*.md' --glob '!target/**'",
+    "cause": "Missing word boundaries matched digit substrings in posterior floats; raw JSON files caused large output and disk/regex work",
+    "termination": "Interrupted session60972 with Ctrl-C; terminal exit1",
+    "followup": "One small exact-word filenames-only scan excluding raw arrays and limiting files to2MB completed before instruction to stop arrived; no further searches will run",
+    "interpretation": "Record contention on reference timing; no clean paired speed claim from this invocation. Retained divergence reportedly preceded scan. Preserve result and all failure denominators.",
+    "numerical_jobs_launched": false
+  },
+  "artifact_sha256": {
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\candidate\\python-pymc-flow-report.json": "641664da957d18a62fd196cdb6a73df2990cc8cf0f624cfe0ea8f9787e53fd80",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\reference\\numpyro-continuation-report.json": "f0dc2d6a58cc88fd9761f14f66b89629120cb9cd23bccb1cc71fab7e5e7d06ea",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\plan.json": "db7ac6ea777091b4d090972c6f9863b2e1b9e364f6bb3058428d5407a179da7a",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\parity\\python-pymc-flow-report.json": "47d6b63e25a2babef5ccf0abc031ec0822a0e764363624e61480df71ae8a1685",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\host-activity-note.json": "3ed804a524fd03bf613e9d9c5a167ec64d237be0a056917e904bd2b493b1a83f",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\candidate-affinity.json": "9e66beb4d1ab139513f0af152f2cc57b8f65ed2321aa81c74e205e7c14d66a52",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\reference-affinity.json": "1cec1cfe5b6f13f5bcd256bf2aa40f8cdfe6aa2527bc904da85d0cd32e02d35d",
+    "STUDIES\\options_flow_v1\\artifacts\\python-flow-long-v1\\parity-affinity.json": "69efcd0e162b29ec23e39fdde49d69c6a7df9aab53b0c44a3bdd007a3c7733d7"
+  },
+  "limitations": [
+    "Reference fails nine-divergence health gate; costs are failure costs, not time to success.",
+    "Host contention on reference independently prevents clean paired speed interpretation.",
+    "Raw canonical starts verified from bounded2MB file tails; full posterior shapes, draw finiteness and transformed-draw correctness not independently rescanned in this audit.",
+    "Stored diagnostics and MCSE gates recomputed, estimators not independently reestimated.",
+    "Single prospectively selected prior fixture; no calibration or broad performance claim.",
+    "Existing caches retained, candidate preflight cost shown separately and inclusively; CPU affinity is not exclusive allocation."
+  ]
+}

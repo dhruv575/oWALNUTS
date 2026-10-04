@@ -3,6 +3,29 @@
 These are implementation/pilot results, not a preregistered qualification.
 Study scope and unresolved gates remain in `protocol.json` and `DESIGN_REVIEW.md`.
 
+## Fresh long-path reference follow-up
+
+On the prospectively generated T=1000/G=4 fixture in `python-flow-long-v1`,
+the NumPyro continuation reference completes its declared 8,000-draw cap but
+fails with nine retained divergences. All 1,012 canonical coordinate diagnostics
+otherwise pass (maximum R-hat 1.000464, minimum bulk/tail ESS 14,855/17,629).
+Endpoint precision alone passes from 2,000 draws; its maximum MCSE/width at
+8,000 is .009208. This does not override the failed health gate. The 328.90-second
+wrapper cost is a failure cost, not time to a usable result. A separately recorded
+repository-search overlap also flags its timing as potentially affected by host
+activity. `reference-audit.json` checks the fixture, source snapshot, fixed
+adaptation and CPU affinity against the frozen plan.
+
+The public PyMC/oWALNUTS block-32 candidate completes successfully at 8,000
+draws per chain with zero divergences and maximum endpoint MCSE/width .016403
+across all 14 physical functionals and four observed forecasts. Earlier tiers
+at 1,000/2,000/4,000 miss precision (.044393/.035541/.024740). Its wrapper cost
+is 822.94 seconds including every full restart, or 835.25 seconds including
+the separate 12.31-second validation preparation. This establishes completion
+of one fresh demanding case, not a speed win: the failed reference has no
+eligible time-to-success ratio. A stronger reference acceptance configuration
+and independent endpoint accuracy checks remain necessary.
+
 ## Computational checks
 
 Independent Rust hand gradients versus JAX autodiff on five perturbed centered
@@ -181,7 +204,9 @@ sampler-seed comparison on the same development dataset reverses execution order
 and uses this implementation: both workflows first pass at 2000 draws, with
 candidate/reference wrapper costs 17.155/36.525 seconds, or a 2.129 ratio. The
 same prewarmed-cache policy applies; candidate parity preparation is separately
-recorded. This is a measured practical-workflow improvement on one reused
+recorded (11.412 seconds). Including that preparation gives 28.567 candidate
+seconds versus 36.525 reference seconds, a more modest 1.279 ratio. This is a
+measured practical-workflow improvement on one reused
 fixture, not a reliability or calibration qualification. See the independent
 `python-flow-workflow-99771002-audit.json`; the original scalar loss is retained.
 
