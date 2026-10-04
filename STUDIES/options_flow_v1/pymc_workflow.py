@@ -76,8 +76,8 @@ def parity(target,data,points,coordinates='centered'):
     from jax.scipy.special import gammaln
     from local_level import log_density
     if coordinates == 'conditional_whitening':
-        from local_conditional_whitening import log_density as guide_density
-        density=lambda q:guide_density(q,data,jnp)
+        from local_conditional_whitening import jax_log_density as guide_density
+        density=lambda q:guide_density(q,data)
     elif coordinates == 'observation_residual':
         from local_observation_residual import log_density as residual_density
         density=lambda q:residual_density(q,data,jnp)
@@ -93,22 +93,54 @@ def parity(target,data,points,coordinates='centered'):
         rows.append(row)
     return dict(passed=True,cases=rows)
 
-def sample_fit(target,fixture,starts,seed,warmup,draws,coordinates='centered'):
+def compact_chain_work(result):
+    """Post-fit telemetry only; cannot expose work during a blocked first fit."""
+    from collections import Counter
+    def plain(v):
+        if isinstance(v,np.ndarray):return plain(v.tolist())
+        if isinstance(v,np.generic):return plain(v.item())
+        if isinstance(v,dict):return {str(k):plain(x) for k,x in v.items()}
+        if isinstance(v,(list,tuple)):return [plain(x) for x in v]
+        return v
+    warmup=int(result.config.get('warmup',0));rows=[]
+    for index,chain in enumerate(result.chains):
+        levels=np.asarray(chain['selected_refinement_level'])
+        if levels.ndim!=1 or len(levels)<warmup:raise ValueError('Invalid refinement telemetry length')
+        row=dict(chain=index,metadata=plain(chain['metadata']))
+        for key in ['work_discarded','work_retained','work_total']:row[key]=plain(chain[key])
+        row['selected_refinement_level_histogram']={
+            'warmup':dict(sorted(Counter(str(int(v)) for v in levels[:warmup]).items())),
+            'retained':dict(sorted(Counter(str(int(v)) for v in levels[warmup:]).items()))}
+        row['stop_counts']={phase:{k:v for k,v in row[key].items() if k.endswith('_stops') or k=='divergences'}
+            for phase,key in [('warmup','work_discarded'),('retained','work_retained')]}
+        rows.append(row)
+    return dict(scope='Post-fit per-chain; warmup and retained separated; no pre-first-tier visibility',chains=rows)
+
+
+def sample_fit(target,fixture,starts,seed,warmup,draws,coordinates='centered',phase_callback=None):
+    emit=phase_callback or (lambda *args:None)
     to_sampling,to_canonical=coordinate_transport(fixture['data'],coordinates)
     sampling_starts=to_sampling(starts)
     ts=time.perf_counter();cpu=time.process_time()
+    emit('sampling','start',draws)
     result=owalnuts.sample(target,dim=starts.shape[1],init=sampling_starts,chains=len(starts),warmup=warmup,draws=draws,seed=seed,threads=1)
     sampling_seconds=time.perf_counter()-ts;sampling_cpu_seconds=time.process_time()-cpu
+    emit('sampling','end',draws)
+    emit('canonical_conversion','start',draws)
     q=to_canonical(np.asarray(result.samples))
     if q.shape!=(len(starts),draws,starts.shape[1]) or not np.isfinite(q).all():raise ValueError('Invalid posterior samples')
+    emit('canonical_conversion','end',draws)
     from run_local_level import evaluate
+    emit('evaluation','start',draws)
     ts=time.perf_counter();evaluation=evaluate(q,fixture,seed+130000);evaluation_seconds=time.perf_counter()-ts
+    emit('evaluation','end',draws)
     health=result.health()
+    chain_work=compact_chain_work(result)
     report=dict(status='completed',draws=draws,evaluation=evaluation,evaluation_seconds=evaluation_seconds,
-      sampling_seconds=sampling_seconds,sampling_cpu_seconds=sampling_cpu_seconds,sampler_health=health,
+      sampling_seconds=sampling_seconds,sampling_cpu_seconds=sampling_cpu_seconds,sampler_health=health,chain_work=chain_work,
       target_calls=result.target_calls,retained_divergences=health['divergences'],
       healthy=evaluation['computational_screen_pass'] and health['divergences']==0)
-    raw=dict(canonical_draws=q.tolist(),initial_positions=starts.tolist(),sampling_initial_positions=sampling_starts.tolist(),coordinates=coordinates,sampler_health=health)
+    raw=dict(canonical_draws=q.tolist(),initial_positions=starts.tolist(),sampling_initial_positions=sampling_starts.tolist(),coordinates=coordinates,sampler_health=health,chain_work=chain_work)
     return report,raw
 
 def main():
@@ -130,19 +162,30 @@ def main():
       source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in Path(__file__).parent.glob('*.py')})
     report_path=a.out/'python-pymc-report.json';report_path.write_text(json.dumps(report,indent=2))
     active_draws=None
+    phase_path=a.out/'phase-events.jsonl'
+    def emit(stage,event,draws=None):
+        with phase_path.open('a',encoding='utf-8') as handle:
+            handle.write(json.dumps(dict(stage=stage,event=event,draws=draws,
+                elapsed_seconds=time.perf_counter()-STARTED,cpu_seconds=time.process_time()))+'\n')
     try:
+        emit('compile','start')
         target,metadata=compile_target(data,a.coordinates);report['compilation']=metadata
+        emit('compile','end')
         starts=canonical_starts(data,a.chains)
         sampling_starts=coordinate_transport(data,a.coordinates)[0](starts)
         points=[sampling_starts[0],sampling_starts[-1],sampling_starts[0]+np.random.default_rng(818).normal(0,.01,len(starts[0]))]
+        emit('parity','start')
         ts=time.perf_counter();report['parity']=parity(target,data,points,a.coordinates);report['parity_seconds']=time.perf_counter()-ts
+        emit('parity','end')
         if not a.compile_only:
             from run import clean
             from precision_tiers import precision_screen
             attempts=[]
             for draws in (a.tiers or [a.draws]):
                 fit_start=time.perf_counter();active_draws=draws
-                fit,raw=sample_fit(target,fixture,starts,a.seed,a.warmup,draws,a.coordinates)
+                emit('fit','start',draws)
+                fit,raw=sample_fit(target,fixture,starts,a.seed,a.warmup,draws,a.coordinates,phase_callback=emit)
+                emit('serialization','start',draws)
                 fit_dir=a.out/f'draws-{draws}' if a.tiers else a.out
                 fit_dir.mkdir(exist_ok=True)
                 (fit_dir/'python-pymc-raw.json').write_text(json.dumps(raw,allow_nan=False))
@@ -151,6 +194,8 @@ def main():
                 attempts.append(dict(draws=draws,fit_and_report_seconds=time.perf_counter()-fit_start,
                   sampling_seconds=fit['sampling_seconds'],evaluation_seconds=fit['evaluation_seconds'],
                   target_calls=fit['target_calls'],screen=screen))
+                emit('serialization','end',draws)
+                emit('fit','end',draws)
                 report.update(fit);report['attempts']=attempts;active_draws=None
                 if screen and screen['pass']:break
             report['settings']['draws']=attempts[-1]['draws']
@@ -161,9 +206,12 @@ def main():
                   total_target_calls=sum(v['target_calls'] for v in attempts))
         report.update(status='completed',end_to_end_seconds=time.perf_counter()-STARTED)
     except Exception as exc:
+        emit('worker','failed',active_draws)
         if active_draws is not None:
             report.setdefault('attempts',[]).append(dict(draws=active_draws,status='failed',fit_and_report_seconds=time.perf_counter()-fit_start))
         report.update(status='failed',error=str(exc),traceback=traceback.format_exc(),end_to_end_seconds=time.perf_counter()-STARTED)
+    emit('worker','end',active_draws)
+    report['phase_events_path']=str(phase_path)
     from run import clean
     report_path.write_text(json.dumps(clean(report),indent=2,allow_nan=False))
     (a.out/'invocation-timing.json').write_text(json.dumps(dict(seconds_including_imports_and_report=time.perf_counter()-STARTED)))
