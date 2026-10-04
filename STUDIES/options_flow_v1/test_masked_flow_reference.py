@@ -37,4 +37,24 @@ class MaskedReferenceTests(unittest.TestCase):
         self.assertTrue(screen(report,1,[[1,0],[3,0]])['pass'])
         self.assertFalse(screen(report,1,[[3,0]])['pass'])
         del report['evaluation']['functionals']['h_mean'];self.assertFalse(screen(report,1,[[1,0],[3,0]])['pass'])
+    def test_execute_masked_fixture_without_psutil(self):
+        import json,tempfile,sys
+        from pathlib import Path
+        from unittest.mock import patch
+        from masked_flow_reference import execute
+        fixture=dict(data=self.data(),holdout=dict(x=[[.1],[None],[.2]],y=[[None],[None],[.3]],x_available=[[True],[False],[True]],observation_mask=[[False],[False],[True]],grid_index=[0,1,2]))
+        with tempfile.TemporaryDirectory() as directory,patch.dict(sys.modules,{'psutil':None}):
+            path=Path(directory)/'fixture.json';path.write_text(json.dumps(fixture));out=Path(directory)/'out'
+            report=execute(path,out,791,warmup=12,chains=4,batch=8,tiers=(8,))
+            self.assertEqual(report['status'],'completed',report.get('traceback'))
+            saved=json.loads((out/'report.json').read_text());raw=json.loads((out/'raw.json').read_text())
+            self.assertEqual(np.asarray(raw['canonical_draws']).shape,(4,8,9))
+            self.assertEqual(saved['plan']['forecast_cells'],[[1,0],[3,0]])
+            self.assertEqual(saved['evaluation']['forecast']['scheduled_cells'],3)
+            self.assertEqual(saved['evaluation']['forecast']['scored_cells'],1)
+            self.assertIsNone(saved['evaluation']['forecast']['rows'][0]['covered'])
+            self.assertFalse(saved['evaluation']['forecast']['rows'][1]['forecast_available'])
+            self.assertEqual(saved['checkpoints'][0]['draws_per_chain'],8)
+            self.assertFalse(saved['precision_pass'])
 if __name__=='__main__':unittest.main()
+

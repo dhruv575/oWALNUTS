@@ -51,8 +51,8 @@ def execute(fixture_path,out,seed,*,warmup=1000,chains=4,batch=1000,tiers=(1000,
         preflight=forecast(np.repeat(starts[:,None,:],4,axis=1),data,fixture['holdout'],seed+130000)
         cells=[[r['horizon'],r['group']] for r in preflight['rows'] if r['forecast_available']]
         if not cells:raise ValueError('No available future covariates for the declared precision family')
-        import psutil
-        plan=dict(phase='exploratory',model='masked_flow',arm='numpyro-masked-noncentered-continuation',fixture=str(fixture_path),fixture_sha256=sha(fixture_path),source=sources(),seed=seed,predictive_seed=seed+130000,warmup=warmup,chains=chains,batch=batch,tiers=list(tiers),target_accept=target_accept,parameter_functionals=names(y.shape[1]),forecast_cells=cells,relative_mcse=.02,forecast_family_policy='Every available future-x row, irrespective of target observation',cpu_affinity=psutil.Process().cpu_affinity(),runtime={'python':platform.python_version(),**{p:importlib.metadata.version(p) for p in ['numpy','scipy','jax','jaxlib','numpyro','arviz']}},compilation_timing='Included in warmup and first retained batch; no artificial separate compile',qualified=False)
+        from hardware_control import get_affinity
+        plan=dict(phase='exploratory',model='masked_flow',arm='numpyro-masked-noncentered-continuation',fixture=str(fixture_path),fixture_sha256=sha(fixture_path),source=sources(),seed=seed,predictive_seed=seed+130000,warmup=warmup,chains=chains,batch=batch,tiers=list(tiers),target_accept=target_accept,parameter_functionals=names(y.shape[1]),forecast_cells=cells,relative_mcse=.02,forecast_family_policy='Every available future-x row, irrespective of target observation',cpu_affinity=get_affinity(),runtime={'python':platform.python_version(),**{p:importlib.metadata.version(p) for p in ['numpy','scipy','jax','jaxlib','numpyro','arviz']}},compilation_timing='Included in warmup and first retained batch; no artificial separate compile',qualified=False)
         write(out/'plan.json',plan)
         def verify():
             if sha(fixture_path)!=plan['fixture_sha256'] or sources()!=plan['source']:raise RuntimeError('Bound fixture/source changed during run')
@@ -83,3 +83,4 @@ def main():
     a=p.parse_args();r=execute(a.fixture,a.out,a.seed,warmup=a.warmup,chains=a.chains,batch=a.batch,tiers=a.tiers,target_accept=a.target_accept)
     raise SystemExit(0 if r.get('precision_pass') else 2)
 if __name__=='__main__':main()
+
