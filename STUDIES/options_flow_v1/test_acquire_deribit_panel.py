@@ -29,6 +29,27 @@ class AcquisitionTests(unittest.TestCase):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_history_requires_explicit_flag_and_records_it(self):
+        import json,tempfile
+        from pathlib import Path
+        from unittest.mock import patch,MagicMock
+        from acquire_deribit_panel import validate_protocol,Client as ActualClient
+        protocol=json.loads(Path(__file__).with_name('DERIBIT_ACCESS_PROTOCOL.json').read_text())
+        protocol['production_base']='https://history.deribit.com/api/v2/'
+        with self.assertRaises(ValueError):validate_protocol(protocol)
+        protocol['include_old']=True;validate_protocol(protocol)
+        response=MagicMock();response.status=200
+        response.read.return_value=b'{"result":{"trades":[],"has_more":false}}'
+        response.__enter__.return_value=response
+        with tempfile.TemporaryDirectory() as directory,patch('urllib.request.urlopen',return_value=response) as request:
+            client=ActualClient(protocol,directory)
+            original={'currency':'BTC'}
+            client.request('public/get_last_trades_by_currency_and_time',original)
+            self.assertEqual(original,{'currency':'BTC'})
+            self.assertIn('include_old=true',request.call_args.args[0].full_url)
+            record=json.loads((Path(directory)/'0001.request.json').read_text())
+            self.assertEqual(record['params']['include_old'],'true')
+
     def test_protocol_mutation_detected_without_network(self):
         import tempfile,json
         from pathlib import Path

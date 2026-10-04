@@ -13,7 +13,8 @@ def write_new(path,value):
 def digest_bytes(value):return hashlib.sha256(value).hexdigest()
 def canonical_digest(value):return digest_bytes(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode())
 def validate_protocol(p):
-    if p['production_base']!='https://www.deribit.com/api/v2/':raise ValueError('Only approved production base allowed')
+    if p['production_base'] not in ['https://www.deribit.com/api/v2/','https://history.deribit.com/api/v2/']:raise ValueError('Only approved production base allowed')
+    if p['production_base']=='https://history.deribit.com/api/v2/' and p.get('include_old') is not True:raise ValueError('Historical host requires explicit include_old')
     dates=[datetime.datetime.fromisoformat(p[k]) for k in ['start_utc','end_utc_exclusive']]
     if any(d.tzinfo is None or d.utcoffset()!=datetime.timedelta(0) for d in dates) or dates[1]<=dates[0]:raise ValueError('UTC-aware increasing panel bounds required')
     for k,v in p['limits'].items():
@@ -57,6 +58,9 @@ class Client:
     def request(self,method,params):
         self.verify()
         if method not in ['public/get_last_trades_by_currency_and_time','public/get_last_trades_by_instrument','public/get_instrument']:raise Incomplete('Unapproved API method')
+        params=dict(params)
+        if self.protocol.get('include_old') is True and method.startswith('public/get_last_trades'):
+            params['include_old']='true'
         limits=self.protocol['limits'];url=self.protocol['production_base']+method+'?'+urllib.parse.urlencode(params)
         for attempt in range(limits['attempts_per_request']):
             self.verify()
