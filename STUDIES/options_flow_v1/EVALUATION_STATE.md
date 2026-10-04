@@ -40,8 +40,17 @@ acceptance .9. The noncentered reference failed both optimized long comparisons
 and is not the strongest baseline. The public comparator remains the attested
 mixed-coordinate continuation workflow.
 
+The four-fit resource pilot is now terminal: both reference workflows completed
+in 282.06 and 268.00 seconds and passed both checkpoint gates. Both public
+samplers completed healthy 8k draws, but the resource adapter incorrectly
+required its own package initializer in the legacy sampler source record.
+Their resource outcomes remain failed. All four outcomes and 834.85 seconds
+are independently audited and archived. Fix the adapter, then recover analysis
+from saved public draws with separately measured costs and unchanged original
+statuses before interpreting whole-workflow resource feasibility.
+
 Two independently initialized fits per backend, fixed 8,000 retained draws and
-a prospectively declared 4,000-draw prefix are a resource pilot only. They must
+a prospectively declared 4,000-draw prefix are a resource pilot only. They
 measure fitting, serialization, compact endpoint/CDF extraction, analysis,
 memory and failures. They cannot support a defensible reference-bootstrap
 accuracy claim. Plan a subsequent bank with substantially more independent
