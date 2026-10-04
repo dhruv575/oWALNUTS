@@ -122,6 +122,30 @@ p,c=json.loads(Path(sys.argv[1]).read_text());run_worker(p,c,Path(sys.argv[2]))
                 if handle:
                     code=ctypes.c_ulong();api.GetExitCodeProcess.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_ulong)]
                     self.assertTrue(api.GetExitCodeProcess(handle,ctypes.byref(code)));api.CloseHandle(handle);self.assertNotEqual(code.value,259)
+    def test_vectorized_prospective_policy_and_actual_callback(self):
+        import json
+        from unittest.mock import Mock
+        from test_reference_bank import ReferenceBankTests
+        from reference_bank_vectorized import batch_cached_parameter
+        with patch.object(r,'versions',return_value={'numpy':'test','scipy':'test'}):plan=r.draft([],implementation='vectorized')
+        plan=json.loads(json.dumps(plan));self.assertEqual(plan['wall_seconds'],2700)
+        self.assertIn('reference_bank_vectorized.py',plan['source']);self.assertEqual(plan['bootstrap_replicates'],30000)
+        streams=[v for c in plan['cells'] for v in c['fit_seeds']+c['init_seeds']+[c['bootstrap_seed']]]
+        self.assertEqual((len(streams),min(streams),max(streams)),(11156,1940000000,1940011155))
+        spec,fits=ReferenceBankTests().bank();spy=Mock(wraps=batch_cached_parameter)
+        with patch('reference_bank_vectorized.batch_cached_parameter',spy):result=r.analyze_selected(plan,spec,fits)
+        self.assertEqual(spy.call_count,8);self.assertIn('joint_bootstrap_endpoints',result)
+        scalar=self.plan();self.assertEqual(scalar['wall_seconds'],1800);self.assertNotIn('reference_bank_vectorized.py',scalar['source'])
+        with patch('reference_bank_vectorized.batch_cached_parameter',side_effect=AssertionError('scalar must not call vector')):self.assertEqual(r.analyze_selected(scalar,spec,fits),result)
+        for bad in [dict(plan,wall_seconds=1800),dict(scalar,wall_seconds=2700),dict(plan,implementation='unknown')]:
+            with self.assertRaises(ValueError):r.validate(bad)
+    def test_vectorized_failed_sentinels_preserve148(self):
+        import json
+        with patch.object(r,'versions',return_value={'numpy':'test','scipy':'test'}):plan=r.draft([],implementation='vectorized')
+        plan['frozen']=True
+        with tempfile.TemporaryDirectory() as d,patch.object(r,'verify_seed_audit'),patch.object(r,'versions',return_value=plan['software']),patch.object(r.subprocess,'run',side_effect=RuntimeError('worker failed')):
+            path=Path(d)/'plan.json';r.save(path,plan);r.run(path,Path(d)/'out');summary=json.loads((Path(d)/'out/summary.json').read_text())
+            self.assertEqual((summary['expected'],summary['failed'],summary['not_started']),(148,4,144));self.assertEqual(summary['compute_and_cleanup_budget_seconds'],2700)
 if __name__=='__main__':unittest.main()
 
 

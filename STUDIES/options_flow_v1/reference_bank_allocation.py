@@ -16,20 +16,27 @@ HERE=Path(__file__).resolve().parent
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def save(p,v):
     with Path(p).open('x',encoding='utf-8') as f:json.dump(v,f,indent=2,allow_nan=False)
-def bindings():return {n:sha(HERE/n) for n in ['reference_bank_allocation.py','reference_bank.py','reference_bank_controls.py','hardware_control.py']}
+def bindings(implementation='scalar'):
+    names=['reference_bank_allocation.py','reference_bank.py','reference_bank_controls.py','hardware_control.py']
+    if implementation=='vectorized':names.append('reference_bank_vectorized.py')
+    return {n:sha(HERE/n) for n in names}
 def versions():return {n:importlib.metadata.version(n) for n in ['numpy','scipy']}
 
-def draft(reserved_seeds,seed=1930000000,seed_audit=None):
+def draft(reserved_seeds,seed=None,seed_audit=None,implementation='scalar'):
+    if implementation not in ['scalar','vectorized']:raise ValueError('Unknown implementation')
+    if seed is None:seed=1940000000 if implementation=='vectorized' else 1930000000
     cells=[];cursor=seed
     configurations=[('sentinel',16,2048,rho,shift,i) for i,(rho,shift) in enumerate([(0.,0.),(0.,.5),(.9,0.),(.9,.5)])]
     configurations += [('campaign',f,n,rho,shift,i) for f,n in [(8,4096),(16,2048),(32,1024)] for rho in [0.,.9] for shift in [0.,.1,.5] for i in range(8)]
     for phase,f,n,rho,shift,i in configurations:
         streams=list(range(cursor,cursor+4*f+1));cursor+=len(streams)
         cells.append(dict(id=f'{phase}-f{f}-n{n}-rho{rho}-shift{shift}-{i}',phase=phase,fits_per_backend=f,lengths=[n//2,n],rho=rho,backend_b_shift=shift,fit_seeds=streams[:2*f],init_seeds=streams[2*f:4*f],bootstrap_seed=streams[-1]))
-    p=dict(frozen=False,qualified=False,phase='exploratory',cells=cells,reserved_seeds=sorted(reserved_seeds),seed_audit=seed_audit,source=bindings(),software=versions(),python=sys.version,interpreter=dict(path=str(Path(sys.executable).resolve()),sha256=sha(sys.executable)),wall_seconds=1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1)
+    p=dict(frozen=False,qualified=False,phase='exploratory',cells=cells,reserved_seeds=sorted(reserved_seeds),seed_audit=seed_audit,implementation=implementation,source=bindings(implementation),software=versions(),python=sys.version,interpreter=dict(path=str(Path(sys.executable).resolve()),sha256=sha(sys.executable)),wall_seconds=2700 if implementation=='vectorized' else 1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1)
     validate(p);return p
 
 def validate(p):
+    implementation=p.get('implementation','scalar')
+    if implementation not in ['scalar','vectorized']:raise ValueError('Unknown implementation')
     if len(p['cells'])!=148 or len({c['id'] for c in p['cells']})!=148:raise ValueError('Require all 148 unique intended cells')
     if [c['phase'] for c in p['cells'][:4]]!=['sentinel']*4 or any(c['phase']!='campaign' for c in p['cells'][4:]):raise ValueError('Sentinels must precede campaign')
     actual=[(c['fits_per_backend'],c['lengths'],c['rho'],c['backend_b_shift']) for c in p['cells'][:4]]
@@ -45,7 +52,7 @@ def validate(p):
     expected={(f,n,rho,shift):8 for f,n in [(8,4096),(16,2048),(32,1024)] for rho in [0.,.9] for shift in [0.,.1,.5]}
     for c in p['cells'][4:]:expected[(c['fits_per_backend'],c['lengths'][-1],c['rho'],c['backend_b_shift'])]-=1
     if any(expected.values()):raise ValueError('Incorrect allocation denominator')
-    for k,v in dict(wall_seconds=1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1).items():
+    for k,v in dict(wall_seconds=2700 if implementation=='vectorized' else 1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1).items():
         if p[k]!=v:raise ValueError('Unsupported prospective budget: '+k)
 
 def projection(sentinels):
@@ -68,6 +75,14 @@ def memory_limit(limit):
     if not handle or not api.SetInformationJobObject(handle,9,ctypes.byref(info),ctypes.sizeof(info)) or not api.AssignProcessToJobObject(handle,api.GetCurrentProcess()):raise OSError('Cannot enforce process committed-memory cap')
     return handle # Keep handle alive until worker exits. No numerical imports yet.
 
+def analyze_selected(plan,spec,fits):
+    from reference_bank import analyze
+    implementation=plan.get('implementation','scalar')
+    if implementation=='scalar':return analyze(spec,fits)
+    if implementation!='vectorized':raise ValueError('Unknown implementation')
+    from reference_bank_vectorized import batch_cached_parameter
+    return analyze(spec,fits,parameter_batch=batch_cached_parameter)
+
 def cell_worker(p,c,out):
     cpu_started=time.process_time()
     guard=memory_limit(p['memory_bytes'])
@@ -86,7 +101,7 @@ def cell_worker(p,c,out):
         fits.append(fit)
     spec={k:p[k] for k in ['bootstrap_replicates','minimum_tail_count','alpha','relative_half_width','backend_equivalence_relative_width','length_equivalence_relative_width']}
     spec.update(lengths=c['lengths'],fits=[{k:v for k,v in f.items() if k!='levels'} for f in fits],chains=1,source_sha256=p['source']['reference_bank.py'],target_sha256='normal-zero-one',numerical_policy='validated_estimate',candidate_streams=[],bootstrap_seed=c['bootstrap_seed'],interval_pairs=[['lo','hi']],endpoints={n:dict(kind='parameter',distribution_id='theta',probability=q,scale='unit') for n,q in [('lo',.05),('hi',.95)]})
-    analysis_started=time.perf_counter();bank=analyze(spec,fits);analysis_seconds=time.perf_counter()-analysis_started
+    analysis_started=time.perf_counter();bank=analyze_selected(p,spec,fits);analysis_seconds=time.perf_counter()-analysis_started
     if 'endpoints' not in bank:raise ValueError('No finite bank bounds: '+str(bank['reasons']))
     vectors=np.asarray([[r['lo'],r['hi']] for r in bank['joint_bootstrap_endpoints']]);shared=vectors-vectors.mean(axis=0)
     # Common reference perturbation reused across20 candidate comparisons.
@@ -116,7 +131,7 @@ def run(path,out):
     verify_seed_audit(p)
     def verify():
         verify_seed_audit(p)
-        if sha(path)!=original or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Frozen bindings changed')
+        if sha(path)!=original or p['source']!=bindings(p.get('implementation','scalar')) or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Frozen bindings changed')
     verify();out=Path(out);out.mkdir(parents=True,exist_ok=False);start=time.monotonic();rows=[];stop=None
     save(out/'expected.json',dict(plan_sha256=original,cells=p['cells']))
     for i,c in enumerate(p['cells']):
@@ -176,16 +191,16 @@ def run_worker(p,c,out):
     finally:save(Path(out)/'resources.json',peak_memory())
 
 def main():
-    a=argparse.ArgumentParser();a.add_argument('--out',type=Path,required=True);a.add_argument('--plan',type=Path);a.add_argument('--worker',type=Path);a.add_argument('--cell',type=int);a.add_argument('--reserved-seeds',type=Path);v=a.parse_args()
+    a=argparse.ArgumentParser();a.add_argument('--out',type=Path,required=True);a.add_argument('--plan',type=Path);a.add_argument('--worker',type=Path);a.add_argument('--cell',type=int);a.add_argument('--reserved-seeds',type=Path);a.add_argument('--implementation',choices=['scalar','vectorized'],default='scalar');v=a.parse_args()
     if v.worker:
         p=json.loads(v.worker.read_text());validate(p)
-        if not p['frozen'] or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Worker binding mismatch')
+        if not p['frozen'] or p['source']!=bindings(p.get('implementation','scalar')) or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Worker binding mismatch')
         run_worker(p,p['cells'][v.cell],v.out)
     elif v.plan:run(v.plan,v.out)
     else:
         if not v.reserved_seeds:raise ValueError('Explicit complete prior seed inventory required')
         evidence=json.loads(v.reserved_seeds.read_text())
-        save(v.out,draft(evidence['reserved_seeds'],seed_audit=dict(path=str(v.reserved_seeds.resolve()),sha256=sha(v.reserved_seeds))))
+        save(v.out,draft(evidence['reserved_seeds'],seed_audit=dict(path=str(v.reserved_seeds.resolve()),sha256=sha(v.reserved_seeds)),implementation=v.implementation))
 if __name__=='__main__':main()
 
 
