@@ -6,6 +6,16 @@ design, not a frozen protocol and not achieved evidence. Current status:
 **ready to select and freeze component protocols after the missing execution
 contracts below are implemented; not ready to claim the full goal achieved.**
 
+Scope clarification, 2026-10-03: the numerical thresholds and study sizes below
+are proposed qualification designs, not additional user requirements. The user's
+goal is a materially easier or faster useful, demanding uncertainty workflow.
+Sampler correctness, endpoint accuracy, reliability, and measured workflow costs
+must be established separately from whether a particular market's order flow
+contains incremental predictive information. Positive financial alpha is not a
+sampler acceptance requirement. A model comparison that reliably finds no flow
+benefit can still be a useful inference workflow; it cannot support a claim of
+improved market prediction.
+
 ## Keep four claims separate
 
 1. The implementation targets the intended posterior and produces calibrated
@@ -145,9 +155,13 @@ unless a separately prespecified reliability-aware statistic handles it.
 
 ## C. Real-market usefulness remains a required, separate track
 
-No inspected file establishes a sufficiently long historical options-flow
-dataset with trustworthy availability times. This remains missing evidence;
-neither 1,200 synthetic replicates nor a local option-price port can fill it.
+The subsequently acquired `artifacts/deribit-access-panel-v3` contains an audited
+historical crypto-options trade panel. Its feature audit preserves 335 scheduled
+origins across four contracts, with only 18 development, four validation, and
+68 evaluation observations. This supports a sparse computational demonstration,
+not a sufficiently powered market qualification. Exchange event timestamps and
+an assumed availability lag do not establish historical receipt availability.
+Neither synthetic replicates nor a local option-price port can fill those gaps.
 Before market freeze identify licensed/source-verifiable data, one estimand,
 forecast issuance, horizon, universe, flow-classification quality and trading
 calendar. A provider-shaped fixture is not evidence of historical authenticity.
@@ -164,12 +178,15 @@ historical baseline. Freeze primary 90% proper interval score, with secondary
 50/80/95% intervals, widths and calibration by regime. Use paired time-block
 uncertainty with concurrent underlyings grouped together. Select independent
 block count from a declared detectable score improvement and coverage tolerance,
-not raw row count. The market score gate should require improvement relative to
-the no-flow model with a paired interval excluding zero, while coverage lies
+not raw row count. A claim of incremental flow predictive value should require
+improvement relative to the no-flow model with a paired interval excluding zero,
+while coverage lies
 within a practically chosen equivalence range. Choose that range before seeing
 held-out results; synthetic +/-5 points is not automatically an acceptable
 application margin. Absence of incremental flow information is a model/data
-finding, not something a faster sampler can cure.
+finding, not something a faster sampler can cure. That outcome must remain in
+the report and must not be treated as a failure of the sampler's computational
+usefulness when matched accuracy, reliability, and workflow gains are established.
 
 ## D. Feasibility and freeze blockers
 
