@@ -52,5 +52,15 @@ class AllocationTests(unittest.TestCase):
         try:out,err=child.communicate(timeout=20)
         except BaseException:child.kill();child.wait();raise
         self.assertEqual(child.returncode,0,err);self.assertIn('limited',out);self.assertIsNotNone(child.poll())
+    def test_timeout_preserves_full_denominator_and_unknown_peak(self):
+        import json,subprocess
+        p=self.plan();p['frozen']=True
+        with tempfile.TemporaryDirectory() as d,patch.object(r,'verify_seed_audit'),patch.object(r,'versions',return_value=p['software']),patch.object(r.subprocess,'run',side_effect=subprocess.TimeoutExpired('worker',1)):
+            path=Path(d)/'plan.json';r.save(path,p);out=Path(d)/'out';r.run(path,out)
+            summary=json.loads((out/'summary.json').read_text())
+            self.assertEqual(summary['failed'],4);self.assertEqual(summary['not_started'],144)
+            row=summary['rows'][0];self.assertIsNone(row['resources']['peak_committed_bytes'])
+            cell=out/p['cells'][0]['id'];self.assertTrue((cell/'started.json').exists());self.assertTrue((cell/'exit.json').exists())
 if __name__=='__main__':unittest.main()
+
 
