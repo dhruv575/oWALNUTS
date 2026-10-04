@@ -111,7 +111,9 @@ def normalized_parity(data,points,target=None):
     return dict(passed=True,cases=rows,normalized_canonical_jacobian_value_and_gradient=True,jax_enable_x64=True)
 
 
-def build_model(data,block_size=32):
+def build_model(data,block_size=32,likelihood_variant="pymc_student_t"):
+    if likelihood_variant not in ("pymc_student_t","shared_logvol_student_t_v1"):raise ValueError("Unknown likelihood variant")
+    if likelihood_variant!="pymc_student_t" and block_size!=32:raise ValueError("Candidate likelihood requires block32")
     import pymc as pm
     import pytensor.tensor as pt
     from flow_starts import canonical_starts
@@ -127,6 +129,14 @@ def build_model(data,block_size=32):
         lp+=pt.sum(pm.logp(pm.Normal.dist(mu=np.float64(0),sigma=np.float64(1)),u[k:]))
         h=ar_path(u[k:],u[2],pt.exp(u[3]),np.float64(data['rho']),t,block_size)
         location=np.float64(.3)*u[4:4+g]+u[4+g:k]*np.array(x,copy=True)
-        lp+=pt.sum(pm.logp(pm.StudentT.dist(nu=np.float64(data['nu']),mu=location,sigma=pt.exp(h[:,None]/np.float64(2))),np.array(y,copy=True)))
+        if likelihood_variant=="pymc_student_t":
+            lp+=pt.sum(pm.logp(pm.StudentT.dist(nu=np.float64(data['nu']),mu=location,sigma=pt.exp(h[:,None]/np.float64(2))),np.array(y,copy=True)))
+        else:
+            # Optional algebra with automatic gradients; exp(-h) retains known
+            # extreme-domain numerical limitations. This is not a new model.
+            import math
+            nu=float(data['nu']);constant=math.lgamma((nu+1)/2)-math.lgamma(nu/2)-.5*math.log(nu*math.pi)
+            residual=np.array(y,copy=True)-location
+            lp+=np.float64(t*g*constant)-np.float64(g/2)*pt.sum(h)-np.float64((nu+1)/2)*pt.sum(pt.log1p(residual**2*pt.exp(-h[:,None])/np.float64(nu)))
         pm.Potential('normalized_mixed_flow',lp)
     return model

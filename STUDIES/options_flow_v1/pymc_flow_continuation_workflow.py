@@ -68,14 +68,21 @@ def strict_screen(report,threshold,names,forecast_rows):
     return precision_screen(report,threshold,names=names,require_forecast=True)
 
 
-def compile_target(data,model,block_size,coordinates='noncentered'):
+def validate_likelihood_variant(model,block_size,coordinates,variant):
+    if variant not in ('pymc_student_t','shared_logvol_student_t_v1'):raise ValueError('Unknown likelihood variant')
+    if variant!='pymc_student_t' and (model!='flow' or coordinates!='mixed_slopes' or block_size!=32):raise ValueError('Candidate likelihood requires dense flow, mixed slopes and block32')
+
+def compile_target(data,model,block_size,coordinates='noncentered',likelihood_variant='pymc_student_t'):
+    validate_likelihood_variant(model,block_size,coordinates,likelihood_variant)
     if coordinates=='mixed_slopes':
         if model!='flow':raise ValueError('Mixed slopes currently support dense flow only')
         import owalnuts
         from flow_mixed_coordinates import build_model
-        tick=time.perf_counter();target,dimension,initial,names,_=owalnuts.from_pymc(build_model(data,block_size),gil_free=True)
+        tick=time.perf_counter();target,dimension,initial,names,_=owalnuts.from_pymc(build_model(data,block_size,likelihood_variant=likelihood_variant),gil_free=True)
         if names!=['q'] or dimension!=4+2*len(data['y'][0])+len(data['y']):raise ValueError('Unexpected mixed flow layout')
-        return target,dict(compile_seconds=time.perf_counter()-tick,dimension=dimension,names=names,initial=initial.tolist(),block_size=block_size,coordinates=coordinates)
+        metadata=dict(compile_seconds=time.perf_counter()-tick,dimension=dimension,names=names,initial=initial.tolist(),block_size=block_size,coordinates=coordinates)
+        if likelihood_variant!='pymc_student_t':metadata['likelihood_variant']=likelihood_variant
+        return target,metadata
     if coordinates!='noncentered':raise ValueError('Unknown flow coordinates')
     if model=='flow':
         from pymc_flow_workflow import compile_target as compile_dense
@@ -128,7 +135,10 @@ def main():
     p.add_argument('--chains',type=int,default=4);p.add_argument('--tiers',type=int,nargs='+',default=[1000,2000,4000,8000])
     p.add_argument('--model',choices=['flow','masked-flow'],default='flow');p.add_argument('--block-size',type=int,choices=[0,16,32],default=32)
     p.add_argument('--coordinates',choices=['noncentered','mixed_slopes'],default='noncentered')
+    p.add_argument('--likelihood-variant',choices=['pymc_student_t','shared_logvol_student_t_v1'],default='pymc_student_t')
     p.add_argument('--expected-cpus');a=p.parse_args()
+    try:validate_likelihood_variant(a.model,a.block_size,a.coordinates,a.likelihood_variant)
+    except ValueError as exc:p.error(str(exc))
     if a.chains<4 or a.warmup<1 or not a.tiers or any(v<4 for v in a.tiers) or any(b<=v for v,b in zip(a.tiers,a.tiers[1:])):
         p.error('At least four chains, positive warmup and strictly increasing tiers >=4 required')
     if a.coordinates=='mixed_slopes' and a.model!='flow':p.error('Mixed slopes currently support dense flow only')
@@ -149,6 +159,9 @@ def main():
         arm='python-pymc-'+a.model+'-'+a.coordinates+'-continuation',coordinates=a.coordinates,seed=a.seed,bindings=identity,
         settings=dict(chains=a.chains,warmup=a.warmup,threads=1,block_size=a.block_size),
         predictive_seed=a.seed+130000,software=dict(python=sys.version,numpy=np.__version__,algorithm_revision=owalnuts.ALGORITHM_REVISION))
+    if a.likelihood_variant!='pymc_student_t':
+        report['likelihood_variant']=a.likelihood_variant;report['settings']['likelihood_variant']=a.likelihood_variant
+        report['arm']+='-'+a.likelihood_variant
     write_json(a.out/'started.json',report)
     def emit(stage,event,draws):
         with (a.out/'phase-events.jsonl').open('a') as f:
@@ -168,7 +181,7 @@ def main():
         else:forward,backward=to_noncentered,to_canonical
         starts=canonical_starts(transport_data,a.chains);sampling_starts=forward(starts,transport_data)
         np.testing.assert_allclose(backward(sampling_starts,transport_data),starts,rtol=1e-12,atol=1e-12)
-        emit('compile','start',None);target,metadata=compile_target(data,a.model,a.block_size,a.coordinates)
+        emit('compile','start',None);target,metadata=compile_target(data,a.model,a.block_size,a.coordinates,a.likelihood_variant)
         report['compilation']=metadata;emit('compile','end',None)
         emit('parity','start',None);tick=time.perf_counter()
         report['parity']=parity(target,data,transport_data,a.model,[sampling_starts[0],sampling_starts[-1],

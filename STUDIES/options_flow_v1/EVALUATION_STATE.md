@@ -64,6 +64,14 @@ further development, not a statistically qualified or end-to-end speed claim.
 The failed earlier experiment remains separate. See
 [`mixed-target-optimization-v4/RESULTS.md`](artifacts/mixed-target-optimization-v4/RESULTS.md).
 
+The likelihood is now available as an explicit dense/mixed/block32 development
+variant; defaults are unchanged. After propagating candidate identity to every
+continuation attempt and tier, 22 focused and continuation tests passed. An
+attested integrated 18-case boundary check found zero candidate-only rejections
+and six shared nonfinite cases. This supports a bounded workflow experiment,
+not a global numerical-safety or sampling-benefit claim. See
+[`SHARED_LOGVOL_LIKELIHOOD.md`](SHARED_LOGVOL_LIKELIHOOD.md).
+
 Next work separates workflow cost improvements, calibration across demanding
 fresh datasets, and viable chronological market data. Small feasibility cohorts
 and fixed-target repetitions cannot replace repeated-data or market validation.

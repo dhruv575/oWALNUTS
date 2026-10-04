@@ -91,6 +91,8 @@ def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
         checkpoint(report)
         for tier in tiers:
             attempt = dict(draws=tier, added_draws=tier-previous, status='running')
+            if 'likelihood_variant' in report:
+                attempt.update(likelihood_variant=report['likelihood_variant'],arm=report['arm'])
             report['attempts'].append(attempt)
             fit_dir = Path(out)/f'draws-{tier}'; fit_dir.mkdir()
             write_json(fit_dir/'attempt.json', attempt)
@@ -123,6 +125,8 @@ def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
                            healthy=evaluation['computational_screen_pass'] and divergences == 0,
                            target_calls=chunk.cumulative_target_calls,
                            cumulative_work=chunk.cumulative_work)
+                if 'likelihood_variant' in report:
+                    fit.update(likelihood_variant=report['likelihood_variant'],arm=report['arm'])
                 emit('evaluation', 'end', tier)
                 result = screen(fit, .02)
                 verify(); emit('serialization', 'start', tier)
