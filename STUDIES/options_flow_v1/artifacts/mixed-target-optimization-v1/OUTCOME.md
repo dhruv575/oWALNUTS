@@ -1,0 +1,9 @@
+# Correctness and graph results ? no target timing
+
+The original five archived positions plus four deterministic broad-scale T1000 regimes passed normalized value/gradient comparison against both the baseline compiled target and independent JAX canonical-density-plus-Jacobian implementation. Maximum baseline/candidate absolute value discrepancy7.57e-10 and gradient discrepancy3.64e-12; tolerances were prospective relative1e-10/value and1e-9/gradient with absolute1e-8.
+
+The optimized graphs genuinely differ: baseline91nodes, candidate82nodes. DimShuffle falls16?10; Elemwise17?16; MakeVector and All nodes disappear; the2Scan,2CumOp and8FusedElemwise counts remain. Node counts alone do not predict performance. Compilation was concurrent with other validation/scan activity and is not a timing comparison.
+
+A separate18-case T1 numerical-domain check used y=0,1e-160,1e-150 and h=?690,?710,?740 at zero path/slopes, with an independent finite scalar normalized-value oracle. There were zero cases where baseline was finite and candidate rejected, six cases where both rejected (h?710/?740), and twelve cases where the candidate was finite while baseline rejected. Candidate finite values matched the scalar oracle within5.83e-11. The cfunc adapter maps nonfinite gradients/log density to recoverable rejection; these are numerical implementation limitations on otherwise finite mathematical targets, not zero posterior density.
+
+The exp(-h) formulation still fails part of the mathematical domain. These checks establish neither general numerical robustness nor permission to replace the baseline. More complete boundary handling would be needed for a general target implementation. Both original validation and boundary outputs remain intact. No handwritten target derivatives, MCMC, runtime benchmark, production source change, or frozen experiment recipe change occurred. All jobs exited0.

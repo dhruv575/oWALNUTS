@@ -43,6 +43,16 @@ controller still uses the legacy reporting path. See
 [`report-provenance-optimization-v1/RESULTS.md`](artifacts/report-provenance-optimization-v1/RESULTS.md)
 and [`COHORT_VALIDATION.md`](COHORT_VALIDATION.md).
 
+The shared-log-volatility likelihood prototype produced about 15% lower target-call
+cost in a two-order microbenchmark, but its independent audit failed runtime
+identity checks: the launcher imported the main editable package instead of the
+configured attested worktree package. The observed result and failed audit are
+preserved in
+[`mixed-target-optimization-v1/RESULTS.md`](artifacts/mixed-target-optimization-v1/RESULTS.md).
+It is not accepted performance evidence for the intended runtime. Repair package
+selection and verify actual imported paths and hashes before compiling or timing
+the corrected experiment. No sampling benefit or default promotion follows.
+
 Next work separates workflow cost improvements, calibration across demanding
 fresh datasets, and viable chronological market data. Small feasibility cohorts
 and fixed-target repetitions cannot replace repeated-data or market validation.

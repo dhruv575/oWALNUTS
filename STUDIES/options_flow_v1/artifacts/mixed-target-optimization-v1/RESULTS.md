@@ -1,0 +1,17 @@
+# Mixed-target algebra optimization evidence: runtime audit failed
+
+**Independent audit failed: 232 of 234 checks passed, but the imported adapter and extension differ from the configured runtime. These timings are not accepted as the configured runtime comparison.** The failed audit and original results are preserved unchanged.
+
+The observed target-only microbenchmark completed once, with both compilation orders and alternating call order. Across 24 blocks and 36,000 target calls, pooled median baseline cost was 73.978 microseconds and candidate cost was 62.903 microseconds: about 15% less time per call. The median paired baseline/candidate ratio was 1.1703. All block results are retained.
+
+This is a promising automatic-gradient likelihood algebra optimization, not a sampler workflow result. There was no sampling, trajectory-equivalence claim, market-calibration claim, or production target integration. The previously failed workflow speed gate remains unchanged. Compiler caches were not cleared; compilation varied with order, so no cold-compilation improvement is claimed.
+
+Normalized value and gradient comparisons passed at five archived T1000 positions and four deterministic stress regimes. The graph shrank from 91 to 82 nodes. Separate numerical-domain tests retained six mathematically finite regimes rejected by both implementations; no candidate-only rejection was observed in that small test. This is not comprehensive numerical robustness. These limitations remain prerequisites to any general replacement.
+
+The original and version2 preparations were not executed and remain preserved. Only version3 was run, using CPU0, an 8 GiB per-process committed-memory cap and a 600-second contained timeout. Both processes exited zero; configuration hashes were checked at admission, completion and between processes. Total outer time was 17.779 seconds.
+
+The archive now also includes actual-imported-runtime with the main-package adapter and extension whose hashes match the recorded worker runtime. The launcher omitted the configured worktree PYTHONPATH and imported the editable main package instead. Pre/post hashes verified the wrong configured package files without checking actual import identity. No rerun or retrospective recertification is made.
+
+The exact executed study and prototype source bytes are in benchmark-run-v3/executed-sources.zip, mapped to their original paths and SHA256 values by its manifest. prior-profile contains the saved points, gradients, independent JAX parity and source metadata used as correctness inputs; inputs/fixture.json preserves the model data. Large historical raw arrays, the intended worktree runtime, and other runtime dependencies are referenced by their original pinned hashes rather than duplicated. The actual imported main-package adapter and native extension are explicitly copied in actual-imported-runtime to preserve the failed runtime comparison. archive-origin-inventory.json maps copied files to their original locations. CHECKSUMS.sha256 binds every archived file except the checksum list itself; .gitattributes disables newline transformation.
+
+See benchmark-run-v3/OUTCOME.md and summary.json for per-process timings, paired ratios, compilation costs and checks. The [independent audit](independent-benchmark-audit-v1/result.json) is present and reports the two runtime-identity failures; its [replayable script](independent-benchmark-audit-v1/audit.py) is preserved beside it. No files were staged or committed during archival.
