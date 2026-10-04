@@ -28,5 +28,10 @@ mutation and source preservation before a discovery failure. An initial isolated
 test used a mocked year beyond ZIP's supported range; the mock was corrected to
 the protocol end plus 72 hours without changing collector behavior for the test.
 
-No new network acquisition has run. Production activity thresholds and the new
-historical window require a concrete prospective protocol before collection.
+After these tests, the September 11-18 activity protocol was frozen as
+`DERIBIT_ACTIVITY_ACCESS_V1.json` with the contained command in
+`DERIBIT_ACTIVITY_EXECUTION_V1.json`. The attempt completed first-day discovery
+but found no instruments passing all thresholds, so it stopped without a full
+panel. The independently audited negative result, all requests and costs are
+retained in `artifacts/deribit-activity-access-v1/OUTCOME.md`. No thresholds or
+dates were changed within that attempt.

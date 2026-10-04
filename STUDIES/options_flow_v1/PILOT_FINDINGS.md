@@ -18,8 +18,13 @@ archives, and the manifest for all 148 local raw banks are in
 The optional activity-based acquisition path is integrated and passes 27 mocked
 tests. It ranks preperiod anchor availability and feature activity, applies
 metadata eligibility, and fails without relaxing thresholds when fewer than
-four contracts qualify. No new panel has been acquired with that policy yet;
-`ACTIVITY_ACQUISITION_VALIDATION.md` records its validation and limits.
+four contracts qualify. The first frozen activity-based attempt, for September
+11-18, completed first-day discovery but found zero of 536 instruments passing
+all thresholds. It stopped without a full panel; all 31 requests, costs and
+negative results are retained. Its independent audit and reproducible auditor
+passed. This result applies to that week and policy, not all Deribit periods.
+`ACTIVITY_ACQUISITION_VALIDATION.md` records implementation validation; the
+attempt's evidence is in `artifacts/deribit-activity-access-v1/OUTCOME.md`.
 
 The public CFunc continuation prototype now supports one adaptation followed by
 incremental retained draws. Focused Rust/Python checks establish exact replay,
