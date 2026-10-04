@@ -12,6 +12,45 @@ study worker adds canonical transport, frozen-adaptation checks, stage costs and
 failure checkpoints. Matched end-to-end measurements are now available below;
 continuation reduces repeated work but does not resolve every precision failure.
 
+## Fresh prior-data production feasibility pilot
+
+The prospective `production-calibration-feasibility-v1` fixes recipes before
+generating sixteen fresh T32 datasets: eight four-group flow datasets and eight
+exogenous-anchor local-level datasets. Each candidate runs the full four-chain
+1k-warmup, 1k/2k/4k/8k first-pass precision procedure. Two prespecified datasets
+per model also receive matched NumPyro reference fits. All twenty attempts took
+441.487 seconds including controller overhead; none was replaced.
+
+| Procedure | Usable / intended | Failure scope |
+|---|---:|---|
+| oWALNUTS mixed-slope flow | 8 / 8 | None in this small cohort |
+| NumPyro noncentered flow | 2 / 2 | None in the prespecified subset |
+| oWALNUTS residual local level | 6 / 8 | Two capped health/precision failures |
+| NumPyro residual local level | 1 / 2 | One capped divergence failure |
+
+The independent audit passes 550 integrity checks and reconciles 52 coverage
+counts/rates with the four separate reporter outputs. All 44/34 canonical
+coordinates, 18/6 physical-and-forecast outputs, starts, first-pass decisions,
+frozen adaptation, costs and provenance are checked. Local candidate case05 is
+healthy at 8k but misses scale endpoint precision (worst .03672245); case07
+misses both health and precision (.02464626). Local reference case01 has 303
+divergences at 8k despite satisfying endpoint precision. These remain failures.
+
+Coverage is descriptive only: flow parameter coverage counts range from 5/8
+to 8/8, and its four forecast counts are 8/8, 7/8, 6/8 and 8/8. Local candidate
+conditional coverage uses only its six usable fits; unconditional usable-and-
+covering counts retain all eight intended datasets. Eight datasets cannot
+establish calibration, and the two-dataset reference subsets are not posterior
+truth banks. The declared familywise coverage bounds are wide and no procedure
+meets the illustrative coverage rule. All outputs remain `qualified=false`.
+T32 establishes feasibility of the complete prospective procedure, not demanding
+long-series reliability or operational market predictive value.
+
+An initial freeze rejected case-only Windows executable spelling. Original
+drafts and the normalization audit are archived: only command[0] spelling changed,
+all resolved executable hashes agreed, and recipes, seeds and fixtures remained
+unchanged. Sampling began only after a successful freeze and independent check.
+
 ## Mixed-slope coordinate development comparison
 
 The frozen eight-cell `mixed-flow-comparison-v1` repeats the two development
