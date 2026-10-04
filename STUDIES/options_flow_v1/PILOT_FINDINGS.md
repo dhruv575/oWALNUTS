@@ -12,6 +12,24 @@ study worker adds canonical transport, frozen-adaptation checks, stage costs and
 failure checkpoints. Matched end-to-end measurements are now available below;
 continuation reduces repeated work but does not resolve every precision failure.
 
+## Independent reference analysis resource result
+
+The frozen `reference-bank-allocation-v1` analytic-control experiment completed
+four prescribed timing sentinels in 77.462 seconds. Its conservative full-study
+projection was 11,333 seconds against 1,723 seconds remaining, so all 144
+conditional campaign trials correctly remain not started. The independent
+audit passes 507 checks; no attempt was replaced. Each sentinel used 30,000
+whole-fit bootstrap resamples and took 17.65--18.47 seconds in bank analysis,
+with peak committed memory below 1.157 GB against a 2 GiB cap.
+
+The iid null sentinel resolved under the declared exploratory checks; the
+correlated null did not establish backend equivalence. Both deliberately
+shifted controls remained unresolved for backend disagreement. One sentinel
+per condition cannot estimate coverage or false-resolution rates. This is a
+resource-unresolved analytic reference experiment, not posterior endpoint
+accuracy evidence. The next implementation investigation targets analysis
+cost while preserving resamples, uncertainty rules and the failed allocation.
+
 ## Optimized long-flow implementation comparison
 
 The six-cell `optimized-mixed-comparison-v1` removes the earlier sequential
