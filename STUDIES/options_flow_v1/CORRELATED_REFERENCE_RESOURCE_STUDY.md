@@ -1,8 +1,16 @@
 # One bounded correlated reference study
 
-This implements the next analytic resource design. No campaign seeds, frozen
-plan or full campaign have been created. It is an exploratory preparation for
-an actual demanding-posterior bank, not a calibration qualification study.
+The frozen campaign terminated with four failed sentinels and 24 unstarted
+main trials. All four failures came from a CLI output-path type mismatch;
+there are no completed statistical results. The exact executed sources,
+independent audit, costs and outcomes are archived under
+`artifacts/correlated-reference-study-v1`. The path conversion is now fixed,
+with seven controller tests passing, including a regression at the allocation
+worker boundary. No replacement campaign has been launched.
+
+The design below remains the prospective record of that failed attempt. It
+was exploratory preparation for an actual demanding-posterior bank, not a
+calibration qualification study.
 
 Primary banks use 32 independent fits per backend, 8,192 values per fit, a
 4,096-value paired prefix and 30,000 whole-fit bootstrap resamples. The existing
