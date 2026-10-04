@@ -1,11 +1,22 @@
-# Continuation prototype (focused checks passed; not yet benchmarked)
+# Continuation prototype (correctness checks and development benchmarks)
 
 This additive CFunc-only prototype avoids repeating adaptation when collecting
 additional retained draws. It does not change posterior geometry, numerical
-kernel behavior, ordinary `sample`, or sampler defaults. It is not ready for
-promotion until a frozen workflow experiment has run. Focused replay and
-lifecycle checks pass on the pinned Rust 1.88 GNU toolchain; no continuation
-workflow speed or geometry improvement is established.
+kernel behavior, ordinary `sample`, or sampler defaults. Focused replay and
+lifecycle checks pass on the pinned Rust 1.88 GNU toolchain. Development
+benchmarks now measure complete workflows; broad reliability and interval
+calibration remain unestablished.
+
+In the audited dense-flow comparison, the T128 workflow took 17.023 seconds
+with continuation versus 21.235 with full restarts, both first passing at 2,000
+draws per chain. Every shared retained array matched exactly. At T1000,
+continuation reduced consumed time from 904.697 to 400.939 seconds, but both
+procedures failed endpoint precision at the 8,000-draw cap; this is not a
+time-to-success improvement. An earlier local-model fit was slower overall with
+continuation because output overhead outweighed saved sampling work. These
+results support measuring full invocation costs, not promising automatic speedups.
+See [the study findings](../../STUDIES/options_flow_v1/PILOT_FINDINGS.md) for
+reference comparisons, failed cases, real-data computations and limitations.
 
 ```python
 with owalnuts.start_session(target, init=starts, chains=4,
