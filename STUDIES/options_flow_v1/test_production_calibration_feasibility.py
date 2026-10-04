@@ -18,7 +18,7 @@ def generated(model,seed):
     return dict(seed=seed,prior_predictive=True,data=data,truth=truth,holdout=future)
 
 
-def prepared(tmp_path,monkeypatch,recipe='noncentered'):
+def prepared(tmp_path,monkeypatch,recipe='noncentered',relative_python=False):
     study=tmp_path/'study';study.mkdir();(study/'bound.py').write_text('immutable mock source')
     monkeypatch.setattr(controller,'HERE',study)
     python=tmp_path/'python.exe';python.write_text('mock executable');package=tmp_path/'package';(package/'owalnuts').mkdir(parents=True)
@@ -34,6 +34,9 @@ def prepared(tmp_path,monkeypatch,recipe='noncentered'):
         assert intent['flow_recipe']==recipe and intent['expected']==20
         calls.append((model,seed));return generated(model,seed)
     monkeypatch.setattr(controller,'generate',generator)
+    if relative_python:
+        monkeypatch.chdir(tmp_path)
+        python=Path('python.exe')
     plan=controller.prepare(out,python,package,attestation,audit,flow_recipe=recipe)
     assert len(calls)==16
     return out,plan
@@ -131,3 +134,13 @@ def test_provenance_abort_still_normalizes_complete_intended_denominator(tmp_pat
     controller.report(out)
     records=[r for p in out.glob('*-normalized.json') for r in json.loads(p.read_text())]
     assert len(records)==20 and all(not r['usable'] for r in records)
+
+
+def test_relative_python_is_canonicalized_before_all_commands(tmp_path,monkeypatch):
+    out,plan=prepared(tmp_path,monkeypatch,relative_python=True)
+    assert plan['python']==str((tmp_path/'python.exe').resolve())
+    for key in plan['manifest_keys']:
+        manifest=json.loads((out/f'{key}-manifest-draft.json').read_text())
+        assert all(cell['worker_command'][0]==plan['python'] for cell in manifest['cells'])
+    controller.freeze(out)
+    assert json.loads((out/'plan.json').read_text())['frozen']

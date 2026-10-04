@@ -109,7 +109,7 @@ def worker_command(python,model,kind,coordinates,fixture,out,seed):
 
 def prepare(out,python,package,attestation,seed_audit,*,flow_recipe,local_recipe='observation_residual'):
     if flow_recipe not in ['noncentered','mixed_slopes'] or local_recipe!='observation_residual':raise ValueError('Explicit pre-generation tested recipes required')
-    out=Path(out).resolve();package=Path(package).resolve();rows=seed_rows();inventory=seed_inventory(rows);audit=audited_seeds(seed_audit,inventory)
+    out=Path(out).resolve();python=Path(python).resolve();package=Path(package).resolve();rows=seed_rows();inventory=seed_inventory(rows);audit=audited_seeds(seed_audit,inventory)
     study={str(p.resolve()):sha(p) for p in HERE.glob('*.py')}
     runtime_files={str(Path(p).resolve()):sha(p) for p in [python,package/'owalnuts/__init__.py',package/'owalnuts/_owalnuts.pyd']}
     bound=dict(study,**runtime_files);bound.update(attested_dependencies(attestation,python,package))
