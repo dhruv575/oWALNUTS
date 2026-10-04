@@ -128,7 +128,7 @@ def shared_reference_errors(candidate_endpoints,bank_vector):
     return [{name:value-bank_vector[name] for name,value in candidate.items()} for candidate in candidate_endpoints]
 
 
-def analyze(spec,fits):
+def analyze(spec,fits,parameter_batch=None):
     out=dict(status='reference_unresolved',qualified=False,expected_fits=len(spec['fits']),recorded_fits=len(fits),reasons=[],
         uncertainty_method='Stratified whole-fit percentile bootstrap with Bonferroni endpoint tails; finite-bank approximation, not exact coverage',
         source_sha256=spec['source_sha256'],target_sha256=spec['target_sha256'])
@@ -187,9 +187,19 @@ def analyze(spec,fits):
         backend_point={b:r[0] for b,r in backend_results.items()}
         backend_errors={name:sum(r[1][name] for r in backend_results.values()) for name in point}
         rng=random.Random(spec['bootstrap_seed']);draws=[];differences=[];backend_differences=[]
-        for _ in range(spec['bootstrap_replicates']):
-            counts=resample_fits(fits,rng);q,error=evaluate(fits,spec,high,counts,cache);q0,error0=evaluate(fits,spec,low,counts,cache)
-            backend_resamples=[evaluate(by_backend[b],spec,high,counts,cache) for b in backends]
+        vectorized=None
+        if parameter_batch is not None:
+            if any(e['kind']!='parameter' for e in spec['endpoints'].values()):raise ValueError('Optional batch path supports parameters only')
+            all_counts=[resample_fits(fits,rng) for _ in range(spec['bootstrap_replicates'])]
+            groups=[(fits,high),(fits,low)]+[(by_backend[b],high) for b in backends]
+            vectorized=[{name:parameter_batch(group,cache,length,name,e['probability'],all_counts) for name,e in spec['endpoints'].items()} for group,length in groups]
+        for index in range(spec['bootstrap_replicates']):
+            if vectorized is None:
+                counts=resample_fits(fits,rng);q,error=evaluate(fits,spec,high,counts,cache);q0,error0=evaluate(fits,spec,low,counts,cache)
+                backend_resamples=[evaluate(by_backend[b],spec,high,counts,cache) for b in backends]
+            else:
+                results=[({name:values[index] for name,values in group.items()},{name:0. for name in point}) for group in vectorized]
+                (q,error),(q0,error0)=results[:2];backend_resamples=results[2:]
             qb=[r[0] for r in backend_resamples]
             for name in point:
                 difference_errors[name]=max(difference_errors[name],error[name]+error0[name])
@@ -231,3 +241,5 @@ def cache_observed_predictive(draws,data,model,grid,order=128):
         error_bound_verified=False,cdf_error_bound=None,error_bound_provenance=None,
         numerical_checks_passed=False,numerical_cdf_error_estimate=None,numerical_checks_provenance=None,
         limitation='Attach frozen refinement and independent-quadrature-control evidence before using a declared numerical error estimate; formal bounds are a separate optional policy')
+
+
