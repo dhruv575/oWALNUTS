@@ -12,6 +12,24 @@ study worker adds canonical transport, frozen-adaptation checks, stage costs and
 failure checkpoints. Matched end-to-end measurements are now available below;
 continuation reduces repeated work but does not resolve every precision failure.
 
+## As-of market eligibility issue found before replay
+
+The unfrozen eight-origin replay screen found that only 5 of its 32 scheduled
+origin/group cells have a known current reference trade, and only 2 have an
+eligible future label. The current as-of adapter's feature-only forecast
+availability is insufficient: this panel defines returns as the log price
+difference from a reference trade no older than 30 minutes at cutoff. Without
+that reference, the anchored return itself is undefined. An available trailing
+flow feature (including valid zero flow) does not establish that anchor.
+
+No rolling campaign has launched. The adapter/controller correction must use
+feature AND known-anchor availability, retain every scheduled cell, distinguish
+no eligible forecast from a successful fit, and join future outcomes only after
+inference. Earlier scenario outputs do not establish an operational forecast.
+Even after correction, this fixed sparse panel cannot support a substantive
+predictive utility or coverage claim. A richer evaluation needs a prospectively
+selected active universe, without choosing origins based on future labels.
+
 ## Independent reference analysis resource result
 
 The frozen `reference-bank-allocation-v1` analytic-control experiment completed
