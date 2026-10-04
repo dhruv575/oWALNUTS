@@ -20,6 +20,8 @@ def reviewed_seeds(rows,audit_path,initialization_seeds=()):
     pattern=re.compile(r'(?<!\d)(?:'+'|'.join(map(str,values))+r')(?!\d)')
     for p,h in audit['inventory_files'].items():
         if sha(p)!=h or pattern.search(Path(p).read_text(encoding='utf-8-sig')):raise ValueError('Historical seed binding/collision')
+    for p,h in audit.get('supplemental_evidence',{}).items():
+        if sha(p)!=h:raise ValueError('Supplemental seed evidence changed')
     return audit
 
 
@@ -60,7 +62,7 @@ def prepare(out,python,package,attestation,panel,anchors,protocol,fixtures,seed_
         fixture=load(item['path']);expected=origin_fixture(derived,rules,origin_index=item['origin'],window=128,init_seed=fixture['provenance']['init_seed'])
         if fixture!=expected:raise ValueError('Fixture differs from bound as-of replay')
     python=Path(python).resolve();package=Path(package).resolve();out=Path(out).resolve()
-    bound={str(Path(p).resolve()):sha(p) for p in [python,package/'owalnuts/__init__.py',package/'owalnuts/_owalnuts.pyd',attestation,panel,anchors,protocol,seed_audit,*fixtures]};bound.update(attested_dependencies(attestation,python,package));bound.update(audit['inventory_files'])
+    bound={str(Path(p).resolve()):sha(p) for p in [python,package/'owalnuts/__init__.py',package/'owalnuts/_owalnuts.pyd',attestation,panel,anchors,protocol,seed_audit,*fixtures]};bound.update(attested_dependencies(attestation,python,package));bound.update(audit['inventory_files']);bound.update(audit.get('supplemental_evidence',{}))
     bound.update({str((Path(archive_directory)/name).resolve()):digest for name,digest in original['acquisition_binding']['trade_files'].items()})
     plan=dict(initialization_policy=INIT_POLICY,panel=str(Path(panel).resolve()),anchors=str(Path(anchors).resolve()),protocol=str(Path(protocol).resolve()),archive_directory=str(Path(archive_directory).resolve()),seed_audit_path=str(Path(seed_audit).resolve()),frozen=False,qualified=False,expected_processes=4,expected_fits=12,python=str(python),pythonpath=str(package),bound_files=bound,study_bindings=sources(),runtime=runtime(python),fixtures=contracts,seed_rows=seed_rows,seed_audit=audit,chains=4,warmup=1000,tiers=TIERS,batch=1000,relative_mcse=.02,reference_target_accept=.9,timeout_seconds=1800,cohorts=[],policy='Fresh adaptation each posterior; immutable A/B/A, process/cache reuse only. Candidate target compiles anew each fit. No posterior carryover or historical timing ratios.')
     for pair,order in enumerate([['pymc','numpyro'],['numpyro','pymc']]):

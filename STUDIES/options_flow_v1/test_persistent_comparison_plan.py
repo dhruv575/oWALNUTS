@@ -167,3 +167,13 @@ def test_invalid_outer_cost_never_enters_ratios(tmp_path,value):
 def test_initialization_stream_collisions_rejected(initial):
     with pytest.raises(ValueError,match='Distinct'):
         p.reviewed_seeds([[1,2,3],[4,5,6]],'must-not-read',initial)
+
+
+def test_supplement_is_hash_bound_not_reinterpreted_as_seed_usage(tmp_path):
+    old=tmp_path/'history.txt';old.write_text('historical seed 90')
+    evidence=tmp_path/'supplement.json';evidence.write_text('{"proposed":1}')
+    audit=tmp_path/'audit.json';values=[1,2,3,4,5,6,130001,130002,130003,130004,130005,130006,7,8]
+    audit.write_text(json.dumps(dict(status='passed',seeds=values,hits=[],scope='test',auditor='test',inventory_files={str(old):p.sha(old)},supplemental_evidence={str(evidence):p.sha(evidence)})))
+    p.reviewed_seeds([[1,2,3],[4,5,6]],audit,[7,8])
+    evidence.write_text('{}')
+    with pytest.raises(ValueError,match='Supplemental'):p.reviewed_seeds([[1,2,3],[4,5,6]],audit,[7,8])
