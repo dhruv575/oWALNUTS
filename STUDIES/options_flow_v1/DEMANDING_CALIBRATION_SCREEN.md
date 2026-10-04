@@ -24,7 +24,8 @@ every failure. No failed case is replaced or retried.
 
 `production_calibration_feasibility.py prepare --screen-spec PATH` accepts an
 explicit JSON object containing `models: ["flow"]`, `periods: 1000`, `groups: 4`,
-`count`, `reference_indices`, `timeout_seconds`, `total_seconds`, and `seed_rows`.
+`count`, `reference_indices`, `timeout_seconds`, `total_seconds`,
+`minimum_free_bytes`, and `seed_rows`.
 Each row specifies `model`, `index`, `dataset_seed`, `init_seed`, `chain_seed`
 and `predictive_seed`; selected reference rows additionally require
 `reference_chain_seed` and `reference_predictive_seed`. Prediction seeds follow
@@ -41,6 +42,16 @@ cases and mark inference unresolved; a cost-dependent completed prefix cannot
 be analyzed as a fixed-size independent binomial experiment. Record subsequent
 normalization, hashing and reporting costs separately and add them once to the
 execution total. A combined overrun also remains explicit.
+
+Storage admission requires at least 12 GiB free before each worker. Record the
+measured free bytes and threshold; once this check fails, preserve remaining
+cases as unstarted for storage and mark inference unresolved. This threshold
+provides headroom for the next procedure and cleanup; it is not a disk quota,
+reservation or guarantee of completing all 40 cases. A full set of cumulative
+1k/2k/4k/8k JSON arrays across all cases could contain 2.4288 billion coordinates,
+approximately 97 GB at a conservative 40 bytes per coordinate, before metadata.
+Do not delete earlier artifacts or retry skipped cases to produce a complete
+cohort. Partial-output failures remain recorded computational outcomes.
 
 Before launch, review and commit the exact protocol, seed inventory, sources,
 runtime, expected IDs, storage allowance and admission policy. The shared binary

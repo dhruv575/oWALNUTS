@@ -13,6 +13,7 @@ from pathlib import Path
 import random
 import re
 import subprocess
+import shutil
 import time
 from continuation_comparison import sha,load,save,attested_dependencies
 from masked_market_comparison_plan import dispersed_starts
@@ -123,6 +124,7 @@ def screen_contract(spec):
     seed_inventory(rows,True)
     if type(spec.get('timeout_seconds'))not in (int,float) or not math.isfinite(spec['timeout_seconds']) or spec['timeout_seconds']<=0:raise ValueError('Explicit positive timeout required')
     if type(spec.get('total_seconds'))not in (int,float) or not math.isfinite(spec['total_seconds']) or spec['total_seconds']<=spec['timeout_seconds']+15:raise ValueError('Explicit total admission budget with cleanup reserve required')
+    if type(spec.get('minimum_free_bytes'))is not int or spec['minimum_free_bytes']<=0:raise ValueError('Explicit positive minimum free bytes required')
     return copy.deepcopy(spec)
 
 
@@ -188,7 +190,7 @@ def prepare(out,python,package,attestation,seed_audit,*,flow_recipe,local_recipe
     for key,manifest in manifests.items():manifest['protocol_sha256']=protocol_sha;save(out/f'{key}-manifest-draft.json',manifest)
     plan=dict(frozen=False,qualified=False,python=str(Path(python).resolve()),pythonpath=str(package),expected=expected,
         protocol_sha256=protocol_sha,protocol_path=str(out/'protocol.json'),bound_files=bound,study_bindings=study,
-        manifest_keys=list(manifests),ordered=ordered,timeout_seconds=timeout,runtime_versions=intent['runtime_versions'],resource_screen=bool(screen),total_seconds=screen['total_seconds'] if screen else None)
+        manifest_keys=list(manifests),ordered=ordered,timeout_seconds=timeout,runtime_versions=intent['runtime_versions'],resource_screen=bool(screen),total_seconds=screen['total_seconds'] if screen else None,minimum_free_bytes=screen['minimum_free_bytes'] if screen else None)
     save(out/'plan-draft.json',plan);return plan
 
 
@@ -210,7 +212,7 @@ def freeze(directory):
         expected=len(screen['models'])*(screen['count']+len(screen['reference_indices']))
         if any(intent.get(k)!=v for k,v in dict(models=screen['models'],count=screen['count'],periods=screen['periods'],groups=screen['groups'],reference_indices=screen['reference_indices'],seed_rows=screen['seed_rows'],expected=expected,timeout_seconds=screen['timeout_seconds']).items()):raise ValueError('Screen scope differs from pregeneration intent')
     else:expected=20
-    if plan.get('resource_screen',False)!=bool(screen) or plan.get('total_seconds')!=(screen['total_seconds'] if screen else None) or plan['timeout_seconds']!=intent['timeout_seconds'] or plan['expected']!=expected or len(plan['ordered'])!=expected:raise ValueError('Draft execution scope differs from pregeneration intent')
+    if plan.get('resource_screen',False)!=bool(screen) or plan.get('total_seconds')!=(screen['total_seconds'] if screen else None) or plan.get('minimum_free_bytes')!=(screen['minimum_free_bytes'] if screen else None) or plan['timeout_seconds']!=intent['timeout_seconds'] or plan['expected']!=expected or len(plan['ordered'])!=expected:raise ValueError('Draft execution scope differs from pregeneration intent')
     seed_map={(r['model'],r['index']):r for r in intent['seed_rows']};claimed_paths=set()
     for key in plan['manifest_keys']:
         manifest=load(directory/f'{key}-manifest-draft.json');manifest['status']='FROZEN'
@@ -252,7 +254,7 @@ def execute(path):
         if sha(path)!=original or path.with_suffix('.sha256').read_text().strip()!=original:raise ValueError('Plan drift')
         verify(plan)
         if any(sha(p)!=v for p,v in plan['manifests'].items()):raise ValueError('Manifest drift')
-    manifests={Path(p).name.removesuffix('-manifest.json'):load(p) for p in plan['manifests']};abort=None;budget_skipped=0;provenance_skipped=0;cohort_start=time.perf_counter()
+    manifests={Path(p).name.removesuffix('-manifest.json'):load(p) for p in plan['manifests']};abort=None;budget_skipped=0;provenance_skipped=0;storage_skipped=0;storage_abort=None;cohort_start=time.perf_counter()
     for order in plan['ordered']:
         manifest=manifests[order['manifest']];cell=next(c for c in manifest['cells'] if c['id']==order['id'])
         status=Path(cell['status_path']);marker=Path(cell['started_path']);output=Path(cell['output_directory'])
@@ -260,11 +262,19 @@ def execute(path):
         if abort:
             provenance_skipped+=1
             save(status,dict(status='unattempted_provenance_abort',error=abort,elapsed_seconds=0,returncode=None));continue
+        storage_admission=None
+        if plan.get('resource_screen'):
+            free=shutil.disk_usage(path.parent).free
+            storage_admission=dict(observed_free_bytes=free,minimum_free_bytes=plan['minimum_free_bytes'],passed=free>=plan['minimum_free_bytes'])
+            if storage_abort is None and free<plan['minimum_free_bytes']:storage_abort=dict(first_observed_free_bytes=free,minimum_free_bytes=plan['minimum_free_bytes'])
+            if storage_abort is not None:
+                storage_skipped+=1
+                save(status,dict(id=cell['id'],status='unattempted_storage',elapsed_seconds=0,returncode=None,observed_free_bytes=free,storage_admission=storage_admission,storage_latch=storage_abort,reason='Prospective free-space admission threshold failed; remaining queue latched unstarted, not a reserved-capacity guarantee'));continue
         if plan.get('resource_screen') and plan['total_seconds']-(time.perf_counter()-cohort_start)<plan['timeout_seconds']+15:
             budget_skipped+=1
-            save(status,dict(id=cell['id'],status='unattempted_budget',elapsed_seconds=0,returncode=None,reason='Insufficient remaining full worker allowance plus cleanup reserve'));continue
-        save(marker,dict(protocol_sha256=manifest['protocol_sha256'],procedure_sha256=manifest['procedure_sha256'],fixture_sha256=cell['fixture_sha256'],dataset_seed=cell['dataset_seed'],utc=datetime.datetime.now(datetime.timezone.utc).isoformat()))
-        tick=time.perf_counter();record=dict(id=cell['id'],status='started',returncode=None)
+            save(status,dict(id=cell['id'],status='unattempted_budget',storage_admission=storage_admission,elapsed_seconds=0,returncode=None,reason='Insufficient remaining full worker allowance plus cleanup reserve'));continue
+        save(marker,dict(protocol_sha256=manifest['protocol_sha256'],procedure_sha256=manifest['procedure_sha256'],fixture_sha256=cell['fixture_sha256'],dataset_seed=cell['dataset_seed'],utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),storage_admission=storage_admission))
+        tick=time.perf_counter();record=dict(id=cell['id'],status='started',returncode=None,storage_admission=storage_admission)
         try:
             try:check()
             except Exception as exc:abort=str(exc);raise
@@ -285,7 +295,7 @@ def execute(path):
             record['status']='worker_terminal'
         except Exception as exc:record.update(status='controller_failed',error=str(exc))
         record['elapsed_seconds']=time.perf_counter()-tick;save(status,record)
-    save(path.parent/'execution-timing.json',dict(seconds=time.perf_counter()-cohort_start,intended=plan['expected'],qualified=False,resource_screen=plan.get('resource_screen',False),unstarted_count=budget_skipped+provenance_skipped,provenance_skipped=provenance_skipped,budget_skipped=budget_skipped,has_budget_skipped=budget_skipped>0,total_budget_unresolved=bool(budget_skipped or provenance_skipped or plan.get('total_seconds') and time.perf_counter()-cohort_start>plan['total_seconds']),budget_scope='Admission budget includes overhead; final overrun explicitly unresolved; wrapper owns per-worker timeout and cleanup'))
+    save(path.parent/'execution-timing.json',dict(seconds=time.perf_counter()-cohort_start,intended=plan['expected'],qualified=False,resource_screen=plan.get('resource_screen',False),storage_skipped=storage_skipped,unstarted_count=budget_skipped+provenance_skipped+storage_skipped,provenance_skipped=provenance_skipped,budget_skipped=budget_skipped,has_budget_skipped=budget_skipped>0,total_budget_unresolved=bool(budget_skipped or provenance_skipped or storage_skipped or plan.get('total_seconds') and time.perf_counter()-cohort_start>plan['total_seconds']),budget_scope='Admission budget includes overhead; final overrun explicitly unresolved; wrapper owns per-worker timeout and cleanup'))
 
 
 def report(directory):

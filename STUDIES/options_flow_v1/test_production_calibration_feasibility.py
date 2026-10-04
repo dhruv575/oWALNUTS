@@ -156,7 +156,7 @@ def demanding_spec(count=4,refs=(0,3)):
         r=dict(model='flow',index=i,dataset_seed=100+i,init_seed=200+i,chain_seed=300+i,predictive_seed=130300+i)
         if i in refs:r.update(reference_chain_seed=400+i,reference_predictive_seed=130400+i)
         rows.append(r)
-    return dict(models=['flow'],periods=1000,groups=4,count=count,reference_indices=list(refs),seed_rows=rows,timeout_seconds=1800,total_seconds=21600)
+    return dict(models=['flow'],periods=1000,groups=4,count=count,reference_indices=list(refs),seed_rows=rows,timeout_seconds=1800,total_seconds=21600,minimum_free_bytes=12*1024**3)
 
 
 def test_demanding_explicit_scope_before_generation_and_shared_starts(tmp_path,monkeypatch):
@@ -244,6 +244,8 @@ def test_cleanup_failure_aborts_remaining_fits(tmp_path,monkeypatch):
     monkeypatch.setattr(controller.subprocess,'run',run);controller.execute(out/'plan.json')
     statuses=[controller.load(p) for p in (out/'status').glob('*-status.json')]
     assert len(calls)==1 and len(statuses)==6
+    actual=next(r for r in statuses if r['status']=='controller_failed');assert actual['storage_admission']['passed'] is True
+    marker=controller.load(next((out/'status').glob('*-started.json')));assert marker['storage_admission']==actual['storage_admission']
     assert sum(r['status']=='unattempted_provenance_abort' for r in statuses)==5
 
 
@@ -260,3 +262,14 @@ def test_report_integrity_flags_without_relabeling_legitimate_gate_failures(tmp_
     assert timing['resource_inference_unresolved'] is expected
     assert timing['integrity_issue_count']==(0 if valid else 6)
     assert timing['observed_unstarted_count']==(6 if unstarted else 0)
+
+
+def test_storage_admission_latches_even_if_space_recovers(tmp_path,monkeypatch):
+    out,_=prepared(tmp_path,monkeypatch,'mixed_slopes',screen=demanding_spec());controller.freeze(out)
+    free=iter([1]);monkeypatch.setattr(controller.shutil,'disk_usage',lambda p:SimpleNamespace(free=next(free,100*1024**3)))
+    monkeypatch.setattr(controller.subprocess,'run',lambda *a,**kw:pytest.fail('No worker after storage admission fails'))
+    controller.execute(out/'plan.json');statuses=[controller.load(p) for p in (out/'status').glob('*-status.json')]
+    assert len(statuses)==6 and all(r['status']=='unattempted_storage' for r in statuses)
+    assert not list((out/'status').glob('*-started.json'))
+    timing=controller.load(out/'execution-timing.json');assert timing['storage_skipped']==timing['unstarted_count']==6 and timing['total_budget_unresolved']
+    assert all(r['storage_latch']['first_observed_free_bytes']==1 for r in statuses)
