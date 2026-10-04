@@ -17,13 +17,19 @@ def gate(report,cell):
     def finite(v):return type(v) in (int,float) and math.isfinite(v)
     def health(v):return all(finite(v[k]) for k in ['rhat','bulk_ess','tail_ess']) and 0<v['rhat']<=1.01 and min(v['bulk_ess'],v['tail_ess'])>=400
     def precise(bounds,errors):return len(bounds)==len(errors)==2 and all(finite(v) for v in bounds+errors) and bounds[1]>bounds[0] and min(errors)>=0 and max(errors)/(bounds[1]-bounds[0])<=.02
-    forecast=e['forecast'];rows=forecast['rows']
-    if len(rows)!=4 or {(r['horizon'],r['group']) for r in rows}!={tuple(v) for v in cell['forecast_cells']}:raise ValueError('Forecast family mismatch')
+    forecast=e['forecast'];rows=forecast['rows'];expected={tuple(v) for v in cell['forecast_cells']}
+    if not expected:raise ValueError('Empty forecast family must remain unattempted')
+    if len(rows)!=4 or {(r['horizon'],r['group']) for r in rows}!={(1,g) for g in range(4)}:raise ValueError('Scheduled forecast family mismatch')
+    available=[]
     for r in rows:
-        if r['grid_index']!=128 or r['forecast_available'] is not True or r['target_observed'] is not False or any(r[k] is not None for k in ['observed','covered','interval_score']):raise ValueError('Future labels or grid drift')
-        if r['width']!=r['upper']-r['lower']:raise ValueError('Interval width mismatch')
-    if forecast['scored_cells']!=0 or forecast['observed_target_cells']!=0 or forecast['available_forecast_cells']!=4:raise ValueError('Forecast denominator drift')
-    return report.get('status')=='completed' and report['retained_divergences']==0 and all(health(v) for v in [*q.values(),*f.values()]) and all(precise(v['interval_90'],v['endpoint_mcse']) for v in f.values()) and all(precise([v['lower'],v['upper']],v['endpoint_mcse']) for v in rows)
+        eligible=(r['horizon'],r['group']) in expected
+        if r['grid_index']!=128 or r['forecast_available'] is not eligible or r['target_observed'] is not False or any(r[k] is not None for k in ['observed','covered','interval_score']):raise ValueError('Future labels or eligibility/grid drift')
+        if eligible:
+            if r['width']!=r['upper']-r['lower']:raise ValueError('Interval width mismatch')
+            available.append(r)
+        elif any(r[k] is not None for k in ['lower','upper','width','endpoint_mcse']):raise ValueError('Unavailable target forecast fabricated')
+    if forecast['scored_cells']!=0 or forecast['observed_target_cells']!=0 or forecast['available_forecast_cells']!=len(expected):raise ValueError('Forecast denominator drift')
+    return report.get('status')=='completed' and report['retained_divergences']==0 and all(health(v) for v in [*q.values(),*f.values()]) and all(precise(v['interval_90'],v['endpoint_mcse']) for v in f.values()) and all(precise([v['lower'],v['upper']],v['endpoint_mcse']) for v in available)
 
 
 def verify(path,plan,digest):
@@ -86,6 +92,10 @@ def execute(path):
         try:
             try:verify(path,plan,digest)
             except Exception as exc:abort=str(exc);raise
+            if not c['forecast_cells']:
+                overhead=time.perf_counter()-tick
+                record.update(status='no_forecast_eligible',elapsed_seconds=overhead,worker_seconds=0,attempted=False,controller_seconds=overhead)
+                save(status,record);continue
             args=command(plan,c,out)
             if args!=c['command']:raise ValueError('Command drift')
             with (path.parent/(c['id']+'.log')).open('x') as log:
@@ -111,7 +121,7 @@ def validate_plan(plan,directory):
     directory=Path(directory).resolve()
     if plan['origins']!=ORIGINS or plan['window']!=128 or plan['expected']!=32 or plan['chains']!=4 or plan['warmup']!=1000 or plan['tiers']!=TIERS or plan['timeout_seconds']!=600 or plan['relative_mcse']!=.02:
         raise ValueError('Prospective schedule/configuration changed')
-    if plan['schema']!=dict(dimension=140,precision_names=list(__import__('masked_market_comparison_plan').NAMES),forecast_cells=[[1,g] for g in range(4)]):raise ValueError('Precision scope changed')
+    if plan['schema']!=dict(dimension=140,precision_names=list(__import__('masked_market_comparison_plan').NAMES),forecast_groups=[0,1,2,3],forecast_eligibility='feature_and_known_anchor'):raise ValueError('Precision scope changed')
     validate_seeds(plan['seed_rows'],plan['seed_audit_path'])
     if plan['python']!=str(Path(plan['python']).resolve()):raise ValueError('Interpreter must be canonical')
     panel=load(plan['panel_path']);protocol=load(plan['protocol_path']);fixtures={}

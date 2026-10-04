@@ -34,7 +34,7 @@ def lifecycle(tmp_path,monkeypatch,mode='completed'):
     from types import SimpleNamespace
     import asof_rolling_execute as e
     from asof_rolling_protocol import ORIGINS
-    cells=[dict(id=f'cell-{i}',arm='owalnuts_continuation',fixture_sha256='fixture',command=['wrapper','--','mock',str(i)]) for i in range(32)]
+    cells=[dict(id=f'cell-{i}',arm='owalnuts_continuation',fixture_sha256='fixture',forecast_cells=[[1,g] for g in range(4)],command=['wrapper','--','mock',str(i)]) for i in range(32)]
     plan=dict(frozen=True,origins=ORIGINS,expected=32,cells=cells,pythonpath='mock',timeout_seconds=600)
     path=tmp_path/'plan.json';path.write_text(json.dumps(plan));path.with_suffix('.sha256').write_text(e.sha(path))
     # Lifecycle isolated from schema tests: workers and validation are mocks.
@@ -117,3 +117,25 @@ def test_reference_checkpoint_gaps(bad):
     from asof_rolling_execute import validate_checkpoint_continuity
     validate_checkpoint_continuity([{'start_iterations':[0]*4,'end_iterations':[1000]*4}])
     with pytest.raises(ValueError):validate_checkpoint_continuity(bad)
+
+
+def test_variable_anchor_family_retains_all_scheduled_rows_and_health():
+    report,cell=valid();cell['forecast_cells']=[[1,1]]
+    for row in report['evaluation']['forecast']['rows']:
+        if row['group']!=1:row.update(forecast_available=False,lower=None,upper=None,width=None,endpoint_mcse=None)
+    report['evaluation']['forecast']['available_forecast_cells']=1
+    assert gate(report,cell)
+    report['evaluation']['canonical_parameter_diagnostics']['q_139']['rhat']=1.02
+    assert not gate(report,cell)
+
+
+def test_zero_eligible_origin_skips_four_arms_without_replacement(tmp_path,monkeypatch):
+    import json
+    e,path,calls=lifecycle(tmp_path,monkeypatch);plan=json.loads(path.read_text())
+    for c in plan['cells'][:4]:c['forecast_cells']=[]
+    path.write_text(json.dumps(plan));path.with_suffix('.sha256').write_text(e.sha(path))
+    e.execute(path)
+    statuses=[json.loads(p.read_text()) for p in tmp_path.glob('*-status.json')]
+    assert len(statuses)==32 and len(calls)==28 and not any(i<4 for i in calls)
+    skipped=[s for s in statuses if s['status']=='no_forecast_eligible']
+    assert len(skipped)==4 and all(s['worker_seconds']==0 and s['elapsed_seconds']==s['controller_seconds'] and s['elapsed_seconds']>=0 and not s['success'] and s['attempted'] is False for s in skipped)

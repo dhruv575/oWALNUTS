@@ -43,7 +43,7 @@ def test_seed_audit_requires_historical_bound_inventory(tmp_path):
     with pytest.raises(ValueError):p.validate_seeds(rows,audit)
 
 
-def draft(tmp_path,monkeypatch):
+def draft(tmp_path,monkeypatch,empty_origin=False):
     import asof_rolling_execute as e
     rows=[dict(origin=o,init_seed=100+i,chain_seed=200+i,predictive_seed=130200+i) for i,o in enumerate(p.ORIGINS)]
     historical=tmp_path/'historical.json';historical.write_text('{"seed":1}')
@@ -55,7 +55,7 @@ def draft(tmp_path,monkeypatch):
     monkeypatch.setattr(p,'attested_dependencies',lambda *a:{})
     monkeypatch.setattr(p,'runtime_versions',lambda *a:{})
     monkeypatch.setattr(e,'runtime_versions',lambda *a:{})
-    def fixture(*args,**kwargs):return dict(data=dict(x=[[.2]*4 for _ in range(128)],initial_positions=[[float(kwargs['init_seed'])]*140 for _ in range(4)]),holdout=dict(x=[[.2]*4],y=[[None]*4]),precision_family=[[1,g] for g in range(4)])
+    def fixture(*args,**kwargs):return dict(data=dict(x=[[.2]*4 for _ in range(128)],initial_positions=[[float(kwargs['init_seed'])]*140 for _ in range(4)]),holdout=dict(x=[[.2]*4],y=[[None]*4]),precision_family=[] if empty_origin and kwargs['origin_index']==144 else [[1,g] for g in range(4)])
     monkeypatch.setattr(p,'origin_fixture',fixture)
     out=tmp_path/'experiment';plan=p.prepare(out,panel,protocol,python,package,attest,audit,rows)
     return e,out,plan
@@ -98,7 +98,7 @@ def test_scoring_join_binds_exact_origin_fixture_seed_and_output(tmp_path,monkey
     fixture=dict(provenance=dict(origin_index=144));fp=tmp_path/'fixture.json';fp.write_text(json.dumps(fixture))
     cell=dict(arm=arm,origin=144,fixture=str(fp),fixture_sha256=p.sha(fp),seed=42,predictive_seed=130042,forecast_cells=[[1,g] for g in range(4)])
     report=dict(status='completed',seed=42,predictive_seed=130042,arm='python-pymc-masked-flow-noncentered-continuation',model='masked-flow',bindings={str(fp.resolve()):p.sha(fp)},
-        plan=dict(arm='numpyro-masked-noncentered-continuation',model='masked_flow',fixture_sha256=p.sha(fp),predictive_seed=130042),evaluation=dict(forecast=dict(rows=[dict(horizon=1,group=g) for g in range(4)])))
+        plan=dict(arm='numpyro-masked-noncentered-continuation',model='masked_flow',fixture_sha256=p.sha(fp),predictive_seed=130042),evaluation=dict(forecast=dict(rows=[dict(horizon=1,group=g,forecast_available=True) for g in range(4)])))
     out=tmp_path/'report.json';out.write_text(json.dumps(report));monkeypatch.setattr(p,'delayed_scores',lambda *a,**k:[])
     assert p.delayed_join(fixture,{},out,p.sha(out),cell=cell,as_of_ms=999)['origin']==144
     for mutate in [lambda r:r.update(seed=43),lambda r:r.update(arm='wrong') if arm=='owalnuts_continuation' else r['plan'].update(arm='wrong'),lambda r:r.update(bindings={}) if arm=='owalnuts_continuation' else r['plan'].update(fixture_sha256='wrong')]:
@@ -106,3 +106,11 @@ def test_scoring_join_binds_exact_origin_fixture_seed_and_output(tmp_path,monkey
         with pytest.raises(ValueError):p.delayed_join(fixture,{},out,p.sha(out),cell=cell,as_of_ms=999)
     out.write_text(json.dumps(report));old=p.sha(out);out.write_text(json.dumps(dict(report,changed=True)))
     with pytest.raises(ValueError):p.delayed_join(fixture,{},out,old,cell=cell,as_of_ms=999)
+
+
+def test_preparation_and_freeze_keep_no_anchor_origin_four_cells(tmp_path,monkeypatch):
+    e,out,plan=draft(tmp_path,monkeypatch,empty_origin=True)
+    assert len(plan['cells'])==32 and len([c for c in plan['cells'] if c['origin']==144])==4
+    assert all(c['forecast_cells']==[] for c in plan['cells'] if c['origin']==144)
+    assert [r['origin'] for r in plan['seed_rows']]==p.ORIGINS
+    e.freeze(out)

@@ -41,9 +41,9 @@ def summarize(directory,*,as_of_ms):
                 intervals={(r['horizon'],r['group']):r for r in report['evaluation']['forecast']['rows']}
                 rows=[]
                 for label in sorted(joined['labels'],key=lambda r:r['group']):
-                    row=dict(label,forecast_usable=True,covered=None,interval_score=None)
+                    row=dict(label,forecast_usable=bool(label['forecast_available']),covered=None,interval_score=None)
                     interval=intervals[(1,label['group'])];lo=interval['lower'];hi=interval['upper']
-                    row.update(lower=lo,upper=hi,width=hi-lo)
+                    row.update(lower=lo,upper=hi,width=hi-lo if label['forecast_available'] else None)
                     if label['scoring_eligible'] and label['forecast_available']:
                         y=label['observed'];row.update(covered=lo<=y<=hi,interval_score=hi-lo+20*max(lo-y,0)+20*max(y-hi,0))
                     rows.append(row)
@@ -55,6 +55,11 @@ def summarize(directory,*,as_of_ms):
         subset=[r for r in outcomes if r['arm']==arm];scored=[f for r in subset if r['success'] for f in r['forecasts'] if f['covered'] is not None]
         known=[r['elapsed_seconds'] for r in subset if r['elapsed_seconds'] is not None]
         summaries[arm]=dict(intended_fits=8,intended_forecasts=32,successful_fits=sum(r['success'] for r in subset),failed_or_unverified_fits=sum(not r['success'] for r in subset),
+            no_forecast_eligible_fits=sum(r['status']=='no_forecast_eligible' for r in subset),
+            known_anchor_cells=sum(f.get('anchor_available') is True for r in subset for f in r['forecasts']),
+            missing_anchor_cells=sum(f.get('anchor_available') is False for r in subset for f in r['forecasts']),
+            missing_covariate_cells=sum(f.get('feature_available') is False for r in subset for f in r['forecasts']),
+            future_unobserved_cells=sum(f.get('future_outcome_unobserved') is True for r in subset for f in r['forecasts']),
             eligible_observed_cells=sum(f.get('scoring_eligible') is True for r in subset for f in r['forecasts']),
             missing_or_purged_cells=sum(f.get('scoring_eligible') is False for r in subset for f in r['forecasts']),
             unknown_label_eligibility_cells=sum(f.get('scoring_eligible') is None for r in subset for f in r['forecasts']),

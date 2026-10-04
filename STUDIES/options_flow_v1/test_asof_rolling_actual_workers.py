@@ -21,7 +21,7 @@ def test_actual_worker_metadata_and_identity_bound_scoring(tmp_path,monkeypatch,
     for i in range(130):
         row=copy.deepcopy(template);decision=i*1800000+60000
         row.update(grid_index=i,decision_ms=decision,cutoff_ms=decision-60000,target_end_ms=decision+1800000)
-        for g in row['groups']:g.update(feature_available_ms=decision,target_available_ms=decision+1860000)
+        for g in row['groups']:g.update(feature_available_ms=decision,target_available_ms=decision+1860000,reference_timestamp=decision-60000)
         panel['records'].append(row)
     fixture=prepare(panel,protocol,origin_index=128,window=128,init_seed=612)
     source=tmp_path/'fixture.json';source.write_text(json.dumps(fixture));out=tmp_path/'out';seed=613

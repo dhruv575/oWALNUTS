@@ -3,8 +3,54 @@
 No execution or acquisition. Event timestamps plus assumed lag are not receipts.
 """
 import math
+import copy
+import hashlib
+import json
+from pathlib import Path
 from market_flow_features import digest_json, milliseconds
 from masked_market_comparison_plan import dispersed_starts
+
+
+def attach_archived_anchors(panel, archive_directory):
+    """New derived copy; resolve reference prices from hash-bound archived trades.
+
+    Does not modify the audited panel or acquisition files. Reference identities
+    already chosen by build_panel are verified against their original trades.
+    """
+    root=Path(archive_directory).resolve();lookup={}
+    files=panel['acquisition_binding']['trade_files']
+    for name,digest in files.items():
+        path=root/name
+        if Path(name).name!=name or hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise ValueError('Archived trade binding differs')
+        for trade in json.loads(path.read_text()):
+            key=(trade['instrument_name'],str(trade['trade_id']))
+            if key in lookup:raise ValueError('Duplicate archived trade identity')
+            lookup[key]=trade
+    result=copy.deepcopy(panel)
+    for row in result['records']:
+        for g in row['groups']:
+            stamp=g['reference_timestamp'];identifier=g['reference_trade_id']
+            if stamp is None:
+                if identifier is not None:raise ValueError('Missing timestamp with reference identity')
+                g['reference_price']=None;continue
+            trade=lookup.get((g['instrument_name'],str(identifier)))
+            if trade is None or trade['timestamp']!=stamp:raise ValueError('Reference trade not found in audited archive')
+            price=trade['price']
+            if type(price) not in (int,float) or not math.isfinite(price) or price<=0:raise ValueError('Invalid reference price')
+            if not row['cutoff_ms']-1800000<=stamp<=row['cutoff_ms']:raise ValueError('Reference outside known freshness window')
+            g['reference_price']=price
+    result['anchor_provenance']=dict(method='Reference trade identity and timestamp joined to hash-bound archived trade files',trade_files=files)
+    return result
+
+
+def anchor_at(row,group):
+    stamp=group.get('reference_timestamp');identifier=group.get('reference_trade_id');price=group.get('reference_price')
+    if stamp is None:
+        if identifier is not None or price is not None:raise ValueError('Incomplete missing-anchor metadata')
+        return dict(available=False,timestamp=None,trade_id=None,price=None)
+    if type(stamp) is not int or not row['cutoff_ms']-1800000<=stamp<=row['cutoff_ms']:raise ValueError('Anchor unavailable/stale at cutoff')
+    if identifier is None or type(price) not in (int,float) or not math.isfinite(price) or price<=0:raise ValueError('Resolve known anchor price from archived provenance before preparing fixture')
+    return dict(available=True,timestamp=stamp,trade_id=identifier,price=price)
 
 
 def prepare(panel, protocol, *, origin_index, window, init_seed):
@@ -47,13 +93,16 @@ def prepare(panel, protocol, *, origin_index, window, init_seed):
             raise ValueError('Mature observed outcome must be finite')
         x.append([g['x'] if g['x_available'] else 0. for g in row['groups']])
         y.append([g['y'] if keep else 0. for g,keep in zip(row['groups'],m)]);mask.append(m)
-    available=[bool(g['x_available']) for g in current['groups']]
-    if not any(available):raise ValueError('No current flow features available')
+    anchors=[anchor_at(current,g) for g in current['groups']]
+    feature_available=[bool(g['x_available']) for g in current['groups']]
+    available=[known and anchor['available'] for known,anchor in zip(feature_available,anchors)]
     data=dict(x=x,y=y,observation_mask=mask,grid_index=list(range(window)),rho=.95,nu=5.)
     data['initial_positions']=dispersed_starts(window,4,.95,init_seed)
     return dict(data=data,holdout=dict(x=[[g['x'] if g['x_available'] else 0. for g in current['groups']]],
-        y=[[None]*4],observation_mask=[[False]*4],x_available=[available],grid_index=[window]),
+        y=[[None]*4],observation_mask=[[False]*4],x_available=[available],feature_available=[feature_available],anchors=anchors,grid_index=[window]),
         source='real',prior_predictive=False,qualified=False,
+        forecast_eligibility='Known flow feature AND known positive fresh reference price at issuance; future labels never select forecasts',
+        forecast_status='eligible' if any(available) else 'no_forecast_eligible',
         precision_family=[[1,g] for g,yes in enumerate(available) if yes],
         provenance=dict(protocol_sha256=panel['protocol_sha256'],acquisition_binding=panel['acquisition_binding'],
             selection_sha256=panel.get('selection_sha256'),selection_binding='Acquisition manifest binds selection file; optional normalized selection digest retained',
@@ -80,9 +129,13 @@ def delayed_scores(fixture,panel,*,as_of_ms):
         if g['y_available'] and (g['y'] is None or not math.isfinite(g['y'])):
             raise ValueError('Available scoring label must be finite')
         purged=bool(g.get('phase_boundary_purged',False))
-        eligible=bool(g['observation_mask'] and not purged and g['y_available'])
+        anchor=fixture['holdout']['anchors'][j];feature=fixture['holdout']['feature_available'][0][j]
+        eligible=bool(g['observation_mask'] and not purged and g['y_available'] and fixture['holdout']['x_available'][0][j])
         result.append(dict(horizon=1,group=j,observed=g['y'] if eligible else None,
             target_observed=bool(g['y_available']),scoring_eligible=eligible,
+            anchor_available=anchor['available'],feature_available=feature,
+            unavailable_reason='missing_covariate_and_anchor' if not feature and not anchor['available'] else 'missing_covariate' if not feature else 'missing_anchor' if not anchor['available'] else None,
+            future_outcome_unobserved=bool(anchor['available'] and feature and not g['y_available']),
             protocol_observation_mask=bool(g['observation_mask']),phase_boundary_purged=purged,
             scoring_policy='Only mature observed labels admitted by original protocol mask and phase purge',
             forecast_available=fixture['holdout']['x_available'][0][j]))

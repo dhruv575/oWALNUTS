@@ -65,7 +65,7 @@ def prepare(out,panel_path,protocol_path,python,package,attestation,seed_audit,s
         aggregate_worker_allowance_seconds=19200,chains=4,warmup=1000,tiers=[1000,2000,4000,8000],relative_mcse=.02,
         reference_target_accept=.9,candidate_target_accept='attested unchanged default0.8',
         panel_path=str(Path(panel_path).resolve()),protocol_path=str(Path(protocol_path).resolve()),seed_audit_path=str(Path(seed_audit).resolve()),
-        schema=dict(dimension=140,precision_names=NAMES,forecast_cells=[[1,g] for g in range(4)]),
+        schema=dict(dimension=140,precision_names=NAMES,forecast_groups=[0,1,2,3],forecast_eligibility='feature_and_known_anchor'),
         interpretation='Historical event-time plus assumed60sec availability lag replay, conditional on eligible trade arrival; eight fixed origins, no qualification.',
         costs='All imports/parity/compile/warmup/draw/evaluation/output/wrapper and failed attempts retained',
         runtime_policy='CPU0 contained workers sequential; retained disk caches; fresh processes; no competing timed jobs',
@@ -75,7 +75,7 @@ def prepare(out,panel_path,protocol_path,python,package,attestation,seed_audit,s
     fixtures={}
     for row in seed_rows:
         f=origin_fixture(panel,protocol,origin_index=row['origin'],window=128,init_seed=row['init_seed'])
-        if f['precision_family']!=[[1,g] for g in range(4)]:raise ValueError('Prespecified four-current-feature family unavailable; do not replace origin')
+        # Retain every scheduled origin, including an empty known-anchor family.
         for kind,value in [('flow',f),('no-flow',no_flow(f))]:
             path=out/'fixtures'/f'{row["origin"]}-{kind}.json';save(path,value);fixtures[(row['origin'],kind)]=path
     plan['intent_sha256']=sha(out/'intent.json');plan['cells']=build_cells(fixtures,seed_rows,out,plan);save(out/'plan-draft.json',plan);return plan
@@ -96,6 +96,6 @@ def delayed_join(fixture,panel,output_path,expected_output_sha256,*,cell,as_of_m
         p=report['plan']
         if p.get('arm')!='numpyro-masked-noncentered-continuation' or p.get('model')!='masked_flow' or p.get('fixture_sha256')!=cell['fixture_sha256'] or p.get('predictive_seed')!=cell['predictive_seed']:raise ValueError('Scoring reference identity differs')
     forecast=report['evaluation']['forecast']
-    if {(r['horizon'],r['group']) for r in forecast['rows']}!={tuple(v) for v in cell['forecast_cells']}:raise ValueError('Scoring forecast family differs')
+    if {(r['horizon'],r['group']) for r in forecast['rows'] if r['forecast_available']}!={tuple(v) for v in cell['forecast_cells']}:raise ValueError('Scoring forecast family differs')
     return dict(inference_output_sha256=expected_output_sha256,origin=cell['origin'],seed=cell['seed'],
         labels=delayed_scores(fixture,panel,as_of_ms=as_of_ms),qualified=False)

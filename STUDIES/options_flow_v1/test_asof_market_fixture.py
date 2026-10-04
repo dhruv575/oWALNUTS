@@ -12,7 +12,7 @@ def inputs():
     for i in range(6):
         decision=i*1800000+60000
         groups=[dict(instrument_name=n,x=.2,y=.03,x_available=True,y_available=True,observation_mask=True,
-            feature_available_ms=decision,target_available_ms=decision+1860000) for n in names]
+            feature_available_ms=decision,target_available_ms=decision+1860000,reference_timestamp=decision-60000,reference_trade_id=n+str(i),reference_price=.1) for n in names]
         records.append(dict(grid_index=i,decision_ms=decision,cutoff_ms=decision-60000,target_end_ms=decision+1800000,
             selection_available=True,stabilizer_available=True,phase='development' if i<3 else 'validation',groups=groups))
     return dict(protocol_sha256=digest_json(protocol),acquisition_binding={'manifest_sha256':'test'},instruments=names,
@@ -87,3 +87,57 @@ def test_delayed_scoring_phase_eligibility_and_nonfinite_labels():
     assert labels[0]['observed'] is None and labels[0]['target_observed']
     panel['records'][4]['groups'][1]['y']=float('nan')
     with pytest.raises(ValueError):delayed_scores(f,panel,as_of_ms=99999999)
+
+
+def test_anchor_and_feature_eligibility_never_uses_future_labels():
+    panel,protocol=inputs();row=panel['records'][4]
+    row['groups'][0].update(reference_timestamp=None,reference_trade_id=None,reference_price=None)
+    row['groups'][1].update(x_available=False,x=None)
+    row['groups'][2].update(y_available=False,y=None,observation_mask=False)
+    f=prepare(panel,protocol,origin_index=4,window=3,init_seed=5)
+    assert f['precision_family']==[[1,2],[1,3]]
+    assert f['holdout']['x_available']==[[False,False,True,True]]
+    changed=copy.deepcopy(panel)
+    for g in changed['records'][4]['groups']:g.update(y=100.,y_available=True,observation_mask=True)
+    assert prepare(changed,protocol,origin_index=4,window=3,init_seed=5)==f
+    labels=delayed_scores(f,panel,as_of_ms=99999999)
+    assert labels[0]['unavailable_reason']=='missing_anchor' and labels[0]['observed'] is None
+    assert labels[1]['unavailable_reason']=='missing_covariate'
+    assert labels[2]['future_outcome_unobserved']
+
+
+def test_no_anchor_origin_remains_scheduled_and_actual_worker_rejects_empty_gate():
+    from pymc_flow_continuation_workflow import validate_fixture
+    panel,protocol=inputs()
+    for g in panel['records'][4]['groups']:g.update(reference_timestamp=None,reference_trade_id=None,reference_price=None)
+    f=prepare(panel,protocol,origin_index=4,window=3,init_seed=5)
+    assert f['forecast_status']=='no_forecast_eligible' and f['precision_family']==[]
+    assert len(f['data']['y'])==3 and len(f['holdout']['x'][0])==4
+    with pytest.raises(ValueError,match='At least one'):validate_fixture(f,'masked-flow')
+
+
+def test_archive_anchor_join_exact_identity_hash_and_immutable_input(tmp_path):
+    import json,hashlib
+    from asof_market_fixture import attach_archived_anchors
+    panel,protocol=inputs();trades=[]
+    for row in panel['records']:
+        for g in row['groups']:
+            trades.append(dict(instrument_name=g['instrument_name'],trade_id=g['reference_trade_id'],timestamp=g['reference_timestamp'],price=.25))
+            g.pop('reference_price')
+    path=tmp_path/'trades.json';path.write_text(json.dumps(trades))
+    panel['acquisition_binding']['trade_files']={'trades.json':hashlib.sha256(path.read_bytes()).hexdigest()}
+    original=copy.deepcopy(panel);derived=attach_archived_anchors(panel,tmp_path)
+    assert panel==original and derived['records'][4]['groups'][0]['reference_price']==.25
+    f=prepare(derived,protocol,origin_index=4,window=3,init_seed=5)
+    assert f['holdout']['anchors'][0]['price']==.25
+    path.write_text('[]')
+    with pytest.raises(ValueError,match='binding'):attach_archived_anchors(panel,tmp_path)
+
+
+@pytest.mark.parametrize('mutation',[
+ lambda g:g.update(reference_timestamp=99999999),lambda g:g.update(reference_timestamp=0),
+ lambda g:g.update(reference_price=None),lambda g:g.update(reference_price=-1),
+ lambda g:g.update(reference_trade_id=None)])
+def test_invalid_or_unresolved_known_anchor_rejected(mutation):
+    panel,protocol=inputs();mutation(panel['records'][4]['groups'][0])
+    with pytest.raises(ValueError):prepare(panel,protocol,origin_index=4,window=3,init_seed=5)

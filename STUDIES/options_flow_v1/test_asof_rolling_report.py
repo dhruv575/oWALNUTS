@@ -89,3 +89,24 @@ def test_coverage_conditioning_and_unconditional_usable_counts(tmp_path,monkeypa
     assert a['usable_and_covering_count']==14
     assert a['usable_and_covering_over_all_intended']==14/32
     assert a['usable_and_covering_over_eligible_observed']==14/16
+
+
+def test_report_preserves_unavailable_anchor_covariate_and_future_missing(tmp_path,monkeypatch):
+    plan=artifacts(tmp_path,monkeypatch)
+    labels=[dict(horizon=1,group=g,observed=.0 if g==0 else None,scoring_eligible=g==0,target_observed=g==0,
+        protocol_observation_mask=g==0,phase_boundary_purged=False,forecast_available=g in [0,3],anchor_available=g!=1,
+        feature_available=g!=2,future_outcome_unobserved=g==3) for g in range(4)]
+    monkeypatch.setattr(r,'delayed_scores',lambda *a,**k:labels)
+    monkeypatch.setattr(r,'delayed_join',lambda *a,**k:dict(labels=labels))
+    for c in plan['cells']:
+        out=tmp_path/c['id']/('python-pymc-flow-report.json' if c['arm']=='owalnuts_continuation' else 'report.json')
+        report=json.loads(out.read_text())
+        for row in report['evaluation']['forecast']['rows']:
+            if row['group'] in [1,2]:row.update(lower=None,upper=None)
+        out.write_text(json.dumps(report));sp=tmp_path/(c['id']+'-status.json');status=json.loads(sp.read_text());status['report_sha256']=r.sha(out);sp.write_text(json.dumps(status))
+    result=r.summarize(tmp_path,as_of_ms=999)
+    for a in result['arms'].values():
+        assert a['known_anchor_cells']==24 and a['missing_anchor_cells']==8
+        assert a['missing_covariate_cells']==8 and a['future_unobserved_cells']==8
+        assert a['scored_forecasts']==8 and a['usable_and_covering_over_all_intended']==8/32
+    assert result['outcomes'][0]['forecasts'][1]['forecast_usable'] is False
