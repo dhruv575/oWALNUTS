@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "scope": "Correctness only; no sampling or performance comparison",
+  "files": {
+    "masked_flow.py": "538aed1ed9181287c211d39913818279d0789815a2f77498044c9018d348959d",
+    "masked_flow_pymc.py": "412a7a47d46c2fcfc2ed0c5c9b6f021fd6c4d4c8854d319f5e657ee68687c8c9",
+    "test_masked_flow.py": "6ef3fe70f1c1cce5305465424dba650b16ecbc2624574ee491311f5709c5eab5"
+  },
+  "python": "C:/dev/owalnuts/target/python-workflow-env/Scripts/python.exe",
+  "PYTHONPATH": "C:/dev/owalnuts/target/python-flow-worktree/integrations/python/python",
+  "commands": [
+    {
+      "command": "python -m unittest discover -s STUDIES/options_flow_v1 -p test_masked_flow.py",
+      "tests": 4,
+      "passed": true,
+      "seconds": 22.299
+    },
+    {
+      "command": "python -m unittest test_masked_flow.MaskedFlowTests.test_jax_gradient_and_placeholder_invariance",
+      "cwd": "STUDIES/options_flow_v1",
+      "tests": 1,
+      "passed": true,
+      "seconds": 1.925,
+      "note": "After strengthening gap assertion to remove standardnormal prior gradient"
+    }
+  ],
+  "limitations": [
+    "Conditioning on observed trade arrival; no observation-selection model",
+    "Caller must supply complete chronological grid and availability metadata; arrays alone cannot discover omitted clock times",
+    "No real market panel evaluated"
+  ]
+}
