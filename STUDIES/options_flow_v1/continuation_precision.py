@@ -41,10 +41,12 @@ def main():
     p.add_argument('--coordinates',choices=['centered','observation_residual'],default='centered',help='Local-level coordinates; flow retains historical process-noncentered recipe')
     p.add_argument('--seed', type=int, required=True)
     p.add_argument('--warmup', type=int, default=1000)
+    p.add_argument('--target-accept',type=float,default=.8)
     p.add_argument('--chains', type=int, default=4)
     p.add_argument('--batch-size', type=int, default=1000)
     p.add_argument('--tiers', type=int, nargs='+', default=[1000,2000,4000,8000])
     a = p.parse_args()
+    if not np.isfinite(a.target_accept) or not 0 < a.target_accept < 1:p.error('--target-accept must be finite and strictly between zero and one')
     if a.model == 'flow' and a.coordinates != 'centered':p.error('Observation residual coordinates support local_level only')
     if (min(a.warmup,a.chains,a.batch_size)<1 or not a.tiers
             or any(v<a.batch_size or v%a.batch_size for v in a.tiers)
@@ -56,7 +58,7 @@ def main():
     coordinate_label='noncentered' if a.model=='flow' else a.coordinates
     arm='numpyro-continuation' if a.coordinates=='centered' else 'numpyro-continuation-observation-residual'
     plan = dict(model=a.model,coordinates=coordinate_label,arm=arm, seed=a.seed, warmup=a.warmup, chains=a.chains,
-        batch_size=a.batch_size, tiers=a.tiers, relative_mcse=.02,
+        target_accept=a.target_accept,batch_size=a.batch_size, tiers=a.tiers, relative_mcse=.02,
         fixture_sha256=hashlib.sha256(a.fixture.read_bytes()).hexdigest(),
         source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest()
                        for f in Path(__file__).parent.glob('*.py')},
@@ -80,7 +82,7 @@ def main():
         else:
             from run_local_level import evaluate
             initial,starts,potential,canonical=local_configuration(data,a.chains,a.coordinates)
-        sampler = ContinuedReference(potential, starts, a.seed, a.warmup,a.batch_size)
+        sampler = ContinuedReference(potential, starts, a.seed, a.warmup,a.batch_size,target_accept=a.target_accept)
         sampler.adapt()
         passed = False
         for tier in a.tiers:
@@ -89,7 +91,7 @@ def main():
             q = canonical(sampler.samples)
             evaluation = evaluate(q,fixture,a.seed+130000)
             report = dict(arm=arm,coordinates=coordinate_label,status='completed',phase='exploratory',
-                qualified=False,seed=a.seed,settings=dict(warmup=a.warmup,draws=tier,chains=a.chains),
+                qualified=False,seed=a.seed,settings=dict(target_accept=a.target_accept,warmup=a.warmup,draws=tier,chains=a.chains),
                 fixture_sha256=plan['fixture_sha256'],source_sha256=plan['source_sha256'],
                 evaluation=evaluation,retained_divergences=sampler.divergences,
                 healthy=evaluation['computational_screen_pass'] and sampler.divergences==0,

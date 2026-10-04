@@ -23,11 +23,14 @@ def adaptation_digest(state):
 
 
 class ContinuedReference:
-    def __init__(self, potential, starts, seed, warmup=1000, batch_size=1000):
+    def __init__(self, potential, starts, seed, warmup=1000, batch_size=1000, target_accept=.8):
+        if isinstance(target_accept,(bool,np.bool_)) or not isinstance(target_accept,(int,float,np.integer,np.floating)) or not np.isfinite(target_accept) or not 0 < target_accept < 1:
+            raise ValueError('target_accept must be finite and strictly between zero and one')
+        self.target_accept=float(target_accept)
         starts = np.asarray(starts, float)
         if starts.ndim != 2 or not np.isfinite(starts).all() or min(warmup, batch_size) < 1:
             raise ValueError('Require finite chain starts and positive warmup/batch size')
-        self.mcmc = MCMC(NUTS(potential_fn=potential, target_accept_prob=.8,
+        self.mcmc = MCMC(NUTS(potential_fn=potential, target_accept_prob=self.target_accept,
                             max_tree_depth=10), num_warmup=warmup,
                          num_samples=batch_size, num_chains=len(starts),
                          chain_method='sequential', progress_bar=False)
