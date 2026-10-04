@@ -119,10 +119,10 @@ def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
                 emit('evaluation', 'end', tier)
                 result = screen(fit, .02)
                 verify(); emit('serialization', 'start', tier)
-                write_json(fit_dir/'python-pymc-raw.json', dict(canonical_draws=q, initial_positions=starts,
+                write_json(fit_dir/'python-pymc-raw.json', dict(canonical_draws=q,
                            sampling_initial_positions=sampling_starts, coordinates=coordinates,
                            retained_chunk_diagnostics=diagnostics, cumulative_work=chunk.cumulative_work,
-                           adapted_metadata=chunk.metadata))
+                           adapted_metadata=chunk.metadata, initial_positions=starts))
                 write_json(fit_dir/'fit-report.json', fit)
                 attempt.update(status='completed', screen=result, added_target_calls=chunk.target_calls,
                                cumulative_target_calls=chunk.cumulative_target_calls)
