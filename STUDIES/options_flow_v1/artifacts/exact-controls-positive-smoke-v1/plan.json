@@ -1,0 +1,95 @@
+{
+  "schema": "exact-endpoint-controls/v1",
+  "frozen": true,
+  "phase": "exploratory",
+  "qualified": false,
+  "source_sha256": "21930da5982d98e44d3286ab3571df2ebd3b50a3a570900eb1f6d234234bf5ef",
+  "replicates": 2,
+  "tiers": [
+    1000
+  ],
+  "chains": 4,
+  "cells": [
+    {
+      "id": "normal-rho0.0-fixed_1000-0000",
+      "marginal": "normal",
+      "rho": 0.0,
+      "policy": "fixed_1000",
+      "seeds": [
+        99891000,
+        99891001,
+        99891002,
+        99891003
+      ]
+    },
+    {
+      "id": "normal-rho0.0-fixed_1000-0001",
+      "marginal": "normal",
+      "rho": 0.0,
+      "policy": "fixed_1000",
+      "seeds": [
+        99891004,
+        99891005,
+        99891006,
+        99891007
+      ]
+    },
+    {
+      "id": "normal-rho0.0-prefix_first_pass-0000",
+      "marginal": "normal",
+      "rho": 0.0,
+      "policy": "prefix_first_pass",
+      "seeds": [
+        99891008,
+        99891009,
+        99891010,
+        99891011
+      ]
+    },
+    {
+      "id": "normal-rho0.0-prefix_first_pass-0001",
+      "marginal": "normal",
+      "rho": 0.0,
+      "policy": "prefix_first_pass",
+      "seeds": [
+        99891012,
+        99891013,
+        99891014,
+        99891015
+      ]
+    },
+    {
+      "id": "normal-rho0.0-restart_first_pass-0000",
+      "marginal": "normal",
+      "rho": 0.0,
+      "policy": "restart_first_pass",
+      "seeds": [
+        99891016,
+        99891017,
+        99891018,
+        99891019
+      ]
+    },
+    {
+      "id": "normal-rho0.0-restart_first_pass-0001",
+      "marginal": "normal",
+      "rho": 0.0,
+      "policy": "restart_first_pass",
+      "seeds": []
+    }
+  ],
+  "health": {
+    "rhat_max": 1.01,
+    "bulk_ess_min": 400,
+    "tail_ess_min": 400
+  },
+  "relative_mcse": 0.02,
+  "interpretation": "Known stationary marginal controls only; no validation of posterior exploration, model calibration, or market usefulness",
+  "policy_notes": "Each fixed_N uses independent streams at that declared length; prefix reuses stationary chain prefixes; restart generates independent four-chain batch at each tier. All policies have independent replicate streams.",
+  "software": {
+    "numpy": "2.5.2",
+    "scipy": "1.18.1",
+    "arviz": "1.3.0"
+  },
+  "fault_injection": "Final restart cell deliberately missing RNG seeds; must remain failed in denominator"
+}

@@ -1,0 +1,129 @@
+{
+  "phase": "exploratory",
+  "qualified": false,
+  "software": {
+    "numpy": "2.5.2",
+    "scipy": "1.18.1",
+    "arviz": "1.3.0"
+  },
+  "plan_sha256": "b4eabfbdf3cdddbfb0a8ffd462c5876ee21775388c729425c844cbf8c7358230",
+  "fixed_policy_note": "Fixed-length usable means healthy, regardless of precision pass; stopped-policy usable requires first-pass success",
+  "groups": {
+    "normal/0.0/fixed_1000": {
+      "procedure": {
+        "expected": 2,
+        "recorded": 2,
+        "usable": 2,
+        "usable_rate": 1.0,
+        "missing_ids": [],
+        "conditional_on_usable": true,
+        "scope": "Usable procedure outputs",
+        "endpoints": {
+          "0.05": {
+            "mean_error": -0.006180874886365539,
+            "rmse": 0.0403981642833918,
+            "empirical_sd": 0.056458984459641294,
+            "mean_reported_mcse": 0.034445497637405065,
+            "mcse_calibration_ratio": 1.636119958596164,
+            "usable_with_error_le_04_true_width_rate": 1.0
+          },
+          "0.95": {
+            "mean_error": -0.03378643456413999,
+            "rmse": 0.05399218810901566,
+            "empirical_sd": 0.059558932432380265,
+            "mean_reported_mcse": 0.027971940679210328,
+            "mcse_calibration_ratio": 2.127615383658687,
+            "usable_with_error_le_04_true_width_rate": 1.0
+          }
+        }
+      },
+      "finite_fixed_length_estimator": {
+        "expected": 2,
+        "recorded": 2,
+        "usable": 2,
+        "usable_rate": 1.0,
+        "missing_ids": [],
+        "conditional_on_usable": false,
+        "scope": "All finite stationary estimates irrespective of health; not usable inference outputs",
+        "endpoints": {
+          "0.05": {
+            "mean_error": -0.006180874886365539,
+            "rmse": 0.0403981642833918,
+            "empirical_sd": 0.056458984459641294,
+            "mean_reported_mcse": 0.034445497637405065,
+            "mcse_calibration_ratio": 1.636119958596164,
+            "usable_with_error_le_04_true_width_rate": 1.0
+          },
+          "0.95": {
+            "mean_error": -0.03378643456413999,
+            "rmse": 0.05399218810901566,
+            "empirical_sd": 0.059558932432380265,
+            "mean_reported_mcse": 0.027971940679210328,
+            "mcse_calibration_ratio": 2.127615383658687,
+            "usable_with_error_le_04_true_width_rate": 1.0
+          }
+        }
+      }
+    },
+    "normal/0.0/prefix_first_pass": {
+      "procedure": {
+        "expected": 2,
+        "recorded": 2,
+        "usable": 2,
+        "usable_rate": 1.0,
+        "missing_ids": [],
+        "conditional_on_usable": true,
+        "scope": "Usable procedure outputs",
+        "endpoints": {
+          "0.05": {
+            "mean_error": 0.02826310700397061,
+            "rmse": 0.03602433231904787,
+            "empirical_sd": 0.031589533124606446,
+            "mean_reported_mcse": 0.03589869988556643,
+            "mcse_calibration_ratio": 0.874773598857024,
+            "usable_with_error_le_04_true_width_rate": 1.0
+          },
+          "0.95": {
+            "mean_error": -0.014072694701906863,
+            "rmse": 0.014176990110159717,
+            "empirical_sd": 0.002427472928989718,
+            "mean_reported_mcse": 0.0364510779467086,
+            "mcse_calibration_ratio": 0.06631848213249888,
+            "usable_with_error_le_04_true_width_rate": 1.0
+          }
+        }
+      },
+      "finite_fixed_length_estimator": null
+    },
+    "normal/0.0/restart_first_pass": {
+      "procedure": {
+        "expected": 2,
+        "recorded": 2,
+        "usable": 1,
+        "usable_rate": 0.5,
+        "missing_ids": [],
+        "conditional_on_usable": true,
+        "scope": "Usable procedure outputs",
+        "endpoints": {
+          "0.05": {
+            "mean_error": 0.05211964180928863,
+            "rmse": 0.05211964180928863,
+            "empirical_sd": null,
+            "mean_reported_mcse": 0.032692992973328616,
+            "mcse_calibration_ratio": null,
+            "usable_with_error_le_04_true_width_rate": 0.5
+          },
+          "0.95": {
+            "mean_error": -0.00452609816277727,
+            "rmse": 0.00452609816277727,
+            "empirical_sd": null,
+            "mean_reported_mcse": 0.03444481325881177,
+            "mcse_calibration_ratio": null,
+            "usable_with_error_le_04_true_width_rate": 0.5
+          }
+        }
+      },
+      "finite_fixed_length_estimator": null
+    }
+  }
+}
