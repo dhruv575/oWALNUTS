@@ -30,6 +30,9 @@ def local_configuration(data,chains,coordinates='centered'):
         return initial,initial.copy(),lambda q:-log_density(q,data,jnp,gammaln),lambda q:q
     if coordinates == 'observation_residual':
         return initial,to_residual(initial,data),lambda q:-residual_density(q,data,jnp),lambda q:to_canonical(q,data)
+    if coordinates == 'conditional_whitening':
+        from local_conditional_whitening import to_whitened,to_canonical as guide_canonical,log_density as guide_density
+        return initial,to_whitened(initial,data),lambda q:-guide_density(q,data,jnp),lambda q:guide_canonical(q,data)
     raise ValueError('Unknown local coordinates')
 
 
@@ -38,7 +41,7 @@ def main():
     p.add_argument('--fixture', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--model', choices=['flow','local_level'], required=True)
-    p.add_argument('--coordinates',choices=['centered','observation_residual'],default='centered',help='Local-level coordinates; flow retains historical process-noncentered recipe')
+    p.add_argument('--coordinates',choices=['centered','observation_residual','conditional_whitening'],default='centered',help='Local-level coordinates; flow retains historical process-noncentered recipe')
     p.add_argument('--seed', type=int, required=True)
     p.add_argument('--warmup', type=int, default=1000)
     p.add_argument('--target-accept',type=float,default=.8)
@@ -56,7 +59,7 @@ def main():
     fixture = json.loads(a.fixture.read_text())
     data = fixture['data']
     coordinate_label='noncentered' if a.model=='flow' else a.coordinates
-    arm='numpyro-continuation' if a.coordinates=='centered' else 'numpyro-continuation-observation-residual'
+    arm='numpyro-continuation' if a.coordinates=='centered' else 'numpyro-continuation-'+a.coordinates.replace('_','-')
     plan = dict(model=a.model,coordinates=coordinate_label,arm=arm, seed=a.seed, warmup=a.warmup, chains=a.chains,
         target_accept=a.target_accept,batch_size=a.batch_size, tiers=a.tiers, relative_mcse=.02,
         fixture_sha256=hashlib.sha256(a.fixture.read_bytes()).hexdigest(),

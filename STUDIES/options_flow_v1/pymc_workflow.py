@@ -41,6 +41,9 @@ def canonical_starts(data,chains):
 
 def coordinate_transport(data, coordinates='centered'):
     if coordinates == 'centered':return lambda q:np.asarray(q),lambda q:np.asarray(q)
+    if coordinates == 'conditional_whitening':
+        from local_conditional_whitening import to_whitened,to_canonical
+        return lambda q:to_whitened(q,data),lambda q:to_canonical(q,data)
     if coordinates != 'observation_residual':raise ValueError('Unknown local coordinates')
     from local_observation_residual import to_residual,to_canonical
     return lambda q:to_residual(q,data),lambda q:to_canonical(q,data)
@@ -48,7 +51,10 @@ def coordinate_transport(data, coordinates='centered'):
 def compile_target(data, coordinates='centered'):
     coordinate_transport(data,coordinates)
     start=time.perf_counter()
-    if coordinates == 'observation_residual':
+    if coordinates == 'conditional_whitening':
+        from local_conditional_whitening import build_model as guide_model
+        model=guide_model(data);expected_names=['position']
+    elif coordinates == 'observation_residual':
         from local_observation_residual import build_model as residual_model
         model=residual_model(data);expected_names=['position']
     else:model=build_model(data);expected_names=['q']
@@ -69,7 +75,10 @@ def parity(target,data,points,coordinates='centered'):
     import jax.numpy as jnp
     from jax.scipy.special import gammaln
     from local_level import log_density
-    if coordinates == 'observation_residual':
+    if coordinates == 'conditional_whitening':
+        from local_conditional_whitening import log_density as guide_density
+        density=lambda q:guide_density(q,data,jnp)
+    elif coordinates == 'observation_residual':
         from local_observation_residual import log_density as residual_density
         density=lambda q:residual_density(q,data,jnp)
     elif coordinates == 'centered':density=lambda q:log_density(q,data,jnp,gammaln)
@@ -105,13 +114,13 @@ def sample_fit(target,fixture,starts,seed,warmup,draws,coordinates='centered'):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--fixture',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--seed',type=int,required=True);p.add_argument('--warmup',type=int,default=1000);p.add_argument('--draws',type=int,default=1000)
-    p.add_argument('--coordinates',choices=['centered','observation_residual'],default='centered')
+    p.add_argument('--coordinates',choices=['centered','observation_residual','conditional_whitening'],default='centered')
     p.add_argument('--tiers',type=int,nargs='+',help='Reuse compiled target, fully restart adaptation/sampling at each retained tier');p.add_argument('--chains',type=int,default=4);p.add_argument('--compile-only',action='store_true');a=p.parse_args()
     if min(a.warmup,a.draws,a.chains)<1:p.error('Positive counts required')
     if a.compile_only and a.tiers:p.error('--compile-only and --tiers cannot be combined')
     if a.tiers and (any(n<4 for n in a.tiers) or any(b<=v for v,b in zip(a.tiers,a.tiers[1:]))):p.error('Strictly increasing tiers >=4 required')
     a.out.mkdir(parents=True,exist_ok=False);fixture=json.loads(a.fixture.read_text());data=fixture['data']
-    report=dict(status='running',phase='exploratory',qualified=False,arm='python-pymc-cfunc' if a.coordinates=='centered' else 'python-pymc-cfunc-observation-residual',coordinates=a.coordinates,model='local_level',seed=a.seed,
+    report=dict(status='running',phase='exploratory',qualified=False,arm='python-pymc-cfunc' if a.coordinates=='centered' else 'python-pymc-cfunc-'+a.coordinates.replace('_','-'),coordinates=a.coordinates,model='local_level',seed=a.seed,
       fixture_sha256=hashlib.sha256(a.fixture.read_bytes()).hexdigest(),extension_path=extension.__file__,
       extension_sha256=hashlib.sha256(Path(extension.__file__).read_bytes()).hexdigest(),
       adapter_source_sha256=hashlib.sha256(Path(owalnuts.__file__).read_bytes()).hexdigest(),
