@@ -1,0 +1,13 @@
+# Completed reference bank
+
+The authoritative experiment is `run-v2`, with the prospectively frozen analysis in `analysis-v2`. All 64 intended independent fits completed. All passed the full diagnostic and precision checks at both 4,000 and 8,000 retained draws. The fitting controller exited successfully after 15,650.645 seconds. No failed fits were replaced or omitted.
+
+`analysis-v2/analysis-output-status.json` records `reference_bank_resolved: true`, `numerically_resolved_under_declared_checks`, and return code zero. Total analysis time, including materialization and controller verification, was 2,556.239 seconds. The analysis plan SHA256 is `a4b71c18c195c22095fbf8872529eeced02e0d651e211c5164855424406a69f5`.
+
+The independent fitting audit passed. The authoritative independent analysis audit is `analysis-v2/independent-analysis-audit-v2.json`: 1,351 checks passed, with no failures. Its auditor, source archive and provenance are saved beside it. The initial audit is preserved: its sole failed check reversed the 4,000/8,000 prefix column order in the auditor. The corrected audit did not change or rerun the experiment.
+
+Across the 12 endpoint estimates, reported uncertainty half-widths are 0.069%–0.319% of the conservative interval-width lower bound (`W_low`). The largest absolute backend-difference interval bound is 0.723% of that width; the largest paired-prefix difference bound is 0.874%. These pass the declared tolerances. The predictive endpoints have numerical half-width 0.00390625 in raw units; their reported uncertainty is dominated by grid resolution. All declared weighted predictive brackets were independently checked to have width at most 0.0078125.
+
+This is an approximate reference for one fixed demanding T1000/G4 posterior. The whole-fit bootstrap uses 32 fits per backend; it does not establish exact posterior truth, calibrated simultaneous coverage, or real-market predictive calibration. Quadrature differences are numerical error estimates, not certified bounds. Saved joint endpoint resamples permit independent endpoint-interval reconstruction; full backend and length bootstrap vectors were not saved, so their construction is supported by the pinned executed source rather than independently reconstructed vectors.
+
+The next experiment must use fresh independent first-passing workflow repetitions, retaining all failures and total costs. It must propagate one shared joint bank vector across repetitions and endpoints, retain numerical uncertainty, and freeze accuracy, reliability and runtime decisions before sampling. The fixed 8,000-draw bank fits are not fresh workflow repetitions and do not by themselves establish a practical speed advantage.
