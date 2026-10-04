@@ -23,6 +23,9 @@ def validate_protocol(p):
     if not isinstance(p['count'],int) or isinstance(p['count'],bool) or not 1<=p['count']<=1000:raise ValueError('Invalid page size')
     if p['contracts']!=4 or p['minimum_retrieval_lag_hours']<48:raise ValueError('Invalid selection or aging constraint')
     if p['forecast']['origin_stride_minutes']<p['forecast']['horizon_minutes']:raise ValueError('Overlapping origins prohibited')
+    if 'activity_selection' in p:
+        from active_contract_selection import rank_preperiod
+        rank_preperiod([],p) # Validate all prospective thresholds before any request.
 
 def eligible(trade,protocol):
     return not any(trade.get(k) is not None for k in protocol['exclude_flags'])
@@ -47,12 +50,21 @@ def merge(rows):
         byid[key]=t;byseq[seq]=key
     return sorted(byid.values(),key=lambda t:(t['timestamp'],t['instrument_name'],t['trade_seq']))
 
+def source_files(protocol):
+    files={'acquire_deribit_panel.py':Path(__file__)}
+    if 'activity_selection' in protocol:files['active_contract_selection.py']=Path(__file__).with_name('active_contract_selection.py')
+    return files
+
+
 class Client:
     def __init__(self,protocol,out):
         self.protocol=protocol;self.out=Path(out);self.requests=0;self.bytes=0;self.last=-math.inf
         self.protocol_digest=canonical_digest(protocol);self.source_digest=digest_bytes(Path(__file__).read_bytes())
+        self.source_paths=source_files(protocol);self.source_snapshots={name:path.read_bytes() for name,path in self.source_paths.items()}
+        self.source_hashes={name:digest_bytes(raw) for name,raw in self.source_snapshots.items()}
     def verify(self):
         if canonical_digest(self.protocol)!=self.protocol_digest or digest_bytes(Path(__file__).read_bytes())!=self.source_digest:raise Incomplete('Protocol/source mutation')
+        if any(digest_bytes(path.read_bytes())!=self.source_hashes[name] for name,path in self.source_paths.items()):raise Incomplete('Bound helper/collector source mutation')
         saved=self.out/'protocol.json'
         if saved.exists() and canonical_digest(json.loads(saved.read_text()))!=self.protocol_digest:raise Incomplete('Archived protocol mutation')
     def request(self,method,params):
@@ -158,6 +170,26 @@ def validate_instrument(instrument,name):
     # This pilot explicitly selects inverse BTC-denominated options only.
     if instrument.get('quote_currency')!='BTC' or instrument.get('settlement_currency')!='BTC':raise Incomplete('Unsupported or missing price/settlement denomination')
 
+def select_activity_contracts(client,protocol,ranking,start,end):
+    """Metadata only after complete preperiod ranking; never loosen thresholds."""
+    selected=[];metadata={};rejections={}
+    for name in ranking['ranked_candidates']:
+        instrument=client.request('public/get_instrument',{'instrument_name':name});metadata[name]=instrument
+        validate_instrument(instrument,name)
+        reasons=[]
+        if instrument['expiration_timestamp']<=end:reasons.append('expiry_not_after_panel_end')
+        if instrument['creation_timestamp']>start:reasons.append('created_after_panel_start')
+        if reasons:rejections[name]=reasons
+        else:selected.append(name)
+        if len(selected)==protocol['contracts']:break
+    evidence=dict(selected=selected,metadata=metadata,metadata_rejections=rejections,
+        metadata_unqueried_candidates=[n for n in ranking['ranked_candidates'] if n not in metadata],**ranking)
+    # Preserve failed selection evidence too; selection.json is only final.
+    write_new(client.out/'activity-metadata-review.json',evidence)
+    if len(selected)!=protocol['contracts']:raise Incomplete('Fewer than four contracts satisfy frozen activity and metadata eligibility')
+    return evidence
+
+
 def collect(protocol,out):
     validate_protocol(protocol)
     start=millis(protocol['start_utc']);end=millis(protocol['end_utc_exclusive']);now=int(time.time()*1000)
@@ -165,18 +197,31 @@ def collect(protocol,out):
     out=Path(out);out.mkdir(parents=True,exist_ok=False);write_new(out/'protocol.json',protocol)
     client=Client(protocol,out);summary=dict(phase='public_crypto_access_feasibility',qualified=False,status='incomplete',started_utc=utc(),selected=[])
     try:
+        if 'activity_selection' in protocol:
+            import zipfile
+            with zipfile.ZipFile(out/'source-snapshots.zip','x',compression=zipfile.ZIP_DEFLATED) as archive:
+                for name,raw in client.source_snapshots.items():archive.writestr(name,raw)
         first=discovery(client,protocol,start,start+86400000-1)
         volume={}
         for t in first:
             if eligible(t,protocol):volume[t['instrument_name']]=volume.get(t['instrument_name'],0.)+t['amount']
-        selected=[];metadata={}
-        for name in sorted(volume,key=lambda x:(-volume[x],x)):
-            instrument=client.request('public/get_instrument',{'instrument_name':name});metadata[name]=instrument
-            validate_instrument(instrument,name)
-            if instrument['expiration_timestamp']>end and instrument['creation_timestamp']<=start:selected.append(name)
-            if len(selected)==protocol['contracts']:break
-        if len(selected)!=protocol['contracts']:raise Incomplete('Fewer than four eligible first-day contracts')
-        write_new(out/'selection.json',dict(selected=selected,first_day_volume=volume,metadata=metadata,selection_completed_utc=utc()))
+        if 'activity_selection' in protocol:
+            from active_contract_selection import rank_preperiod
+            ranking=rank_preperiod(first,protocol)
+            write_new(out/'activity-ranking.json',ranking)
+            selection=select_activity_contracts(client,protocol,ranking,start,end)
+            selection.update(first_day_volume=volume,selection_completed_utc=utc(),source_sha256=client.source_hashes)
+            selected=selection['selected'];write_new(out/'selection.json',selection)
+            summary.update(selection_policy='activity_selection',selection_available_ms=selection['selection_available_ms'])
+        else:
+            selected=[];metadata={}
+            for name in sorted(volume,key=lambda x:(-volume[x],x)):
+                instrument=client.request('public/get_instrument',{'instrument_name':name});metadata[name]=instrument
+                validate_instrument(instrument,name)
+                if instrument['expiration_timestamp']>end and instrument['creation_timestamp']<=start:selected.append(name)
+                if len(selected)==protocol['contracts']:break
+            if len(selected)!=protocol['contracts']:raise Incomplete('Fewer than four eligible first-day contracts')
+            write_new(out/'selection.json',dict(selected=selected,first_day_volume=volume,metadata=metadata,selection_completed_utc=utc()))
         summary['selected']=selected
         counts={}
         quality={}
@@ -194,7 +239,7 @@ def collect(protocol,out):
     finally:
         try:client.verify()
         except Exception as exc:summary.update(status='incomplete',error=str(exc))
-        summary.update(protocol_sha256=client.protocol_digest,source_sha256=client.source_digest,finished_utc=utc(),requests=client.requests,raw_response_bytes=client.bytes)
+        summary.update(protocol_sha256=client.protocol_digest,source_sha256=client.source_digest,source_dependencies_sha256=client.source_hashes,finished_utc=utc(),requests=client.requests,raw_response_bytes=client.bytes)
         write_new(out/'summary.json',summary)
     return summary
 
