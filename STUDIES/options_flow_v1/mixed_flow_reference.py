@@ -10,7 +10,7 @@ import numpy as np
 from pymc_continuation_workflow import bindings,verify_bindings,write_json
 
 
-def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,8000),batch=1000,target_accept=.9):
+def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,8000),batch=1000,target_accept=.9,implementation='sequential'):
     import jax
     jax.config.update('jax_enable_x64',True)
     from reference_continuation import ContinuedReference
@@ -21,13 +21,16 @@ def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,800
     out=Path(out);out.mkdir(parents=True,exist_ok=False);fixture_path=Path(fixture_path).resolve()
     identity=bindings([fixture_path,Path(sys.executable),*Path(__file__).parent.glob('*.py')])
     report=dict(status='running',qualified=False,model='flow',coordinates='mixed_slopes',
-        arm='numpyro-mixed-slopes-continuation',seed=seed,predictive_seed=seed+130000,bindings=identity,
-        settings=dict(warmup=warmup,chains=chains,tiers=list(tiers),batch=batch,target_accept=target_accept),attempts=[])
+        arm='numpyro-mixed-slopes-continuation',implementation=implementation,seed=seed,predictive_seed=seed+130000,bindings=identity,
+        settings=dict(implementation=implementation,warmup=warmup,chains=chains,tiers=list(tiers),batch=batch,target_accept=target_accept),attempts=[])
     write_json(out/'started.json',report);engine=None
     def emit(stage,event,draws=None):
         with (out/'phase-events.jsonl').open('a') as handle:
             handle.write(json.dumps(dict(stage=stage,event=event,draws=draws,seconds=time.perf_counter()-STARTED,cpu_seconds=time.process_time()))+'\n')
     try:
+        if implementation not in ['sequential','associative']:raise ValueError('Unknown mixed reference implementation')
+        if implementation=='associative':
+            from flow_mixed_associative import jax_log_density,normalized_parity
         if isinstance(seed,bool) or not isinstance(seed,int) or not 0<=seed<2**32-130000:raise ValueError('Invalid chain/predictive seed')
         if chains<4 or warmup<1 or batch<4 or not tiers or any(v<4 or v%batch for v in tiers) or any(b<=a for a,b in zip(tiers,tiers[1:])):raise ValueError('Invalid counts/tiers')
         fixture=json.loads(fixture_path.read_text());data=fixture['data'];_,names,cells=validate_fixture(fixture,'flow')
@@ -86,5 +89,7 @@ if __name__=='__main__':
     parser.add_argument('--fixture',type=Path,required=True);parser.add_argument('--out',type=Path,required=True);parser.add_argument('--seed',type=int,required=True)
     parser.add_argument('--warmup',type=int,default=1000);parser.add_argument('--chains',type=int,default=4)
     parser.add_argument('--tiers',type=int,nargs='+',default=[1000,2000,4000,8000]);parser.add_argument('--batch',type=int,default=1000);parser.add_argument('--target-accept',type=float,default=.9)
-    args=parser.parse_args();result=execute(args.fixture,args.out,args.seed,args.warmup,args.chains,args.tiers,args.batch,args.target_accept)
+    parser.add_argument('--implementation',choices=['sequential','associative'],default='sequential')
+    args=parser.parse_args();result=execute(args.fixture,args.out,args.seed,args.warmup,args.chains,args.tiers,args.batch,args.target_accept,args.implementation)
     raise SystemExit(0 if result.get('precision_pass') else 2)
+
