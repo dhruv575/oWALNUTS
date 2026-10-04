@@ -3,6 +3,33 @@
 These are implementation/pilot results, not a preregistered qualification.
 Study scope and unresolved gates remain in `protocol.json` and `DESIGN_REVIEW.md`.
 
+## Current implementation and real-data progress
+
+The public CFunc continuation prototype now supports one adaptation followed by
+incremental retained draws. Focused Rust/Python checks establish exact replay,
+diagnostic transport, lifetime safety and cancellation behavior; the local-model
+study worker adds canonical transport, frozen-adaptation checks, stage costs and
+failure checkpoints. Its end-to-end performance remains unmeasured.
+
+The opt-in exact conditional-whitening identity h=L^-T(v+z) reduces target-call
+cost on the tested points. Eight fresh-process paired profiles at T=32/128/512/1000
+give original/combined median cost ratios 1.345/1.422/1.289/1.310. Independent
+JAX value/gradient checks pass. These callback measurements do not establish
+better mixing or a workflow speedup; the original route remains the default.
+
+A historical Deribit BTC-options panel for September 25 through October 2 UTC
+has been acquired: 977 trades across four contracts selected using first-day
+eligible volume. Independent raw-record checks pass, with all 57 HTTP response
+records preserved losslessly. Earlier empty-host and response-order failures
+remain archived. This is public crypto evidence, not U.S.-listed option data.
+Chronological feature construction and missingness accounting precede any fit;
+no market-model performance, interval calibration or trading advantage is claimed.
+
+The separate masked likelihood preserves every latent grid step and evaluates
+only explicitly observed cells. Compiled PyMC, independent JAX and NumPy checks
+cover all-observed equivalence, prior-only behavior and placeholder invariance.
+It conditions on the observed trade-arrival pattern rather than modeling it.
+
 ## Exact quantile-error controls
 
 The frozen `exact-controls-200-v1` campaign completed all 7,200 cells: Normal
@@ -387,9 +414,10 @@ tested noncentered flow recipe; long-path geometry benefits remain unestablished
   calculations in `calibration-power.json` show the replication cost of a
   simultaneous coverage-equivalence claim; the final scope and power remain
   to be frozen.
-- No verified historical options-flow dataset has been found in the inspected
-  repositories. The real-data adapter records declared provenance but cannot
-  establish its authenticity. Market utility remains unmeasured.
+- The initial repository inspection found no historical options-flow dataset.
+  The subsequently acquired public crypto panel is described above; its raw
+  consistency audit does not establish exchange-feed completeness or historical
+  receipt availability. Market utility remains unmeasured.
 - The existing application's price model provides a second useful fixture,
   with explicit empirical-Bayes anchor and latent-versus-observed forecast
   semantics. It must not be represented as an order-flow model.
