@@ -1,0 +1,50 @@
+{
+  "schema": "deribit-access-feasibility/v3-history-ordering",
+  "phase": "public_crypto_access_feasibility",
+  "qualified": false,
+  "market": "Deribit BTC options; not US-listed utility evidence",
+  "user_market_preference": "unanswered",
+  "start_utc": "2026-09-25T00:00:00+00:00",
+  "end_utc_exclusive": "2026-10-02T00:00:00+00:00",
+  "minimum_retrieval_lag_hours": 48,
+  "development_hours": 48,
+  "validation_hours": 24,
+  "evaluation_hours": 96,
+  "selection_hours": 24,
+  "contracts": 4,
+  "selection": "First-day largest summed eligible base-coin amount; lexicographic tie break; expiry strictly after panel end; creation no later than panel start",
+  "limits": {
+    "requests_including_retries": 500,
+    "raw_response_bytes": 50000000,
+    "requests_per_second": 2,
+    "attempts_per_request": 3,
+    "timeout_seconds": 30
+  },
+  "production_base": "https://history.deribit.com/api/v2/",
+  "count": 1000,
+  "exclude_flags": [
+    "block_trade_id",
+    "combo_id",
+    "combo_trade_id"
+  ],
+  "forecast": {
+    "feature_bin_minutes": 15,
+    "availability_lag_seconds": 60,
+    "maximum_reference_staleness_minutes": 30,
+    "horizon_minutes": 30,
+    "reference": "Last eligible trade with event timestamp <= cutoff and age <=30min at cutoff",
+    "target": "Last eligible trade in (decision, decision+30min]; decision=cutoff+60sec; target interval entirely inside panel",
+    "estimand": "Log target trade price minus log last available reference trade price, conditional on eligible future trade arrival; absence is missing, never zero",
+    "availability": "Historical event-time + assumed60sec lag; no receipt-time claim",
+    "origin_stride_minutes": 30
+  },
+  "completion_policy": "Any budget exhaustion, unresolved discovery tie, inconsistent sequence, metadata mismatch or acquisition error makes panel incomplete and ineligible for fitting",
+  "execution": "Explicit CLI --collect required; no authentication, purchase or order APIs",
+  "utility_scope": "Separate flow-information/no-flow-ablation assessment from sampler accuracy, reliability and workflow cost. Weak or zero flow findings can be useful; no alpha/profit requirement.",
+  "grid_policy": "Preserve scheduled grid, missing masks and all-origin denominator. No zero-fill, imputation or compressed irregular rows. Existing balanced-panel ingest cannot fit missing outcomes; require explicit validated masked likelihood/new adapter before fitting.",
+  "phase_purge": "Exclude training/validation outcomes whose assumed availability extends past phase boundary or held-out origin.",
+  "pagination": "Expand first/last timestamp probes to complete tie pages; freeze min/max sequence; sequence-only pages validate duplicates and range then sort locally; require overlap and contiguous final sequence set. Saturated timestamp ties fail incomplete.",
+  "include_old": true,
+  "supersedes_attempt": "deribit-access-panel-v2: history response contained unique complete but unsorted sequence page",
+  "historical_host_evidence": "deribit-history-host-probe-v1: same fixed historical day returned trades with include_old=true"
+}
