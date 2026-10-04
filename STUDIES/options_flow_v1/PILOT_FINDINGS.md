@@ -3,6 +3,28 @@
 These are implementation/pilot results, not a preregistered qualification.
 Study scope and unresolved gates remain in `protocol.json` and `DESIGN_REVIEW.md`.
 
+## Exact quantile-error controls
+
+The frozen `exact-controls-200-v1` campaign completed all 7,200 cells: Normal
+and Student-t(5) stationary marginals, Gaussian AR(1) dependence 0/.9/.99,
+four fixed lengths and two first-pass stopping policies, with 200 independent
+replicates per combination. The independent saved-record audit passes with no
+missing cells or discrepancies. A lossless archive preserves all started and
+terminal records, and exact worker/auditor source snapshots are retained.
+
+Across the 48 fixed-length endpoints, empirical standard deviation divided by
+RMS reported quantile MCSE ranges approximately .86-1.12. For example, Normal
+rho=.9 at 8,000 draws gives 1.022 [.918,1.122] and 1.001 [.897,1.099] for the
+two endpoints. These are marginal approximate bootstrap 95% intervals, not
+simultaneous qualification bounds. Five of 48 fixed-length and three of 16
+usable stopped-output intervals exclude one; no multiplicity adjustment was
+applied. Stopped-output summaries are conditional on usability, with the full
+denominators retained separately. At rho=.99, no stopped procedure passes
+health requirements within the cap; finite fixed-length estimates are still
+included in the estimator analysis. These results support the error estimator
+on these controls, not posterior exploration, coverage calibration, or market
+usefulness. See `independent-audit-v2.json` and `audit-provenance.json`.
+
 ## Fresh residual-coordinate local reliability screen
 
 The completed `local-residual-breadth-v1` cohort has 19/24 candidate successes
@@ -25,7 +47,7 @@ candidate failures preclude promoting this recipe as broadly reliable.
 An exact Gaussian-conditional whitening prototype subsequently passed six
 focused and ten regression tests, including normalized Gaussian controls,
 generated-gradient checks and a compiled T=128 target. Its Student-t target
-is unchanged. Sampling performance remains unmeasured; the separately frozen
+is unchanged. Sampling performance was then unmeasured; the separately frozen
 `local-conditional-whitening-v1` development comparison retains both failed and
 passing fixtures and all four sampler/coordinate combinations.
 
@@ -39,6 +61,35 @@ This yields no whitening performance conclusion or eligible geometry speed ratio
 The replacement harness assigns workers to a kill-on-close Windows Job Object
 before execution and verifies descendant cleanup; a new comparison must use a
 new frozen plan rather than overwrite or resume the aborted experiment.
+
+## Completed conditional-whitening comparison
+
+The replacement `local-conditional-whitening-v2` campaign completed all twelve
+prespecified cells. Its independent audit passes source, fixture, physical-start,
+diagnostic, stopping, cost and process-containment checks. These three fixtures
+were selected during development, so their success fractions do not estimate
+population reliability. Full controller costs in seconds are:
+
+| Fixture | oW residual | NumPyro residual | oW whitened | NumPyro whitened |
+| --- | ---: | ---: | ---: | ---: |
+| 00 | pass 17.05 | pass 53.02 | pass 660.32 | pass 159.60 |
+| 03 | fail 36.46 | fail 65.14 | pass 220.97 | pass 41.82 |
+| 05 | fail 81.90 | fail 125.79 | timeout 1800.27 | pass 47.94 |
+
+Whitening rescues fixture 03 for both backends, but the current oW implementation
+is slower on both successful whitening pairs. On fixture 05 it exhausts the
+prospective 1,800-second worker budget. Its completed 1,000-draw tier is unhealthy
+(scale R-hat about 1.54, bulk ESS about 7), with 999 retained maximum-depth stops
+despite zero divergences. This timeout is a budgeted computational failure,
+distinct from the deliberately aborted v1 harness experiment. All failure costs
+remain included and comparisons involving failed arms have no speed ratio.
+
+Candidate whitening parity checks still use the expensive unrolled JAX route,
+whereas the reference uses the tested scan implementation. This is a measured
+workflow cost to fix, but it cannot explain all sampling cost or poor mixing.
+No hypothetical parity-cost subtraction is reported as a speed improvement.
+Whitening remains experimental; continuation, target evaluation cost and kernel
+work diagnostics require validation before a fresh performance comparison.
 
 ## Fresh long-path reference follow-up
 
