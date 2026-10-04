@@ -26,8 +26,12 @@ def validate_protocol(p):
 def eligible(trade,protocol):
     return not any(trade.get(k) is not None for k in protocol['exclude_flags'])
 def valid_trade(t,lo,hi,instrument=None):
+    if not isinstance(t,dict):raise Incomplete('Trade must be an object')
     required=['timestamp','trade_id','trade_seq','instrument_name','amount','price','direction']
     if any(k not in t for k in required):raise Incomplete('Missing trade fields')
+    if not isinstance(t,dict):raise Incomplete('Trade must be an object')
+    if any(isinstance(t[k],bool) or not isinstance(t[k],int) or t[k]<0 for k in ['timestamp','trade_seq']):raise Incomplete('Timestamp and sequence must be nonnegative integers')
+    if not isinstance(t['trade_id'],str) or not t['trade_id'] or not isinstance(t['instrument_name'],str) or not t['instrument_name']:raise Incomplete('Invalid trade identifiers')
     if not lo<=t['timestamp']<=hi:raise Incomplete('Trade outside requested bounds')
     if instrument is not None and t['instrument_name']!=instrument:raise Incomplete('Instrument mismatch')
     if t['direction'] not in ['buy','sell'] or not isinstance(t['trade_seq'],int):raise Incomplete('Invalid direction/sequence')
@@ -104,7 +108,7 @@ def instrument_panel(client,protocol,name,lo,hi):
     # Never combine sequence/time filters: official docs do not define precedence.
     first=client.request('public/get_last_trades_by_instrument',dict(instrument_name=name,start_timestamp=lo,count=1,sorting='asc'))['trades']
     last_page=client.request('public/get_last_trades_by_instrument',dict(instrument_name=name,end_timestamp=hi,count=1,sorting='desc'))['trades']
-    if not first or not last_page:raise Incomplete('Missing instrument boundary probes')
+    if not isinstance(first,list) or not isinstance(last_page,list) or len(first)!=1 or len(last_page)!=1:raise Incomplete('Boundary probes must return exactly one trade each')
     valid_trade(first[0],lo,hi,name);valid_trade(last_page[0],lo,hi,name)
     lower=first[0]['trade_seq'];upper=last_page[0]['trade_seq']
     if upper<lower:raise Incomplete('Inconsistent frozen sequence bounds')
@@ -115,6 +119,7 @@ def instrument_panel(client,protocol,name,lo,hi):
         if not isinstance(trades,list) or not isinstance(r.get('has_more'),bool):raise Incomplete('Missing instrument pagination fields')
         for t in trades:valid_trade(t,lo,hi,name)
         sequences=[t['trade_seq'] for t in trades]
+        if any(seq<last or seq>upper for seq in sequences):raise Incomplete('Sequence outside frozen page bounds')
         if sequences!=sorted(sequences) or len(sequences)!=len(set(sequences)):raise Incomplete('Nonmonotonic/duplicate sequence page')
         if last is not None and (not sequences or sequences[0]!=last):raise Incomplete('Sequence boundary overlap not verified')
         rows.extend(trades)
@@ -126,6 +131,17 @@ def instrument_panel(client,protocol,name,lo,hi):
     result=merge(rows);seq=[t['trade_seq'] for t in result]
     if any(b!=a+1 for a,b in zip(seq,seq[1:])):raise Incomplete('Unexplained sequence gap; panel not fit-ready')
     return result
+
+def validate_instrument(instrument,name):
+    if not isinstance(instrument,dict) or instrument.get('instrument_name')!=name or instrument.get('kind')!='option' or instrument.get('base_currency')!='BTC':raise Incomplete('Contract metadata mismatch')
+    for field in ['expiration_timestamp','creation_timestamp']:
+        if isinstance(instrument.get(field),bool) or not isinstance(instrument.get(field),int) or instrument[field]<0:raise Incomplete('Invalid contract timestamp')
+    if instrument.get('option_type') not in ['call','put']:raise Incomplete('Invalid option type')
+    for field in ['strike','contract_size']:
+        value=instrument.get(field)
+        if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or value<=0:raise Incomplete('Invalid '+field)
+    # This pilot explicitly selects inverse BTC-denominated options only.
+    if instrument.get('quote_currency')!='BTC' or instrument.get('settlement_currency')!='BTC':raise Incomplete('Unsupported or missing price/settlement denomination')
 
 def collect(protocol,out):
     validate_protocol(protocol)
@@ -141,7 +157,7 @@ def collect(protocol,out):
         selected=[];metadata={}
         for name in sorted(volume,key=lambda x:(-volume[x],x)):
             instrument=client.request('public/get_instrument',{'instrument_name':name});metadata[name]=instrument
-            if instrument.get('instrument_name')!=name or instrument.get('kind')!='option' or instrument.get('base_currency')!='BTC':raise Incomplete('Contract metadata mismatch')
+            validate_instrument(instrument,name)
             if instrument['expiration_timestamp']>end and instrument['creation_timestamp']<=start:selected.append(name)
             if len(selected)==protocol['contracts']:break
         if len(selected)!=protocol['contracts']:raise Incomplete('Fewer than four eligible first-day contracts')

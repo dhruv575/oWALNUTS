@@ -50,4 +50,31 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn("filename=f'trades-{ordinal:02d}.json'",source)
         self.assertNotIn("out/(name+",source)
 
+
+
+class StructuralValidationTests(unittest.TestCase):
+    def test_boolean_fractional_nonfinite_integer_fields_rejected(self):
+        from acquire_deribit_panel import valid_trade
+        for key in ['timestamp','trade_seq']:
+            for value in [True,False,.5,float('nan'),float('inf'),-1,'10']:
+                row=trade(1);row[key]=value
+                with self.assertRaises(Incomplete):valid_trade(row,0,20)
+    def test_boundary_probe_cardinality(self):
+        for boundary in [[],[trade(1),trade(2)],{},None]:
+            client=Client([dict(trades=boundary),dict(trades=[trade(3)])])
+            with self.assertRaises(Incomplete):instrument_panel(client,{'count':1000},'BTC-X',0,20)
+    def test_sequence_cannot_exceed_frozen_upper(self):
+        client=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=True,trades=[trade(1),trade(4)])])
+        with self.assertRaises(Incomplete):instrument_panel(client,{'count':1000},'BTC-X',0,20)
+    def test_metadata_units_and_type_required(self):
+        from acquire_deribit_panel import validate_instrument
+        base=dict(instrument_name='BTC-X',kind='option',base_currency='BTC',quote_currency='BTC',settlement_currency='BTC',option_type='call',strike=50000.,contract_size=1.,creation_timestamp=1,expiration_timestamp=20)
+        validate_instrument(base,'BTC-X')
+        for key,value in [('quote_currency','USD'),('settlement_currency',None),('option_type','future'),('strike',True),('contract_size',0),('expiration_timestamp',float('inf'))]:
+            changed=dict(base);changed[key]=value
+            with self.assertRaises(Incomplete):validate_instrument(changed,'BTC-X')
+    def test_reversed_boundary_sequences(self):
+        client=Client([dict(trades=[trade(3)]),dict(trades=[trade(1)])])
+        with self.assertRaises(Incomplete):instrument_panel(client,{'count':1000},'BTC-X',0,20)
+
 if __name__=='__main__':unittest.main()
