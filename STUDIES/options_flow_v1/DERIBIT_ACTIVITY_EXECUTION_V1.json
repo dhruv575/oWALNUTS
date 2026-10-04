@@ -1,0 +1,77 @@
+{
+  "status": "FROZEN_BEFORE_ACQUISITION",
+  "frozen": true,
+  "network_requests_made": 0,
+  "command": [
+    "C:\\dev\\owalnuts\\target\\python-workflow-env\\Scripts\\python.exe",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\hardware_control.py",
+    "--cpus",
+    "0",
+    "--record",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\artifacts\\deribit-activity-access-v1-hardware.json",
+    "--timeout",
+    "1800",
+    "--",
+    "C:\\dev\\owalnuts\\target\\python-workflow-env\\Scripts\\python.exe",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\acquire_deribit_panel.py",
+    "--protocol",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\DERIBIT_ACTIVITY_ACCESS_V1.json",
+    "--out",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\artifacts\\deribit-activity-access-v1",
+    "--collect"
+  ],
+  "working_directory": "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1",
+  "output_directory": "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\artifacts\\deribit-activity-access-v1",
+  "hardware_record": "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\artifacts\\deribit-activity-access-v1-hardware.json",
+  "stdout_stderr_log": "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\artifacts\\deribit-activity-access-v1-process.log",
+  "source_bindings": {
+    "C:\\dev\\owalnuts\\target\\python-workflow-env\\Scripts\\python.exe": "9b7bffc26240463c965a2a2a5fada1d8e741c21c25cd2e977728c339b82d9977",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\DERIBIT_ACTIVITY_ACCESS_V1.json": "e25e1993ebcc5b5a70c4a9d389f3f300030462f3f3b38d09dee59429458aa6ff",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\acquire_deribit_panel.py": "323a11f83adbc35f87c900aeb82bb044ff147e7960b1b4e6996ed3e4739ea2dc",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\active_contract_selection.py": "03f3178591228cc3dbf043300187ad651e068f4ce0551343f5933dbe62dd8feb",
+    "C:\\dev\\owalnuts\\STUDIES\\options_flow_v1\\hardware_control.py": "5a358a0bbc4d4b63a0a595d2644f71ee15be8ec4e66b24dc891f4789358d9207"
+  },
+  "protocol_canonical_sha256": "63038581f06dd2705578bc3f94ca4993fb536ca91b04c4274309fabb5bf5629b",
+  "prelaunch_checks": [
+    "Root independent review and explicit freeze of this plan and protocol before execution",
+    "Recompute every source_bindings hash and refuse drift",
+    "Output directory, hardware record and process log must all be absent; no overwrite or automatic retry",
+    "Confirm process timeout1800,CPU0 and worker command exactly as frozen; redirect stdout/stderr to exclusive-create process log",
+    "No overlapping timed sampler or compilation work; public acquisition only"
+  ],
+  "completion": {
+    "required_wrapper_returncode": 0,
+    "hardware_status": "completed",
+    "job_active_processes_after_cleanup": 0,
+    "requested_cpus": [
+      0
+    ],
+    "realized_cpus": [
+      0
+    ],
+    "enforced_before_worker_launch": true,
+    "containment": "Windows Job assigned before execution",
+    "summary_status": "complete_access_panel",
+    "fit_ready": false,
+    "followup": "Independent acquisition/provenance audit and anchor/feature audit required before any fitting"
+  },
+  "failures": {
+    "124": "Contained1800second timeout; preserve partial files, no completion claim, no automatic retry",
+    "2": "Collector incomplete: metadata/discovery/sequence/budget/network failure or insufficient activity-qualified universe; preserve evidence",
+    "other_nonzero": "Launcher/interpreter/containment failure; acquisition incomplete",
+    "missing_summary": "Incomplete even if another artifact exists; never infer successful acquisition",
+    "source_mismatch": "Abort before network; if detected midrun retain incomplete summary",
+    "missing_or_nonzero_job_cleanup": "Containment failure; do not run additional work until process cleanup verified"
+  },
+  "retrospective_selection": "Rank first-day eligible trades only; metadata checks expiry>historical panel end and creation<=historical start. No current is_active filter. Current retrieval may occur after contract expiry; historic names discovered from trades, never reconstructed from a surviving current instrument universe.",
+  "history_v3_compatibility": {
+    "production_base": "https://history.deribit.com/api/v2/",
+    "include_old": true,
+    "count": 1000,
+    "discovery": "same complete inclusive recursion and saturated-tie failclosed logic",
+    "history": "same independent timestamp boundary probes/tie pages then sequence-only overlap and contiguous-sequence validation",
+    "metadata": "same public/get_instrument by discovered historical name; invalid/unavailable metadata fails closed"
+  },
+  "interpretation": "Activity selection is prospective relative to uninspected held-out historical outcomes, not live precommitted trading. No guarantee of dense future targets.",
+  "review": "Root reviewed fixed unseen historical window, activity requirements, history-v3 compatibility, complete discovery, no-relaxation policy, exact contained command and failure rules before any requests."
+}
