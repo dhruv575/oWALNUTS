@@ -12,6 +12,39 @@ study worker adds canonical transport, frozen-adaptation checks, stage costs and
 failure checkpoints. Matched end-to-end measurements are now available below;
 continuation reduces repeated work but does not resolve every precision failure.
 
+## Mixed-slope coordinate development comparison
+
+The frozen eight-cell `mixed-flow-comparison-v1` repeats the two development
+posteriors with fresh paired seeds, common canonical starts and the same full
+health/precision gate. Its independent audit passes all integrity checks.
+Every invocation and failed checkpoint remains in the record.
+
+| Fixture | Workflow | Full seconds | Outcome |
+|---|---|---:|---|
+| T128/G4 | oWALNUTS noncentered | 14.658 | Pass at 2k |
+| T128/G4 | oWALNUTS mixed slopes | 21.094 | Pass at 2k |
+| T128/G4 | NumPyro noncentered | 36.804 | Pass at 2k |
+| T128/G4 | NumPyro mixed slopes | 29.433 | Pass at 2k |
+| T1000/G4 | oWALNUTS noncentered | 256.770 | Pass at 4k |
+| T1000/G4 | oWALNUTS mixed slopes | 93.201 | Pass at 2k |
+| T1000/G4 | NumPyro noncentered | 399.593 | Failure at 8k: 28 divergences |
+| T1000/G4 | NumPyro mixed slopes | 1181.235 | Pass at 4k |
+
+Centering the physical group slopes while retaining volatility innovations
+reduces oWALNUTS's long-model time to precision by about 2.76x in this paired
+run. Both oWALNUTS arms use the same native block-32 target implementation.
+The mixed recipe is slower on the short posterior, so it is not a new default.
+The earlier noncentered long-model precision failure remains valid: the fresh
+seed's pass demonstrates seed sensitivity, not removal of that failure.
+
+The two NumPyro implementations have a computational confound: noncentered uses
+an associative AR prefix, whereas mixed slopes uses a sequential scan. Their
+timing difference cannot isolate coordinate geometry, and the slow mixed
+reference does not establish general sampler superiority. A matched optimized
+mixed reference is required next. The failed noncentered reference has no
+eligible time-to-success ratio. These are two development posteriors, not fresh
+dataset calibration, independent endpoint accuracy or broad reliability.
+
 ## Matched public flow continuation comparison
 
 The frozen six-cell development comparison in `flow-continuation-comparison-v1`
