@@ -1,0 +1,92 @@
+{
+  "status": "passed",
+  "checks": {
+    "six": true,
+    "source": true,
+    "bound": true,
+    "fourstreams": true,
+    "historical_inventory": true,
+    "historical_rescan": true,
+    "singlefixture": true,
+    "pair0-ow_mixed_fixture_starts": true,
+    "pair0-ow_mixed_scope": true,
+    "pair0-ow_mixed_seedorder": true,
+    "pair0-ow_mixed_worker_python": true,
+    "pair0-ow_mixed_budget_cpu": true,
+    "pair0-ow_mixed_associative": true,
+    "pair0-numpyro_nc_fixture_starts": true,
+    "pair0-numpyro_nc_scope": true,
+    "pair0-numpyro_nc_seedorder": true,
+    "pair0-numpyro_nc_worker_python": true,
+    "pair0-numpyro_nc_budget_cpu": true,
+    "pair0-numpyro_nc_associative": true,
+    "pair0-numpyro_mixed_fixture_starts": true,
+    "pair0-numpyro_mixed_scope": true,
+    "pair0-numpyro_mixed_seedorder": true,
+    "pair0-numpyro_mixed_worker_python": true,
+    "pair0-numpyro_mixed_budget_cpu": true,
+    "pair0-numpyro_mixed_associative": true,
+    "pair1-numpyro_mixed_fixture_starts": true,
+    "pair1-numpyro_mixed_scope": true,
+    "pair1-numpyro_mixed_seedorder": true,
+    "pair1-numpyro_mixed_worker_python": true,
+    "pair1-numpyro_mixed_budget_cpu": true,
+    "pair1-numpyro_mixed_associative": true,
+    "pair1-numpyro_nc_fixture_starts": true,
+    "pair1-numpyro_nc_scope": true,
+    "pair1-numpyro_nc_seedorder": true,
+    "pair1-numpyro_nc_worker_python": true,
+    "pair1-numpyro_nc_budget_cpu": true,
+    "pair1-numpyro_nc_associative": true,
+    "pair1-ow_mixed_fixture_starts": true,
+    "pair1-ow_mixed_scope": true,
+    "pair1-ow_mixed_seedorder": true,
+    "pair1-ow_mixed_worker_python": true,
+    "pair1-ow_mixed_budget_cpu": true,
+    "pair1-ow_mixed_associative": true,
+    "same_starts": true,
+    "fixedprocedure": true
+  },
+  "plan_draft_sha256": "5b950cde143fa51de9cfe3cc3b616547d6318ff1ee5676ac959995cd7e60234e",
+  "cells": [
+    {
+      "id": "pair0-ow_mixed",
+      "worker": "pymc_flow_continuation_workflow.py",
+      "seed": 105110001,
+      "implementation": "pymc_block32"
+    },
+    {
+      "id": "pair0-numpyro_nc",
+      "worker": "continuation_precision.py",
+      "seed": 105110001,
+      "implementation": "associative"
+    },
+    {
+      "id": "pair0-numpyro_mixed",
+      "worker": "mixed_flow_reference.py",
+      "seed": 105110001,
+      "implementation": "associative"
+    },
+    {
+      "id": "pair1-numpyro_mixed",
+      "worker": "mixed_flow_reference.py",
+      "seed": 105110002,
+      "implementation": "associative"
+    },
+    {
+      "id": "pair1-numpyro_nc",
+      "worker": "continuation_precision.py",
+      "seed": 105110002,
+      "implementation": "associative"
+    },
+    {
+      "id": "pair1-ow_mixed",
+      "worker": "pymc_flow_continuation_workflow.py",
+      "seed": 105110002,
+      "implementation": "pymc_block32"
+    }
+  ],
+  "scope": "Fixed development posterior, two fresh sampler/prediction seed pairs; not fresh datasets or calibration. Both NumPyro AR implementations associative; NC always middle in two reversed orders.",
+  "static_review": "Inherited per-tier validation checks full1012canonical+14physical+4forecast gates, first-pass/cap, frozen continuation, exact starts and callbacks. Allsix outcomes retained.",
+  "limitation": "Actual target runtime identity/parity must be checked after execution."
+}
