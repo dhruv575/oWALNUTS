@@ -73,7 +73,14 @@ def summarize(manifest,records):
                 if r.get(k)!=c[k]:reasons.append('mismatched '+k)
             if not isinstance(r.get('truth'),dict) or not all(finite(v) for v in r['truth'].values()):reasons.append('mismatched finite truth')
             if r.get('protocol_sha256')!=manifest['protocol_sha256']:reasons.append('protocol mismatch')
-            if not r.get('original_report_sha256'):reasons.append('missing original report binding')
+            if r.get('provenance_valid') is False:reasons.append('mismatched verified provenance')
+            if not r.get('original_report_sha256'):
+                failure=r.get('failure_evidence',{})
+                valid_failure=(r.get('usable') is False and r.get('provenance_valid') is True and isinstance(failure,dict)
+                    and failure.get('classification') in ['budgeted_computational_timeout','missing_report','worker_failed']
+                    and all(isinstance(failure.get(k),str) and bool(failure[k]) for k in ['status_sha256','hardware_sha256','started_sha256'])
+                    and all(failure.get(k)==r.get(k) for k in ['protocol_sha256','procedure_sha256','fixture_sha256','dataset_seed']))
+                if not valid_failure:reasons.append('missing original report or verified failure binding')
             if r.get('usable') is not True:reasons.append('production procedure unsuccessful')
             intervals=r.get('intervals')
             if not isinstance(intervals,dict):
