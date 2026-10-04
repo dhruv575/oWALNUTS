@@ -2,7 +2,27 @@ import json
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from pymc_continuation_workflow import run_session, bindings, verify_bindings
+from pymc_continuation_workflow import run_session, bindings, verify_bindings, plain, write_json
+
+
+def test_numeric_serialization_matches_previous_output(tmp_path):
+    from run import clean
+    def old_plain(value):
+        if isinstance(value,np.ndarray):return old_plain(value.tolist())
+        if isinstance(value,np.generic):return old_plain(value.item())
+        if isinstance(value,dict):return {str(k):old_plain(v) for k,v in value.items()}
+        if isinstance(value,(list,tuple)):return [old_plain(v) for v in value]
+        return value
+    payload=dict(canonical_draws=np.arange(48,dtype=np.float64).reshape(4,4,3),
+                 diagnostics=[dict(divergent=np.array([False,True]),depth=np.array([2,3],dtype=np.uint64))],
+                 exceptional=np.array([[np.nan,np.inf,-np.inf,1.]]),
+                 scalars=(np.float64(np.nan),float('inf'),np.int64(3)),
+                 empty=np.empty((0,3)),scalar_array=np.array(1.25),
+                 noncontiguous=np.arange(12,dtype=float)[::2])
+    expected=json.dumps(clean(old_plain(payload)),indent=2,allow_nan=False)
+    destination=tmp_path/'raw.json';write_json(destination,payload)
+    assert destination.read_text()==expected
+    assert plain(payload)==json.loads(expected)
 
 
 class Session:

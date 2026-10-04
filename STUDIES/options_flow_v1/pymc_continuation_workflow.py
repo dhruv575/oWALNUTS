@@ -23,18 +23,24 @@ def verify_bindings(expected):
 
 
 def plain(value):
-    if isinstance(value, np.ndarray): return plain(value.tolist())
+    if isinstance(value, np.ndarray):
+        # Numeric tolist() already creates native scalar values in C. Avoid
+        # recursively revisiting millions of finite posterior coordinates.
+        native = value.tolist()
+        if value.dtype.kind in 'biu': return native
+        if value.dtype.kind == 'f' and np.isfinite(value).all(): return native
+        return plain(native)
     if isinstance(value, np.generic): return plain(value.item())
     if isinstance(value, dict): return {str(k): plain(v) for k,v in value.items()}
     if isinstance(value, (list, tuple)): return [plain(v) for v in value]
+    if isinstance(value, float) and not np.isfinite(value): return None
     return value
 
 
 def write_json(path, value):
-    from run import clean
     path = Path(path)
     temporary = path.with_suffix(path.suffix + '.tmp')
-    temporary.write_text(json.dumps(clean(plain(value)), indent=2, allow_nan=False))
+    temporary.write_text(json.dumps(plain(value), indent=2, allow_nan=False))
     temporary.replace(path)
 
 
