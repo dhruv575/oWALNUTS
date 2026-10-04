@@ -34,3 +34,23 @@ stability, with one shared reference perturbation across candidate comparisons.
 Agreement and healthy diagnostics corroborate an approximate reference; they do
 not establish exact truth, absence of common bias or calibrated market forecasts.
 This resource plan does not weaken the original demanding uncertainty goal.
+
+
+## Analysis budget supported by resource controls
+
+The saved-data common-grid control completed 20 queries in 57.41 contained
+seconds using two reference fits and both prefixes. The separate 64-fit-shaped
+mixed bootstrap control completed 30,000 shared resamples and 40 parameter
+callbacks in 255.74 contained seconds, with 1.54 GB peak committed memory.
+That workload used deterministic copies of the two pilot fits; its statistical
+output was discarded. It measures computational cost, not 64-fit diversity or
+interval accuracy. Neither control establishes actual-bank grid adequacy.
+
+Declare a separate 7,200-second analysis budget, including materialization,
+admission, grid construction, bootstrap, serialization, and verification.
+Keep CPU 0, 8 GiB, 64 grid queries and 32 refinement rounds, with a 15-second
+cleanup reserve. Record actual overrun and leave the result unresolved if the
+declared budget is exceeded. The full quadrature ladder and original endpoint
+family remain unchanged. A completed resource control supports launching the
+prospective experiment after integration checks; it does not guarantee that
+all 64 fits will pass or that the bank will resolve its uncertainty gates.

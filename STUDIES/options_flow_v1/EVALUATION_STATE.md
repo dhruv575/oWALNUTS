@@ -54,11 +54,27 @@ pilot plus recovery controller cost was 989.67 seconds. This supports resource
 feasibility, not an uninterrupted workflow speed ratio or endpoint accuracy.
 
 Compact admission checks now pass diagnostically on both actual reference
-outputs. Before freezing a larger bank, measure common-grid predictive cache
-and bootstrap costs and validate mixed parameter/predictive endpoint routing.
-The existing fast parameter-only route rejects predictive endpoints; retaining
-the same whole-fit bootstrap multiplicities across the full family is required
-when addressing that limitation.
+outputs. Mixed parameter/predictive analysis now shares the same whole-fit
+bootstrap multiplicities across all twelve endpoints; scalar/batched regression
+checks cover nonzero variation and dependence. A saved-data common-grid probe
+resolved its declared weighted brackets in 20 queries and 57.41 contained
+seconds, with about 1.13 GB peak committed memory. This probe used only two
+reference fits and six distinct normalized mixtures; it does not establish
+64-fit runtime, bank accuracy, or independent-fit diversity. Its estimated
+quadrature errors are not certified envelopes.
+
+The prospective scope is 32 fresh fits per backend, with separate six-hour
+fitting and two-hour analysis caps. Fresh fit and bootstrap seed audits are
+archived, but no production bank has been launched. The 64-fit-shaped resource
+probe completed all 40 parameter callbacks and 30,000 shared bootstrap rows in
+255.74 contained seconds, with 1.54 GB peak committed memory. Its deterministic
+copies of two pilot fits are not independent posterior fits and cannot supply
+statistical evidence; grid construction was measured separately. Exact executed
+sources and containment records passed an independent root review. Before
+freezing the bank, finish reviewing and testing the integrated analysis launcher.
+The analysis intent must
+be frozen before any fit starts, retain all 64 terminal outcomes, and bind both
+controller validation and actual output artifacts through final verification.
 
 Two independently initialized fits per backend, fixed 8,000 retained draws and
 a prospectively declared 4,000-draw prefix are a resource pilot only. They
