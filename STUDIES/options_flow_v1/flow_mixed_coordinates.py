@@ -69,6 +69,48 @@ def jax_log_density(u,data):
     return lp
 
 
+def jax_to_canonical(u,data):
+    """Differentiable inverse used only by independent normalized parity checks."""
+    import jax.numpy as jnp
+    from jax import lax
+    y,_=_data(data);t,g=y.shape;k=4+2*g;rho=data['rho'];mu=u[2];sig=jnp.exp(u[3])
+    first=mu+sig*u[k]/jnp.sqrt(1-rho*rho)
+    def step(previous,z):
+        current=mu+rho*(previous-mu)+sig*z
+        return current,current
+    _,tail=lax.scan(step,first,u[k+1:])
+    return jnp.concatenate([u[:4+g],(u[4+g:k]-u[0])*jnp.exp(-u[1]),first[None],tail])
+
+
+def normalized_parity(data,points,target=None):
+    """Mandatory direct-vs-canonical+Jacobian value/gradient checks, JAX64."""
+    import hashlib
+    import jax
+    jax.config.update('jax_enable_x64',True)
+    import jax.numpy as jnp
+    from jax.scipy.special import gammaln
+    from model import log_density
+    direct=jax.jit(jax.value_and_grad(lambda u:jax_log_density(u,data)))
+    transformed=jax.jit(jax.value_and_grad(lambda u:log_density(jax_to_canonical(u,data),data,jnp,gammaln)+log_jacobian(u,data,jnp)))
+    rows=[]
+    for point in points:
+        u=jnp.asarray(point);value,gradient=direct(u);other,other_gradient=transformed(u)
+        if not np.isfinite(value) or not np.isfinite(gradient).all():raise ValueError('Nonfinite mixed parity point')
+        np.testing.assert_allclose(value,other,rtol=1e-10,atol=1e-8)
+        np.testing.assert_allclose(gradient,other_gradient,rtol=1e-9,atol=1e-8)
+        row=dict(value_error=abs(float(value-other)),gradient_max_error=float(np.max(np.abs(np.asarray(gradient-other_gradient)))),
+            point_sha256=hashlib.sha256(np.asarray(point,dtype=np.float64).tobytes()).hexdigest())
+        if target is not None:
+            from pymc_workflow import evaluate_cfunc
+            native_value,native_gradient=evaluate_cfunc(target,point)
+            np.testing.assert_allclose(native_value,value,rtol=1e-10,atol=1e-8)
+            np.testing.assert_allclose(native_gradient,gradient,rtol=1e-9,atol=1e-8)
+            row.update(native_value_error=abs(native_value-float(value)),native_gradient_max_error=float(np.max(np.abs(native_gradient-np.asarray(gradient)))))
+        rows.append(row)
+    if not rows:raise ValueError('Nonempty mixed parity points required')
+    return dict(passed=True,cases=rows,normalized_canonical_jacobian_value_and_gradient=True,jax_enable_x64=True)
+
+
 def build_model(data,block_size=32):
     import pymc as pm
     import pytensor.tensor as pt

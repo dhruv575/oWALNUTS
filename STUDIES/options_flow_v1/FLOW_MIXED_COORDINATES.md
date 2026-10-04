@@ -4,6 +4,15 @@ Status: prospective static prototype. No numerical tests, fits or performance
 measurements have run for `flow_mixed_coordinates.py`. Existing defaults and the
 frozen six-cell comparison remain unchanged, including all failed outcomes.
 
+The public flow continuation worker now has an explicit `--coordinates
+mixed_slopes` option (dense flow only); its default remains `noncentered`.
+`mixed_flow_reference.py` is a separate matching NumPyro continuation worker.
+Both require direct normalized density/gradient parity against a separately
+expressed canonical density plus Jacobian before adaptation, with JAX64 and
+all parity costs included. The public worker additionally checks the compiled
+native callback. Both return canonical draws and preserve the same physical
+start matrix. These opt-in worker changes and their tests remain unexecuted.
+
 The long-flow restart arm reached 8000 draws with a healthy, zero-divergence
 screen but missed the tau endpoint requirement: MCSE/width 0.02190794 against
 0.02. Earlier 4000-draw uncertainty involved both tau and beta_bar. These facts

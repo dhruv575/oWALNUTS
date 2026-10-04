@@ -68,7 +68,15 @@ def strict_screen(report,threshold,names,forecast_rows):
     return precision_screen(report,threshold,names=names,require_forecast=True)
 
 
-def compile_target(data,model,block_size):
+def compile_target(data,model,block_size,coordinates='noncentered'):
+    if coordinates=='mixed_slopes':
+        if model!='flow':raise ValueError('Mixed slopes currently support dense flow only')
+        import owalnuts
+        from flow_mixed_coordinates import build_model
+        tick=time.perf_counter();target,dimension,initial,names,_=owalnuts.from_pymc(build_model(data,block_size),gil_free=True)
+        if names!=['q'] or dimension!=4+2*len(data['y'][0])+len(data['y']):raise ValueError('Unexpected mixed flow layout')
+        return target,dict(compile_seconds=time.perf_counter()-tick,dimension=dimension,names=names,initial=initial.tolist(),block_size=block_size,coordinates=coordinates)
+    if coordinates!='noncentered':raise ValueError('Unknown flow coordinates')
     if model=='flow':
         from pymc_flow_workflow import compile_target as compile_dense
         return compile_dense(data,block_size)
@@ -84,7 +92,12 @@ def compile_target(data,model,block_size):
         missingness_assumption='Conditional on observation pattern; selection mechanism not modeled')
 
 
-def parity(target,data,transport_data,model,points):
+def parity(target,data,transport_data,model,points,coordinates='noncentered'):
+    if coordinates=='mixed_slopes':
+        if model!='flow':raise ValueError('Mixed slopes currently support dense flow only')
+        from flow_mixed_coordinates import normalized_parity
+        return normalized_parity(data,points,target)
+    if coordinates!='noncentered':raise ValueError('Unknown flow coordinates')
     if model=='flow':
         from pymc_flow_workflow import parity as dense_parity
         return dense_parity(target,data,points)
@@ -114,9 +127,11 @@ def main():
     p.add_argument('--seed',type=int,required=True);p.add_argument('--warmup',type=int,default=1000)
     p.add_argument('--chains',type=int,default=4);p.add_argument('--tiers',type=int,nargs='+',default=[1000,2000,4000,8000])
     p.add_argument('--model',choices=['flow','masked-flow'],default='flow');p.add_argument('--block-size',type=int,choices=[0,16,32],default=32)
+    p.add_argument('--coordinates',choices=['noncentered','mixed_slopes'],default='noncentered')
     p.add_argument('--expected-cpus');a=p.parse_args()
     if a.chains<4 or a.warmup<1 or not a.tiers or any(v<4 for v in a.tiers) or any(b<=v for v,b in zip(a.tiers,a.tiers[1:])):
         p.error('At least four chains, positive warmup and strictly increasing tiers >=4 required')
+    if a.coordinates=='mixed_slopes' and a.model!='flow':p.error('Mixed slopes currently support dense flow only')
     import owalnuts
     import owalnuts._owalnuts as extension
     from flow_starts import canonical_starts,to_noncentered
@@ -131,7 +146,7 @@ def main():
         root/'integrations/python/Cargo.toml',root/'integrations/python/Cargo.lock',
         *root.joinpath('integrations/python/src').rglob('*.rs'),*Path(__file__).parent.glob('*.py')])
     report=dict(status='running',qualified=False,phase='exploratory',model=a.model,
-        arm='python-pymc-'+a.model+'-noncentered-continuation',seed=a.seed,bindings=identity,
+        arm='python-pymc-'+a.model+'-'+a.coordinates+'-continuation',coordinates=a.coordinates,seed=a.seed,bindings=identity,
         settings=dict(chains=a.chains,warmup=a.warmup,threads=1,block_size=a.block_size),
         predictive_seed=a.seed+130000,software=dict(python=sys.version,numpy=np.__version__,algorithm_revision=owalnuts.ALGORITHM_REVISION))
     write_json(a.out/'started.json',report)
@@ -148,19 +163,22 @@ def main():
             forecast_expected_cells=forecast_rows if isinstance(forecast_rows,list) else None,
             forecast_scope='Fixed-origin scenario conditional on supplied future covariates; labels score only; not an operational future-flow claim',
             policy='One adaptation; exact retained prefix; all canonical health; every physical functional and observed forecast')
-        starts=canonical_starts(transport_data,a.chains);sampling_starts=to_noncentered(starts,transport_data)
-        np.testing.assert_allclose(to_canonical(sampling_starts,transport_data),starts,rtol=1e-12,atol=1e-12)
-        emit('compile','start',None);target,metadata=compile_target(data,a.model,a.block_size)
+        if a.coordinates=='mixed_slopes':
+            from flow_mixed_coordinates import to_mixed as forward,to_canonical as backward
+        else:forward,backward=to_noncentered,to_canonical
+        starts=canonical_starts(transport_data,a.chains);sampling_starts=forward(starts,transport_data)
+        np.testing.assert_allclose(backward(sampling_starts,transport_data),starts,rtol=1e-12,atol=1e-12)
+        emit('compile','start',None);target,metadata=compile_target(data,a.model,a.block_size,a.coordinates)
         report['compilation']=metadata;emit('compile','end',None)
         emit('parity','start',None);tick=time.perf_counter()
         report['parity']=parity(target,data,transport_data,a.model,[sampling_starts[0],sampling_starts[-1],
-            sampling_starts[0]+np.random.default_rng(818).normal(0,.01,starts.shape[1])])
+            sampling_starts[0]+np.random.default_rng(818).normal(0,.01,starts.shape[1])],a.coordinates)
         if report['parity'].get('passed') is not True:raise RuntimeError('Independent runtime parity failed')
         report['parity_seconds']=time.perf_counter()-tick;emit('parity','end',None)
-        run_session(target,fixture,starts,a.out,a.seed,a.warmup,a.tiers,'noncentered',report,
+        run_session(target,fixture,starts,a.out,a.seed,a.warmup,a.tiers,a.coordinates,report,
             evaluator=lambda q,f,seed:summarize(q,f,predictive_seed=seed),
             screen=lambda r,t:strict_screen(r,t,names,forecast_rows),
-            transport=(lambda q:to_noncentered(q,transport_data),lambda q:to_canonical(q,transport_data)),
+            transport=(lambda q:forward(q,transport_data),lambda q:backward(q,transport_data)),
             raw_filename='python-pymc-flow-raw.json',verify=lambda:verify_bindings(identity),emit=emit,
             checkpoint=lambda r:write_json(a.out/'python-pymc-flow-report.json',r))
     except Exception as exc:
