@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "C:\dev\oWALNUTS\STUDIES\options_flow_v1\correlated_reference_study.py", line 142, in <module>
+    if v.action=='worker':p=read_frozen(v.plan);guarded_worker(p,p['cells'][v.index],v.out)
+                                                ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\dev\oWALNUTS\STUDIES\options_flow_v1\correlated_reference_study.py", line 74, in guarded_worker
+    try:worker(p,c,out)
+        ~~~~~~^^^^^^^^^
+  File "C:\dev\oWALNUTS\STUDIES\options_flow_v1\correlated_reference_study.py", line 59, in worker
+    cell_worker(p,c,out) # Existing2GiB cap and resource finally-record.
+    ~~~~~~~~~~~^^^^^^^^^
+  File "C:\dev\oWALNUTS\STUDIES\options_flow_v1\reference_bank_allocation.py", line 116, in cell_worker
+    save(out/'bank.json',bank);save(out/'result.json',dict(status='completed',cell=c,truth=truth.tolist(),bank_status=bank['status'],bank_reasons=bank['reasons'],both_endpoints_cover_truth=all(b['lower']<=t<=b['upper'] for b,t in zip(bounds,truth)),max_endpoint_error_over_width=max(abs(b['estimate']-t)/width for b,t in zip(bounds,truth)),shared_reference_covariance=covariance.tolist(),cpu_seconds_before_final_report=time.process_time()-cpu_started,bank_serialized_bytes=(out/'bank.json').stat().st_size,bank_analysis_seconds=analysis_seconds,analysis_seconds_per_bootstrap_including_setup=analysis_seconds/p['bootstrap_replicates'],bounds=bounds,qualified=False))
+         ~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'str' and 'str'

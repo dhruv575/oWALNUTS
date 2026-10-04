@@ -4,6 +4,18 @@ from unittest.mock import patch
 import correlated_reference_study as study
 ROOT=Path(__file__).resolve().parents[2]
 class ControllerTests(unittest.TestCase):
+ def test_cli_string_output_reaches_allocation_as_path(self):
+  import reference_bank_allocation
+  class BoundaryReached(Exception):pass
+  with tempfile.TemporaryDirectory() as d:
+   def allocation(plan,cell,out):
+    self.assertIsInstance(out,Path)
+    (out/'boundary.json').write_text('{}')
+    raise BoundaryReached()
+   with patch.object(reference_bank_allocation,'cell_worker',side_effect=allocation):
+    with self.assertRaises(BoundaryReached):
+     study.worker({'study':str(ROOT/'STUDIES/options_flow_v1')},{},str(d))
+   self.assertTrue((Path(d)/'boundary.json').exists())
  def plan(self,root):
   marker=root/'history.txt';marker.write_text('test historical evidence')
   audit=root/'audit.json';study.save(audit,dict(status='complete',reserved_seeds=[999999],inventory_files={str(marker):study.sha(marker)},auditor='test',scope='Test only; no production seed approval'))

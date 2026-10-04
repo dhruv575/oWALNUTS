@@ -23,8 +23,12 @@ all twelve production-policy market fits passed. Keep individual successful fits
 separate from whole-cohort success in subsequent studies, and retain all failed
 attempts and their costs. The independent timing audit passed 577 checks.
 
-Run at most one further bounded correlated analytic resource study before
-moving to an actual posterior resource pilot. The independent Gaussian-AR
+The bounded correlated analytic study terminated with four failed sentinels
+and 24 unstarted main trials. Its CLI passed a string output directory to a
+worker requiring a Path; no bank result was serialized. This is an integration
+failure, not an accuracy result. Preserve the attempt and costs, fix the entry
+point with regression coverage, and move to the actual posterior resource
+pilot without automatically repeating the analytic campaign. The independent Gaussian-AR
 indicator covariance is a finite-sample variance control; translating it into
 quantile uncertainty uses a delta approximation, not an exact quantile interval.
 Preserve the existing equivalence tolerance and all known failures. This study

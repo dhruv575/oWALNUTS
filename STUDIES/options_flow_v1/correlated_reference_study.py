@@ -54,6 +54,7 @@ def verify(p,require_frozen=True):
  for n,h in p['own_source'].items():
   if sha(n)!=h:raise ValueError('Study prototype source drift')
 def worker(p,c,out):
+ out=Path(out)
  sys.path.insert(0,p['study'])
  from reference_bank_allocation import cell_worker,peak_memory
  cell_worker(p,c,out) # Existing2GiB cap and resource finally-record.
