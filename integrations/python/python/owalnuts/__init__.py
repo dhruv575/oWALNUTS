@@ -638,6 +638,106 @@ def sample(
     return _result(raw, cfg)
 
 
+@dataclass
+class ContinuationChunk:
+    """New draws/diagnostics, with explicitly cumulative work and adaptation.
+
+    Concatenate ``samples`` along axis 1 before computing posterior diagnostics.
+    A warmup chunk has no retained samples and contains warmup diagnostics.
+    """
+    samples: np.ndarray
+    diagnostics: list[dict[str, Any]]
+    cumulative_work: list[dict[str, Any]]
+    metadata: list[dict[str, Any]]
+    retained_start: int
+    retained_end: int
+    is_warmup: bool
+    target_calls: int
+    cumulative_target_calls: int
+    initialization_target_calls: int
+    wall_seconds: float
+
+
+class CFuncSession:
+    """Single-worker continuation; use as a context manager or call close().
+
+    Warmup runs once, then draw(n) advances n additional draws per chain with
+    frozen adaptation. Errors during execution make the session terminal.
+    Cancel is cooperative: an arbitrary stuck native callback cannot be killed
+    in-process. Dropping a session signals cancellation without waiting; the
+    worker retains compiled-code ownership until its callback has returned.
+    """
+    def __init__(self, inner):
+        self._inner = inner
+
+    def adapt(self) -> ContinuationChunk:
+        return ContinuationChunk(**self._inner.adapt())
+
+    def draw(self, draws: int) -> ContinuationChunk:
+        if isinstance(draws, bool) or not isinstance(draws, (int, np.integer)) or draws < 1:
+            raise ValueError("draws must be a positive integer")
+        return ContinuationChunk(**self._inner.draw(int(draws)))
+
+    def progress(self) -> dict[str, Any]:
+        """Last completed-request/error snapshot, not live execution progress.
+
+        During adapt/draw, counters and transition indices can remain zero or
+        reflect the previous completed call. Time individual requests externally
+        when reporting the active phase.
+        """
+        return self._inner.progress()
+
+    def cancel(self) -> None:
+        self._inner.cancel()
+
+    def close(self) -> None:
+        self._inner.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def start_session(
+    target: CFuncTarget, *, init: Any, max_draws: int, chains: int = 4,
+    warmup: int = 1000, seed: int = 0, threads: int = 1,
+    tuning: Tuning = Tuning(), adaptation: Adaptation | None = Adaptation(),
+    mass: Any = None, max_target_evaluations: int | None = None,
+    max_depth_stop_limit: int | None = None, admit_worst_case: bool = True,
+    cache_initial_evaluation: bool | None = None,
+) -> CFuncSession:
+    """Create a CFunc-only continuation session with a fixed lifetime budget.
+
+    ``init`` must explicitly contain every chain's start, shape (chains, dim).
+    Only sequential identity/diagonal sampling is supported. Numerical kernel,
+    warmup, tuning, seed derivation and cache defaults equal ordinary sample().
+    Admission and max_target_evaluations cover warmup plus max_draws across all
+    chains, not individual chunks. No target calls occur before adapt().
+    """
+    if not isinstance(target, CFuncTarget):
+        raise TypeError("start_session requires a CFuncTarget")
+    for name, value, minimum in [("chains", chains, 1), ("max_draws", max_draws, 1), ("warmup", warmup, 0)]:
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < minimum:
+            raise ValueError(f"{name} must be an integer >= {minimum}")
+    if threads != 1:
+        raise ValueError("continuation requires threads=1")
+    starts = np.ascontiguousarray(init, dtype=np.float64)
+    if starts.shape != (chains, target.dim) or not np.isfinite(starts).all():
+        raise ValueError("init must be a finite (chains, target.dim) matrix")
+    if mass is not None and np.asarray(mass).ndim != 1:
+        raise ValueError("continuation supports identity/diagonal mass only")
+    cfg = _config_dict(warmup=warmup, draws=max_draws, seed=seed, threads=1,
+        tuning=tuning, adaptation=adaptation, mass=mass,
+        max_target_evaluations=max_target_evaluations,
+        max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,
+        cache_initial_evaluation=cache_initial_evaluation)
+    inner = _owalnuts.start_cfunc_session(target, target.address, target.dim, starts,
+        cfg, target.user_data, list(target.parameter_names) if target.parameter_names else None)
+    return CFuncSession(inner)
+
+
 def preflight(
     dim: int,
     *,
@@ -1139,6 +1239,7 @@ __all__ = [
     "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "HAS_STAN", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
     "summary", "format_summary", "uniform_starts", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
+    "start_session", "CFuncSession", "ContinuationChunk",
     "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",

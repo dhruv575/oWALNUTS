@@ -267,6 +267,7 @@ use crate::kernel::{
 use crate::types::{State, ValidationError};
 
 mod research;
+pub mod session;
 #[cfg(feature = "research")]
 pub use research::*;
 #[cfg(not(feature = "research"))]

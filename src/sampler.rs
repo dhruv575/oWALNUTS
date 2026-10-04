@@ -58,6 +58,9 @@
 //!
 //! [`TargetEvaluationBudget`]: crate::walnutpie::TargetEvaluationBudget
 
+pub use crate::walnutpie::session::{
+    SessionChainChunk, SessionChunk, SessionHandle, SessionProgress,
+};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -970,6 +973,73 @@ impl Sampler {
     /// Errors are all-or-nothing: no draws are returned on failure.
     pub fn run<T: Target>(&self, target: &T, starts: &[Vec<f64>]) -> Result<Posterior, Error> {
         self.run_with_control_value(target, starts, RunControl::new())
+    }
+
+    /// Start an owned sequential continuation session. `draws` is the lifetime
+    /// retained budget per chain. Warmup runs once; `draw(n)` returns new draws
+    /// and cumulative telemetry. Only identity/diagonal metrics are supported.
+    /// The target must remain deterministic across calls and is owned by the
+    /// worker until close or cooperative cancellation has finished.
+    pub fn start_session<T: Target + 'static>(
+        self,
+        target: T,
+        starts: &[Vec<f64>],
+    ) -> Result<SessionHandle, Error> {
+        if self.threads.unwrap_or(1) != 1 {
+            return Err(Error::configuration("continuation requires threads=1"));
+        }
+        let config = self.run_config()?;
+        let starts = self.starts(starts)?;
+        let chains = NonZeroUsize::new(starts.len())
+            .ok_or_else(|| Error::configuration("at least one start is required"))?;
+        let dimension = catch_unwind(AssertUnwindSafe(|| target.dimension()))
+            .map_err(|_| Error::new(ErrorKind::Panic, "target dimension callback panicked"))?;
+        let dimension = NonZeroUsize::new(dimension)
+            .ok_or_else(|| Error::configuration("target dimension must be nonzero"))?;
+        let mass = match &self.metric {
+            Metric::Identity => DiagonalMass::identity(dimension),
+            Metric::Diagonal {
+                initial: Some(values),
+                ..
+            } => DiagonalMass::from_diagonal(values.clone())?,
+            Metric::Diagonal { initial: None, .. } => DiagonalMass::identity(dimension),
+            _ => {
+                return Err(Error::configuration(
+                    "continuation supports identity/diagonal metrics only",
+                ));
+            }
+        };
+        let explicit_admission =
+            self.limits.max_target_evaluations.is_some() || self.limits.admit_worst_case;
+        let budget = match self.limits.max_target_evaluations {
+            Some(value) => value,
+            None if self.limits.admit_worst_case => {
+                NonZeroUsize::new(config.worst_case_target_evaluations(chains)?)
+                    .ok_or_else(|| Error::configuration("worst case is zero"))?
+            }
+            None => NonZeroUsize::new(crate::walnutpie::CONSERVATIVE_MAX_TARGET_EVALUATIONS)
+                .expect("nonzero conservative ceiling"),
+        };
+        let deadline = match self.limits.timeout {
+            Some(timeout) => Some(
+                Instant::now()
+                    .checked_add(timeout)
+                    .ok_or_else(|| Error::configuration("timeout overflows deadline"))?,
+            ),
+            None => self.limits.deadline,
+        };
+        crate::walnutpie::session::spawn(
+            target,
+            starts,
+            crate::walnutpie::session::SessionSetup {
+                config,
+                mass,
+                budget,
+                explicit_admission,
+                deadline,
+                external_cancellation: self.limits.cancellation,
+            },
+        )
     }
 
     /// Run through the high-level boundary while emitting complete research

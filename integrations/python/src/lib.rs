@@ -14,6 +14,7 @@ use std::num::NonZeroUsize;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
+mod continuation;
 
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
@@ -1596,6 +1597,8 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "float64(intp, CPointer(float64), CPointer(float64), voidptr)",
     )?;
     m.add_function(wrap_pyfunction!(sample_cfunc, m)?)?;
+    m.add_function(wrap_pyfunction!(continuation::start_cfunc_session, m)?)?;
+    m.add_class::<continuation::CFuncSession>()?;
     m.add_function(wrap_pyfunction!(sample_callable, m)?)?;
     m.add_function(wrap_pyfunction!(preflight_callable, m)?)?;
     m.add_function(wrap_pyfunction!(sample_eight_schools, m)?)?;
