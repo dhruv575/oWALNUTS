@@ -23,14 +23,14 @@ class HardwareControlTests(unittest.TestCase):
 
     def test_worker_starts_only_after_enforcement(self):
         events=[]
-        worker=Mock(pid=4321);worker.wait.return_value=0
+        worker=Mock(pid=4321,metadata={});worker.wait.return_value=0
         def enforce(cpus): events.append('affinity');return cpus
         def spawn(command): events.append('worker');return worker
         with tempfile.TemporaryDirectory() as directory:
             record=Path(directory)/'affinity.json'
             with patch.object(hw,'get_affinity',return_value=[0,1,2]), \
                  patch.object(hw,'set_affinity',side_effect=enforce), \
-                 patch.object(hw.subprocess,'Popen',side_effect=spawn):
+                 patch.object(hw,'_ContainedWorker',side_effect=spawn):
                 self.assertEqual(hw.run_worker(['fake'],[1],record),0)
             payload=json.loads(record.read_text())
         self.assertEqual(events,['affinity','worker'])
@@ -55,17 +55,17 @@ class HardwareControlTests(unittest.TestCase):
         self.assertEqual(cpus,sorted(set(cpus)))
 
     def test_timeout_kills_and_reaps_worker(self):
-        worker=Mock(pid=4321)
-        worker.wait.side_effect=[hw.subprocess.TimeoutExpired('fake',1),-9]
+        worker=Mock(pid=4321,metadata={})
+        worker.wait.side_effect=hw.subprocess.TimeoutExpired('fake',1)
         with tempfile.TemporaryDirectory() as directory:
             record=Path(directory)/'affinity.json'
             with patch.object(hw,'get_affinity',return_value=[0]), \
                  patch.object(hw,'set_affinity',return_value=[0]), \
-                 patch.object(hw.subprocess,'Popen',return_value=worker):
+                 patch.object(hw,'_ContainedWorker',return_value=worker):
                 self.assertEqual(hw.run_worker(['fake'],[0],record,timeout=1),124)
             self.assertEqual(json.loads(record.read_text())['status'],'worker-timeout')
-        worker.kill.assert_called_once()
-        self.assertEqual(worker.wait.call_count,2)
+        worker.terminate.assert_called_once()
+        self.assertEqual(worker.wait.call_count,1)
 
 
 if __name__ == '__main__':

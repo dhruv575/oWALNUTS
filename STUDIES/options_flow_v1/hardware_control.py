@@ -120,6 +120,97 @@ def wrapper_command(command, cpus, record_path, timeout=None):
     return [*prefix, '--', *map(str, command)]
 
 
+class _WindowsJob:
+    """Kill-on-close job, assigned while the worker's primary thread is suspended."""
+    def __init__(self):
+        from ctypes import wintypes as w
+        self.api=ctypes.WinDLL('kernel32',use_last_error=True)
+        class Basic(ctypes.Structure):
+            _fields_=[('process_time',ctypes.c_longlong),('job_time',ctypes.c_longlong),('flags',w.DWORD),('min_ws',ctypes.c_size_t),('max_ws',ctypes.c_size_t),('active_limit',w.DWORD),('affinity',ctypes.c_size_t),('priority',w.DWORD),('scheduling',w.DWORD)]
+        class IO(ctypes.Structure):
+            _fields_=[(name,ctypes.c_ulonglong) for name in ('read_ops','write_ops','other_ops','read_bytes','write_bytes','other_bytes')]
+        class Extended(ctypes.Structure):
+            _fields_=[('basic',Basic),('io',IO),('process_memory',ctypes.c_size_t),('job_memory',ctypes.c_size_t),('peak_process',ctypes.c_size_t),('peak_job',ctypes.c_size_t)]
+        class Entry(ctypes.Structure):
+            _fields_=[('size',w.DWORD),('usage',w.DWORD),('tid',w.DWORD),('pid',w.DWORD),('base_priority',w.LONG),('delta_priority',w.LONG),('flags',w.DWORD)]
+        self.Entry=Entry
+        signatures={'CreateJobObjectW':([ctypes.c_void_p,w.LPCWSTR],w.HANDLE),'SetInformationJobObject':([w.HANDLE,ctypes.c_int,ctypes.c_void_p,w.DWORD],w.BOOL),'AssignProcessToJobObject':([w.HANDLE,w.HANDLE],w.BOOL),'TerminateJobObject':([w.HANDLE,w.UINT],w.BOOL),'QueryInformationJobObject':([w.HANDLE,ctypes.c_int,ctypes.c_void_p,w.DWORD,ctypes.c_void_p],w.BOOL),'CloseHandle':([w.HANDLE],w.BOOL),'CreateToolhelp32Snapshot':([w.DWORD,w.DWORD],w.HANDLE),'Thread32First':([w.HANDLE,ctypes.POINTER(Entry)],w.BOOL),'Thread32Next':([w.HANDLE,ctypes.POINTER(Entry)],w.BOOL),'OpenThread':([w.DWORD,w.BOOL,w.DWORD],w.HANDLE),'ResumeThread':([w.HANDLE],w.DWORD)}
+        for name,(args,result) in signatures.items():
+            fn=getattr(self.api,name);fn.argtypes=args;fn.restype=result
+        self.handle=self.api.CreateJobObjectW(None,None)
+        if not self.handle:raise ctypes.WinError(ctypes.get_last_error())
+        info=Extended();info.basic.flags=0x2000 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, no breakaway
+        if not self.api.SetInformationJobObject(self.handle,9,ctypes.byref(info),ctypes.sizeof(info)):
+            error=ctypes.WinError(ctypes.get_last_error());self.close();raise error
+
+    def assign_and_resume(self,worker):
+        if not self.api.AssignProcessToJobObject(self.handle,int(worker._handle)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        snapshot=self.api.CreateToolhelp32Snapshot(4,0) # TH32CS_SNAPTHREAD
+        if snapshot==ctypes.c_void_p(-1).value:raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            entry=self.Entry();entry.size=ctypes.sizeof(entry);found=[]
+            ok=self.api.Thread32First(snapshot,ctypes.byref(entry))
+            while ok:
+                if entry.pid==worker.pid:found.append(entry.tid)
+                ok=self.api.Thread32Next(snapshot,ctypes.byref(entry))
+            if len(found)!=1:raise RuntimeError('Suspended worker must have exactly one primary thread')
+            thread=self.api.OpenThread(2,False,found[0]) # THREAD_SUSPEND_RESUME
+            if not thread:raise ctypes.WinError(ctypes.get_last_error())
+            try:
+                if self.api.ResumeThread(thread)!=1:raise RuntimeError('Unexpected primary thread suspension count')
+            finally:self.api.CloseHandle(thread)
+        finally:self.api.CloseHandle(snapshot)
+
+    def terminate(self):
+        if not self.api.TerminateJobObject(self.handle,124):raise ctypes.WinError(ctypes.get_last_error())
+        class Accounting(ctypes.Structure):
+            _fields_=[('user',ctypes.c_longlong),('kernel',ctypes.c_longlong),('period_user',ctypes.c_longlong),('period_kernel',ctypes.c_longlong),('faults',ctypes.c_ulong),('total',ctypes.c_ulong),('active',ctypes.c_ulong),('terminated',ctypes.c_ulong)]
+        deadline=time.monotonic()+10
+        while True:
+            info=Accounting()
+            if not self.api.QueryInformationJobObject(self.handle,1,ctypes.byref(info),ctypes.sizeof(info),None):raise ctypes.WinError(ctypes.get_last_error())
+            if info.active==0:return
+            if time.monotonic()>=deadline:raise RuntimeError('Job descendants did not terminate within cleanup deadline')
+            time.sleep(.01)
+
+    def close(self):
+        if self.handle:self.api.CloseHandle(self.handle);self.handle=None
+
+
+class _ContainedWorker:
+    def __init__(self,command):
+        self.job=None;self.worker=None
+        try:
+            if os.name=='nt':
+                self.job=_WindowsJob()
+                self.worker=subprocess.Popen(list(command),creationflags=0x4) # CREATE_SUSPENDED
+                self.job.assign_and_resume(self.worker)
+                self.metadata={'kind':'windows-job-object','assigned_before_worker_execution':True,'kill_on_job_close':True,'breakaway_allowed':False}
+            else:
+                self.worker=subprocess.Popen(list(command),start_new_session=True)
+                self.metadata={'kind':'posix-process-group','new_session':True,'limitation':'Descendants deliberately creating new sessions can escape process-group cleanup.'}
+        except BaseException:
+            if self.worker is not None:self.worker.kill();self.worker.wait()
+            if self.job is not None:self.job.close()
+            raise
+        self.pid=self.worker.pid
+
+    def wait(self,timeout=None):return self.worker.wait(timeout=timeout)
+    def terminate(self):
+        if self.job is not None:self.job.terminate()
+        else:
+            import signal
+            try:os.killpg(self.pid,signal.SIGKILL)
+            except ProcessLookupError:pass
+        self.worker.wait()
+    def close(self):
+        # Clean up descendants even when the direct launcher has already exited.
+        try:self.terminate()
+        finally:
+            if self.job is not None:self.job.close()
+
+
 def run_worker(command, cpus, record_path, timeout=None):
     """CLI-only launcher body. Call wrapper_command from long-lived Python processes."""
     if not command:
@@ -142,24 +233,34 @@ def run_worker(command, cpus, record_path, timeout=None):
         record['status'] = 'running'
         atomic_record(path, record)
         # No shell: argument bytes remain separate. Affinity is inherited at process creation.
-        worker = subprocess.Popen(list(command))
+        worker = _ContainedWorker(command)
+        record['containment'] = worker.metadata
         record['worker_pid'] = worker.pid
         atomic_record(path, record)
         try:
             returncode = worker.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            worker.kill()
-            worker.wait()
+            worker.terminate()
             record.update(returncode=124, status='worker-timeout')
             return 124
         record.update(returncode=returncode, status='completed' if returncode == 0 else 'worker-failed')
     except BaseException as exc:
-        if worker is not None and worker.poll() is None:
-            worker.kill()
-            worker.wait()
+        if worker is not None:
+            worker.terminate()
         record.update(status='launcher-failed', error=f'{type(exc).__name__}: {exc}')
         raise
     finally:
+        if worker is not None:
+            try:
+                worker.close()
+                record['descendant_cleanup_requested'] = True
+                record['job_active_processes_after_cleanup'] = 0 if os.name=='nt' else None
+            except BaseException as cleanup_error:
+                record.update(status='cleanup-failed',cleanup_error=str(cleanup_error))
+                record['elapsed_seconds']=time.perf_counter()-started
+                record['finished_utc']=datetime.now(timezone.utc).isoformat()
+                atomic_record(path,record)
+                raise
         record['elapsed_seconds'] = time.perf_counter()-started
         record['finished_utc'] = datetime.now(timezone.utc).isoformat()
         atomic_record(path, record)
