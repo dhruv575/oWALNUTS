@@ -19,6 +19,30 @@ def save_new(path,value):
     with Path(path).open('x') as handle:json.dump(value,handle,indent=2,allow_nan=False)
 
 
+def validate_spec(spec):
+    tiers=spec.get('tiers',[])
+    if spec.get('chains')!=4 or not tiers or any(isinstance(n,bool) or not isinstance(n,int) or n<8 for n in tiers) or any(b<=a for a,b in zip(tiers,tiers[1:])):raise ValueError('Unsupported chains/tiers')
+    if spec.get('health')!={'rhat_max':1.01,'bulk_ess_min':400,'tail_ess_min':400} or spec.get('relative_mcse')!=.02:raise ValueError('Unsupported health or precision configuration')
+    policies={f'fixed_{n}' for n in tiers}|{'prefix_first_pass','restart_first_pass'}
+    ids=set();seeds=set()
+    if not spec.get('cells'):raise ValueError('No expected control cells')
+    for cell in spec['cells']:
+        key=cell.get('id')
+        if not isinstance(key,str) or not key or key in ids or Path(key).name!=key or key in ('.','..'):raise ValueError('Unsafe or duplicate cell ID')
+        ids.add(key)
+        if cell.get('marginal') not in ('normal','student_t5') or isinstance(cell.get('rho'),bool) or cell.get('rho') not in (0.,.9,.99) or cell.get('policy') not in policies:raise ValueError('Unknown marginal, rho or policy')
+        required=4*len(tiers) if cell['policy']=='restart_first_pass' else 4
+        if len(cell.get('seeds',[]))!=required:raise ValueError('Incorrect stream count')
+        for value in cell['seeds']:
+            if isinstance(value,bool) or not isinstance(value,int) or not 0<=value<2**32 or value in seeds:raise ValueError('Invalid or duplicate stream')
+            seeds.add(value)
+
+
+def check_binding(path,original,spec):
+    if digest(path)!=original or path.with_suffix('.sha256').read_text().strip()!=original:raise ValueError('Plan or sidecar changed')
+    if digest(__file__)!=spec['source_sha256']:raise ValueError('Control source changed')
+
+
 def plan(seed,replicates=200,tiers=None):
     tiers=TIERS if tiers is None else tiers
     if isinstance(seed,bool) or not isinstance(seed,int) or seed<0:raise ValueError('Nonnegative integer seed required')
@@ -41,7 +65,7 @@ def plan(seed,replicates=200,tiers=None):
 
 def summarize(rows,expected,finite_estimator_only=False):
     if len({r['id'] for r in rows})!=len(rows) or set(r['id'] for r in rows)-set(expected):raise ValueError('Duplicate or unexpected control ID')
-    good=[r for r in rows if (r.get('finite_estimator') is True if finite_estimator_only else r.get('usable') is True)]
+    good=[r for r in rows if r.get('status','completed')=='completed' and (r.get('finite_estimator') is True if finite_estimator_only else r.get('usable') is True)]
     output=dict(expected=len(expected),recorded=len(rows),usable=len(good),usable_rate=len(good)/len(expected),
         missing_ids=sorted(set(expected)-{r['id'] for r in rows}),conditional_on_usable=not finite_estimator_only,scope='All finite stationary estimates irrespective of health; not usable inference outputs' if finite_estimator_only else 'Usable procedure outputs',endpoints={})
     for j,p in enumerate([.05,.95]):
@@ -63,6 +87,7 @@ def run(plan_path,out):
     from scipy.stats import norm,t
     import arviz as az
     path=Path(plan_path);original=digest(path);spec=json.loads(path.read_text())
+    validate_spec(spec)
     if spec.get('frozen') is not True or path.with_suffix('.sha256').read_text().strip()!=original:raise ValueError('Frozen plan and sidecar required')
     if spec['source_sha256']!=digest(__file__):raise ValueError('Control source changed')
     out=Path(out);out.mkdir(parents=True,exist_ok=False)
@@ -70,7 +95,7 @@ def run(plan_path,out):
     if versions!=spec.get('software'):raise ValueError('Freeze exact numerical software versions before execution')
     allrows=[]
     for cell in spec['cells']:
-        if digest(path)!=original:raise ValueError('Plan changed during control execution')
+        check_binding(path,original,spec)
         start=time.perf_counter();row=dict(cell,id=cell['id'],status='failed',usable=False,attempts=[])
         save_new(out/(cell['id']+'-started.json'),dict(plan_sha256=original,cell=cell))
         try:
@@ -106,8 +131,9 @@ def run(plan_path,out):
                     usable=healthy if fixed else passed)
                 if not fixed and passed:break
             row['status']='completed'
-        except Exception as exc:row.update(status='failed',usable=False,error=f'{type(exc).__name__}: {exc}')
+        except Exception as exc:row.update(status='failed',usable=False,finite_estimator=False,error=f'{type(exc).__name__}: {exc}')
         row['seconds']=time.perf_counter()-start;save_new(out/(cell['id']+'.json'),row);allrows.append(row)
+    check_binding(path,original,spec)
     groups={}
     for cell in spec['cells']:
         key=f"{cell['marginal']}/{cell['rho']}/{cell['policy']}";groups.setdefault(key,[]).append(cell['id'])

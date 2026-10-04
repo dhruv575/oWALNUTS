@@ -1,8 +1,24 @@
 import unittest
-from endpoint_exact_controls import plan,summarize
+from endpoint_exact_controls import plan,summarize,validate_spec
 
 
 class ExactControlsTests(unittest.TestCase):
+    def test_strict_execution_spec(self):
+        import copy
+        spec=plan(1000,2,[8,16]);validate_spec(spec)
+        for key,value in [('relative_mcse',.5),('health',{}),('chains',2)]:
+            bad=copy.deepcopy(spec);bad[key]=value
+            with self.assertRaises(ValueError):validate_spec(bad)
+        for key,value in [('marginal','unknown'),('rho',.8),('policy','arbitrary'),('seeds',[])]:
+            bad=copy.deepcopy(spec);bad['cells'][0][key]=value
+            with self.assertRaises(ValueError):validate_spec(bad)
+        bad=copy.deepcopy(spec);bad['cells'][1]['seeds'][0]=bad['cells'][0]['seeds'][0]
+        with self.assertRaises(ValueError):validate_spec(bad)
+
+    def test_failed_later_tier_cannot_reuse_earlier_estimator(self):
+        row=dict(id='failed',status='failed',finite_estimator=True,usable=True,estimate=[0.,2.],mcse=[1.,1.],truth=[0.,2.])
+        self.assertEqual(summarize([row],['failed'],True)['usable'],0)
+        self.assertEqual(summarize([row],['failed'])['usable'],0)
     def test_distinct_streams_and_unfrozen_plan(self):
         spec=plan(1000,2,[8,16]);seeds=[s for c in spec['cells'] for s in c['seeds']]
         self.assertEqual(len(spec['cells']),48);self.assertEqual(len(set(seeds)),len(seeds));self.assertFalse(spec['frozen'])
