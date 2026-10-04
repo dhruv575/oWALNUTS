@@ -50,6 +50,24 @@ made afterward does not retroactively change those recorded outcomes.
 
 ## Other implementation and real-data progress
 
+The first real-data computational campaign (`market-computational-comparison-v1`)
+retains two passing candidate fits and two reference-worker failures before
+sampling caused by an undeclared `psutil` import. No speed ratio is eligible.
+The dependency was replaced with the existing affinity helper and a full masked
+worker invocation regression passed before a fresh four-cell v2 was frozen.
+
+In `market-computational-comparison-v2`, all four runs first pass at 4,000 draws
+per chain. Candidate/reference full times are 16.2546/40.5254 seconds and
+16.0931/40.0395 seconds, giving paired reference/candidate ratios 2.4932/2.4880.
+The independent audit verifies all 108 canonical coordinates, 14 physical
+functionals and 192 available-covariate forecast intervals, including missing
+future labels, with fixed adaptation and complete costs. This is one sparse
+posterior with two sampler seeds: 18 training observations and four scoreable
+future outcomes. Future covariates define conditional scenarios, not operational
+forecasts. The result supports computational usefulness on these real inputs,
+not broad reliability, interval calibration, incremental flow information or
+trading value. Both original reference failures remain archived separately.
+
 The opt-in exact conditional-whitening identity h=L^-T(v+z) reduces target-call
 cost on the tested points. Eight fresh-process paired profiles at T=32/128/512/1000
 give original/combined median cost ratios 1.345/1.422/1.289/1.310. Independent
