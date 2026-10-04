@@ -1,0 +1,9 @@
+# Posthoc existing-draw recovery draft
+
+STATIC ONLY: no tests or execution yet. No production recovery spec is generated.
+
+After the original campaign is terminal and independently archived, create a separate frozen spec per intended cell. Bind the original plan, immutable original status, raw/report/fixture hashes, source archive, extracted archived study sources, this recovery source and interpreter. The archived study directory must be verified against the exact archive before launch; do not substitute live source files. The source manifest must include the nested posterior_resource extractor. The corrected adapter requires exactly the attested owalnuts package paths in legacy public reports; the recovery source/archive is separately bound in its entirety.
+
+`launch.py --spec <frozen spec>` runs one CPU0 Windows-contained analysis with1800s/8GiB. Existing started/output/hardware/status/log artifacts prohibit retry. The worker imports diagnostics, transforms and CDF helpers only, never sampling drivers or target compilers. It streams existing canonical draws, recomputes4000/8000 full1012+14+4 gates, and evaluates the same group0 predictive CDF ladder with actual fixture x. Original failed statuses remain unchanged and are copied into the additional result. All analysis costs are additional to original campaign costs. Recovery completion does not retroactively make the original workflow successful and is not posterior accuracy qualification.
+
+Before use: test original archive-source extraction correspondence, exact report/path correction, no sampler imports, all posthoc identity/file bindings, actual contained admission routing and failure-cost handling. Launcher currently leaves original-input full hashing to worker under the cap; its own small launcher_inputs must bind script/interpreter/archived hardware wrapper and original archival evidence. No numerical job should overlap.
