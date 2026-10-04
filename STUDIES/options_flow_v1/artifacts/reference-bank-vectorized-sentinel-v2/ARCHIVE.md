@@ -1,0 +1,1 @@
+Full numerical outputs are retained in evidence.zip. The v1 comparison did not invoke the optimized path and is invalid as a performance comparison. v2 numerical equality and timing apply to the exact timed sources archived in timed-sources.zip; later validation-only source changes do not inherit an exact timing claim.

@@ -48,6 +48,25 @@ resource-unresolved analytic reference experiment, not posterior endpoint
 accuracy evidence. The next implementation investigation targets analysis
 cost while preserving resamples, uncertainty rules and the failed allocation.
 
+An optional chunked parameter-quantile implementation subsequently reproduced
+the first sentinel's complete 30,000-resample analysis exactly, including the
+original baseline bank output. An explicit callback spy confirms eight batch
+calls. On the archived timed revision, analysis took 18.735 seconds scalar and
+2.549 seconds vectorized (7.349x), with peak committed memory 1.195 GB. This is
+one scalar-first development comparison of reference analysis, not a sampler
+speedup or proof that the full allocation fits its budget. The default remains
+scalar and the allocation controller is unchanged.
+
+The initial comparison accidentally ran scalar twice because the optional path
+was not wired; its evidence is explicitly invalidated. A callback invocation
+regression now prevents that mistake. Thirteen focused tests pass, including
+exact paired-bootstrap output, ties, chunk boundaries, unequal-size fallback,
+and invalid multiplicities. Exact timed source bytes are archived and their
+hashes independently verified. A subsequent three-line input-validation guard
+does not change the quantile algorithm, but current-source timing is unmeasured.
+Both comparisons and the original provenance failure/resolution are retained
+under `reference-bank-vectorized-sentinel-v1` and `-v2`.
+
 ## Optimized long-flow implementation comparison
 
 The six-cell `optimized-mixed-comparison-v1` removes the earlier sequential
