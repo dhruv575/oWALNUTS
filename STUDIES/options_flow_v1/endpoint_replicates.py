@@ -19,6 +19,11 @@ def finite(value):
     return isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value)
 
 
+def predictive_inputs(fixture):
+    """Only actual forecast inputs, never latent or observed held-out outcomes."""
+    return {k:v for k,v in fixture.get('holdout',{}).items() if k in ('x','dt','horizons','elapsed_times')}
+
+
 def extract_worker(manifest,replicate_id,worker,fixture_bytes):
     """Normalize real worker endpoints after verifying frozen input bindings.
 
@@ -44,8 +49,7 @@ def extract_worker(manifest,replicate_id,worker,fixture_bytes):
     if binding.get('prediction_seed_rule')!='sampler_seed_plus_130000' or streams['prediction_seed']!=streams['sampler_seed']+130000:
         raise ValueError('Unsupported or mismatched predictive stream rule')
     data={k:v for k,v in fixture['data'].items() if k!='initial_positions'}
-    predictive_inputs={k:v for k,v in fixture.get('holdout',{}).items() if k!='y'}
-    target={'data':data,'predictive_contract':manifest['predictive_contract'],'predictive_inputs':predictive_inputs}
+    target={'data':data,'predictive_contract':manifest['predictive_contract'],'predictive_inputs':predictive_inputs(fixture)}
     target_hash=hashlib.sha256(json.dumps(target,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
     if target_hash!=manifest['target_sha256']:raise ValueError('Fixed posterior target mismatch')
     normalized=dict(id=replicate_id,target_sha256=target_hash,arm=manifest['arm'],policy=manifest['policy'],

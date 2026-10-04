@@ -1,9 +1,16 @@
 import copy
 import unittest
-from endpoint_replicates import analyze,extract_worker,extract_cohort
+from endpoint_replicates import analyze,extract_worker,extract_cohort,predictive_inputs
 
 
 class EndpointTests(unittest.TestCase):
+    def test_predictive_inputs_exclude_heldout_truth(self):
+        fixture={'holdout':{'x':[[0.]],'y':[2.],'latent':[1.]}}
+        before=predictive_inputs(fixture)
+        fixture['holdout']['latent']=[99.];fixture['holdout']['y']=[88.]
+        self.assertEqual(before,predictive_inputs(fixture))
+        fixture['holdout']['x']=[[1.]]
+        self.assertNotEqual(before,predictive_inputs(fixture))
     def test_extract_real_worker_and_reject_identity_mismatches(self):
         import hashlib,json
         streams=dict(sampler_seed=10,initialization_seed=20,prediction_seed=130010)
