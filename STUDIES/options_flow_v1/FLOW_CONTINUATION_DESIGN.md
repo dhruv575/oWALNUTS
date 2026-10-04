@@ -1,7 +1,7 @@
 # Flow continuation: next isolated implementation
 
 Status: implemented as a separate worker after the local comparison finished.
-Thirteen focused workflow tests passed, including dense/masked normalized compiled
+Eighteen focused workflow/evaluator tests passed, including dense/masked normalized compiled
 parity and an actual tiny masked worker preserving its failed health gate and
 exact 4-to-8 draw prefix. No performance campaign has run. Continuation changes
 execution cost; it does not repair posterior geometry or establish calibration.
@@ -66,12 +66,18 @@ four groups this is fourteen functionals. Enforce set equality with evaluator
 output before applying the existing 2% endpoint-MCSE/90%-width screen. Do not
 inherit the dense restart CLI's narrower five-name default accidentally.
 
-Require nonempty observed predictive holdout rows and finite matching group
-covariates/outcomes; reject malformed lengths instead of relying on `zip` to
-truncate. Existing evaluation includes future latent process innovation and
-Student-t observation noise, with fixed chain-seed+130000 per tier. Holdout masks
-are not supported initially: reject them explicitly rather than score missing
-outcomes as zeros. Forecasts remain conditional on supplied future covariates;
+Dense mode requires nonempty observed predictive holdout rows and finite matching
+group covariates/outcomes, rejecting masks and malformed lengths rather than
+relying on `zip` to truncate. Masked mode uses the separately validated
+`masked_forecast` evaluator and requires explicit future x/y availability plus a
+complete regular grid. The precision family is frozen from available future x,
+regardless of label availability; missing y has no coverage/score and removes no
+interval precision requirement. Missing x has an explicit unavailable forecast.
+Both include future latent process innovation and Student-t observation noise,
+with fixed chain-seed+130000 per tier. The real-market fixture passed schema
+validation with 96-by-4 training data, fourteen functionals and 192 declared
+forecast precision cells; this is not a fitted-model result.
+Forecasts remain conditional on supplied future covariates;
 operational availability and informative observation/trade arrival are separate
 unresolved modeling requirements. No qualification claim follows from a pass.
 

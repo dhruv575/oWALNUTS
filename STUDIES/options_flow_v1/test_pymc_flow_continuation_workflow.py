@@ -8,7 +8,9 @@ from pymc_flow_continuation_workflow import validate_fixture,strict_screen,compi
 def fixture(groups=4,masked=False):
     data=dict(y=[[.1]*groups,[-.2]*groups],x=[[.3]*groups,[.4]*groups],rho=.8,nu=5.)
     if masked:data.update(observation_mask=[[True]*groups,[False]*groups],grid_index=[0,1])
-    return dict(data=data,holdout=dict(y=[[.2]*groups],x=[[.5]*groups]))
+    future=dict(y=[[.2]*groups],x=[[.5]*groups])
+    if masked:future.update(observation_mask=[[True]*groups],x_available=[[True]*groups],grid_index=[2])
+    return dict(data=data,holdout=future)
 
 
 def test_complete_four_group_gate_and_no_silent_mask():
@@ -28,6 +30,21 @@ def test_masked_transport_is_separate_and_observed_inputs_fail_closed():
     assert np.isnan(f['data']['y'][1][0])
     f['data']['y'][0][0]=float('nan')
     with pytest.raises(ValueError,match='Observed'):validate_fixture(f,'masked-flow')
+
+
+def test_masked_labels_do_not_reduce_frozen_forecast_family():
+    f=fixture(masked=True)
+    f['holdout']['y']=[[None]*4];f['holdout']['observation_mask']=[[False]*4]
+    _,names,family=validate_fixture(f,'masked-flow')
+    assert len(names)==14 and family==[(1,0),(1,1),(1,2),(1,3)]
+    functionals={name:dict(interval_90=[-1,1],endpoint_mcse=[.01,.01]) for name in names}
+    rows=[dict(horizon=1,group=g,forecast_available=True,width=2.,endpoint_mcse=[.01,.01]) for g in range(4)]
+    report=dict(status='completed',healthy=True,evaluation=dict(functionals=functionals,forecast=dict(rows=rows)))
+    assert strict_screen(report,.02,names,family)['pass']
+    rows.pop()
+    assert not strict_screen(report,.02,names,family)['pass']
+    f['holdout']['x_available']=[[False,True,True,True]];f['holdout']['x'][0][0]=None
+    assert validate_fixture(f,'masked-flow')[2]==[(1,1),(1,2),(1,3)]
 
 
 @pytest.mark.parametrize('model',['flow','masked-flow'])

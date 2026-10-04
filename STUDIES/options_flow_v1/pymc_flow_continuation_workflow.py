@@ -23,14 +23,27 @@ def validate_fixture(fixture,model):
         transport_data=dict(data,y=np.where(mask,y,0.).tolist(),x=np.where(mask,x,0.).tolist())
     else:raise ValueError('Unknown flow model')
     future=fixture.get('holdout')
-    if not isinstance(future,dict) or 'observation_mask' in future:
-        raise ValueError('Finite observed holdout without a mask is required')
+    if not isinstance(future,dict):raise ValueError('Explicit forecast holdout is required')
     fy=np.asarray(future.get('y'),dtype=float);fx=np.asarray(future.get('x'),dtype=float)
-    if fy.ndim!=2 or fy.shape!=fx.shape or fy.shape[0]<1 or fy.shape[1]!=y.shape[1] or not np.isfinite(fy).all() or not np.isfinite(fx).all():
-        raise ValueError('Holdout requires matching finite nonempty H-by-G y and x')
+    if fy.ndim!=2 or fy.shape!=fx.shape or fy.shape[0]<1 or fy.shape[1]!=y.shape[1]:
+        raise ValueError('Holdout requires matching nonempty H-by-G y and x')
+    if model=='flow':
+        if any(key in future for key in ['observation_mask','y_available','x_available']):raise ValueError('Dense flow cannot silently ignore future availability masks')
+        if not np.isfinite(fy).all() or not np.isfinite(fx).all():raise ValueError('Dense holdout must be finite')
+        forecast_family=fy.size
+    else:
+        xm=np.asarray(future.get('x_available'))
+        ym=np.asarray(future.get('y_available',future.get('observation_mask')))
+        if 'y_available' in future and 'observation_mask' in future and not np.array_equal(future['y_available'],future['observation_mask']):raise ValueError('Conflicting future outcome masks')
+        if xm.shape!=fx.shape or ym.shape!=fy.shape or xm.dtype!=np.bool_ or ym.dtype!=np.bool_:raise ValueError('Masked forecast requires explicit matching boolean x/y availability')
+        if not np.isfinite(fx[xm]).all() or not np.isfinite(fy[ym]).all():raise ValueError('Available future values must be finite')
+        grid=np.asarray(future.get('grid_index'));h=len(fy);t=len(y)
+        if grid.shape!=(h,) or not np.issubdtype(grid.dtype,np.integer) or not (np.array_equal(grid,np.arange(h)) or np.array_equal(grid,np.arange(t,t+h))):raise ValueError('Future grid must preserve every regular latent step')
+        forecast_family=[(int(i)+1,int(j)) for i,j in zip(*np.nonzero(xm))]
+        if not forecast_family:raise ValueError('At least one declared available-covariate forecast cell is required')
     names=['beta_bar','tau','mu_h','sigma_h','h_terminal','h_mean']
     for group in range(y.shape[1]):names.extend([f'alpha_{group}',f'beta_{group}'])
-    return transport_data,names,fy.size
+    return transport_data,names,forecast_family
 
 
 def strict_screen(report,threshold,names,forecast_rows):
@@ -38,6 +51,18 @@ def strict_screen(report,threshold,names,forecast_rows):
     evaluation=report.get('evaluation',{})
     if set(evaluation.get('functionals',{}))!=set(names):
         raise ValueError('Physical functional set differs from the declared complete flow gate')
+    if isinstance(forecast_rows,list):
+        from masked_forecast import precision_forecast_screen
+        # Parameter health/precision and exact frozen available-x forecast family
+        # remain separate; missing labels never remove precision requirements.
+        parameter_report=dict(report,evaluation={k:v for k,v in evaluation.items() if k!='forecast'})
+        parameters=precision_screen(parameter_report,threshold,names=names,require_forecast=False)
+        forecast=precision_forecast_screen(evaluation.get('forecast',{}),forecast_rows,threshold)
+        ratios={**parameters['ratios'],**{f'forecast_{k}':v for k,v in forecast['ratios'].items()}}
+        return dict(**{'pass':parameters['pass'] and forecast['pass']},reasons=parameters['reasons']+forecast['reasons'],
+            ratios=ratios,max_endpoint_mcse_over_width=max(ratios.values(),default=None),threshold=threshold,
+            parameter_functionals=names,forecast_rows=len(forecast_rows),forecast_expected_cells=forecast_rows,
+            parameter_screen=parameters,forecast_screen=forecast,qualified=False)
     if len(evaluation.get('forecast',{}).get('rows',[]))!=forecast_rows:
         raise ValueError('Observed forecast row count differs from the declared gate')
     return precision_screen(report,threshold,names=names,require_forecast=True)
@@ -96,7 +121,8 @@ def main():
     import owalnuts._owalnuts as extension
     from flow_starts import canonical_starts,to_noncentered
     from pymc_flow_workflow import to_canonical
-    from evaluate import summarize
+    if a.model=='masked-flow':from masked_forecast import summarize
+    else:from evaluate import summarize
     from hardware_control import get_affinity,parse_cpus
     a.out.mkdir(parents=True,exist_ok=False)
     root=Path(__file__).resolve().parents[2]
@@ -117,7 +143,10 @@ def main():
         if a.expected_cpus is not None and sorted(realized)!=sorted(parse_cpus(a.expected_cpus)):raise ValueError('Inherited CPU affinity mismatch')
         fixture=json.loads(a.fixture.read_text());data=fixture['data']
         transport_data,names,forecast_rows=validate_fixture(fixture,a.model)
-        report['precision_plan']=dict(tiers=a.tiers,threshold=.02,names=names,forecast_rows=forecast_rows,
+        report['precision_plan']=dict(tiers=a.tiers,threshold=.02,names=names,
+            forecast_rows=len(forecast_rows) if isinstance(forecast_rows,list) else forecast_rows,
+            forecast_expected_cells=forecast_rows if isinstance(forecast_rows,list) else None,
+            forecast_scope='Fixed-origin scenario conditional on supplied future covariates; labels score only; not an operational future-flow claim',
             policy='One adaptation; exact retained prefix; all canonical health; every physical functional and observed forecast')
         starts=canonical_starts(transport_data,a.chains);sampling_starts=to_noncentered(starts,transport_data)
         np.testing.assert_allclose(to_canonical(sampling_starts,transport_data),starts,rtol=1e-12,atol=1e-12)
