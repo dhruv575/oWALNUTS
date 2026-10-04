@@ -145,7 +145,7 @@ def jax_log_density(u,data,gaussian=False):
     return lp-jnp.log(d).sum()
 
 
-def _pytensor_guide(lo,lr,data):
+def _pytensor_guide(lo,lr,data,return_forward=False):
     """Scan recurrences; separate symbolic implementation for parity checks."""
     import pytensor
     import pytensor.tensor as pt
@@ -154,7 +154,8 @@ def _pytensor_guide(lo,lr,data):
     f0=w+np.float64(1/1.5**2)
     if t==1:
         d=pt.sqrt(f0)[None];e=pt.constant(np.empty(0,dtype=np.float64))
-        return (w*y+np.float64(data['anchor']/1.5**2))/(d*d),d,e
+        rhs=w*y+np.float64(data['anchor']/1.5**2)
+        return (rhs/d if return_forward else rhs/(d*d)),d,e
     def update(ri,previous,wi):
         small=pt.minimum(ri,previous);large=pt.maximum(ri,previous)
         return wi+small/(np.float64(1.)+small/large)
@@ -166,7 +167,7 @@ def _pytensor_guide(lo,lr,data):
     vrest,_=pytensor.scan(lambda bi,ei,di,prev:(bi-ei*prev)/di,
         sequences=[b[1:],e,d[1:]],outputs_info=[v0],strict=True)
     v=pt.concatenate((v0[None],vrest))
-    return _pytensor_backsolve(v,d,e),d,e
+    return (v if return_forward else _pytensor_backsolve(v,d,e)),d,e
 
 
 def _pytensor_backsolve(rhs,d,e):
@@ -178,7 +179,7 @@ def _pytensor_backsolve(rhs,d,e):
     return pt.concatenate((rest[::-1],last[None]))
 
 
-def build_model(data):
+def build_model(data,combine_solve=False):
     import pymc as pm
     import pytensor.tensor as pt
     from local_observation_residual import canonical_starts
@@ -187,9 +188,12 @@ def build_model(data):
     with pm.Model() as model:
         u=pm.Flat('position',shape=t+2,initval=initial)
         z,lo,lr=u[:-2],u[-2],u[-1]
-        m,d,e=_pytensor_guide(lo,lr,data)
-        delta=z/d if t==1 else _pytensor_backsolve(z,d,e)
-        h=m+delta
+        m,d,e=_pytensor_guide(lo,lr,data,return_forward=combine_solve)
+        if combine_solve:
+            h=(m+z)/d if t==1 else _pytensor_backsolve(m+z,d,e)
+        else:
+            delta=z/d if t==1 else _pytensor_backsolve(z,d,e)
+            h=m+delta
         lp=pm.logp(pm.Normal.dist(mu=np.float64(np.log(.08)),sigma=np.float64(1.)),lo)
         lp+=pm.logp(pm.Normal.dist(mu=np.float64(np.log(.12)),sigma=np.float64(1.)),lr)
         lp+=pm.logp(pm.Normal.dist(mu=np.float64(data['anchor']),sigma=np.float64(1.5)),h[0])

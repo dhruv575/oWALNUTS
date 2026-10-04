@@ -139,4 +139,27 @@ class ConditionalWhiteningTests(unittest.TestCase):
                 np.testing.assert_allclose(grad[k],finite,rtol=1e-6,atol=1e-6)
 
 
+class CombinedSolveTests(unittest.TestCase):
+    def test_combined_compiled_target_parity(self):
+        import jax
+        jax.config.update('jax_enable_x64',True)
+        import jax.numpy as jnp
+        import owalnuts
+        from pymc_workflow import evaluate_cfunc
+        for t in [1,2,128]:
+            data=dict(y=np.linspace(-.2,.4,t).tolist(),dt=np.linspace(.4,1.6,t-1).tolist(),anchor=.13,anchor_mode='exogenous',nu=5.)
+            target,dim,initial,names,unravel=owalnuts.from_pymc(guide.build_model(data,combine_solve=True),gil_free=True)
+            self.assertEqual(dim,t+2)
+            reference=jax.jit(jax.value_and_grad(lambda u:guide.jax_log_density(u,data)))
+            for lo,lr in [(-2.5,-2.),(-9.,-1.),(-1.,-9.)]:
+                u=np.r_[np.linspace(-.5,.7,t),lo,lr]
+                value,gradient=evaluate_cfunc(target,u);ref,grad=reference(jnp.asarray(u))
+                np.testing.assert_allclose(value,ref,rtol=1e-9,atol=1e-7)
+                np.testing.assert_allclose(gradient,grad,rtol=1e-7,atol=2e-6)
+                q=guide.to_canonical(u,data);_,d,_=guide._guide(lo,lr,data)
+                np.testing.assert_allclose(value,canonical_density(q,data)-np.log(d).sum(),rtol=1e-9,atol=1e-7)
+                direction=np.zeros_like(u);direction[-2:]=[.6,.8];eps=1e-5
+                finite=(guide.log_density(u+eps*direction,data)-guide.log_density(u-eps*direction,data))/(2*eps)
+                np.testing.assert_allclose(gradient@direction,finite,rtol=3e-5,atol=3e-5)
+
 if __name__=='__main__':unittest.main()
