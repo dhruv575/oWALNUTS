@@ -114,7 +114,17 @@ def instrument_panel(client,protocol,name,lo,hi):
     last_page=client.request('public/get_last_trades_by_instrument',dict(instrument_name=name,end_timestamp=hi,count=1,sorting='desc'))['trades']
     if not isinstance(first,list) or not isinstance(last_page,list) or len(first)!=1 or len(last_page)!=1:raise Incomplete('Boundary probes must return exactly one trade each')
     valid_trade(first[0],lo,hi,name);valid_trade(last_page[0],lo,hi,name)
-    lower=first[0]['trade_seq'];upper=last_page[0]['trade_seq']
+    def tie_boundary(probe,choose):
+        timestamp=probe['timestamp']
+        response=client.request('public/get_last_trades_by_instrument',dict(instrument_name=name,start_timestamp=timestamp,end_timestamp=timestamp,count=protocol['count'],sorting='asc'))
+        ties=response.get('trades')
+        if response.get('has_more') is not False or not isinstance(ties,list) or not ties:raise Incomplete('Unresolved same-timestamp boundary saturation')
+        for trade in ties:valid_trade(trade,timestamp,timestamp,name)
+        sequences=[trade['trade_seq'] for trade in ties]
+        if len(sequences)!=len(set(sequences)):raise Incomplete('Duplicate boundary sequence')
+        if not any(trade==probe for trade in ties):raise Incomplete('Boundary probe not reproduced in complete tie page')
+        return choose(sequences)
+    lower=tie_boundary(first[0],min);upper=tie_boundary(last_page[0],max)
     if upper<lower:raise Incomplete('Inconsistent frozen sequence bounds')
     rows=[];last=lower
     while True:
@@ -124,7 +134,8 @@ def instrument_panel(client,protocol,name,lo,hi):
         for t in trades:valid_trade(t,lo,hi,name)
         sequences=[t['trade_seq'] for t in trades]
         if any(seq<last or seq>upper for seq in sequences):raise Incomplete('Sequence outside frozen page bounds')
-        if sequences!=sorted(sequences) or len(sequences)!=len(set(sequences)):raise Incomplete('Nonmonotonic/duplicate sequence page')
+        if len(sequences)!=len(set(sequences)):raise Incomplete('Duplicate sequence page')
+        trades=sorted(trades,key=lambda trade:trade['trade_seq']);sequences=[trade['trade_seq'] for trade in trades]
         if last is not None and (not sequences or sequences[0]!=last):raise Incomplete('Sequence boundary overlap not verified')
         rows.extend(trades)
         if not r['has_more']:
@@ -132,7 +143,7 @@ def instrument_panel(client,protocol,name,lo,hi):
             break
         if not sequences or (last is not None and sequences[-1]<=last):raise Incomplete('Pagination makes no progress')
         last=sequences[-1]
-    result=merge(rows);seq=[t['trade_seq'] for t in result]
+    result=sorted(merge(rows),key=lambda trade:trade['trade_seq']);seq=[t['trade_seq'] for t in result]
     if any(b!=a+1 for a,b in zip(seq,seq[1:])):raise Incomplete('Unexplained sequence gap; panel not fit-ready')
     return result
 

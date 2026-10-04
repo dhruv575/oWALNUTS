@@ -14,13 +14,13 @@ class AcquisitionTests(unittest.TestCase):
         rows=discovery(c,{'count':1000},9,11)
         self.assertEqual(len(rows),3)
     def test_sequence_overlap_and_progress(self):
-        c=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=True,trades=[trade(1),trade(2)]),dict(has_more=False,trades=[trade(2),trade(3)])])
+        c=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=False,trades=[trade(1),trade(2),trade(3)]),dict(has_more=False,trades=[trade(1),trade(2),trade(3)]),dict(has_more=True,trades=[trade(1),trade(2)]),dict(has_more=False,trades=[trade(2),trade(3)])])
         self.assertEqual(len(instrument_panel(c,{'count':1000},'BTC-X',0,20)),3)
-        self.assertEqual(c.calls[3][1]['start_seq'],2)
-        for _,params in c.calls[2:]:
+        self.assertEqual(c.calls[5][1]['start_seq'],2)
+        for _,params in c.calls[4:]:
             self.assertNotIn('start_timestamp',params);self.assertNotIn('end_timestamp',params);self.assertEqual(params['end_seq'],3)
     def test_gap_fails(self):
-        c=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=False,trades=[trade(1),trade(3)])])
+        c=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=False,trades=[trade(1),trade(2),trade(3)]),dict(has_more=False,trades=[trade(1),trade(2),trade(3)]),dict(has_more=False,trades=[trade(1),trade(3)])])
         with self.assertRaises(Incomplete):instrument_panel(c,{'count':1000},'BTC-X',0,20)
     def test_conflicting_duplicate_fails(self):
         a=trade(1);b=dict(a,amount=2.)
@@ -85,7 +85,7 @@ class StructuralValidationTests(unittest.TestCase):
             client=Client([dict(trades=boundary),dict(trades=[trade(3)])])
             with self.assertRaises(Incomplete):instrument_panel(client,{'count':1000},'BTC-X',0,20)
     def test_sequence_cannot_exceed_frozen_upper(self):
-        client=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=True,trades=[trade(1),trade(4)])])
+        client=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=False,trades=[trade(1),trade(2),trade(3)]),dict(has_more=False,trades=[trade(1),trade(2),trade(3)]),dict(has_more=True,trades=[trade(1),trade(4)])])
         with self.assertRaises(Incomplete):instrument_panel(client,{'count':1000},'BTC-X',0,20)
     def test_metadata_units_and_type_required(self):
         from acquire_deribit_panel import validate_instrument
@@ -95,7 +95,23 @@ class StructuralValidationTests(unittest.TestCase):
             changed=dict(base);changed[key]=value
             with self.assertRaises(Incomplete):validate_instrument(changed,'BTC-X')
     def test_reversed_boundary_sequences(self):
-        client=Client([dict(trades=[trade(3)]),dict(trades=[trade(1)])])
+        client=Client([dict(trades=[trade(3,9)]),dict(trades=[trade(1,11)]),dict(has_more=False,trades=[trade(3,9)]),dict(has_more=False,trades=[trade(1,11)])])
         with self.assertRaises(Incomplete):instrument_panel(client,{'count':1000},'BTC-X',0,20)
+
+class OrderingAndTieTests(unittest.TestCase):
+    def pages(self,body):
+        ties=dict(has_more=False,trades=[trade(3),trade(1),trade(2)])
+        return Client([dict(trades=[trade(2)]),dict(trades=[trade(2)]),ties,ties,body])
+    def test_unsorted_valid_and_full_boundary_ties(self):
+        c=self.pages(dict(has_more=False,trades=[trade(3),trade(1),trade(2)]))
+        rows=instrument_panel(c,{'count':1000},'BTC-X',0,20)
+        self.assertEqual([r['trade_seq'] for r in rows],[1,2,3])
+        self.assertEqual(c.calls[-1][1]['start_seq'],1);self.assertEqual(c.calls[-1][1]['end_seq'],3)
+    def test_duplicate_page_sequence_rejected(self):
+        c=self.pages(dict(has_more=False,trades=[trade(1),trade(1),trade(3)]))
+        with self.assertRaises(Incomplete):instrument_panel(c,{'count':1000},'BTC-X',0,20)
+    def test_saturated_boundary_fails_closed(self):
+        c=Client([dict(trades=[trade(1)]),dict(trades=[trade(3)]),dict(has_more=True,trades=[trade(1)])])
+        with self.assertRaises(Incomplete):instrument_panel(c,{'count':1000},'BTC-X',0,20)
 
 if __name__=='__main__':unittest.main()
