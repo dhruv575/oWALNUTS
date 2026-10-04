@@ -52,8 +52,23 @@ def verify_frozen(path,original=None):
     if sha(intent)!=p['intent_sha256'] or any(p.get(k)!=v for k,v in load(intent).items() if k not in ['cells','frozen']):raise ValueError('Bank intent changed')
     validate(p,path.parent);return p
 
+def verify_analysis_link(fitting_path,fitting_digest,pinned=None):
+ fitting_path=Path(fitting_path).resolve();path=fitting_path.parent/'analysis-link.json';digest=sha(path);link=load(path)
+ if path.with_suffix('.sha256').read_text().strip()!=digest:raise ValueError('Frozen execution link sidecar mismatch')
+ if link['fitting_plan_sha256']!=fitting_digest or Path(link['fitting_plan']).resolve()!=fitting_path:raise ValueError('Execution link binds a different fitting plan')
+ intent_path=Path(link['analysis_intent']).resolve();intent_digest=sha(intent_path);intent=load(intent_path)
+ if intent_digest!=link['analysis_intent_sha256'] or intent_path.with_suffix('.sha256').read_text().strip()!=intent_digest or intent.get('frozen') is not True:raise ValueError('Frozen analysis intent mismatch')
+ if intent['fitting_plan_sha256']!=fitting_digest or Path(intent['fitting_plan']).resolve()!=fitting_path:raise ValueError('Analysis intent binds another fitting plan')
+ plan=load(fitting_path)
+ if intent['ordered_ids']!=[c['id'] for c in plan['cells']]:raise ValueError('Analysis intent changes fit order/denominator')
+ if {str(p.resolve()):sha(p) for p in Path(intent['analysis_source_directory']).rglob('*.py')}!=intent['analysis_source_inventory']:raise ValueError('Analysis source inventory changed')
+ if any(sha(p)!=h for p,h in intent['bindings'].items()):raise ValueError('Analysis intent source drift')
+ snapshot=dict(link_sha256=digest,intent_sha256=intent_digest)
+ if pinned is not None and snapshot!=pinned:raise ValueError('Execution link/intent changed during fitting')
+ return snapshot
+
 def execute(path):
-    path=Path(path).resolve();plan=load(path);original=sha(path);started=time.perf_counter();deadline=started+plan['total_seconds'];abort=None
+    path=Path(path).resolve();plan=load(path);original=sha(path);started=time.perf_counter();deadline=started+plan['total_seconds'];abort=None;analysis_link=None
     if plan.get('frozen') is not True:raise ValueError('Explicit frozen plan required')
     if (path.parent/'terminal.json').exists():raise ValueError('Existing terminal record; no overwrite')
     if plan.get('expected')!=64 or len(plan.get('cells',[]))!=64 or len({c['id'] for c in plan['cells']})!=64:raise ValueError('64-cell bank intent required')
@@ -65,6 +80,7 @@ def execute(path):
         tick=time.perf_counter()
         try:
             if verify_frozen(path,original)!=plan:raise ValueError('Loaded frozen plan changed')
+            analysis_link=verify_analysis_link(path,original,analysis_link)
         except Exception as exc:abort=str(exc);save(status,dict(record,status='unattempted_provenance_abort',error=abort,elapsed_seconds=time.perf_counter()-tick));continue
         remaining=deadline-time.perf_counter()-plan['cleanup_reserve_seconds']
         if remaining<=0:save(status,dict(record,status='unattempted_global_budget',elapsed_seconds=time.perf_counter()-tick));continue
@@ -85,6 +101,7 @@ def execute(path):
             else:
                 rp=Path(c['out'])/'resource-result.json';result=load(rp);validate_outputs(plan,c,result);record.update(status=result['status'],resource_result_sha256=sha(rp),success=result['status']=='resource_completed' and r.returncode==0,resources=result.get('resources'))
             if verify_frozen(path,original)!=plan:raise ValueError('Postworker frozen plan drift')
+            verify_analysis_link(path,original,analysis_link)
         except Exception as exc:record.update(status='worker_or_validation_failed',error=str(exc));abort=str(exc) if 'drift' in str(exc).lower() or 'changed' in str(exc).lower() else None
         record['elapsed_seconds']=time.perf_counter()-tick;save(status,record)
     save(path.parent/'terminal.json',dict(expected=64,recorded=sum((path.parent/(c['id']+'-status.json')).exists() for c in plan['cells']),elapsed_seconds=time.perf_counter()-started,qualified=False,resource_only=True))

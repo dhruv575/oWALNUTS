@@ -28,7 +28,7 @@ def test_all64_outcomes_costs_and_no_retry(tmp_path,monkeypatch,mode):
  cells=[dict(id=f'bank-{i:02d}',out=str(tmp_path/f'bank-{i:02d}')) for i in range(64)]
  plan=dict(frozen=True,expected=64,total_seconds=21600,per_fit_seconds=1800,cleanup_reserve_seconds=15,cells=cells,posterior_sha256='target',python='mock',pythonpath='mock',study='mock')
  path=tmp_path/'plan.json';path.write_text(json.dumps(plan));calls=[]
- monkeypatch.setattr(b,'verify_frozen',lambda *a:plan);monkeypatch.setattr(b,'validate_outputs',lambda *a:None)
+ monkeypatch.setattr(b,'verify_frozen',lambda *a:plan);monkeypatch.setattr(b,'verify_analysis_link',lambda *a:{'link':'fixed'});monkeypatch.setattr(b,'validate_outputs',lambda *a:None)
  def run(args,**kwargs):
   calls.append(args);cid=args[-1];out=tmp_path/cid;out.mkdir();rc=124 if mode=='timeout' else 0;hp=args[args.index('--record')+1]
   b.save(hp,dict(command=args[args.index('--')+1:],returncode=rc,job_active_processes_after_cleanup=0,realized_cpus=[0],enforced_before_worker_launch=True,containment=dict(kind='windows-job-object',assigned_before_worker_execution=True),status='worker-timeout' if mode=='timeout' else 'completed',elapsed_seconds=1800))
@@ -44,7 +44,7 @@ def test_all64_outcomes_costs_and_no_retry(tmp_path,monkeypatch,mode):
 def test_exhausted_global_cap_preserves64_unattempted(tmp_path,monkeypatch):
  cells=[dict(id=f'bank-{i:02d}',out=str(tmp_path/f'bank-{i:02d}')) for i in range(64)]
  plan=dict(frozen=True,expected=64,total_seconds=21600,per_fit_seconds=1800,cleanup_reserve_seconds=15,cells=cells)
- path=tmp_path/'plan.json';path.write_text(json.dumps(plan));monkeypatch.setattr(b,'verify_frozen',lambda *a:plan)
+ path=tmp_path/'plan.json';path.write_text(json.dumps(plan));monkeypatch.setattr(b,'verify_frozen',lambda *a:plan);monkeypatch.setattr(b,'verify_analysis_link',lambda *a:{'link':'fixed'})
  times=iter([0,21600]);monkeypatch.setattr(b.time,'perf_counter',lambda:next(times,21600));monkeypatch.setattr(b.subprocess,'run',lambda *a,**k:pytest.fail('Deadline exhausted'))
  b.execute(path)
  assert b.load(tmp_path/'terminal.json')['recorded']==64
@@ -70,3 +70,22 @@ def test_actual_cli_help_and_string_path_admission(tmp_path):
  path=tmp_path/'bad.json';path.write_text(json.dumps(dict(frozen=False,total_seconds=21600)))
  result=subprocess.run([sys.executable,'-m','posterior_resource.bank_controller','run',str(path)],env=env,capture_output=True,text=True,timeout=30)
  assert result.returncode!=0 and 'Explicit frozen plan required' in result.stderr and 'AttributeError' not in result.stderr
+
+
+def test_missing_analysis_link_keeps64_unstarted(tmp_path,monkeypatch):
+ cells=[dict(id=f'bank-{i:02d}',out=str(tmp_path/f'bank-{i:02d}')) for i in range(64)]
+ plan=dict(frozen=True,expected=64,total_seconds=21600,cells=cells);path=tmp_path/'plan.json';path.write_text(json.dumps(plan));monkeypatch.setattr(b,'verify_frozen',lambda *a:plan)
+ monkeypatch.setattr(b.subprocess,'run',lambda *a,**k:pytest.fail('No analysis admission'))
+ b.execute(path)
+ assert b.load(tmp_path/'terminal.json')['recorded']==64
+ assert not list(tmp_path.glob('*-started.json'))
+ assert all(b.load(tmp_path/(c['id']+'-status.json'))['status']=='unattempted_provenance_abort' for c in cells)
+
+
+def test_execution_link_pins_both_digests(tmp_path):
+ plan=tmp_path/'plan.json';plan.write_text(json.dumps(dict(cells=[dict(id='a')])));pd=b.sha(plan)
+ intent=tmp_path/'intent.json';iv=dict(frozen=True,fitting_plan=str(plan),fitting_plan_sha256=pd,ordered_ids=['a'],bindings={},analysis_source_directory=str(tmp_path),analysis_source_inventory={});intent.write_text(json.dumps(iv));intent.with_suffix('.sha256').write_text(b.sha(intent))
+ link=tmp_path/'analysis-link.json';lv=dict(fitting_plan=str(plan),fitting_plan_sha256=pd,analysis_intent=str(intent),analysis_intent_sha256=b.sha(intent));link.write_text(json.dumps(lv));link.with_suffix('.sha256').write_text(b.sha(link))
+ snapshot=b.verify_analysis_link(plan,pd)
+ iv['changed']=True;intent.write_text(json.dumps(iv));intent.with_suffix('.sha256').write_text(b.sha(intent));lv['analysis_intent_sha256']=b.sha(intent);link.write_text(json.dumps(lv));link.with_suffix('.sha256').write_text(b.sha(link))
+ with pytest.raises(ValueError,match='during fitting'):b.verify_analysis_link(plan,pd,snapshot)
