@@ -1,0 +1,47 @@
+# Actual-posterior bank analysis: proposed next implementation
+
+This is an analysis design, not a frozen run or permission to launch a bank. The four-fit resource pilot measures feasibility only. Two independent fits per backend cannot establish bootstrap accuracy, a credible between-fit variance distribution, backend equivalence, or posterior truth. The failed correlated analytic campaign supplied no completed coverage evidence; it exposed a CLI integration error. Earlier algebra tests, numerical quadrature checks and scalar/vector equality do not repair that missing operating-characteristic evidence.
+
+## Target and denominator
+
+Use the exact resource-pilot T1000/G4 posterior and its recorded group0, horizon1 covariate. Freeze a manifest containing either16 or32 independently initialized fits per backend, their distinct sampler/initialization streams, four-chain1000warmup and fixed4000/8000 paired prefixes. Choose the initial count and any one prospective extension before seeing bank agreement. Never count prefixes, chains or repeated candidate comparisons as additional independent fits. The resource-pilot draws are excluded from the subsequent bank, as fixed in EVALUATION_STATE. The bank requires fresh independent fits; pilot outputs may inform resource planning and adapter checks only.
+
+Keep all intended fit IDs and charged costs. A completed resource process is not necessarily a healthy reference fit: require all1012canonical and14physical diagnostics, zero retained divergences, correct starts/reset/transport, and valid predictive numerical checks. Record unhealthy and missing fits separately; do not silently rebuild a smaller bank of convenient successes. A bank with missing required fits remains incomplete under that recipe. Replacement or exclusion needs a new explicit prospective policy, not an after-the-fact denominator change.
+
+The accuracy family has exactly12 endpoints: .05/.95 for beta_bar,tau,mu_h,sigma_h,h_terminal and the observed Student-t group0 next return. Both probabilities must reference the SAME stored functional or predictive scenario. Units are the model's original scale; no exp/log substitution. Bind fixture/target digest, current covariate, rho, nu, horizon, all source/runtime versions, raw-file digest, compact-file digest, extraction metadata, chain/draw order and fit identity.
+
+## Small adapter, existing analysis
+
+Add one `posterior_resource.bank_adapter` module rather than another sampler or campaign framework. Its input is a frozen expected-fit manifest plus the existing resource outcome records. It reads compact.npz arrays with shape[4,8000], checks file hashes against extraction records, exposes paired[:,:4000] and[:,:8000] views, and returns a complete outcome table plus validated bank inputs. Five physical arrays are sufficient for parameter endpoints; the other nine and all canonical diagnostics remain admission evidence.
+
+For each parameter use the existing `reference_bank.prepare_parameters` and optional vectorized weighted-left-inverse kernel. Pool draws with equal weight per independent fit and equal weight within fit; never average fit quantiles. Flatten chain/draw values only for this empirical CDF after retaining chain metadata for health checks. Resample complete independent fits within each backend; preserve each resampled fit's paired prefixes and all12 endpoints. One shared multiplicity vector must feed all endpoints and every candidate replicate compared with that bank. Candidate repetitions must not reduce the bank's contribution by1/sqrt(number of candidates).
+
+Avoid JSON duplication of large draw lists: store each physical array once per fit/prefix and let both endpoint probabilities refer to that distribution object. A narrow accessor/view conversion at the existing bank boundary is enough. Preserve the existing exact vectorized/scalar regression convention and source binding; changing storage must not change quantiles or multiplicities.
+
+## Predictive CDF cache
+
+Construct `PredictiveMixture` from the compact cdf_location, cdf_future_mean and cdf_future_sd arrays, with nu and scenario metadata bound to the fixture. These preserve posterior dependence and include Gaussian future volatility innovation AND Student-t observation noise. They do not contain future observed labels. Check a fixed collection of compact-vs-canonical CDF values before caching.
+
+Evaluate per-fit, per-prefix CDFs on a COMMON queried grid shared by both backends. Cache values and quadrature diagnostics once; bootstrap then weights cached CDF rows, rather than reintegrating every resample. The same grid/cache serves both probabilities. Use the existing16/32/64/128 quadrature ladder and independently checked quadrature cases. Grid refinement must be deterministic with a declared maximum number of queries and explicit failure outcome. A max-order convergence difference is an estimated numerical error, not a verified mathematical envelope. Preserve `error_bound_verified=false`, estimated CDF error and its checking provenance; unresolved tails or insufficient grid coverage fail numerical admission.
+
+Propagate both CDF-error estimates and inversion-grid brackets through predictive endpoint intervals, backend differences, and paired-prefix differences. Do not certify tiny width merely because bootstrap variability is small. If a resampled mixture lies outside the cached grid, enlarge/refine under the predeclared rule or mark unresolved; never clamp it to a boundary. Evaluate resource cost per common-grid query from the four-fit pilot before specifying16/32-fit cache size: integration scales with fits × retained draws × quadrature order × queried points and can dominate bootstrap.
+
+## Uncertainty and possible conclusions
+
+Whole-fit bootstrap represents between-independent-fit variability, including retained-path autocorrelation through each entire fit. It does not prove removal of warmup bias, common backend bias, missed modes, or finite-length quantile bias. Sixteen or32 fits leave finite-bank bootstrap coverage approximate. Paired4k/8k stability detects some length effects; agreement of two backends sharing model/gradient code is corroboration, not independent truth.
+
+Use existing12-endpoint simultaneous-tail accounting and require enough bootstrap tail draws under the frozen alpha allocation. At30000 resamples and tail .05/(6×12), the expected extreme-tail count is about20.8: just above the current20 minimum, not evidence of exact tail calibration. Record Monte Carlo discreteness; do not silently relax the tail count or family size.
+
+For each endpoint report pooled estimate, reference uncertainty interval, numerical contribution, backend-equivalence interval, paired-length interval and W_low. Require entire difference intervals to fall inside prospective equivalence budgets. A difference interval merely containing zero does not establish agreement. Keep the earlier .001W reference engineering claim distinct from achievable approximate-reference analysis. If achieved reference uncertainty is .002/.005/.01W, retain and propagate it; do not label it .001-qualified or discard it automatically as useless. Report candidate-minus-reference intervals combining independent candidate and SHARED bank uncertainty. A useful conclusion can be a bounded discrepancy at the achieved resolution; it cannot establish smaller posterior bias than that resolution.
+
+For repeated candidates, generate one joint bank bootstrap endpoint draw and reuse it across all candidate errors in that replicate of the comparison. If candidate chains or datasets overlap the bank, independence fails: require disjoint streams and exclusion from the bank, or explicitly model covariance. No candidate fit should validate itself against a reference containing its own draws.
+
+## Minimal checks before any larger bank
+
+1. Exact actual resource-output adapter smoke for both backends, including unhealthy/resource-complete, missing fit, altered compact hash and wrong current covariate. Include the actual CLI path type, not only direct Python calls.
+2. Nondegenerate equal-fit mixture and unequal-draw-count tests; same distribution object for paired quantiles;4k must be the exact8k prefix. Duplicate seed/fit identity and missing manifest ID must fail.
+3. Predictive compact/canonical equality at nonzero covariate, independent quadrature controls, grid undercoverage, explicit estimated-error widening and cache reuse across probabilities.
+4. Shared-bank covariance test with random nonzero bank perturbations: repeating candidate comparisons cannot shrink the reference component. Inject understated uncertainty and a shifted backend; preserve failures.
+5. Measure adapter/cache/bootstrap resources on available pilot outputs WITHOUT claiming a bank interval from two fits. Freeze the16/32-fit scope only if those costs fit a stated cap. Otherwise report resource infeasibility. Do not automatically narrow the estimand or weaken the demanding uncertainty goal. Any scope change requires an explicit, scientifically justified prospective design that preserves that goal; it is not an automatic response to resource failure.
+
+Approximate reference-interval coverage remains unresolved. No accuracy verdict is currently available. The next useful deliverable is an admitted, costed actual-posterior bank with achieved uncertainty and explicitly limited conclusions, not another speed ratio or an exact-truth label.
