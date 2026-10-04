@@ -74,6 +74,23 @@ does not change the quantile algorithm, but current-source timing is unmeasured.
 Both comparisons and the original provenance failure/resolution are retained
 under `reference-bank-vectorized-sentinel-v1` and `-v2`.
 
+## Vectorized reference allocation remains resource-unresolved
+
+The separate fresh-stream `reference-bank-allocation-vectorized-v1` retained
+the same 148-cell design and uncertainty gates under a prospective 2,700-second
+budget. Its four sentinels completed in 17.835 seconds total; bank analysis took
+3.025--3.536 seconds per cell and full contained invocations took 4.195--4.691
+seconds. The fourfold full-study projection was 2,701.776 seconds against
+2,682.232 remaining, with another 15 seconds reserved for cleanup. The frozen
+rule therefore correctly left all 144 campaign trials unstarted. The independent
+audit passes 512 checks. The iid null resolved, the correlated null did not,
+and both shifted controls were rejected; one of each supports no rate estimate.
+
+This result remains unchanged. A further run needs fresh streams and a new
+prospective resource allowance; changing computation time is distinct from
+loosening the unchanged statistical thresholds. No posterior reference bank
+or independent candidate endpoint-accuracy claim has yet been established.
+
 ## Optimized long-flow implementation comparison
 
 The six-cell `optimized-mixed-comparison-v1` removes the earlier sequential
