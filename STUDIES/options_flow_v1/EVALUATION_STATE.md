@@ -49,9 +49,20 @@ identity checks: the launcher imported the main editable package instead of the
 configured attested worktree package. The observed result and failed audit are
 preserved in
 [`mixed-target-optimization-v1/RESULTS.md`](artifacts/mixed-target-optimization-v1/RESULTS.md).
-It is not accepted performance evidence for the intended runtime. Repair package
-selection and verify actual imported paths and hashes before compiling or timing
-the corrected experiment. No sampling benefit or default promotion follows.
+It is not accepted performance evidence for the intended runtime. The correction
+explicitly selects the package and verifies imported paths and hashes before
+compilation and after timing. No sampling benefit or default promotion follows.
+
+The separate corrected runtime experiment has now completed with 246 independent
+audit checks passing. Both processes loaded the intended adapter and native
+extension. Across 24 blocks and 36,000 calls, pooled median target costs were
+76.723 microseconds for the baseline and 66.111 for the candidate; the median
+paired baseline/candidate ratio was 1.1347. Three of twelve pairs were slower for
+the candidate, all in the reverse compilation-order process, whose median ratio
+was only 1.0390 (forward order: 1.1720). These dependent loop timings support
+further development, not a statistically qualified or end-to-end speed claim.
+The failed earlier experiment remains separate. See
+[`mixed-target-optimization-v4/RESULTS.md`](artifacts/mixed-target-optimization-v4/RESULTS.md).
 
 Next work separates workflow cost improvements, calibration across demanding
 fresh datasets, and viable chronological market data. Small feasibility cohorts
