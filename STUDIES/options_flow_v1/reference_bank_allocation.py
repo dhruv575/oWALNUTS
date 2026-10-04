@@ -22,16 +22,18 @@ def bindings(implementation='scalar'):
     return {n:sha(HERE/n) for n in names}
 def versions():return {n:importlib.metadata.version(n) for n in ['numpy','scipy']}
 
-def draft(reserved_seeds,seed=None,seed_audit=None,implementation='scalar'):
+def draft(reserved_seeds,seed=None,seed_audit=None,implementation='scalar',wall_seconds=None):
     if implementation not in ['scalar','vectorized']:raise ValueError('Unknown implementation')
-    if seed is None:seed=1940000000 if implementation=='vectorized' else 1930000000
+    if wall_seconds is None:wall_seconds=2700 if implementation=='vectorized' else 1800
+    if wall_seconds not in ([2700,3600] if implementation=='vectorized' else [1800]):raise ValueError('Explicit supported prospective resource budget required')
+    if seed is None:seed=(1950000000 if wall_seconds==3600 else 1940000000) if implementation=='vectorized' else 1930000000
     cells=[];cursor=seed
     configurations=[('sentinel',16,2048,rho,shift,i) for i,(rho,shift) in enumerate([(0.,0.),(0.,.5),(.9,0.),(.9,.5)])]
     configurations += [('campaign',f,n,rho,shift,i) for f,n in [(8,4096),(16,2048),(32,1024)] for rho in [0.,.9] for shift in [0.,.1,.5] for i in range(8)]
     for phase,f,n,rho,shift,i in configurations:
         streams=list(range(cursor,cursor+4*f+1));cursor+=len(streams)
         cells.append(dict(id=f'{phase}-f{f}-n{n}-rho{rho}-shift{shift}-{i}',phase=phase,fits_per_backend=f,lengths=[n//2,n],rho=rho,backend_b_shift=shift,fit_seeds=streams[:2*f],init_seeds=streams[2*f:4*f],bootstrap_seed=streams[-1]))
-    p=dict(frozen=False,qualified=False,phase='exploratory',cells=cells,reserved_seeds=sorted(reserved_seeds),seed_audit=seed_audit,implementation=implementation,source=bindings(implementation),software=versions(),python=sys.version,interpreter=dict(path=str(Path(sys.executable).resolve()),sha256=sha(sys.executable)),wall_seconds=2700 if implementation=='vectorized' else 1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1)
+    p=dict(frozen=False,qualified=False,phase='exploratory',cells=cells,reserved_seeds=sorted(reserved_seeds),seed_audit=seed_audit,implementation=implementation,source=bindings(implementation),software=versions(),python=sys.version,interpreter=dict(path=str(Path(sys.executable).resolve()),sha256=sha(sys.executable)),wall_seconds=wall_seconds,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1)
     validate(p);return p
 
 def validate(p):
@@ -52,7 +54,8 @@ def validate(p):
     expected={(f,n,rho,shift):8 for f,n in [(8,4096),(16,2048),(32,1024)] for rho in [0.,.9] for shift in [0.,.1,.5]}
     for c in p['cells'][4:]:expected[(c['fits_per_backend'],c['lengths'][-1],c['rho'],c['backend_b_shift'])]-=1
     if any(expected.values()):raise ValueError('Incorrect allocation denominator')
-    for k,v in dict(wall_seconds=2700 if implementation=='vectorized' else 1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1).items():
+    if type(p['wall_seconds'])!=int or p['wall_seconds'] not in ([2700,3600] if implementation=='vectorized' else [1800]):raise ValueError('Unsupported prospective wall budget')
+    for k,v in dict(cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1).items():
         if p[k]!=v:raise ValueError('Unsupported prospective budget: '+k)
 
 def projection(sentinels):
@@ -191,7 +194,7 @@ def run_worker(p,c,out):
     finally:save(Path(out)/'resources.json',peak_memory())
 
 def main():
-    a=argparse.ArgumentParser();a.add_argument('--out',type=Path,required=True);a.add_argument('--plan',type=Path);a.add_argument('--worker',type=Path);a.add_argument('--cell',type=int);a.add_argument('--reserved-seeds',type=Path);a.add_argument('--implementation',choices=['scalar','vectorized'],default='scalar');v=a.parse_args()
+    a=argparse.ArgumentParser();a.add_argument('--out',type=Path,required=True);a.add_argument('--plan',type=Path);a.add_argument('--worker',type=Path);a.add_argument('--cell',type=int);a.add_argument('--reserved-seeds',type=Path);a.add_argument('--implementation',choices=['scalar','vectorized'],default='scalar');a.add_argument('--wall-seconds',type=int);v=a.parse_args()
     if v.worker:
         p=json.loads(v.worker.read_text());validate(p)
         if not p['frozen'] or p['source']!=bindings(p.get('implementation','scalar')) or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Worker binding mismatch')
@@ -200,7 +203,7 @@ def main():
     else:
         if not v.reserved_seeds:raise ValueError('Explicit complete prior seed inventory required')
         evidence=json.loads(v.reserved_seeds.read_text())
-        save(v.out,draft(evidence['reserved_seeds'],seed_audit=dict(path=str(v.reserved_seeds.resolve()),sha256=sha(v.reserved_seeds)),implementation=v.implementation))
+        save(v.out,draft(evidence['reserved_seeds'],seed_audit=dict(path=str(v.reserved_seeds.resolve()),sha256=sha(v.reserved_seeds)),implementation=v.implementation,wall_seconds=v.wall_seconds))
 if __name__=='__main__':main()
 
 

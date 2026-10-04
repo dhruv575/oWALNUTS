@@ -146,6 +146,17 @@ p,c=json.loads(Path(sys.argv[1]).read_text());run_worker(p,c,Path(sys.argv[2]))
         with tempfile.TemporaryDirectory() as d,patch.object(r,'verify_seed_audit'),patch.object(r,'versions',return_value=plan['software']),patch.object(r.subprocess,'run',side_effect=RuntimeError('worker failed')):
             path=Path(d)/'plan.json';r.save(path,plan);r.run(path,Path(d)/'out');summary=json.loads((Path(d)/'out/summary.json').read_text())
             self.assertEqual((summary['expected'],summary['failed'],summary['not_started']),(148,4,144));self.assertEqual(summary['compute_and_cleanup_budget_seconds'],2700)
+    def test_explicit60minute_policy_does_not_grow_defaults(self):
+        with patch.object(r,'versions',return_value={'numpy':'test','scipy':'test'}):
+            default=r.draft([],implementation='vectorized');expanded=r.draft([],implementation='vectorized',wall_seconds=3600)
+            self.assertEqual(default['wall_seconds'],2700);self.assertEqual(expanded['wall_seconds'],3600)
+            self.assertEqual(default['cells'][0]['fit_seeds'][0],1940000000)
+            streams=[s for c in expanded['cells'] for s in c['fit_seeds']+c['init_seeds']+[c['bootstrap_seed']]]
+            self.assertEqual((len(streams),min(streams),max(streams)),(11156,1950000000,1950011155))
+            for k in ['bootstrap_replicates','minimum_tail_count','memory_bytes','alpha','relative_half_width','backend_equivalence_relative_width','length_equivalence_relative_width','cleanup_reserve_seconds']:self.assertEqual(default[k],expanded[k])
+            r.validate(expanded)
+            for mode,budget in [('scalar',3600),('scalar',2700),('vectorized',1800),('vectorized',3601)]:
+                with self.assertRaises(ValueError):r.draft([],implementation=mode,wall_seconds=budget)
 if __name__=='__main__':unittest.main()
 
 
