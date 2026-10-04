@@ -3,6 +3,32 @@
 These are implementation/pilot results, not a preregistered qualification.
 Study scope and unresolved gates remain in `protocol.json` and `DESIGN_REVIEW.md`.
 
+## Fresh residual-coordinate local reliability screen
+
+The completed `local-residual-breadth-v1` cohort has 19/24 candidate successes
+and 4/6 reference successes. These are fresh prior-generated T=128 datasets,
+with the observed-data starts, all-coordinate health and 2% endpoint precision
+gates frozen before execution. Candidate acceptance remains .8; reference .9
+was selected from earlier development failures before this cohort's outcomes.
+Candidate failures 03,05,06,07,13 all miss convergence and precision at 8,000
+draws despite zero divergences. Reference 05 has 10,919 divergences and fails
+convergence/precision; reference 13 has 97 divergences and misses precision.
+
+Four successful matched pairs have full driver-cost ratios
+2.8978,2.3452,2.2151,2.5588 (reference/candidate). Failed pairs 05 and 13 have no
+eligible ratio. All 30 attempted outcomes and costs remain included: 527.38
+seconds across candidates and 284.44 across references. The completed integrity
+audit passes. This is standalone exploratory reliability evidence, not a causal
+comparison with the earlier centered cohort or a calibration result. The five
+candidate failures preclude promoting this recipe as broadly reliable.
+
+An exact Gaussian-conditional whitening prototype subsequently passed six
+focused and ten regression tests, including normalized Gaussian controls,
+generated-gradient checks and a compiled T=128 target. Its Student-t target
+is unchanged. Sampling performance remains unmeasured; the separately frozen
+`local-conditional-whitening-v1` development comparison retains both failed and
+passing fixtures and all four sampler/coordinate combinations.
+
 ## Fresh long-path reference follow-up
 
 On the prospectively generated T=1000/G=4 fixture in `python-flow-long-v1`,
