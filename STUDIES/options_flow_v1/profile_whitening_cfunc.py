@@ -30,7 +30,7 @@ def peak_memory():
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--periods',type=int,choices=[32,128,512,1000],required=True)
-    p.add_argument('--out',type=Path,required=True);p.add_argument('--calls-per-block',type=int,default=300)
+    p.add_argument('--out',type=Path,required=True);p.add_argument('--solve',choices=['original','combined'],default='original');p.add_argument('--calls-per-block',type=int,default=300)
     p.add_argument('--blocks',type=int,default=5);p.add_argument('--expected-cpus',default='0');a=p.parse_args()
     if a.calls_per_block<3 or a.blocks<1:p.error('Require >=3 calls and >=1 blocks')
     if a.out.exists():raise FileExistsError(a.out)
@@ -39,7 +39,9 @@ def main():
     import owalnuts._owalnuts as extension
     import pymc,pytensor,numba
     from hardware_control import get_affinity,parse_cpus
-    from pymc_workflow import compile_target
+    from local_conditional_whitening import build_model
+    from unittest.mock import patch
+    from collections import Counter
     expected=parse_cpus(a.expected_cpus)
     if get_affinity()!=expected:raise RuntimeError('Run under affinity wrapper with expected CPUs')
     before=snapshot(extension.__file__,owalnuts.__file__)
@@ -47,7 +49,22 @@ def main():
     # Deterministic declared data/positions, no generating truth or fitted values.
     data=dict(y=(.2*np.sin(index*.17)+.001*index).tolist(),dt=(.7+.6*(np.arange(t-1)%7)/6).tolist(),anchor=.1,anchor_mode='exogenous',nu=5.)
     points=[np.ascontiguousarray(np.r_[.25*np.cos(index*.11+shift),lo,lr],dtype=np.float64) for shift,lo,lr in [(0.,-2.5,-2.),(.7,-4.,-1.),(1.4,-1.,-4.)]]
-    start=time.perf_counter();target,metadata=compile_target(data,'conditional_whitening');compile_seconds=time.perf_counter()-start
+    captured=[]
+    original_compile=pymc.Model.logp_dlogp_function
+    def capture(self,*args,**kwargs):
+        fn=original_compile(self,*args,**kwargs)
+        captured.append(fn._pytensor_function.maker.fgraph)
+        return fn
+    start=time.perf_counter()
+    with patch.object(pymc.Model,'logp_dlogp_function',capture):
+        model=build_model(data,combine_solve=a.solve=='combined')
+        target,dimension,initial,names,unravel=owalnuts.from_pymc(model,gil_free=True)
+    compile_seconds=time.perf_counter()-start
+    metadata=dict(dimension=dimension,names=names,solve=a.solve,compile_seconds=compile_seconds)
+    def describe(graph):
+        nodes=graph.toposort();counts=Counter(type(n.op).__name__ for n in nodes)
+        return dict(nodes=len(nodes),ops=dict(sorted(counts.items())),scans=[dict(name=getattr(n.op,'name',None),inner_nodes=len(n.op.fgraph.toposort()),inner_ops=dict(Counter(type(x.op).__name__ for x in n.op.fgraph.toposort()))) for n in nodes if type(n.op).__name__=='Scan'])
+    graph_inventory=[describe(g) for g in captured]
     # Construct ABI wrapper and buffer pointers exactly once, outside timed loops.
     pointer=ctypes.POINTER(ctypes.c_double)
     prototype=ctypes.CFUNCTYPE(ctypes.c_double,ctypes.c_ssize_t,pointer,pointer,ctypes.c_void_p)
@@ -70,7 +87,7 @@ def main():
     if before!=after or get_affinity()!=expected:raise RuntimeError('Source/binary/affinity changed during profile')
     result=dict(phase='target-only-exploratory',qualified=False,periods=t,data=data,
         data_sha256=hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
-        coordinates='conditional_whitening',process_pid=os.getpid(),source_before=before,source_after=after,
+        coordinates='conditional_whitening',solve=a.solve,optimized_graphs=graph_inventory,process_pid=os.getpid(),source_before=before,source_after=after,
         environment=dict(python=sys.version,platform=platform.platform(),numpy=np.__version__,pymc=pymc.__version__,pytensor=pytensor.__version__,numba=numba.__version__,algorithm_revision=owalnuts.ALGORITHM_REVISION),
         cpus_before=expected,cpus_after=get_affinity(),compile_seconds=compile_seconds,compilation=metadata,
         first_call_seconds=first,blocks=blocks,validation_points=values,checksum=checksum,
