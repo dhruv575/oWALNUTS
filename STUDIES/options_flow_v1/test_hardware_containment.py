@@ -33,7 +33,19 @@ class RealTreeTests(unittest.TestCase):
                 deadline=time.monotonic()+5
                 while not pidfile.exists() and time.monotonic()<deadline:time.sleep(.01)
                 self.assertTrue(pidfile.exists(),'worker did not start')
-                pid=int(pidfile.read_text());launcher.kill();launcher.wait(timeout=5)
+                pid=int(pidfile.read_text())
+                evidence=json.loads(record.read_text())
+                actual_wrapper_pid=evidence['launcher_pid']
+                api=ctypes.WinDLL('kernel32',use_last_error=True)
+                api.OpenProcess.argtypes=[ctypes.c_ulong,ctypes.c_int,ctypes.c_ulong];api.OpenProcess.restype=ctypes.c_void_p
+                api.TerminateProcess.argtypes=[ctypes.c_void_p,ctypes.c_uint];api.TerminateProcess.restype=ctypes.c_int
+                api.CloseHandle.argtypes=[ctypes.c_void_p]
+                handle=api.OpenProcess(1,False,actual_wrapper_pid)
+                self.assertTrue(handle,'actual wrapper is unavailable')
+                try:self.assertTrue(api.TerminateProcess(handle,137))
+                finally:api.CloseHandle(handle)
+                launcher.wait(timeout=5)
+                self.assert_dead(actual_wrapper_pid)
                 self.assert_dead(pid)
             finally:
                 if launcher.poll() is None:launcher.kill();launcher.wait(timeout=5)
