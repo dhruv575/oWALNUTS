@@ -1,7 +1,9 @@
 """Authored during live dense timing; run only after the coordinated quiet window."""
 import copy
+import json
 import pytest
-from masked_market_comparison_plan import dispersed_starts,contract,command,matched_fixture
+import masked_market_comparison_plan as planner
+from masked_market_comparison_plan import dispersed_starts,contract,command,matched_fixture,seed_family
 
 
 def fixture():
@@ -56,3 +58,29 @@ def test_placeholder_normalization_preserves_all_likelihood_inputs_and_future_la
             for key in ['x','y']:
                 assert matched['data'][key][i][j]==(source['data'][key][i][j] if observed else 0.)
     assert 'not full prior draws' in matched['initialization_contract']['distribution_note']
+
+
+@pytest.mark.parametrize('initial,chains',[(True,[1,2]),(-1,[1,2]),(2**32,[1,2]),(7,[True,2]),(7,[1]),(7,[1,1]),(1,[1,2]),(130001,[1,2]),(7,[1,130001]),(7,[2**32-130000,2])])
+def test_seed_inventory_rejects_collision_and_invalid_values_before_output(tmp_path,initial,chains):
+    with pytest.raises(ValueError):seed_family(initial,chains)
+    with pytest.raises(ValueError):planner.prepare(tmp_path/'out','unused','unused','unused','unused','unused',init_seed=initial,chain_seeds=chains)
+    assert not (tmp_path/'out').exists()
+
+
+def test_custom_seed_inventory_drives_plan_and_exact_audit(tmp_path,monkeypatch):
+    initial=910;chains=[1000,1001];_,predictive,inventory=seed_family(initial,chains)
+    source=tmp_path/'fixture.json';source.write_text(json.dumps(fixture()))
+    audit=tmp_path/'audit.json';audit.write_text(json.dumps(dict(status='passed',seeds=inventory,hits=[],scope='bounded test metadata')))
+    package=tmp_path/'package';(package/'owalnuts').mkdir(parents=True)
+    for name in ['__init__.py','_owalnuts.pyd']:(package/'owalnuts'/name).write_text('dummy')
+    python=tmp_path/'python.exe';python.write_text('dummy');attestation=tmp_path/'attestation.json';attestation.write_text('{}')
+    monkeypatch.setattr(planner,'attested_dependencies',lambda *a:{})
+    monkeypatch.setattr(planner.subprocess,'check_output',lambda *a,**kw:'{}')
+    plan=planner.prepare(tmp_path/'out',source,python,package,attestation,audit,init_seed=initial,chain_seeds=chains)
+    assert plan['initialization']['seed']==initial
+    assert [c['seed'] for c in plan['cells']]==[1000,1000,1001,1001]
+    assert [c['predictive_seed'] for c in plan['cells']]==[predictive[0],predictive[0],predictive[1],predictive[1]]
+    assert plan['starts']==dispersed_starts(96,4,.95,initial)
+    audit.write_text(json.dumps(dict(status='passed',seeds=inventory[:-1],hits=[],scope='bounded')))
+    with pytest.raises(ValueError,match='preaudited'):planner.prepare(tmp_path/'bad',source,python,package,attestation,audit,init_seed=initial,chain_seeds=chains)
+    assert not (tmp_path/'bad').exists()

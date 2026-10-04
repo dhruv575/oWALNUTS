@@ -20,6 +20,15 @@ PREDICTIVE_SEEDS=[s+130000 for s in CHAIN_SEEDS]
 NAMES=['beta_bar','tau','mu_h','sigma_h','h_terminal','h_mean']+[name+str(g) for g in range(4) for name in ['alpha_','beta_']]
 
 
+def seed_family(init_seed=INIT_SEED,chain_seeds=None):
+    chains=list(CHAIN_SEEDS if chain_seeds is None else chain_seeds)
+    if type(init_seed) is not int or not 0<=init_seed<2**32:raise ValueError('Initialization seed must be a uint32 integer')
+    if len(chains)!=2 or any(type(seed) is not int or not 0<=seed<2**32-130000 for seed in chains):raise ValueError('Exactly two valid chain seeds with uint32 predictive offsets required')
+    predictive=[seed+130000 for seed in chains];inventory=[init_seed,*chains,*predictive]
+    if len(set(inventory))!=len(inventory):raise ValueError('Initialization, chain and derived predictive seeds must all be distinct')
+    return chains,predictive,inventory
+
+
 def dispersed_starts(periods,groups,rho,seed):
     """Prior-scale dispersion uses only shape/fixed rho, never data values."""
     if periods<1 or groups<1 or not math.isfinite(rho) or abs(rho)>=1:raise ValueError('Invalid model structure')
@@ -79,26 +88,27 @@ def command(plan,cell,out):
         '--timeout',str(plan['timeout_seconds']),'--',plan['python'],str(HERE/worker),*common]
 
 
-def matched_fixture(original):
+def matched_fixture(original,init_seed=INIT_SEED):
     fixture=copy.deepcopy(original)
     for i,row in enumerate(fixture['data']['observation_mask']):
         for j,observed in enumerate(row):
             if not observed:
                 for key in ['y','x']:fixture['data'][key][i][j]=0.
-    fixture['data']['initial_positions']=dispersed_starts(96,4,fixture['data']['rho'],INIT_SEED)
+    fixture['data']['initial_positions']=dispersed_starts(96,4,fixture['data']['rho'],init_seed)
     fixture['training_placeholder_contract']='Unobserved training x/y normalized to finite zero for strict start-shape helpers; explicit mask preserved; gathered likelihood unchanged. Future missing outcomes remain missing.'
-    fixture['initialization_contract']=dict(seed=INIT_SEED,algorithm='Python random.Random.gauss; interpreter bound',
+    fixture['initialization_contract']=dict(seed=init_seed,algorithm='Python random.Random.gauss; interpreter bound',
         formula='Globals mean[0,-1,-1,-1.5]+0.25*priorSD[.5,.5,1,.5]*N; group z=0.25N; stationaryAR path conditional on each chain mu/sigma with innovations0.25N',
         input_scope='Shape and fixed rho only; no observed values, outcomes, truth or fitted diagnostics',
         distribution_note='Dispersed initial positions at0.25priorSD; not full prior draws')
     return fixture
 
 
-def prepare(out,fixture_path,python,package,attestation,seed_audit):
+def prepare(out,fixture_path,python,package,attestation,seed_audit,*,init_seed=INIT_SEED,chain_seeds=None):
     """Generate a fresh matched-start fixture and draft plan; never freeze/run."""
+    chains,predictive,seeds=seed_family(init_seed,chain_seeds)
     out=Path(out).resolve();fixture_path=Path(fixture_path).resolve();package=Path(package).resolve()
     original=load(fixture_path);schema=contract(original)
-    audit=load(seed_audit);seeds=[INIT_SEED,*CHAIN_SEEDS,*PREDICTIVE_SEEDS]
+    audit=load(seed_audit)
     if audit.get('status')!='passed' or sorted(audit.get('seeds',[]))!=sorted(seeds) or audit.get('hits')!=[] or not audit.get('scope'):
         raise ValueError('Requires preaudited exact seed family and declared bounded search scope')
     dependencies=attested_dependencies(attestation,python,package)
@@ -106,7 +116,7 @@ def prepare(out,fixture_path,python,package,attestation,seed_audit):
         "import sys,json,importlib.metadata as m; print(json.dumps(dict(python=sys.version,packages={p:m.version(p) for p in ['numpy','scipy','pymc','pytensor','numba','jax','jaxlib','numpyro','arviz']})))"],text=True))
     bound={str(Path(p).resolve()):sha(p) for p in [fixture_path,python,package/'owalnuts/__init__.py',package/'owalnuts/_owalnuts.pyd',attestation,seed_audit]}
     bound.update(dependencies)
-    fixture=matched_fixture(original)
+    fixture=matched_fixture(original,init_seed)
     out.mkdir(parents=True,exist_ok=False);matched=out/'fixture-matched-starts.json';save(matched,fixture)
     plan=dict(frozen=False,status='draft_requires_review',phase='development_computational_only',qualified=False,
         original_fixture=str(fixture_path),original_fixture_sha256=sha(fixture_path),fixture=str(matched),fixture_sha256=sha(matched),
@@ -121,10 +131,10 @@ def prepare(out,fixture_path,python,package,attestation,seed_audit):
         failure_policy='Immutable intent/start/exit/terminal records; no automatic retry of a started cell; source drift abort terminalizes all remaining cells',
         interpretation='Single sparse posterior, two paired sampler seeds. No reliability breadth, calibration, positive-alpha, coverage or trading-usefulness claim. Ratios only for matched successful cells.',
         forecast_scope='Fixed-origin conditional scenario supplied future covariates; every available-x cell precision-gated regardless of label. Four labels score only; no positive-alpha requirement.')
-    for rep,(seed,predictive) in enumerate(zip(CHAIN_SEEDS,PREDICTIVE_SEEDS)):
+    for rep,(seed,predictive_seed) in enumerate(zip(chains,predictive)):
         order=['owalnuts_continuation','numpyro_continuation'] if rep==0 else ['numpyro_continuation','owalnuts_continuation']
         for arm in order:
-            cell=dict(id=f'rep{rep}-{arm}',arm=arm,seed=seed,predictive_seed=predictive,fixture=str(matched),fixture_sha256=sha(matched),starts=plan['starts'])
+            cell=dict(id=f'rep{rep}-{arm}',arm=arm,seed=seed,predictive_seed=predictive_seed,fixture=str(matched),fixture_sha256=sha(matched),starts=plan['starts'])
             cell['command']=command(plan,cell,out/cell['id']);plan['cells'].append(cell)
     save(out/'plan-draft.json',plan)
     return plan
@@ -133,4 +143,5 @@ def prepare(out,fixture_path,python,package,attestation,seed_audit):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     for name in ['out','fixture','python','package','attestation','seed-audit']:p.add_argument('--'+name,type=Path,required=True)
-    args=p.parse_args();prepare(args.out,args.fixture,args.python,args.package,args.attestation,args.seed_audit)
+    p.add_argument('--init-seed',type=int,default=INIT_SEED);p.add_argument('--chain-seeds',type=int,nargs=2,default=CHAIN_SEEDS)
+    args=p.parse_args();prepare(args.out,args.fixture,args.python,args.package,args.attestation,args.seed_audit,init_seed=args.init_seed,chain_seeds=args.chain_seeds)
