@@ -1,5 +1,25 @@
 # Optional workflow correctness validation
 
+## Prospective calibration and optimized reference checks
+
+After the eight-cell mixed comparison terminated and its source snapshot was
+captured, the attested Python environment passed **55 tests and 20 subtests in
+42.81 seconds**, exit code 0. The invocation ran in the isolated study directory:
+
+```powershell
+$env:PYTHONPATH='C:/dev/owalnuts/target/python-flow-worktree/integrations/python/python'
+& C:/dev/owalnuts/target/python-workflow-env/Scripts/python.exe -m pytest -q test_production_calibration_feasibility.py test_production_calibration_adapter.py test_production_calibration_report.py test_reference_bank_allocation.py test_flow_mixed_associative.py test_mixed_flow_workers.py
+```
+
+This covers pre-generation recipe binding, complete failure denominators,
+independent adapter gates, actual-target associative density/gradient parity,
+finite-difference and shape checks, tiny mixed-worker execution, and contained
+Windows launcher/descendant timeouts with nested memory limits. It is correctness
+evidence, not a sampler timing or calibration result. The tested changes are
+integrated as `188e345`, `7af5b97` and `e5e42eb`; the native binary is unchanged.
+
+## Earlier optional workflow checks
+
 The isolated worktree focused test invocation completed with exit code 0:
 **28 passed in 42.96 seconds**. Other agents could run correctness tests
 concurrently, so this duration is not a comparative timing measurement.
