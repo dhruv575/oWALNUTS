@@ -9,7 +9,46 @@ The public CFunc continuation prototype now supports one adaptation followed by
 incremental retained draws. Focused Rust/Python checks establish exact replay,
 diagnostic transport, lifetime safety and cancellation behavior; the local-model
 study worker adds canonical transport, frozen-adaptation checks, stage costs and
-failure checkpoints. Its end-to-end performance remains unmeasured.
+failure checkpoints. Matched end-to-end measurements are now available below;
+continuation reduces repeated work but does not resolve every precision failure.
+
+## Matched public flow continuation comparison
+
+The frozen six-cell development comparison in `flow-continuation-comparison-v1`
+uses the same explicit physical starts, four chains, 1,000 warmup, retained tiers
+1k/2k/4k/8k, CPU 0 and 1,800 seconds per invocation. It checks every canonical
+coordinate, all 14 physical functionals and all four forecast intervals, with
+zero divergences and endpoint MCSE/width at most .02. NumPyro uses target
+acceptance .9; oWALNUTS uses the unchanged public default. Existing disk caches
+are retained, fresh-process imports/compilation/parity and all attempts counted.
+
+| Fixture | Workflow | Full seconds | Outcome |
+|---|---|---:|---|
+| T128/G4 | NumPyro continuation | 71.861 | Pass at 2k |
+| T128/G4 | oWALNUTS continuation | 17.023 | Pass at 2k |
+| T128/G4 | oWALNUTS restart | 21.235 | Pass at 2k |
+| T1000/G4 | oWALNUTS restart | 904.697 | Precision failure at 8k |
+| T1000/G4 | oWALNUTS continuation | 400.939 | Precision failure at 8k |
+| T1000/G4 | NumPyro continuation | 82.311 | Pass at 1k |
+
+The independent audit passes all integrity checks. Exact canonical float64
+samples agree between the two oWALNUTS procedures at every shared tier. On T128,
+continuation consumes 19.8% less time than restart and the reference/candidate
+ratio is 4.221. These are one-fixture development results, not a population claim.
+On T1000 both candidate procedures are healthy with zero divergences but miss
+the tau endpoint requirement: .02190794 versus .02. The reference's worst ratio
+is .01971493 at 1k. Both long-model speed ratios remain null; lower failed-run
+cost is not a time-to-success advantage. This identifies a demanding-workflow
+gap despite the short-model win. Exact continuation replay is not independent
+posterior accuracy, and no result here establishes interval calibration.
+
+The earlier nine-cell local comparison also remains informative: only case00
+passes all arms. Continuation takes 12.365 seconds versus restart's 10.671 and
+NumPyro's 56.098; reduced sampling work was outweighed by output overhead.
+Cases03/05 fail in all arms and retain their full costs. A serialization change
+made afterward does not retroactively change those recorded outcomes.
+
+## Other implementation and real-data progress
 
 The opt-in exact conditional-whitening identity h=L^-T(v+z) reduces target-call
 cost on the tested points. Eight fresh-process paired profiles at T=32/128/512/1000
