@@ -56,3 +56,27 @@ No sparse-market fixture was prepared or frozen by this invocation. No market
 posterior or long mixed-coordinate target was sampled. No scientific qualification,
 calibration, broad reliability or performance improvement follows from these tests.
 The optional targets remain opt-in and all earlier failed outcomes are preserved.
+
+## As-of replay and changing-data checks
+
+Using the same attested isolated Python environment and extension, the following
+focused suites passed before integration as main commits `620d96d` and `6d34d6d`:
+
+- `test_dynamic_masked_target.py`: 3 passed in 12.141 seconds. Checks normalized
+  density/gradient parity, immutable snapshots, masked nonfinite placeholders,
+  and one JIT trace for same-shape A/B/A with changed observed counts. An initial
+  test used weak-typed scalars and retraced; explicitly typed float64 scalars
+  fixed that test input contract without changing target mathematics.
+- `test_asof_rolling_protocol.py`, `test_asof_rolling_execute.py`, and
+  `test_asof_market_fixture.py`: 50 passed in 3.21 seconds. Includes prospective
+  schedule/source/seed bindings, actual availability rules, full outcome
+  accounting, no retries, positive R-hat, hardware evidence and checkpoint
+  continuity, and identity-bound delayed label joins.
+- `test_asof_rolling_actual_workers.py`: 2 passed in 19.88 seconds. Actual public
+  and reference T128/G4 workers with 12 warmup and 8 retained draws return the
+  expected 140 canonical diagnostics, 14 functionals and four unlabeled
+  forecasts. Production precision remains failed; the production validator
+  rejects the short sampling configuration. Fixture-bound scoring joins pass.
+
+These are correctness checks, not timed sampler comparisons. The 32-cell rolling
+market campaign and persistent-process sampler comparison have not run.
