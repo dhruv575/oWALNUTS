@@ -61,6 +61,41 @@ class AllocationTests(unittest.TestCase):
             self.assertEqual(summary['failed'],4);self.assertEqual(summary['not_started'],144)
             row=summary['rows'][0];self.assertIsNone(row['resources']['peak_committed_bytes'])
             cell=out/p['cells'][0]['id'];self.assertTrue((cell/'started.json').exists());self.assertTrue((cell/'exit.json').exists())
+    def test_actual_analytic_worker_boundary(self):
+        import json,subprocess,sys
+        # Test-only small policy: two fits/backend, lengths32/64,240 bootstrap
+        # resamples -> one expected tail draw. Never a production resolution claim.
+        p=self.plan();p.update(bootstrap_replicates=240,minimum_tail_count=1)
+        c=dict(p['cells'][0],fits_per_backend=2,lengths=[32,64],fit_seeds=[501,502,503,504],init_seeds=[601,602,603,604],bootstrap_seed=701)
+        code="""
+import json,sys
+from pathlib import Path
+sys.modules['psutil']=None
+import reference_bank
+original=reference_bank.analyze
+def checked(spec,fits):
+ for fit in fits:
+  short=fit['levels']['32']['endpoints'];long=fit['levels']['64']['endpoints']
+  assert short['lo'] is short['hi'] and long['lo'] is long['hi']
+  assert short['lo']['draws']==long['lo']['draws'][:32]
+ return original(spec,fits)
+reference_bank.analyze=checked
+from reference_bank_allocation import run_worker
+p,c=json.loads(Path(sys.argv[1]).read_text());run_worker(p,c,Path(sys.argv[2]))
+"""
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'input.json';r.save(path,[p,c]);out=Path(d)/'worker';out.mkdir()
+            result=subprocess.run([sys.executable,'-c',code,str(path),str(out)],capture_output=True,text=True,timeout=60)
+            self.assertEqual(result.returncode,0,result.stderr)
+            row=json.loads((out/'result.json').read_text());bank=json.loads((out/'bank.json').read_text());usage=json.loads((out/'resources.json').read_text())
+            self.assertEqual(row['status'],'completed');self.assertAlmostEqual(row['truth'][0],-1.6448536269514722,places=12)
+            self.assertAlmostEqual(row['truth'][1],1.6448536269514722,places=12)
+            self.assertEqual(len(bank['joint_bootstrap_endpoints']),240)
+            width=row['truth'][1]-row['truth'][0]
+            self.assertAlmostEqual(row['max_endpoint_error_over_width'],max(abs(b['estimate']-t)/width for b,t in zip(row['bounds'],row['truth'])))
+            self.assertGreater(usage['peak_resident_bytes'],0)
+            if r.os.name=='nt':self.assertGreater(usage['peak_committed_bytes'],0);self.assertLessEqual(usage['peak_committed_bytes'],p['memory_bytes'])
 if __name__=='__main__':unittest.main()
+
 
 

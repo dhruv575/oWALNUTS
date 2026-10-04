@@ -144,28 +144,37 @@ def run(path,out):
     except Exception as exc:integrity_error=str(exc)
     save(out/'summary.json',dict(integrity_error=integrity_error,expected=148,completed=sum(r['status']=='completed' for r in rows),failed=sum(r['status']=='failed' for r in rows),not_started=sum(r['status']=='not_started' for r in rows),rows=rows,total_seconds=time.monotonic()-start,qualified=False))
 
+def peak_memory():
+    if os.name!='nt':
+        import resource
+        return dict(peak_resident_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024,peak_committed_bytes=None,measurement='POSIX peak RSS; committed peak unavailable',cap_kind='OS virtual-address-space limit')
+    import ctypes
+    from ctypes import wintypes as w
+    class Counters(ctypes.Structure):
+        _fields_=[('cb',w.DWORD),('faults',w.DWORD),('peak_ws',ctypes.c_size_t),('ws',ctypes.c_size_t),('peak_paged',ctypes.c_size_t),('paged',ctypes.c_size_t),('peak_nonpaged',ctypes.c_size_t),('nonpaged',ctypes.c_size_t),('pagefile',ctypes.c_size_t),('peak_pagefile',ctypes.c_size_t),('private',ctypes.c_size_t)]
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True);kernel.GetCurrentProcess.restype=w.HANDLE
+    api=ctypes.WinDLL('psapi',use_last_error=True);api.GetProcessMemoryInfo.argtypes=[w.HANDLE,ctypes.c_void_p,w.DWORD]
+    info=Counters();info.cb=ctypes.sizeof(info)
+    if not api.GetProcessMemoryInfo(kernel.GetCurrentProcess(),ctypes.byref(info),info.cb):raise ctypes.WinError(ctypes.get_last_error())
+    return dict(peak_committed_bytes=info.peak_pagefile,peak_resident_bytes=info.peak_ws,measurement='Windows process peak pagefile/working set',cap_kind='OS process committed-memory limit')
+
+def run_worker(p,c,out):
+    try:cell_worker(p,c,out)
+    finally:save(Path(out)/'resources.json',peak_memory())
+
 def main():
     a=argparse.ArgumentParser();a.add_argument('--out',type=Path,required=True);a.add_argument('--plan',type=Path);a.add_argument('--worker',type=Path);a.add_argument('--cell',type=int);a.add_argument('--reserved-seeds',type=Path);v=a.parse_args()
     if v.worker:
         p=json.loads(v.worker.read_text());validate(p)
         if not p['frozen'] or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version:raise ValueError('Worker binding mismatch')
-        import psutil
-        process=psutil.Process()
-        try:cell_worker(p,p['cells'][v.cell],v.out)
-        finally:
-            info=process.memory_info()
-            if os.name=='nt':
-                usage=dict(peak_committed_bytes=info.peak_pagefile,peak_resident_bytes=info.peak_wset,measurement='Windows process peak pagefile/working set',cap_kind='OS process committed-memory limit')
-            else:
-                import resource
-                usage=dict(peak_resident_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024,peak_committed_bytes=None,measurement='POSIX peak RSS; committed peak unavailable',cap_kind='OS virtual-address-space limit')
-            save(v.out/'resources.json',usage)
+        run_worker(p,p['cells'][v.cell],v.out)
     elif v.plan:run(v.plan,v.out)
     else:
         if not v.reserved_seeds:raise ValueError('Explicit complete prior seed inventory required')
         evidence=json.loads(v.reserved_seeds.read_text())
         save(v.out,draft(evidence['reserved_seeds'],seed_audit=dict(path=str(v.reserved_seeds.resolve()),sha256=sha(v.reserved_seeds))))
 if __name__=='__main__':main()
+
 
 
 
