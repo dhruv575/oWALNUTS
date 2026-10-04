@@ -34,7 +34,7 @@ quantile uncertainty uses a delta approximation, not an exact quantile interval.
 Preserve the existing equivalence tolerance and all known failures. This study
 must not become an open-ended search for a favorable analytic result.
 
-The actual posterior pilot will use the existing T1000/G4 flow fixture and its
+The actual posterior pilot used the existing T1000/G4 flow fixture and its
 strongest tested reference: associative mixed-coordinate NumPyro at target
 acceptance .9. The noncentered reference failed both optimized long comparisons
 and is not the strongest baseline. The public comparator remains the attested
@@ -45,9 +45,20 @@ in 282.06 and 268.00 seconds and passed both checkpoint gates. Both public
 samplers completed healthy 8k draws, but the resource adapter incorrectly
 required its own package initializer in the legacy sampler source record.
 Their resource outcomes remain failed. All four outcomes and 834.85 seconds
-are independently audited and archived. Fix the adapter, then recover analysis
-from saved public draws with separately measured costs and unchanged original
-statuses before interpreting whole-workflow resource feasibility.
+are independently audited and archived. The exact-package-path adapter fix
+passes 50 tests and both actual saved public reports. Separately audited
+saved-draw recovery completed for both public fits in 154.82 additional seconds;
+both 4k/8k checkpoint gates and predictive quadrature checks passed. Original
+public resource statuses remain failed, and no sampling was repeated. Full
+pilot plus recovery controller cost was 989.67 seconds. This supports resource
+feasibility, not an uninterrupted workflow speed ratio or endpoint accuracy.
+
+Compact admission checks now pass diagnostically on both actual reference
+outputs. Before freezing a larger bank, measure common-grid predictive cache
+and bootstrap costs and validate mixed parameter/predictive endpoint routing.
+The existing fast parameter-only route rejects predictive endpoints; retaining
+the same whole-fit bootstrap multiplicities across the full family is required
+when addressing that limitation.
 
 Two independently initialized fits per backend, fixed 8,000 retained draws and
 a prospectively declared 4,000-draw prefix are a resource pilot only. They
