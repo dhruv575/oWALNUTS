@@ -45,7 +45,11 @@ def validate_report(report,cell,fixture,plan,raw):
         for i,c in enumerate(cps):
             if c['start_iterations']!=[1000+i*1000]*4 or c['end_iterations']!=[2000+i*1000]*4:raise ValueError('Reference retained iterations differ')
     actual=norm(report['bindings']);expected=norm(plan['worker_bindings'])
-    if public:expected.update({k:v for k,v in norm(plan['bindings']).items() if Path(k).name in ['__init__.py','_owalnuts.pyd']})
+    if public:
+        bound=norm(plan['bindings'])
+        for name in ['__init__.py','_owalnuts.pyd']:
+            key=str((Path(plan['pythonpath'])/'owalnuts'/name).resolve()).casefold()
+            expected[key]=bound[key]
     expected[str(Path(cell['fixture']).resolve()).casefold()]=cell['fixture_sha256']
     if any(actual.get(p)!=v for p,v in expected.items()):raise ValueError('Actual worker source/fixture binding mismatch')
     if set(report['evaluation']['canonical_parameter_diagnostics'])!={f'q_{i}' for i in range(1012)} or set(report['evaluation']['functionals'])!=set(plan['full_gate']['functional_names']) or len(report['evaluation']['forecast']['rows'])!=4:raise ValueError('Full diagnostic scope differs')
