@@ -10,12 +10,28 @@ additional user requirements.
 | Requirement | Current evidence | What remains |
 | --- | --- | --- |
 | Correct implementation and continuation | Target parity, replay, ownership/reset checks, attested runtime, integrated repeated-fit controller and six actual compatibility proofs | Continue validating new accuracy-study adapters and broader failure conditions |
-| Material practical cost or effort benefit | All twelve actual-market repeated fits passed; full-cohort reference/public ratios 1.470 and 1.458. Earlier optimized T1000 comparison had a win and an effective tie | Broader reliability and demanding-posterior accuracy; these fixed-workload results are not a general speedup estimate |
-| Trustworthy posterior interval endpoints | Full analytic reference-bank allocation study; independent exact iid quantile diagnostic | Correlated-sample uncertainty control, then an independently initialized bank on the actual demanding posterior |
+| Material practical cost or effort benefit | Fresh 36-pair T1000 comparison: 75.27s public versus 89.43s reference; ratio 1.188, interval [1.069, 1.320]; predefined speed criterion not met | Diagnose and improve costs, then validate changes on fresh evidence; broader workload benefit remains unproven |
+| Trustworthy posterior interval endpoints | Independently audited 64-fit reference bank; all 48 accuracy checks passed in the fresh paired comparison | Fresh-dataset calibration and robustness beyond this fixed posterior |
+| Repeated-data calibration | T32 feasibility: flow public 8/8 and reference 2/2 usable; local public 6/8 and reference 1/2; no coverage component qualified | A demanding fresh-dataset resource screen and prospectively powered calibration design |
 | Useful market workflow | As-of anchor bug fixed; sparse verified panel retained; activity-based collector tested and audited | Suitable data and chronological interval scoring; neither available panel nor failed acquisition establishes utility |
 | Honest accounting and reproducibility | Frozen protocols, failed/unstarted denominators, independent audits, exact source archives, local raw-file manifests | Continue these requirements for each subsequent experiment |
 
-## Decisions for the next experiments
+## Current decision
+
+The completed bank and fresh paired comparison supersede the pre-execution
+statements in the historical account below. See
+[`posterior-reference-bank-v1/RESULTS.md`](artifacts/posterior-reference-bank-v1/RESULTS.md)
+and [`fresh-paired-comparison-v1/RESULTS.md`](artifacts/fresh-paired-comparison-v1/RESULTS.md).
+The latter result and independent audits are archived in commit `9e4bcd2`.
+Both workflows completed 36/36 usable fits and passed the accuracy family.
+The practical-speed rule required a reference/public interval lower bound above
+1.25; it failed. Preserve this decision while developing improvements.
+
+Next work separates workflow cost improvements, calibration across demanding
+fresh datasets, and viable chronological market data. Small feasibility cohorts
+and fixed-target repetitions cannot replace repeated-data or market validation.
+
+## Historical development decisions (before the completed bank and comparison)
 
 The A/B/A compatibility check and actual-market timing study are complete.
 The short compatibility fits were correctly rejected under the production cap;

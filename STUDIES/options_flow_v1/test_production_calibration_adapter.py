@@ -4,6 +4,24 @@ from pathlib import Path
 import production_calibration_adapter as a
 
 class Adapter(unittest.TestCase):
+ def mixed(self,root):
+  m,c,old=self.build(root);p=m['procedure'];p.update(implementation='associative',coordinates='mixed_slopes',worker_arm='numpyro-mixed-slopes-continuation',target_accept=.9)
+  ph=a.object_digest(p);m['procedure_sha256']=c['procedure_sha256']=ph
+  marker=a.load(c['started_path']);marker['procedure_sha256']=ph;self.write(Path(c['started_path']),marker)
+  report=a.load(old);report.update(arm=p['worker_arm'],coordinates='mixed_slopes',implementation='associative')
+  report['settings'].update(implementation='associative',batch=1000,tiers=[1000],target_accept=.9)
+  import numpy as np
+  from flow_mixed_coordinates import to_mixed
+  fixture=a.load(c['fixture_path']);fixture['data'].update(rho=.95,nu=5.);self.write(Path(c['fixture_path']),fixture)
+  c['fixture_sha256']=a.digest(c['fixture_path']);marker['fixture_sha256']=c['fixture_sha256'];self.write(Path(c['started_path']),marker)
+  report['bindings'][c['fixture_path']]=c['fixture_sha256']
+  report['sampling_initial_positions']=to_mixed(np.asarray(fixture['data']['initial_positions']),fixture['data']).tolist()
+  report['checkpoints'][0].update(start_iterations=[1000]*4,end_iterations=[2000]*4)
+  rp=self.write(old.parent/'report.json',report)
+  fit=a.load(old.parent/'draws-1000-report.json');fit['checkpoints']=report['checkpoints'];self.write(old.parent/'draws-1000-report.json',fit)
+  raw=a.load(old.parent/'numpyro-continuation-raw.json');raw['sampling_initial_positions']=report['sampling_initial_positions'];self.write(old.parent/'draws-1000-raw.json',raw)
+  status=a.load(c['status_path']);status['report_sha256']=a.digest(rp);self.write(Path(c['status_path']),status)
+  return m,c,rp
  def write(self,path,value):
   path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(value));return path
  def build(self,root,public=False):
@@ -83,4 +101,32 @@ class Adapter(unittest.TestCase):
    self.write(rp,dict(status='failed',phase='exploratory',qualified=False,plan=failed_plan,error='runtime failure',traceback='mock',attempts=[],end_to_end_seconds=3.))
    sp=Path(c['status_path']);s=a.load(sp);s['report_sha256']=a.digest(rp);self.write(sp,s)
    r=a.normalize(m);self.assertFalse(r[0]['usable']);self.assertTrue(r[0]['provenance_valid'],r[0]['normalization']['errors']);self.assertTrue(summarize(m,r)['record_integrity_pass'])
+ def test_associative_reference_current_schema(self):
+  with tempfile.TemporaryDirectory() as d:
+   m,c,rp=self.mixed(d);r=a.normalize(m)[0]
+   self.assertTrue(r['usable'],r['normalization']['errors'])
+   self.assertIn(str(rp.parent/'draws-1000-raw.json'),r['normalization']['artifact_sha256'])
+ def test_associative_reference_rejects_policy_drift(self):
+  for field,value in [('implementation','sequential'),('batch',500),('tiers',[2000])]:
+   with self.subTest(field=field),tempfile.TemporaryDirectory() as d:
+    m,c,rp=self.mixed(d);r=a.load(rp);r['settings'][field]=value;self.write(rp,r)
+    status=a.load(c['status_path']);status['report_sha256']=a.digest(rp);self.write(Path(c['status_path']),status)
+    self.assertFalse(a.normalize(m)[0]['usable'])
+ def test_associative_reference_exception_retained(self):
+  with tempfile.TemporaryDirectory() as d:
+   m,c,rp=self.mixed(d);r=a.load(rp);r.update(status='failed',error='integration failure',attempts=[]);self.write(rp,r)
+   status=a.load(c['status_path']);status['report_sha256']=a.digest(rp);self.write(Path(c['status_path']),status)
+   r=a.normalize(m)[0];self.assertFalse(r['usable']);self.assertTrue(r['provenance_valid'],r['normalization']['errors'])
+ def test_associative_reference_raw_start_drift(self):
+  with tempfile.TemporaryDirectory() as d:
+   m,c,rp=self.mixed(d);self.write(rp.parent/'draws-1000-raw.json',dict(initial_positions=[]))
+   self.assertFalse(a.normalize(m)[0]['usable'])
+ def test_associative_reference_iteration_gap(self):
+  with tempfile.TemporaryDirectory() as d:
+   m,c,rp=self.mixed(d);fp=rp.parent/'draws-1000-report.json';fit=a.load(fp);fit['checkpoints'][0]['end_iterations'][0]+=1;self.write(fp,fit)
+   self.assertFalse(a.normalize(m)[0]['usable'])
+ def test_associative_reference_sampling_start_drift(self):
+  with tempfile.TemporaryDirectory() as d:
+   m,c,rp=self.mixed(d);raw=rp.parent/'draws-1000-raw.json';r=a.load(raw);r['sampling_initial_positions'][0][0]+=.1;self.write(raw,r)
+   self.assertFalse(a.normalize(m)[0]['usable'])
 if __name__=='__main__':unittest.main()

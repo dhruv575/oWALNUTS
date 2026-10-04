@@ -14,6 +14,12 @@ Cells keep the source_sha256 schema expected by the worker: absolute bindings
 for public continuation, filename keys for reference. Extra runtime bindings
 are verified separately. Inputs are never edited; write_records uses exclusive
 creation. This first adapter supports dense flow and exogenous local-level only.
+
+Reference procedures explicitly declaring implementation='associative' use the
+mixed_flow_reference report.json schema and per-tier raw artifacts. Admission
+checks absolute worker bindings against the manifest's basename source map,
+transformed starts, checkpoint continuity, and exact selected-tier output.
+Legacy reference procedures retain the continuation_precision schema.
 """
 import hashlib,json,math
 from pathlib import Path
@@ -99,8 +105,10 @@ def select_intervals(report,selectors):
 
 def normalize_cell(manifest,cell):
     procedure=manifest['procedure'];out=Path(cell['output_directory']);public=procedure['worker_kind']=='public'
+    mixed_reference=not public and procedure.get('implementation')=='associative'
+    modern=public or mixed_reference
     filename='python-pymc-flow-report.json' if manifest['model']=='flow' else 'python-pymc-report.json'
-    rp=out/(filename if public else 'numpyro-continuation-report.json')
+    rp=out/(filename if public else 'report.json' if mixed_reference else 'numpyro-continuation-report.json')
     record={k:cell[k] for k in ['id','model','arm','procedure_sha256','dataset_seed','source_sha256','fixture_sha256','truth']}
     record.update(protocol_sha256=manifest['protocol_sha256'],provenance_valid=False,usable=False,intervals={},original_report_sha256=None,normalization=dict(phase='prospective_component_evidence',qualified=False,errors=[],tier_checks=[],artifact_sha256={}))
     evidence=record['normalization'];cost={};record['cost']=cost
@@ -122,6 +130,8 @@ def normalize_cell(manifest,cell):
     try:
         require(object_digest(procedure)==manifest['procedure_sha256'],'Procedure digest mismatch')
         require(procedure['worker_kind'] in ['public','reference'] and procedure['chains']==4 and procedure['warmup']>0,'Invalid worker procedure')
+        if 'implementation' in procedure:
+            require(mixed_reference and manifest['model']=='flow' and procedure['coordinates']=='mixed_slopes' and procedure['worker_arm']=='numpyro-mixed-slopes-continuation','Unsupported explicit reference implementation')
         tiers=procedure['tiers'];require(tiers and all(isinstance(v,int) and not isinstance(v,bool) and v>0 for v in tiers) and all(a<b for a,b in zip(tiers,tiers[1:])),'Invalid retained tiers')
         require(finite(procedure['relative_mcse']) and 0<procedure['relative_mcse']<1,'Invalid precision threshold')
         require(bool(procedure['bound_files']) and bool(procedure['runtime_bindings']),'Empty build/runtime binding')
@@ -154,12 +164,15 @@ def normalize_cell(manifest,cell):
         report=read(rp);require(status.get('report_sha256')==record['original_report_sha256'],'Report hash mismatch')
         if report.get('status')=='failed':
             require(isinstance(report.get('error'),str) and bool(report['error']) and isinstance(report.get('attempts',[]),list),'Malformed worker exception report')
-            if public:
+            if modern:
                 require(report.get('seed')==cell['chain_seed'] and report.get('arm')==procedure['worker_arm'],'Failed public identity mismatch')
                 actual=normalized(report['bindings']);expected=dict(source);expected.update(runtime);expected[str(Path(cell['fixture_path']).resolve()).casefold()]=cell['fixture_sha256']
                 require(all(actual.get(k)==v for k,v in expected.items()),'Failed public source/runtime mismatch')
                 for key in ['chains','warmup','target_accept','block_size']:
                     if key in procedure:require(report.get('settings',{}).get(key)==procedure[key],'Failed public setting mismatch')
+                if mixed_reference:
+                    require(report.get('implementation')=='associative' and report.get('coordinates')=='mixed_slopes','Failed mixed reference implementation mismatch')
+                    require(report['settings'].get('implementation')=='associative' and report['settings'].get('batch')==procedure['batch_size'] and report['settings'].get('tiers')==tiers,'Failed mixed reference policy mismatch')
             else:
                 failed_plan=report['plan']
                 require(failed_plan.get('model')==manifest['model'] and failed_plan.get('arm')==procedure['worker_arm'] and failed_plan.get('seed')==cell['chain_seed'] and failed_plan.get('coordinates')==procedure['coordinates'],'Failed reference plan identity mismatch')
@@ -171,28 +184,45 @@ def normalize_cell(manifest,cell):
         settings=report['settings']
         for key in ['chains','warmup','target_accept','block_size']:
             if key in procedure:require(settings.get(key)==procedure[key],'Worker setting mismatch: '+key)
-        if public:
-            actual=normalized(report['bindings']);expected=normalized(cell['source_sha256']);expected.update(normalized(procedure['runtime_bindings']));expected[str(Path(cell['fixture_path']).resolve()).casefold()]=cell['fixture_sha256']
+        if modern:
+            actual=normalized(report['bindings']);expected=dict(source);expected.update(normalized(procedure['runtime_bindings']));expected[str(Path(cell['fixture_path']).resolve()).casefold()]=cell['fixture_sha256']
             require(all(actual.get(k)==v for k,v in expected.items()),'Public source/runtime mismatch')
             require(close_matrix(report['initial_positions'],contract['starts']),'Report canonical start mismatch')
             require(report.get('predictive_seed')==cell['chain_seed']+130000,'Predictive seed mismatch')
             require(report.get('parity',{}).get('passed') is True,'Target parity missing/failed')
+            if mixed_reference:
+                require(report.get('implementation')==settings.get('implementation')=='associative','Mixed reference implementation mismatch')
+                require(settings.get('batch')==procedure['batch_size'] and settings.get('tiers')==tiers,'Mixed reference policy mismatch')
         else:require(report.get('source_sha256')==cell['source_sha256'] and report.get('fixture_sha256')==cell['fixture_sha256'],'Reference source/fixture mismatch')
         if report.get('status')!='completed':return failure('worker_failed')
         attempts=report['attempts'];counts=[a['draws'] for a in attempts]
         require(counts and counts==tiers[:len(counts)],'Non-prefix retained tiers')
-        gates=[]
+        gates=[];previous_checkpoints=[]
         for attempt in attempts:
             n=attempt['draws'];fp=out/(f'draws-{n}/fit-report.json' if public else f'draws-{n}-report.json')
-            fit=read(fp);require((fit.get('draws') if public else fit.get('settings',{}).get('draws'))==n,'Tier report retained count mismatch');g=gate(fit,contract,procedure['relative_mcse']);gates.append(g)
+            fit=read(fp);require((fit.get('draws') if modern else fit.get('settings',{}).get('draws'))==n,'Tier report retained count mismatch');g=gate(fit,contract,procedure['relative_mcse']);gates.append(g)
             require(g['passed']==attempt['screen']['pass'],'Stored tier gate disagrees with recomputation')
             require(set(attempt['screen']['parameter_functionals'])==set(contract['names']) and attempt['screen']['forecast_rows']==len(contract['forecasts']) and attempt['screen']['threshold']==procedure['relative_mcse'],'Stored screen scope mismatch')
             evidence['tier_checks'].append(dict(draws=n,**g))
-            if public or n==counts[-1]:
-                raw=(out/f'draws-{n}'/('python-pymc-flow-raw.json' if manifest['model']=='flow' else 'python-pymc-raw.json') if public else out/'numpyro-continuation-raw.json')
+            if mixed_reference:
+                from asof_rolling_execute import validate_checkpoint_continuity
+                require(procedure['batch_size']==1000,'Unsupported mixed reference checkpoint batch')
+                checkpoints=fit['checkpoints'];validate_checkpoint_continuity(checkpoints)
+                require(len(checkpoints)==n//1000 and checkpoints[:len(previous_checkpoints)]==previous_checkpoints,'Mixed reference checkpoint prefix differs')
+                previous_checkpoints=checkpoints
+            if modern or n==counts[-1]:
+                raw=(out/f'draws-{n}'/('python-pymc-flow-raw.json' if manifest['model']=='flow' else 'python-pymc-raw.json') if public else out/f'draws-{n}-raw.json' if mixed_reference else out/'numpyro-continuation-raw.json')
                 require(close_matrix(raw_tail(raw,'initial_positions'),contract['starts']),'Raw canonical starts mismatch')
+                if mixed_reference:
+                    import numpy as np
+                    from flow_mixed_coordinates import to_mixed
+                    expected_starts=to_mixed(np.asarray(contract['starts']),fixture['data']).tolist()
+                    require(raw_tail(raw,'sampling_initial_positions')==expected_starts and report.get('sampling_initial_positions')==expected_starts,'Mixed reference sampling starts differ')
+                    evidence['artifact_sha256'][str(raw)]=digest(raw)
         require(not any(g['passed'] for g in gates[:-1]) and (gates[-1]['passed'] or counts[-1]==tiers[-1]),'Not the frozen first-pass/cap procedure')
         require(gate(report,contract,procedure['relative_mcse'])==gates[-1] and report.get('precision_pass')==gates[-1]['passed'],'Final gate mismatch')
+        if mixed_reference:
+            require(report.get('draws')==counts[-1] and all(report.get(k)==fit.get(k) for k in ['evaluation','retained_divergences','checkpoints']),'Mixed reference final selected output differs')
         inv=read(out/'invocation-timing.json');worker=next(v for k,v in inv.items() if k.startswith('seconds_'));cost['worker_seconds']=worker
         require(finite(worker) and cost['wrapper_seconds']>=worker>=report['end_to_end_seconds'],'Worker cost enclosure failure')
         if public:
@@ -206,7 +236,9 @@ def normalize_cell(manifest,cell):
         else:
             checkpoints=report['checkpoints'];batch=procedure['batch_size']
             require([c['draws_per_chain'] for c in checkpoints]==list(range(batch,counts[-1]+1,batch)) and len({c['adaptation_sha256'] for c in checkpoints})==1,'Reference continuation state/batches mismatch')
-            require(report['end_to_end_seconds']>=report['warmup_seconds']+sum(c['seconds'] for c in checkpoints),'Reference stage cost enclosure failure')
+            require(report['end_to_end_seconds']>=report['adapt_seconds' if mixed_reference else 'warmup_seconds']+sum(c['seconds'] for c in checkpoints),'Reference stage cost enclosure failure')
+            if mixed_reference:
+                require(math.isclose(report['total_sampling_seconds'],report['adapt_seconds']+sum(a['sampling_seconds'] for a in attempts),rel_tol=1e-12,abs_tol=1e-7),'Mixed reference sampling-stage cost mismatch')
         record['intervals']=select_intervals(report,manifest['selectors']);evidence['selected_draws']=counts[-1]
         record['usable']=gates[-1]['passed'] and status.get('returncode')==0 and hardware.get('status')=='completed'
         if not record['usable']:evidence['errors'].append('production health/precision/exit failed')

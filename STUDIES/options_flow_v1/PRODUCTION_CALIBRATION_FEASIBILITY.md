@@ -1,7 +1,14 @@
 # Prospective production-procedure feasibility cohort
 
-Prospective controller; no cohort fixtures, freezing or sampling have run.
-Choose the recipe explicitly before invoking `prepare`. The combined controller,
+The cohort has completed. The retained coverage artifacts in
+`artifacts/production-calibration-feasibility-v1` record flow public 8/8 and
+reference 2/2 usable fits, and local public 6/8 and reference 1/2. Every report
+remains `qualified=false`; no coverage component met its reporting rule. These
+T32 results establish feasibility and expose failures, not powered calibration.
+
+The following describes the original prospective controller and its frozen
+policy. For a new cohort, choose the recipe explicitly before invoking
+`prepare`. The combined controller,
 adapter/reporter, reference allocation, associative-target and mixed-worker test
 run passed 55 tests and 20 subtests in 42.81 seconds on the attested Python
 environment. This validates implementation contracts, not interval calibration.
