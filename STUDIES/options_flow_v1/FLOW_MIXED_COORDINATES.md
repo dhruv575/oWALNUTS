@@ -1,8 +1,10 @@
 # Optional centered-slope, noncentered-path investigation
 
-Status: prospective static prototype. No numerical tests, fits or performance
-measurements have run for `flow_mixed_coordinates.py`. Existing defaults and the
-frozen six-cell comparison remain unchanged, including all failed outcomes.
+Status: optional experimental prototype. The combined focused suite passed 28
+tests in 42.96 seconds, including normalized parity and tiny fits of both workers.
+This is correctness evidence, not a performance measurement or a long-target
+mixing result. Existing defaults and the frozen six-cell comparison remain
+unchanged, including all failed outcomes.
 
 The public flow continuation worker now has an explicit `--coordinates
 mixed_slopes` option (dense flow only); its default remains `noncentered`.
@@ -11,7 +13,8 @@ Both require direct normalized density/gradient parity against a separately
 expressed canonical density plus Jacobian before adaptation, with JAX64 and
 all parity costs included. The public worker additionally checks the compiled
 native callback. Both return canonical draws and preserve the same physical
-start matrix. These opt-in worker changes and their tests remain unexecuted.
+start matrix. Both opt-in workers completed tiny tests while preserving the
+expected failed health gate; neither has been evaluated in a timed experiment.
 
 The long-flow restart arm reached 8000 draws with a healthy, zero-divergence
 screen but missed the tau endpoint requirement: MCSE/width 0.02190794 against
@@ -98,8 +101,9 @@ The authored tests check batched roundtrips, every physical functional, Jacobian
 sign against an independent full autodiff determinant, equality of normalized
 densities and gradients via a separately expressed transform, and public PyMC
 versus independent JAX gradients at multiple log-tau scales. T1 and T7 boundary
-cases and nonrepresentable positive scales are included. Run these only after
-the current timing job ends; add a T1000 parity point before any long trial.
+cases and nonrepresentable positive scales are included. These tests passed after
+the timing job ended; mandatory runtime parity must also pass on T1000 before
+any long trial proceeds to adaptation.
 
 Then freeze a small development comparison with identical physical starts and
 unchanged default tuning, full costs, all fourteen functionals, all forecast cells,

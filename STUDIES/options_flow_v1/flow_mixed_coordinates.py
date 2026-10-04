@@ -1,6 +1,6 @@
 """Optional dense-flow study target: centered group slopes, NC volatility path.
 
-Static prototype; not connected to any default worker or validated by execution.
+Optional target; focused correctness and tiny-worker tests passed, no timed trial.
 u=[beta_bar,log_tau,mu_h,log_sigma_h,z_alpha[G],beta[G],z_path[T]].
 """
 import numpy as np
