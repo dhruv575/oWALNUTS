@@ -103,7 +103,8 @@ def select_intervals(report,selectors):
     return {s['name']:(interval(e['functionals'][s['key']])[0] if s['kind']=='functional' else interval(forecasts[(s['horizon'],s.get('group'))],True)[0]) for s in selectors}
 
 
-def normalize_cell(manifest,cell):
+def normalize_cell(manifest,cell,*,shared_context=None):
+    """shared_context is an internal seam; records remain provisional until cohort finish."""
     procedure=manifest['procedure'];out=Path(cell['output_directory']);public=procedure['worker_kind']=='public'
     mixed_reference=not public and procedure.get('implementation')=='associative'
     modern=public or mixed_reference
@@ -111,6 +112,7 @@ def normalize_cell(manifest,cell):
     rp=out/(filename if public else 'report.json' if mixed_reference else 'numpyro-continuation-report.json')
     record={k:cell[k] for k in ['id','model','arm','procedure_sha256','dataset_seed','source_sha256','fixture_sha256','truth']}
     record.update(protocol_sha256=manifest['protocol_sha256'],provenance_valid=False,usable=False,intervals={},original_report_sha256=None,normalization=dict(phase='prospective_component_evidence',qualified=False,errors=[],tier_checks=[],artifact_sha256={}))
+    if shared_context is not None:record['shared_validation_provisional']=True
     evidence=record['normalization'];cost={};record['cost']=cost
     def read(path):
         evidence['artifact_sha256'][str(path)]=digest(path);return load(path)
@@ -118,14 +120,24 @@ def normalize_cell(manifest,cell):
     for key,path in [('controller_seconds',cell['status_path']),('wrapper_seconds',cell['hardware_path'])]:
         try:cost[key]=load(path).get('elapsed_seconds')
         except (OSError,ValueError):cost[key]=None
+    def shared_check(message):
+        if shared_context is None:
+            for path,expected in procedure['bound_files'].items():require(digest(path)==expected,message+': '+path)
+        else:
+            from cohort_validation import POLICY
+            require(shared_context.policy==POLICY,'Unsupported shared validation policy')
+            shared_context.require(procedure['bound_files'])
     def failure(classification):
-        for path,expected in procedure['bound_files'].items():require(digest(path)==expected,'Post-failure source/build drift')
+        shared_check('Post-failure source/build drift')
         require(digest(cell['fixture_path'])==cell['fixture_sha256'],'Post-failure fixture drift')
         record['provenance_valid']=True
         record['failure_evidence']=dict(classification=classification,
             status_sha256=digest(cell['status_path']),hardware_sha256=digest(cell['hardware_path']),started_sha256=digest(cell['started_path']),
             **{k:record[k] for k in ['protocol_sha256','procedure_sha256','fixture_sha256','dataset_seed']})
         evidence['errors'].append(classification)
+        if shared_context is not None:
+            record['shared_validation_pending_flags']=dict(usable=record['usable'],provenance_valid=record['provenance_valid'])
+            record['usable']=False;record['provenance_valid']=False
         return record
     try:
         require(object_digest(procedure)==manifest['procedure_sha256'],'Procedure digest mismatch')
@@ -139,7 +151,7 @@ def normalize_cell(manifest,cell):
         require(all(frozen.get(k)==v for k,v in runtime.items()),'Runtime files not frozen')
         source=normalized(cell['source_sha256']) if public else normalized({str(Path(procedure['study_directory'])/k):v for k,v in cell['source_sha256'].items()})
         require(all(frozen.get(k)==v for k,v in source.items()),'Worker sources not frozen')
-        for path,expected in procedure['bound_files'].items():require(digest(path)==expected,'Bound source/build drift: '+path)
+        shared_check('Bound source/build drift')
         fixture=read(cell['fixture_path']);require(digest(cell['fixture_path'])==cell['fixture_sha256'],'Fixture hash mismatch')
         require(fixture.get('seed')==cell['dataset_seed'],'Dataset seed mismatch')
         contract=fixture_contract(fixture,manifest['model']);truth=select_truth(contract,manifest['selectors'])
@@ -242,13 +254,16 @@ def normalize_cell(manifest,cell):
         record['intervals']=select_intervals(report,manifest['selectors']);evidence['selected_draws']=counts[-1]
         record['usable']=gates[-1]['passed'] and status.get('returncode')==0 and hardware.get('status')=='completed'
         if not record['usable']:evidence['errors'].append('production health/precision/exit failed')
-        for path,expected in procedure['bound_files'].items():require(digest(path)==expected,'Post-read source/build drift')
+        shared_check('Post-read source/build drift')
         require(digest(cell['fixture_path'])==cell['fixture_sha256'] and digest(rp)==record['original_report_sha256'],'Post-read fixture/report drift')
         record['provenance_valid']=True
     except (KeyError,TypeError,ValueError,OSError,StopIteration,OverflowError) as exc:
         record['usable']=False;record['provenance_valid']=False;evidence['errors'].append(f'{type(exc).__name__}: {exc}')
     for key,value in list(cost.items()):
         if value is not None and not finite(value):cost[key]=None
+    if shared_context is not None:
+        record['shared_validation_pending_flags']=dict(usable=record['usable'],provenance_valid=record['provenance_valid'])
+        record['usable']=False;record['provenance_valid']=False
     return record
 
 
@@ -257,3 +272,28 @@ def normalize(manifest):
     return [normalize_cell(manifest,c) for c in manifest['cells']]
 def write_records(path,records):
     with Path(path).open('x',encoding='utf-8') as f:json.dump(records,f,indent=2,allow_nan=False)
+
+
+def normalize_shared(manifests,*,policy,expected_inventory,inventory):
+    """Explicit opt-in cohort transaction; legacy normalize() is unchanged.
+
+    Whole-cohort shared drift invalidates every returned record. This validates
+    pre/post content, not every legacy intermediate observation instant.
+    Historical manifests/archived source paths must not be silently rewritten.
+    """
+    from cohort_validation import POLICY,normalize_cohort
+    if policy!=POLICY:raise ValueError('Explicit supported cohort policy required')
+    manifests=list(manifests);cells=[];owners={}
+    for manifest in manifests:
+        validate_manifest(manifest)
+        for original in manifest['cells']:
+            if original['id'] in owners:raise ValueError('Duplicate intended cohort IDs')
+            owners[original['id']]=manifest;cell=dict(original);cell['known_cost']={}
+            cell['record_template']={k:cell[k] for k in ['id','model','arm','procedure_sha256','dataset_seed','source_sha256','fixture_sha256','truth']}
+            cell['record_template'].update(protocol_sha256=manifest['protocol_sha256'],intervals={},original_report_sha256=None,normalization=dict(phase='prospective_component_evidence',qualified=False,errors=[],tier_checks=[],artifact_sha256={}))
+            for key,path in [('controller_seconds',cell['status_path']),('wrapper_seconds',cell['hardware_path'])]:
+                try:
+                    value=load(path).get('elapsed_seconds');cell['known_cost'][key]=value if finite(value) else None
+                except (OSError,ValueError,TypeError):cell['known_cost'][key]=None
+            cells.append(cell)
+    return normalize_cohort(cells,[m['procedure']['bound_files'] for m in manifests],lambda cell,ctx:normalize_cell(owners[cell['id']],cell,shared_context=ctx),inventory,expected_inventory)
