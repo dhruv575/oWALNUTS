@@ -12,6 +12,27 @@ study worker adds canonical transport, frozen-adaptation checks, stage costs and
 failure checkpoints. Matched end-to-end measurements are now available below;
 continuation reduces repeated work but does not resolve every precision failure.
 
+## Optimized long-flow implementation comparison
+
+The six-cell `optimized-mixed-comparison-v1` removes the earlier sequential
+NumPyro mixed-target graph confound by using the tested associative target.
+On the same T1000/G4 development posterior, both mixed implementations pass
+the full health and endpoint-precision gate at 2,000 draws for both fresh seeds.
+Full controller costs are 65.954 versus 105.397 seconds in pair0 and 87.323
+versus 87.685 seconds in pair1 (oWALNUTS versus NumPyro). Eligible reference/oW
+ratios are 1.598 and 1.004: one advantage and one effective tie. This does not
+establish a consistent speed advantage across datasets or repeated live fits.
+
+Both noncentered NumPyro reference attempts reach the 8,000-draw cap with
+18 and 4 divergences respectively; their 461.594 and 392.987 second costs
+remain counted and associated usable-result ratios are null. All six attempts
+cost 1,200.947 seconds including controller overhead. The independent audit
+passes all 195 checks. Exact auditor, source snapshot and provenance are
+archived, with a manifest for 22 local raw files totaling 2,792,934,757 bytes.
+These are two seeds on one fixed development posterior, with incomplete
+order balance and fresh-process costs. Interval calibration, independent
+posterior endpoint accuracy and persistent-process performance remain open.
+
 ## Fresh prior-data production feasibility pilot
 
 The prospective `production-calibration-feasibility-v1` fixes recipes before
