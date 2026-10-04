@@ -9,19 +9,19 @@ additional user requirements.
 
 | Requirement | Current evidence | What remains |
 | --- | --- | --- |
-| Correct implementation and continuation | Target parity, replay, ownership/reset checks, and attested runtime; actual repeated-fit compatibility checking is in progress | Integrate the reviewed controller after actual worker compatibility passes |
-| Material practical cost or effort benefit | Optimized mixed T1000 comparison: 65.95 vs 105.40 seconds for one pair; another pair was effectively tied | Fresh repeated-fit timing with compilation and every unsuccessful attempt charged; broader reliability |
+| Correct implementation and continuation | Target parity, replay, ownership/reset checks, attested runtime, integrated repeated-fit controller and six actual compatibility proofs | Continue validating new accuracy-study adapters and broader failure conditions |
+| Material practical cost or effort benefit | All twelve actual-market repeated fits passed; full-cohort reference/public ratios 1.470 and 1.458. Earlier optimized T1000 comparison had a win and an effective tie | Broader reliability and demanding-posterior accuracy; these fixed-workload results are not a general speedup estimate |
 | Trustworthy posterior interval endpoints | Full analytic reference-bank allocation study; independent exact iid quantile diagnostic | Correlated-sample uncertainty control, then an independently initialized bank on the actual demanding posterior |
 | Useful market workflow | As-of anchor bug fixed; sparse verified panel retained; activity-based collector tested and audited | Suitable data and chronological interval scoring; neither available panel nor failed acquisition establishes utility |
 | Honest accounting and reproducibility | Frozen protocols, failed/unstarted denominators, independent audits, exact source archives, local raw-file manifests | Continue these requirements for each subsequent experiment |
 
 ## Decisions for the next experiments
 
-First finish the running A/B/A backend-to-controller compatibility check. A short
-run that misses production precision must remain incomplete under the full
-production cap. Check individual successful fits separately from whole-cohort
-success; a failed cohort must not erase valid individual diagnostics or create
-an eligible full-cohort timing ratio.
+The A/B/A compatibility check and actual-market timing study are complete.
+The short compatibility fits were correctly rejected under the production cap;
+all twelve production-policy market fits passed. Keep individual successful fits
+separate from whole-cohort success in subsequent studies, and retain all failed
+attempts and their costs. The independent timing audit passed 577 checks.
 
 Run at most one further bounded correlated analytic resource study before
 moving to an actual posterior resource pilot. The independent Gaussian-AR

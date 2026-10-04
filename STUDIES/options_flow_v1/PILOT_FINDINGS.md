@@ -5,6 +5,15 @@ Study scope and unresolved gates remain in `protocol.json` and `DESIGN_REVIEW.md
 
 ## Current implementation and real-data progress
 
+The actual-market repeated-fit development comparison completed all twelve fits
+successfully, including fresh adaptation for each A/B/A posterior. Public cohort
+costs were 82.462 and 82.498 seconds versus reference costs of 121.246 and 120.244
+seconds: eligible full-process ratios of 1.470 and 1.458 across balanced order.
+The independent terminal audit passed 577 checks. This supports practical cost
+on these two fixed sparse-data posteriors, not general calibration or market
+utility. Full results and timing scope are in
+`artifacts/persistent-comparison-v1/OUTCOME.md`.
+
 The full vectorized reference-bank allocation study completed all 148 intended
 cells in 707.35 seconds; its independent integrity audit passed 2,527 checks.
 Two iid allocations passed exploratory progression, but correlated null trials
