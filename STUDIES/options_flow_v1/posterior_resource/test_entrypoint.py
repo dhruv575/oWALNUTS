@@ -58,3 +58,25 @@ def test_contained_actual_worker_admission_failure(tmp_path):
     r=json.loads((out/'resource-result.json').read_text())
     assert r['status']=='failed' and 'Unexpected memory policy' in r['error']
     assert not (out/'fit').exists()
+
+
+def test_contained_bank_phase_routes_only_to_exact_bank_verifier(tmp_path):
+    if os.name!='nt':
+        import pytest
+        pytest.skip('Windows job protocol')
+    import hashlib
+    out=tmp_path/'bank';plan=tmp_path/'plan.json';intent=tmp_path/'intent.json';hardware=tmp_path/'hardware.json'
+    # Valid freeze envelope, deliberately invalid bank qualification flag.
+    body=dict(frozen=False,phase='prospective_reference_bank',qualified=True,study=str(STUDY),posterior_sha256='fixture',memory_bytes=8*1024**3,cells=[dict(id='bank-00-public',backend='public',out=str(out))])
+    intent.write_text(json.dumps(body));body.update(frozen=True,intent_sha256=hashlib.sha256(intent.read_bytes()).hexdigest())
+    plan.write_text(json.dumps(body));plan.with_suffix('.sha256').write_text(hashlib.sha256(plan.read_bytes()).hexdigest())
+    args=[sys.executable,str(STUDY/'hardware_control.py'),'--cpus','0','--record',str(hardware),'--timeout','30','--',sys.executable,'-m','posterior_resource.resource_worker','--plan',str(plan),'--cell','bank-00-public']
+    result=subprocess.run(args,cwd=STUDY,env=dict(os.environ,PYTHONPATH=str(STUDY)),capture_output=True,text=True,timeout=45)
+    assert result.returncode==2,result.stderr
+    h=json.loads(hardware.read_text());r=json.loads((out/'resource-result.json').read_text())
+    assert h['job_active_processes_after_cleanup']==0 and h['realized_cpus']==[0]
+    assert h['containment']['assigned_before_worker_execution'] is True
+    assert r['status']=='failed' and r['last_phase']=='admission'
+    assert 'Explicit nonqualified bank phase required' in r['error']
+    assert r['memory_cap_bytes']==8*1024**3 and r['worker_seconds_before_final_report']>0
+    assert not (out/'fit').exists()

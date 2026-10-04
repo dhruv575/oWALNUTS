@@ -70,7 +70,10 @@ def run(plan_path,cell_id):
         # Install the fixed cap before admission helpers can import numerical modules.
         if plan.get('memory_bytes')!=8*1024**3:raise ValueError('Unexpected memory policy')
         guard=memory_limit(plan['memory_bytes'])
-        from .controller import verify_frozen
+        if plan.get('phase')=='prospective_reference_bank':
+            from .bank_controller import verify_frozen
+        else:
+            from .controller import verify_frozen
         original_plan_sha=sha(plan_path);validated=verify_frozen(plan_path,original_plan_sha)
         if validated!=plan or cell not in validated['cells']:raise ValueError('Worker cell/plan identity differs')
         import numpy as np
