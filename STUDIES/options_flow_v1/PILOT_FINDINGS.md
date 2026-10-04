@@ -5,6 +5,22 @@ Study scope and unresolved gates remain in `protocol.json` and `DESIGN_REVIEW.md
 
 ## Current implementation and real-data progress
 
+The full vectorized reference-bank allocation study completed all 148 intended
+cells in 707.35 seconds; its independent integrity audit passed 2,527 checks.
+Two iid allocations passed exploratory progression, but correlated null trials
+could not establish backend agreement within the fixed 2%-width tolerance.
+Their endpoint-uncertainty and paired-length gates passed. The smallest iid
+fit allocation had one resolved endpoint-bound miss. These analytic controls
+do not qualify posterior accuracy or calibration. Exact outcomes, source
+archives, and the manifest for all 148 local raw banks are in
+`artifacts/reference-bank-allocation-vectorized-60min-v1/OUTCOME.md`.
+
+The optional activity-based acquisition path is integrated and passes 27 mocked
+tests. It ranks preperiod anchor availability and feature activity, applies
+metadata eligibility, and fails without relaxing thresholds when fewer than
+four contracts qualify. No new panel has been acquired with that policy yet;
+`ACTIVITY_ACQUISITION_VALIDATION.md` records its validation and limits.
+
 The public CFunc continuation prototype now supports one adaptation followed by
 incremental retained draws. Focused Rust/Python checks establish exact replay,
 diagnostic transport, lifetime safety and cancellation behavior; the local-model
