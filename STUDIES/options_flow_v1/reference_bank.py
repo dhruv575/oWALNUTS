@@ -189,16 +189,22 @@ def analyze(spec,fits,parameter_batch=None):
         rng=random.Random(spec['bootstrap_seed']);draws=[];differences=[];backend_differences=[]
         vectorized=None
         if parameter_batch is not None:
-            if any(e['kind']!='parameter' for e in spec['endpoints'].values()):raise ValueError('Optional batch path supports parameters only')
             all_counts=[resample_fits(fits,rng) for _ in range(spec['bootstrap_replicates'])]
             groups=[(fits,high),(fits,low)]+[(by_backend[b],high) for b in backends]
-            vectorized=[{name:parameter_batch(group,cache,length,name,e['probability'],all_counts) for name,e in spec['endpoints'].items()} for group,length in groups]
+            vectorized=[{name:parameter_batch(group,cache,length,name,e['probability'],all_counts) for name,e in spec['endpoints'].items() if e['kind']=='parameter'} for group,length in groups]
         for index in range(spec['bootstrap_replicates']):
             if vectorized is None:
                 counts=resample_fits(fits,rng);q,error=evaluate(fits,spec,high,counts,cache);q0,error0=evaluate(fits,spec,low,counts,cache)
                 backend_resamples=[evaluate(by_backend[b],spec,high,counts,cache) for b in backends]
             else:
-                results=[({name:values[index] for name,values in group.items()},{name:0. for name in point}) for group in vectorized]
+                results=[]
+                for (group,length),parameters in zip(groups,vectorized):
+                    values={name:rows[index] for name,rows in parameters.items()};errors={name:0. for name in values}
+                    for name,endpoint in spec['endpoints'].items():
+                        if endpoint['kind']=='predictive':
+                            lo,hi=predictive_bracket(group,name,length,endpoint['probability'],all_counts[index])
+                            values[name]=(lo+hi)/2;errors[name]=(hi-lo)/2
+                    results.append((values,errors))
                 (q,error),(q0,error0)=results[:2];backend_resamples=results[2:]
             qb=[r[0] for r in backend_resamples]
             for name in point:
