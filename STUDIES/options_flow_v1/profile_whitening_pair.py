@@ -22,14 +22,38 @@ def create(out,python,adapter,extension):
     plan=dict(phase='target-only-exploratory',qualified=False,frozen=True,source_sha256=sources(),bound_files=bound,cells=cells,cache_policy='Freshprocess per cell, existing disk caches retained; balanced order; all compile/setup costs preserved',scope='No MCMC; no workflow speed inference from callback timing')
     save(out/'plan.json',plan);(out/'plan.sha256').write_text(sha(out/'plan.json')+'\n')
 def execute(path):
-    path=Path(path);plan=json.loads(path.read_text());verify(path,plan)
+    path=Path(path);plan=json.loads(path.read_text());original_digest=sha(path);verify(path,plan);abort=None
     for cell in plan['cells']:
         status=path.parent/(cell['id']+'-status.json');marker=path.parent/(cell['id']+'-started.json')
         if marker.exists() or status.exists():raise ValueError('Already attempted')
-        save(marker,dict(plan_sha256=sha(path),id=cell['id']));verify(path,plan)
-        with (path.parent/(cell['id']+'.log')).open('x') as log:r=subprocess.run(cell['command'],stdout=log,stderr=subprocess.STDOUT,cwd=ROOT)
-        verify(path,plan);save(status,dict(returncode=r.returncode,id=cell['id']))
-        if r.returncode:raise RuntimeError('Profilefailed, remainingcells unattempted')
+        if abort is not None:
+            save(status,dict(id=cell['id'],status='unattempted_provenance_abort',reason=abort,returncode=None));continue
+        save(marker,dict(plan_sha256=original_digest,id=cell['id']))
+        record=dict(id=cell['id'],returncode=None,status='failed',plan_sha256=original_digest)
+        try:
+            if sha(path)!=original_digest:raise ValueError('Originalplan changed')
+            verify(path,plan)
+            with (path.parent/(cell['id']+'.log')).open('x') as log:r=subprocess.run(cell['command'],stdout=log,stderr=subprocess.STDOUT,cwd=ROOT)
+            record['returncode']=r.returncode
+            # Persist returned exit before any provenance failure can obscure it.
+            save(path.parent/(cell['id']+'-exit.json'),dict(record))
+            if sha(path)!=original_digest:raise ValueError('Originalplan changed')
+            verify(path,plan)
+            if r.returncode:
+                record['status']='worker_failed'
+            else:
+                result=json.loads((path.parent/(cell['id']+'.json')).read_text())
+                for snapshot_name in ['source_before','source_after']:
+                    runtime=result[snapshot_name]
+                    if runtime['source_sha256']!=plan['source_sha256']:raise ValueError('Runtime study source mismatch')
+                    for label in ['python_executable','adapter','extension']:
+                        key='python_path' if label=='python_executable' else label+'_path'
+                        actual=Path(runtime[key]).resolve();expected={Path(k).resolve():v for k,v in plan['bound_files'].items()}
+                        if actual not in expected or runtime[label+'_sha256']!=expected[actual]:raise ValueError('Runtime dependency mismatch: '+label)
+                record['status']='completed'
+        except Exception as exc:
+            record.update(status='provenance_or_executor_failed',error=str(exc));abort=str(exc)
+        save(status,record)
 def validate(path,out):
     # Explicitly separate validation process; never imported by timed worker.
     import numpy as np
