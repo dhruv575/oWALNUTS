@@ -29,6 +29,17 @@ is unchanged. Sampling performance remains unmeasured; the separately frozen
 `local-conditional-whitening-v1` development comparison retains both failed and
 passing fixtures and all four sampler/coordinate combinations.
 
+That v1 comparison was deliberately stopped for a harness defect: Windows
+timeout cleanup could terminate the Python launcher while leaving its numerical
+child alive. No timeout had occurred. Two residual baselines completed, the
+first whitening reference was interrupted, and nine cells were not attempted.
+All twelve terminal accounting records and process-stop evidence are preserved
+in `local-conditional-whitening-v1`. The interrupted raw report remains unchanged.
+This yields no whitening performance conclusion or eligible geometry speed ratio.
+The replacement harness assigns workers to a kill-on-close Windows Job Object
+before execution and verifies descendant cleanup; a new comparison must use a
+new frozen plan rather than overwrite or resume the aborted experiment.
+
 ## Fresh long-path reference follow-up
 
 On the prospectively generated T=1000/G=4 fixture in `python-flow-long-v1`,
