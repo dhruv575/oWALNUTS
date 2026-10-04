@@ -58,6 +58,11 @@ class ConditionalWhiteningTests(unittest.TestCase):
             np.testing.assert_allclose(gradient,refgrad,rtol=1e-9,atol=1e-9)
             np.testing.assert_allclose(gradient[:-2],-u[:-2],atol=1e-10)
             np.testing.assert_allclose(jax.hessian(density)(u)[:-2,-2:],0.,atol=1e-9)
+            scan=lambda v:guide.jax_log_density(v,data,gaussian=True)
+            scan_value,scan_gradient=jax.value_and_grad(scan)(u)
+            np.testing.assert_allclose(scan_value,ref,rtol=1e-10,atol=1e-10)
+            np.testing.assert_allclose(scan_gradient,refgrad,rtol=1e-9,atol=1e-9)
+            np.testing.assert_allclose(jax.hessian(scan)(u)[:-2,-2:],0.,atol=1e-9)
 
     def test_compiled_density_gradient_and_starts(self):
         import jax
@@ -100,6 +105,19 @@ class ConditionalWhiteningTests(unittest.TestCase):
         np.testing.assert_allclose(guide.to_whitened(canonical,data),positions,rtol=1e-10,atol=1e-10)
         for i in range(2):
             for j in range(3):np.testing.assert_allclose(canonical[i,j],guide.to_canonical(positions[i,j],data),atol=1e-12)
+
+    def test_scan_matches_independent_loop_gradient(self):
+        import jax
+        jax.config.update('jax_enable_x64',True)
+        import jax.numpy as jnp
+        for t in [1,2,7,128]:
+            data=self.data(t)
+            for lo,lr in [(-2.,-2.),(-9.,-1.),(-1.,-9.)]:
+                u=np.r_[np.linspace(-.5,.7,t),lo,lr]
+                value,gradient=jax.value_and_grad(lambda q:guide.jax_log_density(q,data))(u)
+                ref,refgrad=jax.value_and_grad(lambda q:guide.log_density(q,data,jnp))(u)
+                np.testing.assert_allclose(value,ref,rtol=1e-10,atol=1e-8)
+                np.testing.assert_allclose(gradient,refgrad,rtol=1e-8,atol=1e-7)
 
     def test_compiled_tie_and_long_path(self):
         import jax

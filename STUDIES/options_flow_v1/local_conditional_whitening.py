@@ -88,6 +88,63 @@ def log_density(u,data,xp=np,gaussian=False):
     return lp-xp.sum(xp.log(d))
 
 
+def _jax_backsolve(rhs,d,e):
+    import jax
+    import jax.numpy as jnp
+    last=rhs[-1]/d[-1]
+    def step(previous,parts):
+        ri,ei,di=parts
+        value=(ri-ei*previous)/di
+        return value,value
+    _,rest=jax.lax.scan(step,last,(rhs[:-1][::-1],e[::-1],d[:-1][::-1]))
+    return jnp.concatenate((rest[::-1],last[None]))
+
+
+def _jax_guide(lo,lr,data):
+    """Linear-size compiled scan graph; NumPy/Python-loop guide stays independent."""
+    import jax
+    import jax.numpy as jnp
+    t=len(data['y']);w=jnp.exp(-2*lo)
+    r=jnp.exp(-2*lr)/jnp.asarray(data.get('dt',np.ones(t-1)))
+    first=w+1/1.5**2
+    def filter_step(previous,ri):
+        small=jnp.minimum(ri,previous);large=jnp.maximum(ri,previous)
+        value=w+small/(1+small/large)
+        return value,value
+    _,rest=jax.lax.scan(filter_step,first,r)
+    f=jnp.concatenate((first[None],rest))
+    d=jnp.sqrt(f+jnp.concatenate((r,jnp.zeros(1,dtype=lo.dtype))))
+    e=-r/d[:-1]
+    b=w*jnp.asarray(data['y'])
+    v0=(b[0]+data['anchor']/1.5**2)/d[0]
+    def forward(previous,parts):
+        bi,ei,di=parts
+        value=(bi-ei*previous)/di
+        return value,value
+    _,vrest=jax.lax.scan(forward,v0,(b[1:],e,d[1:]))
+    v=jnp.concatenate((v0[None],vrest))
+    return _jax_backsolve(v,d,e),d,e
+
+
+def jax_log_density(u,data,gaussian=False):
+    """Normalized scan-based potential for NumPyro; no Python path-length loops."""
+    import jax.numpy as jnp
+    u=jnp.asarray(u);t=len(data['y'])
+    if u.ndim!=1 or u.shape[0]!=t+2:raise ValueError('Expected T+2 vector')
+    lo,lr=u[-2],u[-1]
+    m,d,e=_jax_guide(lo,lr,data)
+    h=m+_jax_backsolve(u[:-2],d,e)
+    def normal(v,mean,sd):
+        return jnp.sum(-.5*((v-mean)/sd)**2-jnp.log(sd)-.5*np.log(2*np.pi))
+    lp=normal(lo,np.log(.08),1.)+normal(lr,np.log(.12),1.)
+    lp+=normal(h[0],data['anchor'],1.5)
+    lp+=normal(h[1:]-h[:-1],0.,jnp.exp(lr)*jnp.sqrt(jnp.asarray(data.get('dt',np.ones(t-1)))))
+    residual=(jnp.asarray(data['y'])-h)/jnp.exp(lo)
+    if gaussian:lp+=normal(residual,0.,1.)-t*lo
+    else:lp+=jnp.sum(gammaln(3.)-gammaln(2.5)-.5*np.log(5*np.pi)-lo-3*jnp.log1p(residual**2/5))
+    return lp-jnp.log(d).sum()
+
+
 def _pytensor_guide(lo,lr,data):
     """Scan recurrences; separate symbolic implementation for parity checks."""
     import pytensor

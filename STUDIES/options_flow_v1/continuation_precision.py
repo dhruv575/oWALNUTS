@@ -9,6 +9,7 @@ STARTED = time.perf_counter()
 import argparse
 import hashlib
 import json
+import datetime
 from pathlib import Path
 import traceback
 
@@ -31,8 +32,8 @@ def local_configuration(data,chains,coordinates='centered'):
     if coordinates == 'observation_residual':
         return initial,to_residual(initial,data),lambda q:-residual_density(q,data,jnp),lambda q:to_canonical(q,data)
     if coordinates == 'conditional_whitening':
-        from local_conditional_whitening import to_whitened,to_canonical as guide_canonical,log_density as guide_density
-        return initial,to_whitened(initial,data),lambda q:-guide_density(q,data,jnp),lambda q:guide_canonical(q,data)
+        from local_conditional_whitening import to_whitened,to_canonical as guide_canonical,jax_log_density
+        return initial,to_whitened(initial,data),lambda q:-jax_log_density(q,data),lambda q:guide_canonical(q,data)
     raise ValueError('Unknown local coordinates')
 
 
@@ -56,6 +57,13 @@ def main():
             or any(b<=c for c,b in zip(a.tiers,a.tiers[1:]))):
         p.error('Positive settings and increasing tiers divisible by batch size required')
     a.out.mkdir(parents=True, exist_ok=False)
+    def phase(event,**details):
+        record=dict(event=event,utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    elapsed_seconds=time.perf_counter()-STARTED,**details)
+        with (a.out/'phase-events.jsonl').open('a',encoding='utf-8') as handle:
+            handle.write(json.dumps(record)+'\n');handle.flush()
+        print(json.dumps(record),flush=True)
+    phase('worker_configuring')
     fixture = json.loads(a.fixture.read_text())
     data = fixture['data']
     coordinate_label='noncentered' if a.model=='flow' else a.coordinates
@@ -85,14 +93,21 @@ def main():
         else:
             from run_local_level import evaluate
             initial,starts,potential,canonical=local_configuration(data,a.chains,a.coordinates)
+        phase('sampler_constructing')
         sampler = ContinuedReference(potential, starts, a.seed, a.warmup,a.batch_size,target_accept=a.target_accept)
+        phase('adapt_begin')
         sampler.adapt()
+        phase('adapt_end')
         passed = False
         for tier in a.tiers:
             while len(sampler.chunks)*a.batch_size < tier:
+                phase('batch_begin',batch=len(sampler.chunks)+1)
                 sampler.append()
+                phase('batch_end',batch=len(sampler.chunks))
+            phase('evaluation_begin',tier=tier)
             q = canonical(sampler.samples)
             evaluation = evaluate(q,fixture,a.seed+130000)
+            phase('evaluation_end',tier=tier)
             report = dict(arm=arm,coordinates=coordinate_label,status='completed',phase='exploratory',
                 qualified=False,seed=a.seed,settings=dict(target_accept=a.target_accept,warmup=a.warmup,draws=tier,chains=a.chains),
                 fixture_sha256=plan['fixture_sha256'],source_sha256=plan['source_sha256'],
@@ -116,10 +131,12 @@ def main():
         report.update(plan=plan,attempts=attempts,precision_pass=passed,
                       end_to_end_seconds=time.perf_counter()-STARTED)
     except Exception as exc:
+        phase('worker_error',error=f'{type(exc).__name__}: {exc}')
         report=dict(status='failed',phase='exploratory',qualified=False,plan=plan,
                     error=str(exc),traceback=traceback.format_exc(),attempts=attempts,
                     end_to_end_seconds=time.perf_counter()-STARTED)
     report_path.write_text(json.dumps(clean(report),indent=2,allow_nan=False))
+    phase('worker_terminal',status=report.get('status'),precision_pass=report.get('precision_pass',False))
     (a.out/'invocation-timing.json').write_text(json.dumps(dict(
         seconds_including_imports_and_output=time.perf_counter()-STARTED,
         precision_pass=report.get('precision_pass',False),qualified=False)))
