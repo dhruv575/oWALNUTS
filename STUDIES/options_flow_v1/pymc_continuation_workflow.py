@@ -46,7 +46,8 @@ def write_json(path, value):
 
 def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
                 report, session_factory=None, evaluator=None, screen=None, verify=lambda: None,
-                emit=lambda *args: None, checkpoint=lambda report: None):
+                emit=lambda *args: None, checkpoint=lambda report: None, transport=None,
+                raw_filename='python-pymc-raw.json'):
     """Persist each attempted tier, including failures; injectable seams test transport."""
     import owalnuts
     from pymc_workflow import coordinate_transport
@@ -57,7 +58,7 @@ def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
     screen = screen or precision_screen
     if not tiers or any(n < 4 for n in tiers) or any(b <= a for a, b in zip(tiers, tiers[1:])):
         raise ValueError('Strictly increasing retained tiers >=4 required')
-    to_sampling, to_canonical = coordinate_transport(fixture['data'], coordinates)
+    to_sampling, to_canonical = transport or coordinate_transport(fixture['data'], coordinates)
     sampling_starts = to_sampling(starts)
     report.update(status='running', attempts=[], coordinates=coordinates, initial_positions=starts.tolist(),
                   sampling_initial_positions=sampling_starts.tolist())
@@ -125,10 +126,10 @@ def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
                 emit('evaluation', 'end', tier)
                 result = screen(fit, .02)
                 verify(); emit('serialization', 'start', tier)
-                write_json(fit_dir/'python-pymc-raw.json', dict(canonical_draws=q,
-                           sampling_initial_positions=sampling_starts, coordinates=coordinates,
+                write_json(fit_dir/raw_filename, dict(canonical_draws=q, coordinates=coordinates,
                            retained_chunk_diagnostics=diagnostics, cumulative_work=chunk.cumulative_work,
-                           adapted_metadata=chunk.metadata, initial_positions=starts))
+                           adapted_metadata=chunk.metadata,sampling_initial_positions=sampling_starts,
+                           initial_positions=starts))
                 write_json(fit_dir/'fit-report.json', fit)
                 attempt.update(status='completed', screen=result, added_target_calls=chunk.target_calls,
                                cumulative_target_calls=chunk.cumulative_target_calls)
