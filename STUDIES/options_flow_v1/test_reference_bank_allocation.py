@@ -48,10 +48,11 @@ class AllocationTests(unittest.TestCase):
     def test_child_memory_cap_and_reaped_exit(self):
         import subprocess,sys
         code="from reference_bank_allocation import memory_limit; handle=memory_limit(128*1024**2)\ntry:\n b=bytearray(256*1024**2)\nexcept MemoryError:\n print('limited')\nelse:\n raise AssertionError('cap ineffective')"
-        child=subprocess.Popen([sys.executable,'-c',code],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-        try:out,err=child.communicate(timeout=20)
-        except BaseException:child.kill();child.wait();raise
-        self.assertEqual(child.returncode,0,err);self.assertIn('limited',out);self.assertIsNotNone(child.poll())
+        from hardware_control import wrapper_command,get_affinity
+        with tempfile.TemporaryDirectory() as d:
+            command=wrapper_command([sys.executable,'-c',code],[get_affinity()[0]],Path(d)/'hardware.json',timeout=20)
+            child=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(child.returncode,0,child.stderr);self.assertIn('limited',child.stdout)
     def test_timeout_preserves_full_denominator_and_unknown_peak(self):
         import json,subprocess
         p=self.plan();p['frozen']=True
@@ -85,8 +86,14 @@ p,c=json.loads(Path(sys.argv[1]).read_text());run_worker(p,c,Path(sys.argv[2]))
 """
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/'input.json';r.save(path,[p,c]);out=Path(d)/'worker';out.mkdir()
-            result=subprocess.run([sys.executable,'-c',code,str(path),str(out)],capture_output=True,text=True,timeout=60)
+            from hardware_control import wrapper_command,get_affinity
+            hardware=Path(d)/'hardware.json'
+            command=wrapper_command([sys.executable,'-c',code,str(path),str(out)],[get_affinity()[0]],hardware,timeout=60)
+            result=subprocess.run(command,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
+            containment=json.loads(hardware.read_text())
+            self.assertTrue(containment['descendant_cleanup_requested'])
+            if r.os.name=='nt':self.assertEqual(containment['job_active_processes_after_cleanup'],0);self.assertTrue(containment['containment']['assigned_before_worker_execution'])
             row=json.loads((out/'result.json').read_text());bank=json.loads((out/'bank.json').read_text());usage=json.loads((out/'resources.json').read_text())
             self.assertEqual(row['status'],'completed');self.assertAlmostEqual(row['truth'][0],-1.6448536269514722,places=12)
             self.assertAlmostEqual(row['truth'][1],1.6448536269514722,places=12)
@@ -95,7 +102,29 @@ p,c=json.loads(Path(sys.argv[1]).read_text());run_worker(p,c,Path(sys.argv[2]))
             self.assertAlmostEqual(row['max_endpoint_error_over_width'],max(abs(b['estimate']-t)/width for b,t in zip(row['bounds'],row['truth'])))
             self.assertGreater(usage['peak_resident_bytes'],0)
             if r.os.name=='nt':self.assertGreater(usage['peak_committed_bytes'],0);self.assertLessEqual(usage['peak_committed_bytes'],p['memory_bytes'])
+    def test_real_contained_launcher_descendant_timeout(self):
+        import json,subprocess,sys,time,os
+        from hardware_control import wrapper_command,get_affinity
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);heartbeat=root/'heartbeat';pidfile=root/'pid'
+            descendant="import os,time;from pathlib import Path;p=Path("+repr(str(heartbeat))+");Path("+repr(str(pidfile))+").write_text(str(os.getpid()))\nwhile True:\n p.write_text(str(time.time()));time.sleep(.05)"
+            launcher="import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',"+repr(descendant)+"]);time.sleep(60)"
+            hardware=root/'hardware.json';command=wrapper_command([sys.executable,'-c',launcher],[get_affinity()[0]],hardware,timeout=2)
+            finished=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(finished.returncode,124,finished.stderr);record=json.loads(hardware.read_text())
+            self.assertEqual(record['status'],'worker-timeout');self.assertTrue(record['descendant_cleanup_requested']);self.assertTrue(pidfile.exists())
+            before=heartbeat.read_text();time.sleep(.2);self.assertEqual(heartbeat.read_text(),before)
+            if os.name=='nt':
+                self.assertTrue(record['containment']['assigned_before_worker_execution']);self.assertEqual(record['job_active_processes_after_cleanup'],0)
+                import ctypes
+                api=ctypes.WinDLL('kernel32',use_last_error=True);api.OpenProcess.restype=ctypes.c_void_p;api.CloseHandle.argtypes=[ctypes.c_void_p]
+                handle=api.OpenProcess(0x1000,False,int(pidfile.read_text()))
+                if handle:
+                    code=ctypes.c_ulong();api.GetExitCodeProcess.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_ulong)]
+                    self.assertTrue(api.GetExitCodeProcess(handle,ctypes.byref(code)));api.CloseHandle(handle);self.assertNotEqual(code.value,259)
 if __name__=='__main__':unittest.main()
+
+
 
 
 

@@ -16,7 +16,7 @@ HERE=Path(__file__).resolve().parent
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def save(p,v):
     with Path(p).open('x',encoding='utf-8') as f:json.dump(v,f,indent=2,allow_nan=False)
-def bindings():return {n:sha(HERE/n) for n in ['reference_bank_allocation.py','reference_bank.py','reference_bank_controls.py']}
+def bindings():return {n:sha(HERE/n) for n in ['reference_bank_allocation.py','reference_bank.py','reference_bank_controls.py','hardware_control.py']}
 def versions():return {n:importlib.metadata.version(n) for n in ['numpy','scipy']}
 
 def draft(reserved_seeds,seed=1930000000,seed_audit=None):
@@ -26,7 +26,7 @@ def draft(reserved_seeds,seed=1930000000,seed_audit=None):
     for phase,f,n,rho,shift,i in configurations:
         streams=list(range(cursor,cursor+4*f+1));cursor+=len(streams)
         cells.append(dict(id=f'{phase}-f{f}-n{n}-rho{rho}-shift{shift}-{i}',phase=phase,fits_per_backend=f,lengths=[n//2,n],rho=rho,backend_b_shift=shift,fit_seeds=streams[:2*f],init_seeds=streams[2*f:4*f],bootstrap_seed=streams[-1]))
-    p=dict(frozen=False,qualified=False,phase='exploratory',cells=cells,reserved_seeds=sorted(reserved_seeds),seed_audit=seed_audit,source=bindings(),software=versions(),python=sys.version,wall_seconds=1800,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1)
+    p=dict(frozen=False,qualified=False,phase='exploratory',cells=cells,reserved_seeds=sorted(reserved_seeds),seed_audit=seed_audit,source=bindings(),software=versions(),python=sys.version,interpreter=dict(path=str(Path(sys.executable).resolve()),sha256=sha(sys.executable)),wall_seconds=1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1)
     validate(p);return p
 
 def validate(p):
@@ -45,7 +45,7 @@ def validate(p):
     expected={(f,n,rho,shift):8 for f,n in [(8,4096),(16,2048),(32,1024)] for rho in [0.,.9] for shift in [0.,.1,.5]}
     for c in p['cells'][4:]:expected[(c['fits_per_backend'],c['lengths'][-1],c['rho'],c['backend_b_shift'])]-=1
     if any(expected.values()):raise ValueError('Incorrect allocation denominator')
-    for k,v in dict(wall_seconds=1800,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1).items():
+    for k,v in dict(wall_seconds=1800,cleanup_reserve_seconds=15,memory_bytes=2*1024**3,bootstrap_replicates=30000,minimum_tail_count=20,alpha=.05,relative_half_width=.1,backend_equivalence_relative_width=.02,length_equivalence_relative_width=.1).items():
         if p[k]!=v:raise ValueError('Unsupported prospective budget: '+k)
 
 def projection(sentinels):
@@ -69,6 +69,7 @@ def memory_limit(limit):
     return handle # Keep handle alive until worker exits. No numerical imports yet.
 
 def cell_worker(p,c,out):
+    cpu_started=time.process_time()
     guard=memory_limit(p['memory_bytes'])
     import numpy as np
     from scipy.signal import lfilter
@@ -85,14 +86,16 @@ def cell_worker(p,c,out):
         fits.append(fit)
     spec={k:p[k] for k in ['bootstrap_replicates','minimum_tail_count','alpha','relative_half_width','backend_equivalence_relative_width','length_equivalence_relative_width']}
     spec.update(lengths=c['lengths'],fits=[{k:v for k,v in f.items() if k!='levels'} for f in fits],chains=1,source_sha256=p['source']['reference_bank.py'],target_sha256='normal-zero-one',numerical_policy='validated_estimate',candidate_streams=[],bootstrap_seed=c['bootstrap_seed'],interval_pairs=[['lo','hi']],endpoints={n:dict(kind='parameter',distribution_id='theta',probability=q,scale='unit') for n,q in [('lo',.05),('hi',.95)]})
-    bank=analyze(spec,fits)
+    analysis_started=time.perf_counter();bank=analyze(spec,fits);analysis_seconds=time.perf_counter()-analysis_started
     if 'endpoints' not in bank:raise ValueError('No finite bank bounds: '+str(bank['reasons']))
     vectors=np.asarray([[r['lo'],r['hi']] for r in bank['joint_bootstrap_endpoints']]);shared=vectors-vectors.mean(axis=0)
     # Common reference perturbation reused across20 candidate comparisons.
-    covariance=np.cov(shared.T);repeated=np.broadcast_to(shared[:,None,:],(len(shared),20,2)).mean(axis=1)
+    covariance=np.cov(shared.T)
+    if not np.isfinite(covariance).all() or np.any(np.diag(covariance)<=0):raise ValueError('Degenerate/nonfinite shared reference uncertainty control')
+    repeated=np.broadcast_to(shared[:,None,:],(len(shared),20,2)).mean(axis=1)
     if not np.allclose(np.cov(repeated.T),covariance,rtol=1e-12,atol=1e-15):raise ValueError('Shared reference covariance changed')
     bounds=[bank['endpoints'][n] for n in ['lo','hi']]
-    save(out/'bank.json',bank);save(out/'result.json',dict(status='completed',cell=c,truth=truth.tolist(),bank_status=bank['status'],bank_reasons=bank['reasons'],both_endpoints_cover_truth=all(b['lower']<=t<=b['upper'] for b,t in zip(bounds,truth)),max_endpoint_error_over_width=max(abs(b['estimate']-t)/width for b,t in zip(bounds,truth)),shared_reference_covariance=covariance.tolist(),bounds=bounds,qualified=False))
+    save(out/'bank.json',bank);save(out/'result.json',dict(status='completed',cell=c,truth=truth.tolist(),bank_status=bank['status'],bank_reasons=bank['reasons'],both_endpoints_cover_truth=all(b['lower']<=t<=b['upper'] for b,t in zip(bounds,truth)),max_endpoint_error_over_width=max(abs(b['estimate']-t)/width for b,t in zip(bounds,truth)),shared_reference_covariance=covariance.tolist(),cpu_seconds_before_final_report=time.process_time()-cpu_started,bank_serialized_bytes=(out/'bank.json').stat().st_size,bank_analysis_seconds=analysis_seconds,analysis_seconds_per_bootstrap_including_setup=analysis_seconds/p['bootstrap_replicates'],bounds=bounds,qualified=False))
 
 def verify_seed_audit(p):
     audit=p.get('seed_audit')
@@ -113,14 +116,14 @@ def run(path,out):
     verify_seed_audit(p)
     def verify():
         verify_seed_audit(p)
-        if sha(path)!=original or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version:raise ValueError('Frozen bindings changed')
+        if sha(path)!=original or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Frozen bindings changed')
     verify();out=Path(out);out.mkdir(parents=True,exist_ok=False);start=time.monotonic();rows=[];stop=None
     save(out/'expected.json',dict(plan_sha256=original,cells=p['cells']))
     for i,c in enumerate(p['cells']):
         remaining=p['wall_seconds']-(time.monotonic()-start)
         if i==4:
             projected=projection(rows);save(out/'projection.json',dict(projected_seconds=projected,remaining_seconds=remaining,includes_imports_serialization=True))
-            if projected is None or projected>remaining:stop='sentinel_cost_or_failure'
+            if projected is None or projected>remaining-p['cleanup_reserve_seconds']:stop='sentinel_cost_or_failure'
         if remaining<=0:stop='wall_budget'
         row=dict(id=c['id'],status='not_started',reason=stop,outer_seconds=0.,plan_sha256=original)
         if not stop:
@@ -128,11 +131,21 @@ def run(path,out):
             save(cellout/'started.json',dict(cell=c,plan_sha256=original,started_unix=time.time(),remaining_wall_seconds=remaining))
             try:
                 verify()
+                from hardware_control import wrapper_command,get_affinity
+                remaining=p['wall_seconds']-(time.monotonic()-start)
+                if remaining<=p['cleanup_reserve_seconds']:stop='wall_budget';raise TimeoutError('No compute budget after reserving cleanup')
+                command=[sys.executable,str(Path(__file__).resolve()),'--worker',str(path),'--cell',str(i),'--out',str(cellout)]
+                wrapped=wrapper_command(command,[get_affinity()[0]],cellout/'hardware.json',timeout=remaining-p["cleanup_reserve_seconds"])
                 with (cellout/'worker.log').open('w') as log:
-                    finished=subprocess.run([sys.executable,str(Path(__file__).resolve()),'--worker',str(path),'--cell',str(i),'--out',str(cellout)],stdout=log,stderr=subprocess.STDOUT,timeout=max(.001,remaining),check=True)
-                verify();row.update(json.loads((cellout/'result.json').read_text()));row['worker_exit_code']=finished.returncode
+                    finished=subprocess.run(wrapped,stdout=log,stderr=subprocess.STDOUT,check=False)
+                row['worker_exit_code']=finished.returncode
+                # Preserve exit evidence before any potentially failing postcheck.
+                save(cellout/'worker-exit.json',dict(returncode=finished.returncode,exit_unix=time.time()))
+                verify()
+                if finished.returncode:raise RuntimeError('Contained worker exit '+str(finished.returncode))
+                row.update(json.loads((cellout/'result.json').read_text()))
             except Exception as exc:
-                row.update(status='failed',reason=f'{type(exc).__name__}: {exc}',worker_exit_code=getattr(exc,'returncode',None))
+                row.update(status='failed',reason=f'{type(exc).__name__}: {exc}',worker_exit_code=row.get('worker_exit_code',getattr(exc,'returncode',None)))
                 if isinstance(exc,ValueError):stop='binding_integrity_failure'
             if (cellout/'resources.json').exists():row['resources']=json.loads((cellout/'resources.json').read_text())
             else:row['resources']={'peak_committed_bytes':None,'reason':'Worker exited before resource record; never assume zero peak'} 
@@ -142,7 +155,7 @@ def run(path,out):
     integrity_error=None
     try:verify()
     except Exception as exc:integrity_error=str(exc)
-    save(out/'summary.json',dict(integrity_error=integrity_error,expected=148,completed=sum(r['status']=='completed' for r in rows),failed=sum(r['status']=='failed' for r in rows),not_started=sum(r['status']=='not_started' for r in rows),rows=rows,total_seconds=time.monotonic()-start,qualified=False))
+    save(out/'summary.json',dict(compute_and_cleanup_budget_seconds=p['wall_seconds'],cleanup_reserve_seconds=p['cleanup_reserve_seconds'],timing_scope='Contained inner timeout reserves cleanup inside budget; no unsafe outer launcher kill. Scheduling and terminal bookkeeping may overrun, all charged.',integrity_error=integrity_error,expected=148,completed=sum(r['status']=='completed' for r in rows),failed=sum(r['status']=='failed' for r in rows),not_started=sum(r['status']=='not_started' for r in rows),rows=rows,total_seconds=time.monotonic()-start,qualified=False))
 
 def peak_memory():
     if os.name!='nt':
@@ -166,7 +179,7 @@ def main():
     a=argparse.ArgumentParser();a.add_argument('--out',type=Path,required=True);a.add_argument('--plan',type=Path);a.add_argument('--worker',type=Path);a.add_argument('--cell',type=int);a.add_argument('--reserved-seeds',type=Path);v=a.parse_args()
     if v.worker:
         p=json.loads(v.worker.read_text());validate(p)
-        if not p['frozen'] or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version:raise ValueError('Worker binding mismatch')
+        if not p['frozen'] or p['source']!=bindings() or p['software']!=versions() or p['python']!=sys.version or p['interpreter']!={'path':str(Path(sys.executable).resolve()),'sha256':sha(sys.executable)}:raise ValueError('Worker binding mismatch')
         run_worker(p,p['cells'][v.cell],v.out)
     elif v.plan:run(v.plan,v.out)
     else:
@@ -174,6 +187,10 @@ def main():
         evidence=json.loads(v.reserved_seeds.read_text())
         save(v.out,draft(evidence['reserved_seeds'],seed_audit=dict(path=str(v.reserved_seeds.resolve()),sha256=sha(v.reserved_seeds))))
 if __name__=='__main__':main()
+
+
+
+
 
 
 

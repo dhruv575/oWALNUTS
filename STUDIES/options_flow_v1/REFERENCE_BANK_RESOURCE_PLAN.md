@@ -28,7 +28,7 @@ Use30000 whole-fit bootstrap resamples, stratified by backend, with one common f
 
 ## Bounded execution and acceptance
 
-First run four disjoint timing-only sentinel trials: balanced allocation, each rho, shifts0/.5, with the full bootstrap count. These are an additional declared feasibility set, not replacements for failed144-trial cells. Record wall/CPU, peak memory, serialization volume and per-bootstrap costs; all failures remain in the denominator. Before launch, freeze a sequential-worker limit, a total30minute wall cap and2GiB process-memory cap including the sentinels. Do not silently reduce resamples or continue beyond the cap. Extrapolate144-trial cost from the slowest relevant sentinel with a2x contingency. Proceed within the same frozen campaign only if the estimate fits the remaining cap; otherwise terminate as resource unresolved and design a new campaign. Resource estimates are not sampler performance benchmarks.
+First run four disjoint timing-only sentinel trials: balanced allocation, each rho, shifts0/.5, with the full bootstrap count. These are an additional declared feasibility set, not replacements for failed144-trial cells. Record wall/CPU, peak memory, serialization volume and per-bootstrap costs; all failures remain in the denominator. Before launch, freeze a sequential-worker limit, a 30-minute compute-and-cleanup budget and a 2GiB process-memory cap including the sentinels. Reserve 15 seconds for contained cleanup inside that budget; the inner worker timeout receives only the remaining budget minus that reserve. Scheduling and terminal bookkeeping can overrun the nominal budget and remain charged in reported total elapsed time. This is not a literal real-time hard deadline. Do not silently reduce resamples or continue beyond the cap. Extrapolate the 144-trial cost from the slowest sentinel with a **4x planning multiplier: 2x contingency multiplied by 2x for the largest fit-count or path-length allocation change from the balanced sentinel**. The four sentinel costs are already charged; compare this projection with the remaining wall budget. This is a conservative planning heuristic, not a proved runtime upper bound. Proceed within the same frozen campaign only if the estimate fits the remaining cap; otherwise terminate as resource unresolved and design a new campaign. Resource estimates are not sampler performance benchmarks.
 
 For each allocation/rho report full-denominator valid-null resolution, shifted false resolution, simultaneous coverage of the two analytic quantiles, maximum actual endpoint error/known width, reference half-width, backend and length bounds, and all failure reasons. Report exact binomial uncertainty for rates; eight trials cannot establish a small false-resolution probability. Include finite returned bounds from unresolved banks in coverage diagnostics, clearly separate from usable resolved outputs.
 
@@ -70,3 +70,36 @@ Relative bank half-widths .002W, .005W and .01W respectively contribute uncertai
 For all three, the actual .02W RMS-error and .04W absolute-error usability criteria, if retained, must be evaluated using propagated conservative error bounds and full failed-procedure denominators. A reported MCSE of .02W is not itself an absolute-error guarantee. Near-boundary outcomes can remain unresolved even with a .001W bank. Repeatability/MCSE calibration, known-marginal estimator controls, posterior diagnostic reliability, and market predictive utility remain different claims.
 
 A resource-limited prospective alternative would freeze a maximum bank budget, publish endpoint-wise reference uncertainty at that cap, and report identified bias/RMS/usability intervals at their achieved resolution. It can support statements such as an explicit upper bound on computational endpoint error, or detection of a discrepancy larger than the reference uncertainty, only when the resulting intervals justify them. It cannot silently claim the earlier .001-width design passed. This alternative should be selected for scientific usefulness and available resources before new outcomes, with its own uncertainty method and claim scope, rather than requiring unbounded reference computation.
+
+
+## Static execution-readiness review (before launch)
+
+The draft controller must use the existing assign-before-resume process-tree
+containment for its actual worker launch. A `subprocess.run` timeout alone can
+kill the Windows virtual-environment launcher while leaving the numerical child
+alive. The worker's process-memory JobObject is not a substitute for kill-on-close
+tree containment. Verify the actual descendant cleanup path with a real timeout
+control before running sentinels; mocked timeout tests only check accounting.
+
+Persist each returned exit code before post-worker provenance verification, and
+recompute the remaining global deadline immediately before launching a worker.
+Any provenance failure must preserve the completed attempt's cost and exit code
+and terminalize all remaining intended cells. Freeze the actual interpreter
+path/hash as well as its version string. Keep all 148 intended outcomes visible,
+including a resource-driven stop after the four sentinels.
+
+The initial review found missing CPU time, serialized byte count and per-bootstrap
+cost fields, plus a covariance check that could pass vacuously at zero variance.
+Corresponding controller corrections have been statically authored, including
+interpreter identity, resource fields and finite positive covariance diagonals;
+they remain pending quiet-window tests. Report actual bank-analysis time per
+bootstrap including its setup, not an unmeasured inner-loop timing.
+
+The revised controller reserves 15 seconds for cleanup **inside** the 1,800-second
+budget and has no unsafe outer launcher timeout. It recomputes remaining time
+after verification, then gives the contained worker the remainder minus that
+reserve. No new worker starts once only the reserve remains. Scheduling and
+terminal bookkeeping overruns are explicitly charged, not hidden behind a claim
+of a strict real-time total wall cap. A combined contained analytic-worker test
+must verify the nested process-memory job and descendant cleanup together before
+sentinel execution; separate tests of each mechanism are weaker evidence.
