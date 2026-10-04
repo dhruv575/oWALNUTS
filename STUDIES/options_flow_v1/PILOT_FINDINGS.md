@@ -22,10 +22,17 @@ difference from a reference trade no older than 30 minutes at cutoff. Without
 that reference, the anchored return itself is undefined. An available trailing
 flow feature (including valid zero flow) does not establish that anchor.
 
-No rolling campaign has launched. The adapter/controller correction must use
-feature AND known-anchor availability, retain every scheduled cell, distinguish
-no eligible forecast from a successful fit, and join future outcomes only after
-inference. Earlier scenario outputs do not establish an operational forecast.
+No rolling campaign has launched. The correction integrated as `447a990` uses
+feature AND known-anchor availability, retains every scheduled cell, distinguishes
+no eligible forecast from a successful fit, and joins future outcomes only after
+inference. The derived anchor panel resolves exact trade identities, timestamps
+and positive prices from hash-bound archived files without modifying originals.
+Read-only real-panel checks confirm five eligible cells, two observed labels,
+and three empty origins (144, 192, 240); inference labels remain absent. Skipped
+workers have zero worker cost, while their controller overhead stays charged.
+Focused and actual-worker checks pass; `ANCHORED_ROLLING_REPLAY.md` records the
+validation, including one concurrent-source guard failure and its clean rerun.
+Earlier scenario outputs do not establish an operational forecast.
 Even after correction, this fixed sparse panel cannot support a substantive
 predictive utility or coverage claim. A richer evaluation needs a prospectively
 selected active universe, without choosing origins based on future labels.
