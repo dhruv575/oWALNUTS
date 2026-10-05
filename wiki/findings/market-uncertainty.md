@@ -301,3 +301,12 @@ The full new campaign cost 1,041.78 seconds. See
 Further complexity tuning on this same development history is stopping;
 validation on a separately fixed period and the ongoing live schedule remain
 necessary. The live model is not changed after inspecting these results.
+
+A separate October validation is now running: 32 fixed forecast origins and
+64 paired no-flow SV fits, compared with the unchanged exact price-only
+baseline. The scientific choices were frozen before acquiring the historical
+October bars. Twelve preparation/reporting tests and an independent causal
+audit passed. See [October launch evidence](../../STUDIES/market_uncertainty_v1/artifacts/sv-october-validation-launch-v1/RESULTS.md).
+This four-day retrospective comparison assumes zero publication lag and does
+not establish general calibration; existing live October receipts also mean
+the market period was not universally unseen. Terminal results are pending.

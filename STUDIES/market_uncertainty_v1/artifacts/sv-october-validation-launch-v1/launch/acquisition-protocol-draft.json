@@ -1,0 +1,22 @@
+{
+  "schema": "historical-pooled-option-flow-v1",
+  "status": "draft_requires_root_freeze",
+  "start_ms": 1790812800000,
+  "end_ms_exclusive": 1791158400000,
+  "max_requests": 1000,
+  "max_bytes": 134217728,
+  "max_seconds": 1200,
+  "max_response_bytes": 1048576,
+  "minimum_free_bytes": 12884901888,
+  "minimum_request_interval_seconds": 0.5,
+  "estimand": "Retrospective event-time pooled BTC option aggressor amount versus next completed BTC-PERPETUAL 30-minute traded bar-close log return; not receipt-time or midpoint.",
+  "phase": "Independent calendar-period validation of a September-selected no-flow model; retrospective availability assumptions",
+  "print_policy": "All returned BTC option prints included; raw combo/block metadata retained without inferred causal interpretation",
+  "chronological_split": {
+    "training": "256 prior half-hour origins, mature labels only, crossing September/October boundary",
+    "evaluation": "32 fixed origins Oct1 00:00 through Oct4 21:00UTC; labels at origin+30min",
+    "selection": "Model selected on September; no October tuning"
+  },
+  "bar_publication_lag_ms": 0,
+  "bar_publication_assumption": "Zero publication lag after bar end is assumed for retrospective replay, not empirically guaranteed."
+}
