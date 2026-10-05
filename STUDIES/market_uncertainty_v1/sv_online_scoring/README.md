@@ -17,3 +17,15 @@ The admitted interval must equal the bound public-worker result, which must pass
 Terminal or later-prefix hashes are checked before and after scoring. Late gaps intersecting any original acknowledged coverage conservatively invalidate a forecast, including when they could retract training inputs. Current features are rebuilt and compared before using the mature 30-minute midpoint-return label. The score reports width, coverage and the proper nominal-90% interval score; none implies calibration from one or a few observations.
 
 Eight mocked tests cover terminal/provisional scoring, wrong identity, future-label leakage, gap retraction, nonsuccess denominator, numerical gates beyond boolean claims and mutation during scoring. An integration test calls the actual issuer, snapshot and feature builders with a mock sampler, then scores a later immutable prefix and terminal capture and retracts the score after a late gap. Production hardware/config hash pairs are validated when present. No live SV issuance or actual sampler run has been deployed by this prototype.
+
+## Complete final aggregation
+
+```
+python aggregate.py --plan SCHEDULE/plan.json --events SCHEDULE/events.jsonl --scores FINAL_SCORE_1.json FINAL_SCORE_2.json ... --out NEW_AGGREGATE.json
+```
+
+Supply exactly one final score and one event for each of the 95 distinct planned origins. Provisional scores, duplicate or missing origins, and changed event issuance bytes are rejected. No-forecast, unavailable and failed outcomes remain in the denominator; zero scored outcomes produce null coverage/width/score means. Coverage is explicitly conditional on scored forecasts, alongside all-origin usable and covering fractions.
+
+Changed or missing transitive source/data lineage invalidates the affected origin instead of aborting the entire denominator. The original score status is retained. Direct plan/event/score identities and event-bound issuance files remain mandatory and are checked before and after aggregation. These are local byte-identity checks, not externally certified clock evidence.
+
+Optional `--baseline-scores` accepts final exact-baseline scores; comparisons use only common scored origins with identical observed returns. Baselines are not needed for an SV-only summary. Paired results remain descriptive for dependent market outcomes, with no calibration qualification.
