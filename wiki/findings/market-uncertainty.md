@@ -169,3 +169,17 @@ Hybrid time was 29.91 seconds versus 5.48 seconds for reference, but there is
 no eligible speed comparison: precision differed and hybrid chains ran
 sequentially while the reference ran in parallel. No retry or tuning followed.
 See [the retained diagnostic](../../STUDIES/market_uncertainty_v1/artifacts/sv-hybrid-t32-v1/RESULTS.md).
+
+The first historical SV pilot then fitted all four flow ablations with both
+full-joint samplers at the fixed September 15 00:00 UTC validation origin.
+Every fit used the preceding 256 scheduled observations, unchanged illustrative
+priors, and the existing health/endpoint gates. All eight fits passed. Public
+complete-process costs totaled 23.47 seconds across four fits, versus 40.19
+seconds for reference; individual ranges were 5.36–6.91 and 8.11–11.16 seconds.
+All source/runtime identities, CPU containment and saved coordinate transforms
+verified. This is computational feasibility on one actual market posterior per
+ablation, not evidence of predictive quality, reliable speed across periods, or
+which flow placement is best. See
+[historical SV evidence](../../STUDIES/market_uncertainty_v1/artifacts/sv-historical-pilot-v1/RESULTS.md).
+The next study is a fixed rolling grid of historical forecast times, with
+model-quality and matched sampler-cost comparisons reported separately.

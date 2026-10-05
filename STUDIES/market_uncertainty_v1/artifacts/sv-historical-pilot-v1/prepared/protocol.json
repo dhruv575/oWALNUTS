@@ -1,0 +1,83 @@
+{
+  "status": "diagnostic_preparation",
+  "qualified": false,
+  "origin_ms": 1789430400000,
+  "origin_utc": "2026-09-15T00:00:00Z",
+  "ablations": [
+    "neither",
+    "mean",
+    "scale",
+    "both"
+  ],
+  "minimum_history": 20,
+  "lookback": 256,
+  "rho": 0.9,
+  "nu": 5.0,
+  "priors": {
+    "mu_mean": -10.596634733096073,
+    "mu_sd": 1.0,
+    "log_sigma_mean": -1.6094379124341003,
+    "log_sigma_sd": 0.5,
+    "beta_sd": 0.002,
+    "gamma_sd": 0.03
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "tiers": [
+    1000,
+    2000,
+    4000
+  ],
+  "cpus": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "timeout_seconds_per_fit": 1800,
+  "global_seconds": 21600,
+  "disk_floor_bytes": 12884901888,
+  "streams": [
+    {
+      "ablation": "neither",
+      "starts": 991901,
+      "sampler": 991905,
+      "predictive": 991909,
+      "order": [
+        "public",
+        "reference"
+      ]
+    },
+    {
+      "ablation": "mean",
+      "starts": 991902,
+      "sampler": 991906,
+      "predictive": 991910,
+      "order": [
+        "reference",
+        "public"
+      ]
+    },
+    {
+      "ablation": "scale",
+      "starts": 991903,
+      "sampler": 991907,
+      "predictive": 991911,
+      "order": [
+        "public",
+        "reference"
+      ]
+    },
+    {
+      "ablation": "both",
+      "starts": 991904,
+      "sampler": 991908,
+      "predictive": 991912,
+      "order": [
+        "reference",
+        "public"
+      ]
+    }
+  ],
+  "scope": "Single fixed historical validation origin; illustrative priors unchanged; no calibration or speed qualification; every intended fit retained"
+}
