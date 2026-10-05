@@ -250,7 +250,7 @@ errors. Fourteen mocked tests passed; this is evaluation infrastructure, not
 observed market performance. See
 [aggregate validation](../../STUDIES/market_uncertainty_v1/artifacts/live-sv-aggregate-validation-v1.json).
 
-Two research routes remain candidates, not implemented or selected models.
+Two research routes remain candidates for improving predictive quality.
 First, test coarse contract-marked flow (put/call, maturity and moneyness) in
 volatility dynamics against the same SV model without flow and with pooled
 flow. Evidence linking buying pressure to implied-volatility shape
@@ -266,3 +266,21 @@ on a subsequently frozen calendar period. Current historical results are
 development evidence. Future-return intervals are predictive intervals;
 coefficient posterior intervals and confidence intervals for forecast
 performance answer different questions.
+
+The first route now has a separate development implementation. All 201,712
+September trades retain valid required contract marks. The coverage-aware
+24-bucket builder conserves pooled counts and amounts over 1,440 windows;
+missing coverage rejects admission instead of implying zero trading. The
+adapter compares no flow, pooled activity and marked activity in volatility,
+keeping the mean at intercept plus lagged return. Training-only log-amount
+scaling and explicit dimension-scaled illustrative priors are fixed choices,
+not learned evidence of useful flow effects. Fifteen construction/admission
+tests pass. See [feature evidence](../../STUDIES/market_uncertainty_v1/artifacts/marked-flow-conservation-v1/validation.json).
+
+At the fixed September 15 pilot origin, all six public/reference fits passed.
+The marked-activity model cost 7.53 seconds public versus 8.54 seconds reference;
+the full six-fit campaign cost 48.31 seconds. Source, runtime, reported numerical
+gates, paired starts and hardware checks passed. This establishes one-origin
+computational feasibility, not improved forecasts. See
+[pilot evidence](../../STUDIES/market_uncertainty_v1/artifacts/marked-sv-pilot-v1/README.md).
+A 72-origin development comparison is being prepared; it has not run yet.
