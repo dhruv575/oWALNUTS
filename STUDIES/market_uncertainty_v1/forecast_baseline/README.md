@@ -11,8 +11,8 @@ Validation: **11 tests and 15 subtests passed**, covering prior-only controls, f
 From the repository root:
 
 ```powershell
-python -m pytest target/market-forecast-interface-v1/test_forecast.py -q
-python target/market-forecast-interface-v1/forecast.py --features PATH-TO-FEATURES.json --output NEW-FORECASTS.json
+python -m pytest STUDIES/market_uncertainty_v1/forecast_baseline/test_forecast.py -q
+python STUDIES/market_uncertainty_v1/forecast_baseline/forecast.py --features PATH-TO-FEATURES.json --output NEW-FORECASTS.json
 ```
 
 Outputs are exclusive and include feature/source hashes, numerical-library version and procedure minimum history. Input/source bytes are checked again before writing. The next small oracle test should freeze an identical standardized design and prior, sample the same joint beta/log-variance target with oWalnuts, and compare with these exact parameter and observed-predictive distributions. Such a check is correctness evidence on an easy target, not hard-case qualification.

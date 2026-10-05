@@ -53,6 +53,13 @@ single-fixture results, not a repeated speed qualification or market validation.
    an exact linear-state block coupled to oWALNUTS for non-Gaussian volatility
    and global parameters, rather than claiming generic sampling is necessary.
 
+Parallel continuation was integrated on main as `4fe485d`. The default stays
+single-threaded; explicit multiple threads advance independent chains in a
+bounded pool while preserving per-chain state. Rust and isolated debug Python
+checks cover exact replay, concurrency and lifecycle behavior. A separate release
+build and latency experiment are pending; the old attested study runtime was
+not replaced. See [the API note](../../integrations/python/PARALLEL_CONTINUATION.md).
+
 Keep future-observation predictive intervals, posterior parameter credible
 intervals and repeated-sample confidence intervals explicitly distinct. The
 current market deliverable is predictive uncertainty; no broad coverage

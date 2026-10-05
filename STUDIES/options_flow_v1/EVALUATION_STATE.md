@@ -76,6 +76,15 @@ Next work separates workflow cost improvements, calibration across demanding
 fresh datasets, and viable chronological market data. Small feasibility cohorts
 and fixed-target repetitions cannot replace repeated-data or market validation.
 
+The upcoming likelihood comparison retains the existing single-CPU procedure.
+Parallel continuation is now implemented separately on main (commit `4fe485d`),
+with exact replay and lifecycle tests; see
+`integrations/python/PARALLEL_CONTINUATION.md`. The previously attested study
+runtime remains unchanged, and `ContinuedReference` still uses sequential chains.
+A multicore latency study must build and identify its own release runtime and
+compare an equally capable parallel reference. No speed result follows from the
+correctness tests or the single-CPU likelihood experiment.
+
 ## Historical development decisions (before the completed bank and comparison)
 
 The A/B/A compatibility check and actual-market timing study are complete.
