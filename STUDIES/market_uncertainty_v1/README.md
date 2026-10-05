@@ -185,3 +185,25 @@ label under an explicitly diagnostic 20-label admission setting). No market SV
 fit was forced. Full workflow setup and diagnostics dominate the tiny measured
 kernel times, so the next compute work should separate reusable validation/setup
 from necessary per-fit work and test fresh datasets before drawing speed claims.
+
+The six fresh synthetic dataset comparison is now complete: both arms passed
+all six fits, with total complete-process costs of 44.63 seconds for oWALNUTS
+and 56.32 seconds for NumPyro. These exploratory results include all attempts
+and setup costs; they do not establish general speed or market calibration.
+See `artifacts/sv-fresh-dataset-comparison-v1/RESULTS.md`.
+
+The historical route now has a complete September API acquisition and an exact
+chronological baseline comparison. In the final 432 scored origins, adding
+flow to the mean slightly worsened interval and log scores despite slightly
+increasing coverage. This is retrospective event-time flow/bar-close evidence
+with explicit timing assumptions, separate from the live receipt workflow.
+See `artifacts/historical-baseline-evaluation-v1/RESULTS.md` and
+`artifacts/historical-september-acquisition-v1/RESULTS.md`.
+
+`sv_prototype/historical_inputs.py` admits verified historical rows directly,
+without relabeling them as receipt-time observations. It preserves missing
+latent steps and admits only labels matured by the forecast origin. Three
+tests cover all four ablations, causal perturbations and grid integrity.
+The standalone specialist sampler in `sv_hybrid` is a separate comparator,
+not an oWALNUTS feature; its first fixed diagnostic missed endpoint precision.
+The historical evaluator, adapter and hybrid controls passed 14 tests together.

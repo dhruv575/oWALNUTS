@@ -136,11 +136,36 @@ and supplies no coverage observation. Later terminal reconciliation remains
 required; see
 [the immutable score](../../STUDIES/market_uncertainty_v1/artifacts/first-provisional-score-v1/provisional-score.json).
 
-A separate historical capability probe found September pooled BTC-option
-trades on the history host and half-hour perpetual bars. The same older trade
-query returned empty on the production host, so empty responses there cannot
-establish zero flow. Completeness is still unproven. This route targets
-retrospective event-time flow and bar-close returns, with closes available only
-after bar end under an explicit publication assumption. It must remain
-separate from live receipt-time midpoint forecasts. Historical data can speed
-development and stress testing; genuinely future evaluation is still needed.
+A separate September historical acquisition completed API-level coverage with
+201,712 unique pooled BTC-option trades and 1,440 half-hour perpetual bars.
+The collector subdivides saturated time windows, checks complete leaf coverage,
+and rejects conflicting duplicate IDs. It used 628 requests and 121 MB of
+responses in 376.6 seconds. See
+[acquisition evidence](../../STUDIES/market_uncertainty_v1/artifacts/historical-september-acquisition-v1/RESULTS.md).
+The history host is necessary: an earlier production-host query returned empty
+for an interval where history records existed. API coverage does not certify
+exchange data accuracy, publication latency, or absence of later revisions.
+
+The frozen chronological exact baseline completed on this dataset. Its final
+September 22–30 segment has 432 common scored origins. Price-only versus
+flow-in-mean results were 93.52% versus 93.98% coverage for nominal 90%
+predictive intervals, interval scores 0.0135421 versus 0.0135737 (lower is
+better), and log scores 4.44556 versus 4.44232 (higher is better). Flow slightly
+improved coverage but worsened both proper scores; this simple specification
+does not demonstrate incremental predictive value. All 1,440 scheduled origins
+per arm remain recorded, including 21 initial no-forecast outcomes and the
+final October 1 origin with no subsequent observed label. See
+[baseline evidence](../../STUDIES/market_uncertainty_v1/artifacts/historical-baseline-evaluation-v1/RESULTS.md).
+These are retrospective event-time/bar-close results under explicit bar-open
+timestamp and zero publication-lag assumptions, not live receipt-time midpoint
+forecasts. Temporal dependence precludes an ordinary independent-binomial
+coverage guarantee; genuinely future evaluation remains necessary.
+
+A specialist Gamma/Gaussian plus elliptical/scalar-slice comparator passed six
+mathematical and transition tests. Its fixed T32 diagnostic completed with
+healthy chains but failed the declared endpoint-precision gate for volatility
+scale and terminal log volatility. The full-joint NumPyro reference passed.
+Hybrid time was 29.91 seconds versus 5.48 seconds for reference, but there is
+no eligible speed comparison: precision differed and hybrid chains ran
+sequentially while the reference ran in parallel. No retry or tuning followed.
+See [the retained diagnostic](../../STUDIES/market_uncertainty_v1/artifacts/sv-hybrid-t32-v1/RESULTS.md).
