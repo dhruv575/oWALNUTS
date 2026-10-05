@@ -108,6 +108,16 @@ adaptation also matter. The comparison retains its two reused development seeds,
 complete costs, and limits. Finer continuation increments are a separate pilot,
 not a changed interpretation of these results.
 
+The completed finer-tier mechanism pilot is in
+`artifacts/finer-continuation-pilot-v1/`. Keeping the same precision gates,
+oWALNUTS passed at 2,500/2,000 draws in 45.88s/35.31s; the parallel reference
+passed at 2,000/2,000 in 33.49s/33.59s. All eight shared 1k/2k raw prefixes
+matched the previous runs byte-for-byte. The selected first public case improved
+from 56.09s, but the reference remained faster. The original launcher import
+failure and its costs are retained: corrected run 148.73s, failed attempt 80.03s.
+These are reused development seeds and a changed 4k resource cap, not a fresh
+speed or reliability qualification.
+
 `sv_prototype/` implements a normalized heavy-tailed return model where option
 flow can affect expected return and latent volatility separately. Its analytical
 gradient is checked against finite differences of a centered-density oracle.

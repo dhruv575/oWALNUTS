@@ -1,0 +1,9 @@
+# Finer continuation: completed development pilot
+
+Corrected run-v2 completed all four fits with unchanged health and interval precision gates. Public seed4101 first passed at2,500 draws in45.876s, compared with its earlier4,000-draw56.093s result. Public seed4201 passed at2,000 in35.312s. Parallel NumPyro passed both at2,000 in33.491s and33.590s. The finer schedule saved work in the deliberately selected public near-threshold case but did not reverse the reference advantage.
+
+All eight overlapping1k/2k raw files were byte-identical to the previous coarse-schedule runs. This includes reference batch500 versus its previous batch1000. Thus the observed checkpoint change did not alter those retained sample paths or stored starts. This is posthoc development evidence using reused seeds, not fresh confirmation; host receipt collectors and potentially brief pure tests/light reads make it nonexclusive timing.
+
+The first v1 attempt failed both public workers before adaptation because this prototype's run.py shadowed study run.py. Both reference fits completed. Its80.026s cost and frozen source snapshot remain preserved. V2 placed the worker's study directory first, passed an actual transitive no-MCMC import check, then ran the unchanged schedule. V2 total cost148.725s; combined research execution cost228.751s. No thresholds were weakened, no extra grid was run, and the4k cap remains explicitly distinct from the historical8k cap.
+
+Next compute work should focus on repeated-fit compile/adaptation reuse with fresh adaptation for changed posteriors, and symmetric lossless storage to reduce repeated checkpoint cost. Neither is established by this pilot. No additional sampling was launched. Both authoritative sessions60446 and95049 explicitly exited0; worker failures in v1 remain visible independently of launcher status.
