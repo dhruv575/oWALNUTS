@@ -283,4 +283,11 @@ the full six-fit campaign cost 48.31 seconds. Source, runtime, reported numerica
 gates, paired starts and hardware checks passed. This establishes one-origin
 computational feasibility, not improved forecasts. See
 [pilot evidence](../../STUDIES/market_uncertainty_v1/artifacts/marked-sv-pilot-v1/README.md).
-A 72-origin development comparison is being prepared; it has not run yet.
+A 72-origin development comparison has launched with 156 intended fits:
+72 public pooled-activity, 72 public marked-activity, and 12 matched
+marked-activity reference fits. Exact canonical target comparisons permit
+reuse of all 72 prior no-flow forecasts; their previous costs are excluded
+from new timing comparisons. The fixed source/configuration and reuse proof
+are preserved in [launch evidence](../../STUDIES/market_uncertainty_v1/artifacts/marked-sv-rolling-launch-v1/RESULTS.md).
+The original process is recorded in
+`target/marked-sv-rolling-v1/execution-handle.json`; results remain pending.
