@@ -711,7 +711,7 @@ def start_session(
     """Create a CFunc-only continuation session with a fixed lifetime budget.
 
     ``init`` must explicitly contain every chain's start, shape (chains, dim).
-    Only sequential identity/diagonal sampling is supported. Numerical kernel,
+    Only identity/diagonal sampling is supported. Threads bound parallel chains. Numerical kernel,
     warmup, tuning, seed derivation and cache defaults equal ordinary sample().
     Admission and max_target_evaluations cover warmup plus max_draws across all
     chains, not individual chunks. No target calls occur before adapt().
@@ -721,14 +721,14 @@ def start_session(
     for name, value, minimum in [("chains", chains, 1), ("max_draws", max_draws, 1), ("warmup", warmup, 0)]:
         if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < minimum:
             raise ValueError(f"{name} must be an integer >= {minimum}")
-    if threads != 1:
-        raise ValueError("continuation requires threads=1")
+    if isinstance(threads, bool) or not isinstance(threads, (int, np.integer)) or threads < 1:
+        raise ValueError("threads must be a positive integer")
     starts = np.ascontiguousarray(init, dtype=np.float64)
     if starts.shape != (chains, target.dim) or not np.isfinite(starts).all():
         raise ValueError("init must be a finite (chains, target.dim) matrix")
     if mass is not None and np.asarray(mass).ndim != 1:
         raise ValueError("continuation supports identity/diagonal mass only")
-    cfg = _config_dict(warmup=warmup, draws=max_draws, seed=seed, threads=1,
+    cfg = _config_dict(warmup=warmup, draws=max_draws, seed=seed, threads=int(threads),
         tuning=tuning, adaptation=adaptation, mass=mass,
         max_target_evaluations=max_target_evaluations,
         max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,

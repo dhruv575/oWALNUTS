@@ -19,23 +19,24 @@ def gaussian():
     return owalnuts.from_cfunc(callback,2)
 
 
+@pytest.mark.parametrize('threads',[1,4])
 @pytest.mark.parametrize('cache',[False,True])
-def test_chunked_sampling_is_bitwise_equal_to_ordinary_sample(cache):
-    target=gaussian();starts=np.array([[.1,-.2],[-.3,.4]])
+def test_chunked_sampling_is_bitwise_equal_to_ordinary_sample(cache,threads):
+    target=gaussian();starts=np.array([[.1,-.2],[-.3,.4],[.5,-.6],[-.7,.8]])
     tuning=owalnuts.Tuning(max_depth=5)
-    settings=dict(init=starts,chains=2,warmup=60,seed=8172,threads=1,tuning=tuning,cache_initial_evaluation=cache)
+    settings=dict(init=starts,chains=4,warmup=60,seed=8172,threads=threads,tuning=tuning,cache_initial_evaluation=cache)
     full=owalnuts.sample(target,draws=13,**settings)
     with owalnuts.start_session(target,max_draws=13,**settings) as session:
         assert session.progress()['target_calls']==0
         with pytest.raises(Exception):session.draw(1)
         warmup=session.adapt()
-        assert warmup.is_warmup and warmup.samples.shape==(2,0,2)
+        assert warmup.is_warmup and warmup.samples.shape==(4,0,2)
         with pytest.raises(Exception):session.adapt()
         with pytest.raises(Exception):session.draw(14)
         chunks=[session.draw(1),session.draw(5),session.draw(7)]
         np.testing.assert_array_equal(np.concatenate([c.samples for c in chunks],axis=1),full.samples)
         assert [(c.retained_start,c.retained_end) for c in chunks]==[(0,1),(1,6),(6,13)]
-        for i in range(2):
+        for i in range(4):
             transition_fields=['depth','stop','target_evaluations','divergent','max_abs_energy_error',
                 'leaves_built','selected_refinement_level','zero_density_evaluations','trajectory_macro_length']
             assert set(chunks[-1].diagnostics[i])==set(transition_fields)
@@ -62,7 +63,7 @@ def test_native_worker_owns_compiled_target_until_closed():
 
 def test_invalid_inputs_and_cancel_before_adapt():
     target=gaussian();settings=dict(init=np.zeros((1,2)),chains=1,max_draws=2,warmup=2)
-    for changes in [dict(threads=2),dict(max_draws=0),dict(init=np.zeros(2)),dict(mass=np.eye(2)),dict(init=np.array([[np.nan,0.]]))]:
+    for changes in [dict(threads=0),dict(threads=True),dict(threads=1.5),dict(max_draws=0),dict(init=np.zeros(2)),dict(mass=np.eye(2)),dict(init=np.array([[np.nan,0.]]))]:
         with pytest.raises((ValueError,RuntimeError)):owalnuts.start_session(target,**dict(settings,**changes))
     with pytest.raises(TypeError):owalnuts.start_session(lambda x:x,**settings)
     session=owalnuts.start_session(target,**settings)

@@ -975,7 +975,7 @@ impl Sampler {
         self.run_with_control_value(target, starts, RunControl::new())
     }
 
-    /// Start an owned sequential continuation session. `draws` is the lifetime
+    /// Start an owned continuation session with bounded parallel chains. `draws` is the lifetime
     /// retained budget per chain. Warmup runs once; `draw(n)` returns new draws
     /// and cumulative telemetry. Only identity/diagonal metrics are supported.
     /// The target must remain deterministic across calls and is owned by the
@@ -985,8 +985,9 @@ impl Sampler {
         target: T,
         starts: &[Vec<f64>],
     ) -> Result<SessionHandle, Error> {
-        if self.threads.unwrap_or(1) != 1 {
-            return Err(Error::configuration("continuation requires threads=1"));
+        let threads = self.threads.unwrap_or(1);
+        if threads == 0 {
+            return Err(Error::configuration("threads must be positive"));
         }
         let config = self.run_config()?;
         let starts = self.starts(starts)?;
@@ -1032,6 +1033,7 @@ impl Sampler {
             target,
             starts,
             crate::walnutpie::session::SessionSetup {
+                threads,
                 config,
                 mass,
                 budget,

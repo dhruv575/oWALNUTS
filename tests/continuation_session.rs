@@ -148,7 +148,7 @@ fn unsupported_configuration_and_admission_make_zero_target_calls() {
     let calls = Arc::clone(&target.calls);
     assert!(
         sampler(true)
-            .threads(2)
+            .threads(0)
             .start_session(target.clone(), &starts())
             .is_err()
     );
@@ -336,4 +336,240 @@ fn callback_close_cancels_without_joining_itself_and_external_close_reaps() {
     assert!(saw_error.load(Ordering::Acquire));
     assert!(dropped.load(Ordering::Acquire));
     assert!(session.progress().closed);
+}
+
+#[test]
+fn parallel_four_chains_match_sequential_chunks_and_ordinary_run() {
+    let starts = vec![
+        vec![0.1, -0.3],
+        vec![-0.2, 0.4],
+        vec![0.7, 0.8],
+        vec![-0.8, -0.6],
+    ];
+    for cache in [false, true] {
+        let full = sampler(cache)
+            .threads(4)
+            .run(&Gaussian::new(), &starts)
+            .unwrap();
+        let seq = sampler(cache)
+            .start_session(Gaussian::new(), &starts)
+            .unwrap();
+        let par = sampler(cache)
+            .threads(4)
+            .start_session(Gaussian::new(), &starts)
+            .unwrap();
+        let sw = seq.adapt().unwrap();
+        let pw = par.adapt().unwrap();
+        assert_eq!(sw.target_calls, pw.target_calls);
+        for i in 0..4 {
+            assert_eq!(sw.chains[i].diagnostics, pw.chains[i].diagnostics);
+        }
+        let mut samples = vec![Vec::new(); 4];
+        for n in [1, 5, 7] {
+            let a = seq.draw(n).unwrap();
+            let b = par.draw(n).unwrap();
+            assert_eq!(a.target_calls, b.target_calls);
+            assert_eq!(a.cumulative_target_calls, b.cumulative_target_calls);
+            for i in 0..4 {
+                assert_eq!(a.chains[i].samples, b.chains[i].samples);
+                assert_eq!(a.chains[i].diagnostics, b.chains[i].diagnostics);
+                assert_eq!(a.chains[i].telemetry, b.chains[i].telemetry);
+                assert_eq!(a.chains[i].mass_diagonal, b.chains[i].mass_diagonal);
+                assert_eq!(a.chains[i].tuning, b.chains[i].tuning);
+                samples[i].extend_from_slice(&b.chains[i].samples);
+            }
+        }
+        for i in 0..4 {
+            assert_eq!(samples[i], full.chains()[i].samples());
+        }
+        seq.close().unwrap();
+        par.close().unwrap();
+    }
+}
+
+#[test]
+fn parallel_callback_close_does_not_join_coordinator() {
+    use owalnuts::sampler::SessionHandle;
+    struct Reentrant {
+        slot: Arc<Mutex<Option<Arc<SessionHandle>>>>,
+        saw: Arc<AtomicBool>,
+    }
+    impl Target for Reentrant {
+        fn dimension(&self) -> usize {
+            2
+        }
+        fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+            if let Some(handle) = self.slot.lock().unwrap().take() {
+                assert!(handle.close().is_err());
+                self.saw.store(true, Ordering::Release);
+            }
+            g[0] = -q[0];
+            g[1] = -q[1];
+            Ok(-0.5 * (q[0] * q[0] + q[1] * q[1]))
+        }
+    }
+    let slot = Arc::new(Mutex::new(None));
+    let saw = Arc::new(AtomicBool::new(false));
+    let handle = Arc::new(
+        sampler(true)
+            .threads(4)
+            .start_session(
+                Reentrant {
+                    slot: slot.clone(),
+                    saw: saw.clone(),
+                },
+                &starts(),
+            )
+            .unwrap(),
+    );
+    handle.adapt().unwrap();
+    *slot.lock().unwrap() = Some(handle.clone());
+    assert!(handle.draw(1).is_err());
+    handle.close().unwrap();
+    assert!(saw.load(Ordering::Acquire));
+    assert!(handle.progress().closed);
+}
+#[test]
+fn parallel_callbacks_overlap_cancel_joins_and_global_budget_is_bounded() {
+    use std::sync::Barrier;
+    struct Concurrent {
+        armed: Arc<AtomicBool>,
+        entered: Arc<AtomicUsize>,
+        active: Arc<AtomicUsize>,
+        calls: Arc<AtomicUsize>,
+        release: Arc<AtomicBool>,
+        dropped: Arc<AtomicBool>,
+        barrier: Arc<Barrier>,
+    }
+    impl Target for Concurrent {
+        fn dimension(&self) -> usize {
+            2
+        }
+        fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+            self.calls.fetch_add(1, Ordering::AcqRel);
+            if self.armed.load(Ordering::Acquire) {
+                self.active.fetch_add(1, Ordering::AcqRel);
+                self.entered.fetch_add(1, Ordering::AcqRel);
+                self.barrier.wait();
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while !self.release.load(Ordering::Acquire) {
+                    assert!(Instant::now() < deadline, "callback test deadline");
+                    std::thread::yield_now();
+                }
+                self.active.fetch_sub(1, Ordering::AcqRel);
+            }
+            g[0] = -q[0];
+            g[1] = -q[1];
+            Ok(-0.5 * (q[0] * q[0] + q[1] * q[1]))
+        }
+    }
+    impl Drop for Concurrent {
+        fn drop(&mut self) {
+            assert_eq!(self.active.load(Ordering::Acquire), 0);
+            self.dropped.store(true, Ordering::Release);
+        }
+    }
+    let armed = Arc::new(AtomicBool::new(false));
+    let entered = Arc::new(AtomicUsize::new(0));
+    let active = Arc::new(AtomicUsize::new(0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let release = Arc::new(AtomicBool::new(false));
+    let dropped = Arc::new(AtomicBool::new(false));
+    let builder = sampler(true).threads(4);
+    let budget = builder.worst_case_target_evaluations(4).unwrap();
+    let starts = vec![vec![0.1, 0.2]; 4];
+    let handle = Arc::new(
+        sampler(true)
+            .threads(4)
+            .limits(Limits::new().max_target_evaluations(budget))
+            .start_session(
+                Concurrent {
+                    armed: armed.clone(),
+                    entered: entered.clone(),
+                    active: active.clone(),
+                    calls: calls.clone(),
+                    release: release.clone(),
+                    dropped: dropped.clone(),
+                    barrier: Arc::new(Barrier::new(4)),
+                },
+                &starts,
+            )
+            .unwrap(),
+    );
+    handle.adapt().unwrap();
+    armed.store(true, Ordering::Release);
+    let worker = handle.clone();
+    let request = std::thread::spawn(move || worker.draw(1));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while entered.load(Ordering::Acquire) < 4 {
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert_eq!(active.load(Ordering::Acquire), 4);
+    handle.cancel();
+    assert!(!dropped.load(Ordering::Acquire));
+    release.store(true, Ordering::Release);
+    assert!(request.join().unwrap().is_err());
+    assert_eq!(active.load(Ordering::Acquire), 0);
+    handle.close().unwrap();
+    assert!(dropped.load(Ordering::Acquire));
+    assert!(calls.load(Ordering::Acquire) <= budget);
+    assert_eq!(
+        handle.progress().target_calls,
+        calls.load(Ordering::Acquire)
+    );
+}
+#[test]
+fn parallel_callback_error_is_terminal_and_target_drops_after_join() {
+    struct Failing {
+        inner: Gaussian,
+        panic_mode: bool,
+        dropped: Arc<AtomicBool>,
+    }
+    impl Target for Failing {
+        fn dimension(&self) -> usize {
+            2
+        }
+        fn log_density_gradient(&self, q: &[f64], g: &mut [f64]) -> Result<f64, TargetError> {
+            if self.panic_mode && self.inner.fail.load(Ordering::Acquire) {
+                self.inner.calls.fetch_add(1, Ordering::Relaxed);
+                panic!("parallel injected panic");
+            }
+            self.inner.log_density_gradient(q, g)
+        }
+    }
+    impl Drop for Failing {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::Release);
+        }
+    }
+    for panic_mode in [false, true] {
+        let inner = Gaussian::new();
+        let fail = inner.fail.clone();
+        let calls = inner.calls.clone();
+        let dropped = Arc::new(AtomicBool::new(false));
+        let session = sampler(true)
+            .threads(4)
+            .start_session(
+                Failing {
+                    inner,
+                    panic_mode,
+                    dropped: dropped.clone(),
+                },
+                &vec![vec![0.1, 0.2]; 4],
+            )
+            .unwrap();
+        session.adapt().unwrap();
+        fail.store(true, Ordering::Release);
+        assert!(session.draw(1).is_err());
+        assert!(session.progress().failed);
+        assert!(session.draw(1).is_err());
+        session.close().unwrap();
+        assert!(dropped.load(Ordering::Acquire));
+        assert!(session.progress().closed);
+        assert_eq!(
+            calls.load(Ordering::Acquire),
+            session.progress().target_calls
+        );
+    }
 }

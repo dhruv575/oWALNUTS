@@ -1,9 +1,11 @@
-//! Sequential owned worker for additive continuation. No borrowed state leaves
+//! Owned coordinator and bounded parallel workers for additive continuation. No borrowed state leaves
 //! the worker stack. This module deliberately does not reconstruct ChainRun.
 use super::*;
+use std::cell::Cell;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::JoinHandle;
+thread_local! { static SESSION_WORKER: Cell<usize> = const { Cell::new(0) }; }
 
 #[derive(Clone, Debug)]
 pub struct SessionChainChunk {
@@ -60,7 +62,7 @@ enum Request {
     Close,
 }
 
-/// An owned sequential session. Explicit close joins; Drop cancels and detaches
+/// An owned continuation session. Explicit close joins; Drop cancels and detaches
 /// so a nonreturning target cannot block a destructor. The worker retains all
 /// target ownership until its last callback finishes.
 pub struct SessionHandle {
@@ -109,7 +111,9 @@ impl SessionHandle {
         self.cancel();
         // Check before acquiring the join mutex: another thread can already
         // hold it while joining us. A callback must never wait on that join.
-        if std::thread::current().id() == self.worker_id {
+        if std::thread::current().id() == self.worker_id
+            || SESSION_WORKER.with(|id| id.get() == Arc::as_ptr(&self.cancellation) as usize)
+        {
             return Err(Error::configuration(
                 "cannot join a session from its own worker; cancellation was requested, close from another thread",
             ));
@@ -129,6 +133,7 @@ impl Drop for SessionHandle {
 }
 
 pub(crate) struct SessionSetup {
+    pub threads: usize,
     pub config: RunConfig,
     pub mass: DiagonalMass,
     pub budget: NonZeroUsize,
@@ -151,6 +156,10 @@ pub(crate) fn spawn<T: Target + 'static>(
         return Err(Error::configuration(
             "continuation does not support chain rescue",
         ));
+    }
+    let threads = setup.threads.min(starts.len());
+    if threads == 0 || threads > setup.config.limits.max_chains {
+        return Err(Error::configuration("invalid continuation thread count"));
     }
     let budget = TargetEvaluationBudget::new(setup.budget);
     let dimension = if setup.explicit_admission {
@@ -190,6 +199,8 @@ pub(crate) fn spawn<T: Target + 'static>(
     let worker = std::thread::Builder::new()
         .name("owalnuts-continuation".into())
         .spawn(move || {
+            let session_id = Arc::as_ptr(&worker_cancel) as usize;
+            SESSION_WORKER.with(|id| id.set(session_id));
             let cancellation = SessionCancellation {
                 local: worker_cancel,
                 external: setup.external_cancellation,
@@ -200,24 +211,58 @@ pub(crate) fn spawn<T: Target + 'static>(
             }
             let wrapped = budget.wrap(&target);
             let result = catch_unwind(AssertUnwindSafe(|| {
-                serve(
-                    &wrapped,
-                    &starts,
-                    &setup.mass,
-                    &setup.config,
-                    dimension,
-                    &control,
-                    &budget,
-                    &rx,
-                    &worker_progress,
-                )
+                if threads == 1 {
+                    serve(
+                        &wrapped,
+                        &starts,
+                        &setup.mass,
+                        &setup.config,
+                        dimension,
+                        &control,
+                        &budget,
+                        &rx,
+                        &worker_progress,
+                        None,
+                    );
+                    Ok(())
+                } else {
+                    with_scoped_pool_using(
+                        threads,
+                        |worker| {
+                            SESSION_WORKER.with(|id| id.set(session_id));
+                            worker.run();
+                            SESSION_WORKER.with(|id| id.set(0));
+                        },
+                        |pool| {
+                            serve(
+                                &wrapped,
+                                &starts,
+                                &setup.mass,
+                                &setup.config,
+                                dimension,
+                                &control,
+                                &budget,
+                                &rx,
+                                &worker_progress,
+                                Some(pool),
+                            )
+                        },
+                    )
+                }
             }));
             let mut state = worker_progress.lock().unwrap_or_else(|p| p.into_inner());
             state.closed = true;
             state.target_calls = budget.started();
-            if result.is_err() {
-                state.failed = true;
-                state.error = Some("session worker panicked".into());
+            match result {
+                Err(_) => {
+                    state.failed = true;
+                    state.error = Some("session worker panicked".into());
+                }
+                Ok(Err(error)) => {
+                    state.failed = true;
+                    state.error = Some(error.to_string());
+                }
+                Ok(Ok(())) => {}
             }
             // target (including any external-code keepalive) drops only after runs,
             // wrappers and callback execution have left scope.
@@ -244,6 +289,7 @@ fn serve<T: Target>(
     budget: &TargetEvaluationBudget,
     requests: &mpsc::Receiver<Request>,
     progress: &Mutex<SessionProgress>,
+    pool: Option<&rayon::ThreadPool>,
 ) {
     let first_reply = loop {
         match requests.recv() {
@@ -323,7 +369,16 @@ fn serve<T: Target>(
         }
     };
     let initialization_calls = budget.started();
-    let mut first = advance(&mut runs, config.discarded, budget, 0, 0, true, progress);
+    let mut first = advance(
+        &mut runs,
+        config.discarded,
+        budget,
+        0,
+        0,
+        true,
+        progress,
+        pool,
+    );
     if let Ok(chunk) = &mut first {
         chunk.initialization_target_calls = initialization_calls;
     }
@@ -362,6 +417,7 @@ fn serve<T: Target>(
                     end,
                     false,
                     progress,
+                    pool,
                 );
                 let failed = result.is_err();
                 if reply.send(result).is_err() || failed {
@@ -397,12 +453,33 @@ fn advance<T: Target>(
     retained_end: usize,
     is_warmup: bool,
     progress: &Mutex<SessionProgress>,
+    pool: Option<&rayon::ThreadPool>,
 ) -> Result<SessionChunk, Error> {
     let calls_before = if is_warmup { 0 } else { budget.started() };
     let diagnostic_starts: Vec<_> = runs.iter().map(|r| r.diagnostics.len()).collect();
     let result = catch_unwind(AssertUnwindSafe(|| -> Result<(), Error> {
-        for (chain, run) in runs.iter_mut().enumerate() {
-            run.advance(end).map_err(|e| e.at_chain(chain))?;
+        if let Some(pool) = pool {
+            // Indexed collection joins every task before publishing a chunk/error.
+            // Per-chain RNG and state are never shared across tasks.
+            let results: Vec<_> = pool.install(|| {
+                runs.par_iter_mut()
+                    .enumerate()
+                    .map(|(chain, run)| {
+                        catch_unwind(AssertUnwindSafe(|| run.advance(end)))
+                            .unwrap_or_else(|_| {
+                                Err(Error::new(ErrorKind::Panic, "session transition panicked"))
+                            })
+                            .map_err(|e| e.at_chain(chain))
+                    })
+                    .collect()
+            });
+            for result in results {
+                result?;
+            }
+        } else {
+            for (chain, run) in runs.iter_mut().enumerate() {
+                run.advance(end).map_err(|e| e.at_chain(chain))?;
+            }
         }
         Ok(())
     }))
