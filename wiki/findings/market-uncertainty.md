@@ -80,6 +80,21 @@ labels: the earliest possible first forecast is about 10h45m after capture start
 Do not lower that requirement to produce an early forecast. Even an uninterrupted
 48 hours supplies only a small exploratory sample, not coverage across regimes.
 
+The next model hypothesis is that option flow may predict volatility and tails
+even if it adds little directional signal. The study now includes a normalized
+Student-t stochastic-volatility target, independent density/gradient checks, and
+[a proposed model and hybrid-inference design](../../STUDIES/market_uncertainty_v1/SV_MODEL_DESIGN.md).
+Its four planned comparisons separate flow effects in mean and volatility.
+It has not yet been fitted to market data or connected to the sampler.
+
+The exact-baseline online scheduler has been launched from frozen sources;
+its 95 eligible origins, actual missed/issued/no-forecast statuses and runtime
+identity are recorded under `target/market-online-issuance-run-v1`. A separate
+terminal-capture scorer preserves interval identity and invalidates provisional
+coverage affected by late gap notices. Fifteen issuer/scheduler tests and eight
+scorer tests passed. A live data prefix also yielded its first default-horizon
+matured return, but no market interval coverage result is available yet.
+
 Keep future-observation predictive intervals, posterior parameter credible
 intervals and repeated-sample confidence intervals explicitly distinct. The
 current market deliverable is predictive uncertainty; no broad coverage

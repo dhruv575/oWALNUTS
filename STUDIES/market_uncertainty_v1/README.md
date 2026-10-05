@@ -136,3 +136,20 @@ hypothesis, the four ablations, and the exact conditional blocks available for a
 future hybrid sampler. Gaussian FFBS applies to a conditional linear state block;
 it does not directly solve nonlinear log volatility. A hybrid would require an
 explicit conditional-target cache reset and frozen retained-sampling tuning.
+
+`online_issuance/` now provides a one-shot issuer and a bounded scheduler; 15
+tests passed. A frozen standalone copy was launched against the 48-hour capture
+under `target/market-online-issuance-launch-v1`, with actual records under
+`target/market-online-issuance-run-v1`. Its 95 planned origins require the target
+horizon to end by the planned capture end. The first, already missed origin is
+explicitly recorded; future origins are never backdated. An issuance attempt
+without 20 matured eligible labels records no forecast. The scheduler has a
+12GiB disk admission floor and stops further attempts on source drift or capture
+termination. Inspect its actual process/ledger for current status; launch is
+not evidence that an interval was issued.
+
+An immutable prefix from the separate two-hour capture exercised the default
+15-minute flow window and 30-minute target: two origins had known flow (73 and
+60 trades), and the first had a matured midpoint return while the second did not.
+This is a causal historical-prefix pipeline check, not a prospective forecast or
+calibration result; final collector gaps still require reconciliation.
