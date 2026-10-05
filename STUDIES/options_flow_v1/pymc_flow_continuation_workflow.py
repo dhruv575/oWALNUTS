@@ -133,14 +133,15 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--fixture',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--seed',type=int,required=True);p.add_argument('--warmup',type=int,default=1000)
     p.add_argument('--chains',type=int,default=4);p.add_argument('--tiers',type=int,nargs='+',default=[1000,2000,4000,8000])
+    p.add_argument('--threads',type=int,default=1)
     p.add_argument('--model',choices=['flow','masked-flow'],default='flow');p.add_argument('--block-size',type=int,choices=[0,16,32],default=32)
     p.add_argument('--coordinates',choices=['noncentered','mixed_slopes'],default='noncentered')
     p.add_argument('--likelihood-variant',choices=['pymc_student_t','shared_logvol_student_t_v1'],default='pymc_student_t')
     p.add_argument('--expected-cpus');a=p.parse_args()
     try:validate_likelihood_variant(a.model,a.block_size,a.coordinates,a.likelihood_variant)
     except ValueError as exc:p.error(str(exc))
-    if a.chains<4 or a.warmup<1 or not a.tiers or any(v<4 for v in a.tiers) or any(b<=v for v,b in zip(a.tiers,a.tiers[1:])):
-        p.error('At least four chains, positive warmup and strictly increasing tiers >=4 required')
+    if a.chains<4 or a.warmup<1 or a.threads<1 or not a.tiers or any(v<4 for v in a.tiers) or any(b<=v for v,b in zip(a.tiers,a.tiers[1:])):
+        p.error('At least four chains, positive warmup/threads and strictly increasing tiers >=4 required')
     if a.coordinates=='mixed_slopes' and a.model!='flow':p.error('Mixed slopes currently support dense flow only')
     import owalnuts
     import owalnuts._owalnuts as extension
@@ -157,7 +158,7 @@ def main():
         *root.joinpath('integrations/python/src').rglob('*.rs'),*Path(__file__).parent.glob('*.py')])
     report=dict(status='running',qualified=False,phase='exploratory',model=a.model,
         arm='python-pymc-'+a.model+'-'+a.coordinates+'-continuation',coordinates=a.coordinates,seed=a.seed,bindings=identity,
-        settings=dict(chains=a.chains,warmup=a.warmup,threads=1,block_size=a.block_size),
+        settings=dict(chains=a.chains,warmup=a.warmup,threads=a.threads,block_size=a.block_size),
         predictive_seed=a.seed+130000,software=dict(python=sys.version,numpy=np.__version__,algorithm_revision=owalnuts.ALGORITHM_REVISION))
     if a.likelihood_variant!='pymc_student_t':
         report['likelihood_variant']=a.likelihood_variant;report['settings']['likelihood_variant']=a.likelihood_variant
@@ -192,7 +193,7 @@ def main():
             evaluator=lambda q,f,seed:summarize(q,f,predictive_seed=seed),
             screen=lambda r,t:strict_screen(r,t,names,forecast_rows),
             transport=(lambda q:forward(q,transport_data),lambda q:backward(q,transport_data)),
-            raw_filename='python-pymc-flow-raw.json',verify=lambda:verify_bindings(identity),emit=emit,
+            raw_filename='python-pymc-flow-raw.json',threads=a.threads,verify=lambda:verify_bindings(identity),emit=emit,
             checkpoint=lambda r:write_json(a.out/'python-pymc-flow-report.json',r))
     except Exception as exc:
         report.update(status='failed',precision_pass=False,error=str(exc),traceback=traceback.format_exc())

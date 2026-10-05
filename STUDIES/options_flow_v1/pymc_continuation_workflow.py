@@ -47,13 +47,15 @@ def write_json(path, value):
 def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
                 report, session_factory=None, evaluator=None, screen=None, verify=lambda: None,
                 emit=lambda *args: None, checkpoint=lambda report: None, transport=None,
-                raw_filename='python-pymc-raw.json'):
+                raw_filename='python-pymc-raw.json', threads=1):
     """Persist each attempted tier, including failures; injectable seams test transport."""
     import owalnuts
     from pymc_workflow import coordinate_transport
     from run_local_level import evaluate
     from precision_tiers import precision_screen
     factory = session_factory or owalnuts.start_session
+    if type(threads) is not int or threads < 1:
+        raise ValueError('Positive integer thread count required')
     evaluator = evaluator or evaluate
     screen = screen or precision_screen
     if not tiers or any(n < 4 for n in tiers) or any(b <= a for a, b in zip(tiers, tiers[1:])):
@@ -72,7 +74,7 @@ def run_session(target, fixture, starts, out, seed, warmup, tiers, coordinates,
         tick = time.perf_counter()
         try:
             session = factory(target, init=sampling_starts, chains=len(starts), warmup=warmup,
-                              max_draws=tiers[-1], seed=seed, threads=1)
+                              max_draws=tiers[-1], seed=seed, threads=threads)
         finally:
             report['admission_seconds'] = time.perf_counter() - tick
         emit('admission', 'end', None)

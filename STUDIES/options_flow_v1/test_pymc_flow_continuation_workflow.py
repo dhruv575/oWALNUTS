@@ -57,13 +57,15 @@ def test_public_compiled_normalized_parity(model):
     assert result['passed'] and len(result['cases'])==2 and metadata['dimension']==8
 
 
-def test_masked_actual_worker_retains_failed_tiny_health_gate(tmp_path,monkeypatch):
+@pytest.mark.parametrize('threads',[1,4])
+def test_masked_actual_worker_retains_failed_tiny_health_gate(tmp_path,monkeypatch,threads):
     f=fixture(groups=1,masked=True);source=tmp_path/'fixture.json';source.write_text(json.dumps(f));out=tmp_path/'out'
     monkeypatch.setattr('sys.argv',['worker','--fixture',str(source),'--out',str(out),'--seed','828',
-        '--model','masked-flow','--warmup','10','--tiers','4','8'])
+        '--model','masked-flow','--warmup','10','--tiers','4','8','--threads',str(threads)])
     assert main()==1
     report=json.loads((out/'python-pymc-flow-report.json').read_text())
     assert report['status']=='completed',report.get('error')
+    assert report['settings']['threads']==threads
     assert not report['precision_pass'] and report['parity']['passed']
     assert [v['added_draws'] for v in report['attempts']]==[4,4]
     first=json.loads((out/'draws-4/python-pymc-flow-raw.json').read_text())
