@@ -106,3 +106,41 @@ Keep future-observation predictive intervals, posterior parameter credible
 intervals and repeated-sample confidence intervals explicitly distinct. The
 current market deliverable is predictive uncertainty; no broad coverage
 guarantee has been established.
+
+The six-dataset synthetic comparison is terminal: all twelve intended fits
+passed, with no retries or discarded failures. Public full-process cost totaled
+44.633 seconds versus 56.322 seconds for the independent parallel reference;
+individual paired ratios ranged from 1.004 to 1.574. Both arms used identical
+physical starts, exact prior whitening and the same reporting/precision gates.
+These six exploratory pairs establish computational feasibility across this
+small declared prior-generated set, not market coverage, broad reliability or
+a general speed qualification. All failed earlier precision checkpoints and
+setup/storage costs remain charged. See the
+[complete outcome](../../STUDIES/market_uncertainty_v1/artifacts/sv-fresh-dataset-comparison-v1/RESULTS.md).
+
+The production research worker now checks each fit against the independent
+NumPy density/gradient oracle. Independent JAX qualification remains separate
+test evidence; the public worker does not initialize JAX. Five tests, including
+actual tiny CLI runs of both backends, passed; these tiny runs intentionally
+do not establish sampling precision. See
+[worker validation](../../STUDIES/market_uncertainty_v1/artifacts/sv-workflow-validation-v2/validation.json).
+Batched reporting reproduced all six archived checkpoint reports exactly,
+including predictive random streams. Its measured path calculation fell from
+1.01–2.03 seconds to 0.013–0.036 seconds; these replay timings are not an
+end-to-end sampler speed result. See
+[reporting evidence](../../STUDIES/market_uncertainty_v1/artifacts/sv-reporting-replay-v1/RESULTS.md).
+
+The first actual delayed provisional scoring attempt completed and preserved
+both models' insufficient-history no-forecast outcomes. It creates no interval
+and supplies no coverage observation. Later terminal reconciliation remains
+required; see
+[the immutable score](../../STUDIES/market_uncertainty_v1/artifacts/first-provisional-score-v1/provisional-score.json).
+
+A separate historical capability probe found September pooled BTC-option
+trades on the history host and half-hour perpetual bars. The same older trade
+query returned empty on the production host, so empty responses there cannot
+establish zero flow. Completeness is still unproven. This route targets
+retrospective event-time flow and bar-close returns, with closes available only
+after bar end under an explicit publication assumption. It must remain
+separate from live receipt-time midpoint forecasts. Historical data can speed
+development and stress testing; genuinely future evaluation is still needed.
