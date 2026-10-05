@@ -1,0 +1,3 @@
+# Scheduler launch-only snapshot
+
+The immutable launch sources, preparation manifest and execution-handle record are archived with startup plan and the first missed-origin event. Session 56606 was running when this snapshot was requested; this archive is not a terminal summary, not evidence of an issued interval, and not a replacement execution. The preparation manifest intentionally still says prepared_not_launched; the separate execution-handle record records actual launch. Only the first complete event line is copied from the active scheduler log. No active capture raw data is copied or modified. Later issuance, outcomes and terminal gap reconciliation remain outside this launch snapshot.
