@@ -24,3 +24,12 @@ Eight synthetic tests passed, including tampered receipts, late-gap withdrawal,
 missing future quotes, inconsistent statuses, current-label leakage, exact score
 boundaries, and preservation of original issuance records. No live market
 forecast has yet been scored by this component.
+
+`aggregate.py --plan <scheduler-plan.json> --scores <score-files...> --output
+<new-summary.json>` requires exactly one score record for every planned origin.
+It rejects partial or duplicate denominators, retains each unavailable status,
+and compares models only on common scored origins with identical outcomes.
+Per-arm available-outcome summaries are separate from that paired comparison.
+An empty scored set produces null metrics, not perfect coverage. Five tests
+passed. It binds supplied score files, without independently revalidating their
+producer; dependent-outcome confidence intervals are deliberately not estimated.

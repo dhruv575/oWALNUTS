@@ -153,3 +153,18 @@ An immutable prefix from the separate two-hour capture exercised the default
 60 trades), and the first had a matured midpoint return while the second did not.
 This is a causal historical-prefix pipeline check, not a prospective forecast or
 calibration result; final collector gaps still require reconciliation.
+
+The first scheduled future attempt is preserved in
+`artifacts/first-prospective-no-forecast-v1/`: both baseline records reported
+insufficient eligible history, with a 3.088-second issuance lag. No interval was
+issued. This demonstrates an actual scheduled attempt rather than historical
+replay. Receipt coverage remains provisional until final reconciliation.
+
+The richer SV target now has a compiled oWALNUTS adapter, an independent
+JAX/NumPyro reference, synthetic prior diagnostics, and a causal market-input
+builder. The first matched four-fit pilot (`artifacts/sv-inference-pilot-v1/`)
+found both public fits failing at initial adaptation and both reference fits
+passing. Investigation found and fixed a representable scale-underflow rejection;
+raw coordinates then exposed genuine exponential overflow. Exact prior whitening
+is a separate candidate under test. Preserve these failures when judging overall
+workflow reliability; pointwise density/gradient parity was insufficient.

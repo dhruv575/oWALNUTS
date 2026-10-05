@@ -1,0 +1,35 @@
+{
+  "arm": "public",
+  "seed": 6301,
+  "attempts": [],
+  "status": "failed",
+  "qualified": false,
+  "settings": {
+    "chains": 4,
+    "warmup": 1000,
+    "tiers": [
+      1000,
+      2000,
+      4000
+    ],
+    "fixture_seed": 6107,
+    "mask_seed": 6108,
+    "starts_seed": 6401,
+    "predictive_seed": 6501,
+    "paired_seeds": [
+      6201,
+      6301
+    ],
+    "threshold": 0.02,
+    "development_only": true
+  },
+  "runtime_hashes": [
+    "9ec20beeac32f5dd4ce5544a86f34e35bc90034c1e874840b19cbadd57326064",
+    "c339aa4bfeb6e1f504c0b12762f46ab14081a6e1d60817db46bd240bdbaf0001"
+  ],
+  "compile_seconds": 0.8977324001025409,
+  "precision_pass": false,
+  "error": "owalnuts Target: target evaluation failed: raw target returned a nonfinite log density (NaN) (chain 0, transition 0)",
+  "traceback": "Traceback (most recent call last):\n  File \"C:\\dev\\oWALNUTS\\target\\sv-reference-pilot-v1\\worker.py\", line 49, in main\n    tick=time.perf_counter();ad=engine.adapt();r['adapt_seconds']=time.perf_counter()-tick;r['adapted_metadata']=ad.metadata;r['warmup_work']=ad.cumulative_work;r['warmup_target_calls']=ad.target_calls\n                                ~~~~~~~~~~~~^^\n  File \"C:\\dev\\oWALNUTS\\target\\parallel-continuation-route-v1-worktree\\integrations\\python\\python\\owalnuts\\__init__.py\", line 674, in adapt\n    return ContinuationChunk(**self._inner.adapt())\n                               ~~~~~~~~~~~~~~~~~^^\nRuntimeError: owalnuts Target: target evaluation failed: raw target returned a nonfinite log density (NaN) (chain 0, transition 0)\n",
+  "end_to_end_seconds": 7.6728323000716045
+}
