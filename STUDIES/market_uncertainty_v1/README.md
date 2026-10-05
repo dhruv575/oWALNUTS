@@ -64,6 +64,15 @@ These are not optimized time-to-precision ratios: earlier stopping tiers were
 not tested, and source correction/development costs are separately retained.
 No general sampler advantage or market coverage follows from this pilot.
 
+The subsequent demanding T1000/G4 continuation experiment is preserved at
+`artifacts/parallel-continuation-latency-v1/`. Two one-/four-thread pairs reached
+the same passing tiers (4,000 and 2,000 draws) with byte-identical retained raw
+artifacts, diagnostics, adaptation metadata and work counts. Whole-process
+latency ratios were 1.924 and 1.939 in favor of four threads. This demonstrates
+a continuation latency improvement on this model, using more concurrent CPU
+resources. It is a two-pair development result; an equally parallel NumPyro
+comparison is separate and market calibration remains unestablished.
+
 Posterior coefficient credible intervals, future-return predictive intervals and
 repeated-sample confidence intervals answer different questions. The first market
 deliverable is a predictive distribution issued using only information received by
