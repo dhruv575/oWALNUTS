@@ -33,3 +33,11 @@ Per-arm available-outcome summaries are separate from that paired comparison.
 An empty scored set produces null metrics, not perfect coverage. Five tests
 passed. It binds supplied score files, without independently revalidating their
 producer; dependent-outcome confidence intervals are deliberately not estimated.
+
+`provisional_score.py` accepts a later immutable receipt-prefix directory using
+the same CLI arguments as `score.py`. The prefix must reach the forecast horizon,
+be unclipped, and preserve the original receipt/lifecycle prefix and selection.
+Three tests passed for identity, late-gap withdrawal, maturity and missing quotes.
+The result has a distinct provisional schema and requires final reconciliation;
+the final aggregation CLI rejects that schema. Provisional scoring never replaces
+an issued interval or a previous score. A later final score is a separate record.

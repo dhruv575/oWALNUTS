@@ -1,0 +1,53 @@
+{
+  "schema": "provisional-issued-market-interval-score/v1",
+  "qualified": false,
+  "provisional": true,
+  "final_reconciliation_required": true,
+  "issuance_sha256": "21fe164f830c7c6c3cf2ab85cef3c702f54b59f99dc11c265b7e909091bd6e3a",
+  "origin_receipt_ns": 787037371227700,
+  "issuance_status": "issued_no_forecast",
+  "outcomes": [
+    {
+      "model": "price_history_only",
+      "forecast_status": "no_forecast",
+      "status": "no_forecast",
+      "reason": "insufficient_mature_history",
+      "receipt_coverage_invalidated": false
+    },
+    {
+      "model": "price_plus_pooled_flow",
+      "forecast_status": "no_forecast",
+      "status": "no_forecast",
+      "reason": "insufficient_mature_history",
+      "receipt_coverage_invalidated": false
+    }
+  ],
+  "scope": "PROVISIONAL prefix scoring only; late gaps can withdraw scores. Final scoring is a separate immutable record, never replacement of issuance or this provisional record",
+  "reconciliation": {
+    "prefix_bytes_match": true,
+    "checks": {
+      "receipts.jsonl": true,
+      "lifecycle.jsonl": true,
+      "selection.json": true
+    },
+    "late_gaps": [],
+    "requires_rebuild": false,
+    "provisional": true
+  },
+  "input_and_source_sha256": {
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-launch-v1\\delayed_scoring\\provisional_score.py": "5b234d496dd676a267c51e7e21c940e776e261b3f4b6b4a1653f0c42b1b7aa08",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-launch-v1\\delayed_scoring\\score.py": "f6a89fa189fca81c93763d2b6f1da6fb74a319a44bcc12cd6708071418428fd5",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-launch-v1\\receipt_features\\features.py": "a7b63234853f9733b26ce847f15c91f93afd925c2b7ca3af5975bdfe44297638",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-launch-v1\\live_snapshot\\snapshot.py": "09ad49c07f96fb234ce87e7e760e76e570c6df0979eba14bb1bf2879d1945ce9",
+    "C:\\dev\\oWALNUTS\\target\\market-online-issuance-run-v1\\787037371227700\\issuance.json": "21fe164f830c7c6c3cf2ab85cef3c702f54b59f99dc11c265b7e909091bd6e3a",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-run-v1\\later-prefix\\prefix-summary.json": "c05c0a3801a943485ec1936983a57fd316f5c8b0e37fc8dd98b54f7f31b86569",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-run-v1\\later-prefix\\receipts.jsonl": "2cfee47f33de703c9c5d45fc26c06b7b600ea4ed8f788690927e1c80ed96dc89",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-run-v1\\later-prefix\\lifecycle.jsonl": "6467283332b03b4b7a4696a860d772a1cc5fe4393712115d50ed3e4851bf6379",
+    "C:\\dev\\oWALNUTS\\target\\provisional-score-run-v1\\later-prefix\\selection.json": "fa51cdab54799bcc2780e1fea1777e126490aa958ba94f917c69bfd6750f54f1",
+    "C:\\dev\\oWALNUTS\\target\\market-online-issuance-run-v1\\787037371227700\\snapshot\\prefix-summary.json": "8fe9eff12b6d32978ede1d735366d5aa220d8f9de460e611d0955dc251b63ce9",
+    "C:\\dev\\oWALNUTS\\target\\market-online-issuance-run-v1\\787037371227700\\snapshot\\receipts.jsonl": "1aa8c325c90a72e910d06203fc75902341fcb66b3be36afdd032abeb6c4f48b5",
+    "C:\\dev\\oWALNUTS\\target\\market-online-issuance-run-v1\\787037371227700\\snapshot\\lifecycle.jsonl": "6467283332b03b4b7a4696a860d772a1cc5fe4393712115d50ed3e4851bf6379",
+    "C:\\dev\\oWALNUTS\\target\\market-online-issuance-run-v1\\787037371227700\\snapshot\\selection.json": "fa51cdab54799bcc2780e1fea1777e126490aa958ba94f917c69bfd6750f54f1",
+    "C:\\dev\\oWALNUTS\\target\\market-online-issuance-run-v1\\787037371227700\\asof-features.json": "404f997aca39126d2945be45b982c295efef71904d3b7a561c231e4da93bc381"
+  }
+}
