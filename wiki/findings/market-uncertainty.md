@@ -85,7 +85,14 @@ even if it adds little directional signal. The study now includes a normalized
 Student-t stochastic-volatility target, independent density/gradient checks, and
 [a proposed model and hybrid-inference design](../../STUDIES/market_uncertainty_v1/SV_MODEL_DESIGN.md).
 Its four planned comparisons separate flow effects in mean and volatility.
-It has not yet been fitted to market data or connected to the sampler.
+It has not yet been fitted to market data. Both sampler adapters now exist.
+The first public runs failed on extreme raw-coordinate proposals; investigation
+fixed an erroneous underflow rejection, while exact prior whitening addressed
+the tested geometry failure without changing the posterior. Both samplers then
+passed both synthetic development fits. Public times were 14.03s/10.73s versus
+reference 12.04s/16.53s, with differing stopping tiers. See the study's
+[whitened pilot](../../STUDIES/market_uncertainty_v1/artifacts/sv-whitened-pilot-v1/RESULTS.md).
+The speed ordering is mixed; no broad advantage or market coverage follows.
 
 The exact-baseline online scheduler has been launched from frozen sources;
 its 95 eligible origins, actual missed/issued/no-forecast statuses and runtime

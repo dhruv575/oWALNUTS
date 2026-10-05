@@ -57,6 +57,13 @@ Two tests cover density/gradient transport, starts and callback lifetime. A
 separate matched inference experiment evaluates this candidate; pointwise tests
 alone do not establish that it solves the adaptation failure.
 
+The completed matched whitened pilot passed in both samplers for both declared
+development seeds. Public outer times were 14.03s and 10.73s; reference times
+were 12.04s and 16.53s. Different first-passing precision tiers explain part of
+the changing speed order. See the parent study's
+`artifacts/sv-whitened-pilot-v1/RESULTS.md`. The integrated suite subsequently
+passed 30 tests and four subtests against the isolated parallel release.
+
 `reference.py` implements the same normalized posterior independently in JAX
 with an associative latent-path calculation and a NumPyro NUTS kernel. Three
 tests with multiple model-shape subcases passed, including missing rows and

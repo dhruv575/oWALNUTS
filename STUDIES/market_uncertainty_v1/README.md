@@ -168,3 +168,20 @@ passing. Investigation found and fixed a representable scale-underflow rejection
 raw coordinates then exposed genuine exponential overflow. Exact prior whitening
 is a separate candidate under test. Preserve these failures when judging overall
 workflow reliability; pointwise density/gradient parity was insufficient.
+
+The exact prior-whitened follow-up is preserved in
+`artifacts/sv-whitened-pilot-v1/`. All four fits passed unchanged health and
+endpoint-precision requirements after an affine coordinate change with its
+Jacobian. Physical starts and posterior were unchanged. Public outer costs were
+14.03s/10.73s (2k/1k draws), versus 12.04s/16.53s (1k/2k) for the reference.
+Each sampler was faster in one pair. All saved physical and sampling-coordinate
+arrays reconcile exactly. This establishes feasibility on one synthetic fixture,
+not broad robustness, market calibration, or a consistent speed advantage.
+
+The combined SV test run passed 30 tests and four subtests against the isolated
+parallel release. The first actual no-forecast snapshot also exercises the SV
+market-input builder: all four ablations report insufficient history (one usable
+label under an explicitly diagnostic 20-label admission setting). No market SV
+fit was forced. Full workflow setup and diagnostics dominate the tiny measured
+kernel times, so the next compute work should separate reusable validation/setup
+from necessary per-fit work and test fresh datasets before drawing speed claims.
