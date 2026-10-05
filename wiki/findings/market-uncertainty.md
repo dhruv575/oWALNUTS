@@ -230,8 +230,17 @@ reported numerical gates and scoring; it did not recompute diagnostics from
 raw draws. This uses synthetic receipts and a simulated origin clock, not live
 market issuance. See
 [integration evidence](../../STUDIES/market_uncertainty_v1/artifacts/live-sv-production-smoke-v1/RESULTS.md).
-Live SV deployment is still pending. Existing exact-baseline issuance and
-collection remain unchanged.
+The separate live SV scheduler has now launched on the existing 48-hour
+receipt capture, using an immutable source mirror and configuration hash
+`d27c6c315e0faac66f8bccaecd315481008573e222204d27394c47a14d00cf79`.
+Its 95-origin schedule retains the five origins missed before launch; those
+are not replayed. The initial process check confirms the scheduler is running,
+but no SV interval has yet been issued. Twenty mature training observations
+are required, so early scheduled decisions may also withhold forecasts.
+`target/market-sv-online-issuance-run-v1` holds its plan and issuance ledger;
+`target/sv-live-launch-v1/execution-handle.json` identifies the original process.
+Existing exact-baseline issuance and collection remain unchanged. This launch
+does not establish market calibration or future forecast availability.
 
 Final live-SV aggregation now requires all 95 planned origins, preserves
 unusable outcomes, and checks baseline comparisons against identical realized
