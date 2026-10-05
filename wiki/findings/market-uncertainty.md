@@ -203,3 +203,17 @@ forecast origins have known received-flow windows and three have matured
 labels. This validates the input/reconciliation path, not interval coverage or
 exchange feed completeness. See
 [terminal capture evidence](../../STUDIES/market_uncertainty_v1/artifacts/horizon-terminal-v1/RESULTS.md).
+
+Separate live SV issuance, scheduling and delayed scoring modules now exist.
+They retain the historical both-flow model's four mean and two scale covariates,
+but use genuine receipt-time midpoint inputs. A distinct 60-second decision
+deadline includes snapshot, fit, diagnostics and hash verification; late or
+unusable fits are withheld. The scheduler records each issuance hash before
+later scoring and stops further launches on unverified worker containment.
+Provisional scores can be withdrawn by late gap evidence. Twenty-two mocked
+tests passed, including the actual snapshot/features/issuer/scorer path with a
+mock sampler. See [validation evidence](../../STUDIES/market_uncertainty_v1/artifacts/live-sv-mock-validation-v1.json).
+No live SV deployment or actual contained-worker integration test has occurred
+yet. The latter is prepared separately and must wait until the rolling timing
+campaign ends to avoid concurrent inference load. Existing exact-baseline
+issuance and collection remain unchanged.
