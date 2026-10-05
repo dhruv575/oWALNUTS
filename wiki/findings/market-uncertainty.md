@@ -183,3 +183,12 @@ which flow placement is best. See
 [historical SV evidence](../../STUDIES/market_uncertainty_v1/artifacts/sv-historical-pilot-v1/RESULTS.md).
 The next study is a fixed rolling grid of historical forecast times, with
 model-quality and matched sampler-cost comparisons reported separately.
+
+The separate two-hour receipt capture completed on its original process with
+one acknowledged connection, 7,148 quote messages, 474 option-trade messages
+and no reported gaps. Its terminal receipts reconcile with the earlier prefix;
+the prior feature values and first matured return are unchanged. Four default
+forecast origins have known received-flow windows and three have matured
+labels. This validates the input/reconciliation path, not interval coverage or
+exchange feed completeness. See
+[terminal capture evidence](../../STUDIES/market_uncertainty_v1/artifacts/horizon-terminal-v1/RESULTS.md).
