@@ -47,6 +47,23 @@ full stochastic-volatility market model. Include oWALNUTS, a strong NumPyro
 parameterization and the specialized algorithm. Compare accuracy and endpoint
 precision before interpreting timings; preserve failures and total workflow cost.
 
+The completed single-fixture pilot is now archived at
+`artifacts/structured-inference-pilot-v1/`. Its 49 checksummed files preserve
+failed and corrected runs, exact executed sources and runtime identities.
+Large raw arrays remain external and hash-pinned. The portable exact blocked
+prototype is in `blocked_prototype/`; three dense-Gaussian oracle and missing-data
+checks passed in the repository location.
+
+At the tested fixed lengths, contained worker times were approximately 25.73s
+for oWALNUTS, 47.13s for centered NumPyro, 56.71s for noncentered NumPyro, and
+21.50s for specialized Gibbs with 16,000 retained draws per chain. These runs
+passed their health and endpoint-precision checks. The initial 4,000-draw Gibbs
+run failed endpoint precision. The first oWALNUTS adapter preflight failed on a
+constant normalization offset and was corrected without relaxing the tolerance.
+These are not optimized time-to-precision ratios: earlier stopping tiers were
+not tested, and source correction/development costs are separately retained.
+No general sampler advantage or market coverage follows from this pilot.
+
 Posterior coefficient credible intervals, future-return predictive intervals and
 repeated-sample confidence intervals answer different questions. The first market
 deliverable is a predictive distribution issued using only information received by
