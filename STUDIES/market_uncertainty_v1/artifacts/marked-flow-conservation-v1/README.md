@@ -1,0 +1,7 @@
+﻿# Causal marked flow
+
+features.build(trades, origin_ms, coverage_intervals=intervals) returns all 24 fixed put/call × calendar-maturity × strike/index buckets, their counts, total and signed raw BTC amounts, and pooled conservation totals. Window membership is exactly [origin−15 minutes, origin). The union of supplied half-open coverage intervals must cover that entire window; missing coverage raises instead of becoming zero flow. Only observed-window marks are inspected; missing/invalid marks or duplicate identities fail closed rather than silently dropping trades. No normalization is estimated here; any later scaling must use training origins only.
+
+Maturity is the difference between UTC trade date and encoded expiry date, not exact settlement-hour time to expiry. Moneyness uses the index_price supplied on that trade. Amount is not Greeks-adjusted exposure. Event-time retrospective use requires its publication-lag assumption; this module does not authenticate acquisition completeness or certify live availability. No forecast claim or fit.
+
+Validation: ten focused tests cover time-window boundaries, calendar maturity and moneyness cutoffs, future-mark invariance, missing-index and duplicate rejection, coverage gaps, valid empty windows and nonfinite ratios. All 1,440 historical windows match the verified pooled counts and amounts within floating-point rounding (maximum total-amount difference 4.55e-13). Input hashes match the frozen rolling-study bindings. This validates construction, not forecasting value.
