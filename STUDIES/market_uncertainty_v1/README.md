@@ -53,3 +53,21 @@ deliverable is a predictive distribution issued using only information received 
 its origin. Compare price-only and flow-augmented models on identical scheduled
 origins; measure availability, coverage, width and proper interval score together.
 Sampler convergence cannot by itself establish market calibration.
+
+## Exact forecast baseline
+
+`forecast_baseline/forecast.py` consumes 30-minute feature rows and emits a
+price-history-only or flow-augmented conjugate Bayesian regression prediction.
+Only matured past labels enter fitting and scaling. The Gaussian observation
+model has an exact Student-t posterior predictive distribution; this is not
+a heavy-tailed Student-t observation likelihood or a stochastic-volatility model.
+Observation predictive intervals and coefficient credible intervals are separate.
+At least 20 eligible labels are required, so the two-hour capture is expected to
+return insufficient-history statuses rather than a trained market forecast.
+
+Eleven tests plus 15 parameterized subtests passed. An actual synthetic CLI run
+produced all 60 intended outputs: 18 forecasts and 42 explicit no-forecast
+statuses. Its inputs, outputs and executed source are preserved in
+`artifacts/forecast-synthetic-cli-v1.zip` with member hashes. This baseline is
+an analytic reference and pipeline component, not evidence of market calibration
+or a replacement for the demanding inference objective.
