@@ -37,6 +37,8 @@ what worked, what did not work, current default, open questions.
   corrections, oracles, fingerprints.
 - [State-space targets](findings/state-space-targets.md): sspd fixtures,
   parameterisations, crypto stochastic volatility.
+- [Market uncertainty](findings/market-uncertainty.md): causal market data,
+  predictive interval evaluation and specialized inference routes.
 - [Integrations and platforms](findings/integrations-and-platforms.md):
   BridgeStan, PyMC and Python transport, Windows native faults, publishing.
 
