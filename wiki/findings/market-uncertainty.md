@@ -290,4 +290,14 @@ reuse of all 72 prior no-flow forecasts; their previous costs are excluded
 from new timing comparisons. The fixed source/configuration and reuse proof
 are preserved in [launch evidence](../../STUDIES/market_uncertainty_v1/artifacts/marked-sv-rolling-launch-v1/RESULTS.md).
 The original process is recorded in
-`target/marked-sv-rolling-v1/execution-handle.json`; results remain pending.
+`target/marked-sv-rolling-v1/execution-handle.json`.
+The study completed all 156 new fits successfully. Across the 72 common
+origins, interval scores were 0.010549783 without flow, 0.010566725 with pooled
+activity and 0.010591066 with marked activity; all three covered 90.28% of
+outcomes. The richer representation did not improve scores. The 12 matched
+marked-activity pairs cost 82.01 seconds public versus 115.39 seconds reference.
+The full new campaign cost 1,041.78 seconds. See
+[terminal evidence](../../STUDIES/market_uncertainty_v1/artifacts/marked-sv-rolling-v1/RESULTS.md).
+Further complexity tuning on this same development history is stopping;
+validation on a separately fixed period and the ongoing live schedule remain
+necessary. The live model is not changed after inspecting these results.
