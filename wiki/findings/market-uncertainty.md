@@ -213,10 +213,25 @@ later scoring and stops further launches on unverified worker containment.
 Provisional scores can be withdrawn by late gap evidence. Twenty-two mocked
 tests passed, including the actual snapshot/features/issuer/scorer path with a
 mock sampler. See [validation evidence](../../STUDIES/market_uncertainty_v1/artifacts/live-sv-mock-validation-v1.json).
-No live SV deployment or actual contained-worker integration test has occurred
-yet. The latter is prepared separately and must wait until the rolling timing
-campaign ends to avoid concurrent inference load. Existing exact-baseline
-issuance and collection remain unchanged.
+The rolling campaign subsequently completed all 360 fits, all passing, with
+72 common scored origins. The no-flow SV model had mean interval score
+0.01054978 versus 0.01206660 for the exact price baseline; the both-flow SV
+score was 0.01059432. Flow did not improve the SV score on this development
+cohort. Matched both-flow public/reference costs were 467.44/648.34 seconds,
+including all 72 fits per backend. These are descriptive historical results,
+not future calibration or general speed qualification. See
+[full results and evidence](../../STUDIES/market_uncertainty_v1/artifacts/sv-historical-rolling-v1/RESULTS.md).
+
+After the timing campaign ended, the real contained-worker integration test
+passed at 2,000 retained draws following a failed 1,000-draw precision check.
+Complete issuance took 3.25 seconds; provisional and synthetic terminal scoring
+agreed. Independent verification checked source/runtime identities, hardware,
+reported numerical gates and scoring; it did not recompute diagnostics from
+raw draws. This uses synthetic receipts and a simulated origin clock, not live
+market issuance. See
+[integration evidence](../../STUDIES/market_uncertainty_v1/artifacts/live-sv-production-smoke-v1/RESULTS.md).
+Live SV deployment is still pending. Existing exact-baseline issuance and
+collection remain unchanged.
 
 Final live-SV aggregation now requires all 95 planned origins, preserves
 unusable outcomes, and checks baseline comparisons against identical realized
