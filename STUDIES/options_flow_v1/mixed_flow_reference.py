@@ -10,7 +10,7 @@ import numpy as np
 from pymc_continuation_workflow import bindings,verify_bindings,write_json
 
 
-def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,8000),batch=1000,target_accept=.9,implementation='sequential'):
+def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,8000),batch=1000,target_accept=.9,implementation='sequential',chain_method='sequential'):
     import jax
     jax.config.update('jax_enable_x64',True)
     from reference_continuation import ContinuedReference
@@ -23,6 +23,9 @@ def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,800
     report=dict(status='running',qualified=False,model='flow',coordinates='mixed_slopes',
         arm='numpyro-mixed-slopes-continuation',implementation=implementation,seed=seed,predictive_seed=seed+130000,bindings=identity,
         settings=dict(implementation=implementation,warmup=warmup,chains=chains,tiers=list(tiers),batch=batch,target_accept=target_accept),attempts=[])
+    if chain_method != 'sequential':
+        report['chain_method']=chain_method;report['settings']['chain_method']=chain_method
+        report['local_devices']=[dict(id=d.id,platform=d.platform) for d in jax.local_devices()]
     write_json(out/'started.json',report);engine=None
     def emit(stage,event,draws=None):
         with (out/'phase-events.jsonl').open('a') as handle:
@@ -44,7 +47,7 @@ def execute(fixture_path,out,seed,warmup=1000,chains=4,tiers=(1000,2000,4000,800
         report['parity']=normalized_parity(data,[sampling_starts[0],sampling_starts[-1],sampling_starts[0]+np.random.default_rng(818).normal(0,.01,starts.shape[1])])
         if report['parity'].get('passed') is not True:raise ValueError('Normalized parity did not pass')
         report['parity_seconds']=time.perf_counter()-tick;emit('parity','end');verify_bindings(identity)
-        engine=ContinuedReference(lambda u:-jax_log_density(u,data),sampling_starts,seed,warmup,batch,target_accept)
+        engine=ContinuedReference(lambda u:-jax_log_density(u,data),sampling_starts,seed,warmup,batch,target_accept,chain_method=chain_method)
         emit('adapt','start');tick=time.perf_counter()
         try:engine.adapt()
         finally:report['adapt_seconds']=time.perf_counter()-tick
@@ -90,6 +93,7 @@ if __name__=='__main__':
     parser.add_argument('--warmup',type=int,default=1000);parser.add_argument('--chains',type=int,default=4)
     parser.add_argument('--tiers',type=int,nargs='+',default=[1000,2000,4000,8000]);parser.add_argument('--batch',type=int,default=1000);parser.add_argument('--target-accept',type=float,default=.9)
     parser.add_argument('--implementation',choices=['sequential','associative'],default='sequential')
-    args=parser.parse_args();result=execute(args.fixture,args.out,args.seed,args.warmup,args.chains,args.tiers,args.batch,args.target_accept,args.implementation)
+    parser.add_argument('--chain-method',choices=['sequential','parallel'],default='sequential')
+    args=parser.parse_args();result=execute(args.fixture,args.out,args.seed,args.warmup,args.chains,args.tiers,args.batch,args.target_accept,args.implementation,args.chain_method)
     raise SystemExit(0 if result.get('precision_pass') else 2)
 

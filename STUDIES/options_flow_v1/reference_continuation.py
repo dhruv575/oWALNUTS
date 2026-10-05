@@ -23,17 +23,22 @@ def adaptation_digest(state):
 
 
 class ContinuedReference:
-    def __init__(self, potential, starts, seed, warmup=1000, batch_size=1000, target_accept=.8):
+    def __init__(self, potential, starts, seed, warmup=1000, batch_size=1000, target_accept=.8, chain_method='sequential'):
         if isinstance(target_accept,(bool,np.bool_)) or not isinstance(target_accept,(int,float,np.integer,np.floating)) or not np.isfinite(target_accept) or not 0 < target_accept < 1:
             raise ValueError('target_accept must be finite and strictly between zero and one')
         self.target_accept=float(target_accept)
         starts = np.asarray(starts, float)
         if starts.ndim != 2 or not np.isfinite(starts).all() or min(warmup, batch_size) < 1:
             raise ValueError('Require finite chain starts and positive warmup/batch size')
+        if chain_method not in ('sequential','parallel'):
+            raise ValueError('Unsupported reference chain method')
+        if chain_method == 'parallel' and jax.local_device_count() < len(starts):
+            raise ValueError('Parallel reference requires at least one local device per chain')
+        self.chain_method=chain_method
         self.mcmc = MCMC(NUTS(potential_fn=potential, target_accept_prob=self.target_accept,
                             max_tree_depth=10), num_warmup=warmup,
                          num_samples=batch_size, num_chains=len(starts),
-                         chain_method='sequential', progress_bar=False)
+                         chain_method=chain_method, progress_bar=False)
         self.warmup = warmup
         self.batch_size = batch_size
         self.seed = seed

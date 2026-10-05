@@ -7,6 +7,29 @@ from reference_continuation import ContinuedReference
 
 
 class ContinuationTests(unittest.TestCase):
+    @unittest.skipUnless(jax.local_device_count() >= 4, 'Requires four configured local JAX devices')
+    def test_parallel_chunks_preserve_draws_and_frozen_adaptation(self):
+        potential=lambda q:.5*jnp.sum(q*q/jnp.array([.5,2.]))
+        starts=np.array([[-.4,.2],[.3,-.5],[.1,.6],[-.2,-.3]])
+        split=ContinuedReference(potential,starts,99068013,warmup=20,batch_size=8,target_accept=.9,chain_method='parallel')
+        full=ContinuedReference(potential,starts,99068013,warmup=20,batch_size=16,target_accept=.9,chain_method='parallel')
+        split.adapt();full.adapt();digest=split.adaptation_sha256
+        split.append();split.append();full.append()
+        np.testing.assert_array_equal(split.samples,full.samples)
+        self.assertEqual(split.samples.shape,(4,16,2))
+        self.assertEqual(split.adaptation_sha256,digest)
+        self.assertEqual(split.adaptation_sha256,full.adaptation_sha256)
+        self.assertEqual(split.checkpoints[-1]['end_iterations'],[36]*4)
+        self.assertEqual(split.divergences,full.divergences)
+
+    def test_parallel_refuses_silent_device_fallback(self):
+        from unittest.mock import patch
+        with patch('reference_continuation.jax.local_device_count',return_value=1):
+            with self.assertRaisesRegex(ValueError,'local device'):
+                ContinuedReference(lambda q:jnp.sum(q*q),np.zeros((4,2)),1,chain_method='parallel')
+        with self.assertRaises(ValueError):
+            ContinuedReference(lambda q:jnp.sum(q*q),[[0.]],1,chain_method='invalid')
+
     def test_chunks_match_uninterrupted_retention_and_freeze_adaptation(self):
         potential = lambda q: .5*jnp.sum(q*q/jnp.array([.5, 2.]))
         starts = np.array([[-.4, .2], [.3, -.5]])
