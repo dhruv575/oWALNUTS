@@ -97,3 +97,32 @@ statuses. Its inputs, outputs and executed source are preserved in
 `artifacts/forecast-synthetic-cli-v1.zip` with member hashes. This baseline is
 an analytic reference and pipeline component, not evidence of market calibration
 or a replacement for the demanding inference objective.
+
+## New routes under development
+
+The equally parallel reference experiment is preserved in
+`artifacts/parallel-reference-latency-v1/`. Both reference fits passed at 2,000
+draws, taking 31.08s and 31.72s versus oWALNUTS at 56.09s and 35.15s. A narrow
+precision miss forced the first public fit to 4,000 draws; compilation and
+adaptation also matter. The comparison retains its two reused development seeds,
+complete costs, and limits. Finer continuation increments are a separate pilot,
+not a changed interpretation of these results.
+
+`sv_prototype/` implements a normalized heavy-tailed return model where option
+flow can affect expected return and latent volatility separately. Its analytical
+gradient is checked against finite differences of a centered-density oracle.
+This is a research target, not a fitted market model. The four intended ablations
+are neither, mean-only, scale-only, and both flow effects. Numeric market priors,
+sampler integration and prospective predictive checks remain open.
+
+`delayed_scoring/` scores immutable issuance records after collector termination.
+It binds inputs, reconciles late gaps, retains missing/nonissuance outcomes, and
+reports predictive interval coverage, width and proper score without refitting.
+The exact baseline remains the first live pipeline component; the demanding
+stochastic-volatility target will need its own validated forecast adapter.
+
+[The model design](SV_MODEL_DESIGN.md) explains the proposed flow-in-volatility
+hypothesis, the four ablations, and the exact conditional blocks available for a
+future hybrid sampler. Gaussian FFBS applies to a conditional linear state block;
+it does not directly solve nonlinear log volatility. A hybrid would require an
+explicit conditional-target cache reset and frozen retained-sampling tuning.

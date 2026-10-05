@@ -1,0 +1,9 @@
+# Equally parallel reference: development comparison
+
+Both reference fits used four logical JAX CPU devices and parallel chains, associative mixed-coordinate transport, target acceptance0.9, four chains,1,000warmup and unchanged first-passing1/2/4/8k tiers. CPU affinity0–3 matched the public sampler. Both passed at2,000draws, outer costs31.076s and31.719s. Public parallel costs were56.093s (4k) and35.147s (2k). Reference was faster in both exploratory pairs; no randomized-order or broad superiority claim follows from two reused development seeds.
+
+Public seed4101 missed the2k gate only for tau endpoint MCSE/width0.02002416 versus0.02, requiring4k. No threshold was relaxed. At seed4201's equal2k length, public sampling was6.780s versus reference9.475s, but public compilation2.793s plus adaptation9.759s exceeded reference adaptation including JIT6.701s. Repeated diagnostics and JSON storage are substantial for both arms. The practical next investigations are repeated-dataset compilation amortization, adaptation cost, and prospectively declared finer retention increments; none has been benchmarked here.
+
+All canonical/functional/predictive gates passed, but agreement is not established merely by passing mixing gates. Across36endpoints, maximum absolute difference divided by combined MCSE was3.285 and2.253; maximum reference-width differences4.094% and2.332%. These are descriptive, unadjusted comparisons with shared prediction seeds and no independent truth claim. No extra fits or threshold changes were made.
+
+Original authoritative session40524 exited0. Two fit launch costs total62.7958s; controller total62.9947s. Runtime asserts CPU backend and exactly four devices; all JAX/JAXlib/NumPyro Python/native hashes and study sources were pinned before and checked after execution. Reference runs followed public runs; warm compiler caches and host effects are not randomized. This is development evidence, not qualification or market validation.

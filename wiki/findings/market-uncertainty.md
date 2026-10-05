@@ -55,10 +55,30 @@ single-fixture results, not a repeated speed qualification or market validation.
 
 Parallel continuation was integrated on main as `4fe485d`. The default stays
 single-threaded; explicit multiple threads advance independent chains in a
-bounded pool while preserving per-chain state. Rust and isolated debug Python
-checks cover exact replay, concurrency and lifecycle behavior. A separate release
-build and latency experiment are pending; the old attested study runtime was
-not replaced. See [the API note](../../integrations/python/PARALLEL_CONTINUATION.md).
+bounded pool while preserving per-chain state. Rust and isolated release Python
+checks cover exact replay, concurrency and lifecycle behavior. The demanding
+T1000/G4 development pilot preserved byte-identical draws and diagnostics while
+reducing complete process latency by factors of 1.924 and 1.939. See
+[the archived experiment](../../STUDIES/market_uncertainty_v1/artifacts/parallel-continuation-latency-v1/RESULTS.md)
+and [the API note](../../integrations/python/PARALLEL_CONTINUATION.md).
+
+The equally parallel NumPyro follow-up finished in 31.08s and 31.72s, versus
+oWALNUTS at 56.09s and 35.15s on the same two development seeds. Both reference
+runs passed at 2,000 draws. The first oWALNUTS run narrowly failed one precision
+gate at 2,000 draws and therefore continued to 4,000; the threshold was retained.
+At the shared 2,000-draw length, oWALNUTS sampling was faster but its compilation
+and adaptation costs outweighed that advantage. Evidence is preserved under
+[`parallel-reference-latency-v1`](../../STUDIES/market_uncertainty_v1/artifacts/parallel-reference-latency-v1/RESULTS.md). These two pairs motivate
+finer continuation increments and lower setup cost; they do not establish a
+general speed ranking or statistical equivalence.
+
+A separate bounded 48-hour receipt capture is launched under
+`target/market-receipt-route-v2/exploratory-48h-v1`, with frozen launch sources
+in its sibling `exploratory-48h-v1-launch` directory. Inspect process and terminal
+records for its actual status. The exact baseline requires 20 matured eligible
+labels: the earliest possible first forecast is about 10h45m after capture starts.
+Do not lower that requirement to produce an early forecast. Even an uninterrupted
+48 hours supplies only a small exploratory sample, not coverage across regimes.
 
 Keep future-observation predictive intervals, posterior parameter credible
 intervals and repeated-sample confidence intervals explicitly distinct. The
