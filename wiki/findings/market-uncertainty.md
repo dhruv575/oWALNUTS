@@ -217,3 +217,28 @@ No live SV deployment or actual contained-worker integration test has occurred
 yet. The latter is prepared separately and must wait until the rolling timing
 campaign ends to avoid concurrent inference load. Existing exact-baseline
 issuance and collection remain unchanged.
+
+Final live-SV aggregation now requires all 95 planned origins, preserves
+unusable outcomes, and checks baseline comparisons against identical realized
+returns. Changed upstream lineage invalidates affected forecasts without
+removing them from the denominator; changed issuance identities remain hard
+errors. Fourteen mocked tests passed; this is evaluation infrastructure, not
+observed market performance. See
+[aggregate validation](../../STUDIES/market_uncertainty_v1/artifacts/live-sv-aggregate-validation-v1.json).
+
+Two research routes remain candidates, not implemented or selected models.
+First, test coarse contract-marked flow (put/call, maturity and moneyness) in
+volatility dynamics against the same SV model without flow and with pooled
+flow. Evidence linking buying pressure to implied-volatility shape
+([Bollen and Whaley](https://onlinelibrary.wiley.com/doi/10.1111/j.1540-6261.2004.00647.x))
+does not establish prediction of realized BTC returns. Opening-position flow
+used in [Pan and Poteshman](https://www.mit.edu/people/junpan/volume.pdf)
+is unavailable in the current public tape. Second, only after collecting
+substantially more stress-period evidence, test flow-dependent calm/stress
+transition probabilities against an otherwise identical no-flow regime model.
+Neither route is justified by higher coverage alone: proper predictive scores,
+interval width, availability and temporal clustering of misses must be assessed
+on a subsequently frozen calendar period. Current historical results are
+development evidence. Future-return intervals are predictive intervals;
+coefficient posterior intervals and confidence intervals for forecast
+performance answer different questions.
