@@ -184,6 +184,17 @@ which flow placement is best. See
 The next study is a fixed rolling grid of historical forecast times, with
 model-quality and matched sampler-cost comparisons reported separately.
 
+That rolling study launched at 2026-10-05 03:09:55 UTC on its original root-owned
+process. It declares 72 origins every three hours from September 22 00:00 through
+September 30 21:00, four public model ablations and a matched both-flow reference
+at each origin: 360 intended fits. Ablation groups rotate and paired backend order
+alternates. The six-hour admission budget may leave unstarted rows, which remain
+in the denominator. Only the 72 both-flow pairs support sampler comparisons;
+model scores use individual and common eligible grids with the exact baselines.
+Inspect `target/sv-historical-rolling-v1/run-v1/execution.json` and the original
+process for completion; launch is not a result. The immutable launch snapshot is
+[archived here](../../STUDIES/market_uncertainty_v1/artifacts/sv-historical-rolling-launch-v1/SUMMARY.md).
+
 The separate two-hour receipt capture completed on its original process with
 one acknowledged connection, 7,148 quote messages, 474 option-trade messages
 and no reported gaps. Its terminal receipts reconcile with the earlier prefix;
