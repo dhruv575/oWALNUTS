@@ -41,10 +41,12 @@
 //! budgeted admission variant for them).
 //!
 //! [`Init`] chooses the starting positions: [`Init::Given`] (the positions
-//! passed to [`Sampler::run`]) or [`Init::Uniform`], the CmdStan rule of
+//! passed to [`Sampler::run`]), [`Init::Uniform`], the CmdStan rule of
 //! uniform(-r, r) unconstrained starts redrawn until the log density and
 //! gradient are finite ([`Sampler::run_with_init`],
-//! [`Sampler::run_from_random_starts`]).
+//! [`Sampler::run_from_random_starts`]), or the opt-in
+//! [`Init::Candidates`] rule, which draws several such starts per chain and
+//! keeps one by its log density ([`candidate_starts`]).
 //!
 //! [`Adaptation`] selects the warmup rules: acceptance-driven dual averaging
 //! (`WarmupConfig::new(target_accept)`, the default), the JMLR Appendix C
@@ -397,6 +399,31 @@ pub enum Init {
         /// Draws tried per chain before the run errors; nonzero.
         max_attempts: usize,
     },
+    /// Opt-in candidate-pool starts: per chain, `candidates` evaluable
+    /// [`Init::Uniform`] draws, of which the one picked by `selection` (by its
+    /// log density) is the start; see [`candidate_starts`]. With
+    /// `candidates = 1` the starts are exactly the [`Init::Uniform`] starts.
+    Candidates {
+        /// Half-width of the uniform box; finite and positive.
+        radius: f64,
+        /// Evaluable candidates drawn per chain; nonzero.
+        candidates: usize,
+        /// Draws tried per candidate before the run errors; nonzero.
+        max_attempts: usize,
+        /// Which candidate becomes the start.
+        selection: StartSelection,
+    },
+}
+
+/// How [`Init::Candidates`] picks a chain's start from its candidate pool.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StartSelection {
+    /// The candidate with the highest log density (the first on ties).
+    HighestDensity,
+    /// The candidate of median log density: the `(k - 1) / 2`-th smallest of
+    /// the `k` candidates (lower median; stable on ties).
+    MedianDensity,
 }
 
 /// Tag mixed into the sampler seed for the start RNG so that start draws are
@@ -409,6 +436,30 @@ impl Init {
         Self::Uniform {
             radius: 2.0,
             max_attempts: 100,
+        }
+    }
+}
+
+impl Init {
+    /// Best-of-`candidates`: uniform(-2, 2) candidates (up to 100 draws
+    /// each), start at the highest log density. Opt-in; not the default.
+    pub fn best_of(candidates: usize) -> Self {
+        Self::Candidates {
+            radius: 2.0,
+            candidates,
+            max_attempts: 100,
+            selection: StartSelection::HighestDensity,
+        }
+    }
+
+    /// Median-of-`candidates`: as [`Init::best_of`], but start at the
+    /// candidate of median log density. Opt-in; not the default.
+    pub fn median_of(candidates: usize) -> Self {
+        Self::Candidates {
+            radius: 2.0,
+            candidates,
+            max_attempts: 100,
+            selection: StartSelection::MedianDensity,
         }
     }
 }
@@ -503,6 +554,157 @@ pub fn uniform_starts<T: Target + ?Sized>(
         }
     }
     Ok(starts)
+}
+
+/// Starts chosen by [`candidate_starts`], with the evidence for the choice.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct CandidateStarts {
+    /// One start per chain.
+    pub starts: Vec<Vec<f64>>,
+    /// Log density of each chain's start.
+    pub start_log_densities: Vec<f64>,
+    /// Log density of every evaluable candidate, per chain, in draw order.
+    pub candidate_log_densities: Vec<Vec<f64>>,
+    /// Index of the chosen candidate within each chain's pool.
+    pub chosen: Vec<usize>,
+    /// Target evaluations made per chain (evaluable candidates plus the
+    /// rejected draws), every one of them a log density and gradient call.
+    pub evaluations: Vec<usize>,
+}
+
+/// Draw `chains` starts by the [`Init::Candidates`] rule.
+///
+/// For each chain in turn, `candidates` evaluable starts are drawn exactly
+/// as [`uniform_starts`] draws one (uniform(-radius, radius) coordinates,
+/// redrawn up to `max_attempts` times until the log density and gradient are
+/// finite), from the same start RNG stream; `selection` then keeps one. With
+/// `candidates = 1` the result's starts equal
+/// `uniform_starts(target, chains, seed, radius, max_attempts)`. Every
+/// evaluation is a full log-density-and-gradient call and counts against the
+/// target's call counter; [`CandidateStarts::evaluations`] reports them.
+///
+/// Errors as [`uniform_starts`], and with a configuration error when
+/// `candidates` is zero.
+pub fn candidate_starts<T: Target + ?Sized>(
+    target: &T,
+    chains: usize,
+    seed: u64,
+    radius: f64,
+    candidates: usize,
+    max_attempts: usize,
+    selection: StartSelection,
+) -> Result<CandidateStarts, Error> {
+    if !radius.is_finite() || radius <= 0.0 {
+        return Err(Error::configuration(
+            "initialisation radius must be finite and positive",
+        ));
+    }
+    if max_attempts == 0 {
+        return Err(Error::configuration(
+            "initialisation must allow at least one attempt",
+        ));
+    }
+    if candidates == 0 {
+        return Err(Error::configuration(
+            "initialisation must draw at least one candidate",
+        ));
+    }
+    if chains == 0 {
+        return Err(Error::configuration("chain count must be nonzero"));
+    }
+    let dimension = catch_unwind(AssertUnwindSafe(|| target.dimension()))
+        .map_err(|_| Error::new(ErrorKind::Panic, "target dimension callback panicked"))?;
+    if dimension == 0 {
+        return Err(Error::configuration("target dimension must be nonzero"));
+    }
+    let mut rng = SmallRng::seed_from_u64(crate::walnutpie::splitmix64(seed ^ INIT_SEED_TAG));
+    let mut gradient = vec![0.0; dimension];
+    let mut out = CandidateStarts {
+        starts: Vec::with_capacity(chains),
+        start_log_densities: Vec::with_capacity(chains),
+        candidate_log_densities: Vec::with_capacity(chains),
+        chosen: Vec::with_capacity(chains),
+        evaluations: Vec::with_capacity(chains),
+    };
+    for chain in 0..chains {
+        let mut pool: Vec<(Vec<f64>, f64)> = Vec::with_capacity(candidates);
+        let mut evaluations = 0usize;
+        for _candidate in 0..candidates {
+            let mut last_failure = String::new();
+            let mut found = None;
+            for _attempt in 0..max_attempts {
+                let candidate: Vec<f64> = (0..dimension)
+                    .map(|_| rng.random_range(-radius..radius))
+                    .collect();
+                gradient.iter_mut().for_each(|g| *g = f64::NAN);
+                let evaluated = catch_unwind(AssertUnwindSafe(|| {
+                    target.log_density_gradient(&candidate, &mut gradient)
+                }))
+                .map_err(|_| Error::new(ErrorKind::Panic, "target callback panicked"))?;
+                evaluations += 1;
+                match evaluated {
+                    Ok(value) if value.is_finite() && gradient.iter().all(|g| g.is_finite()) => {
+                        found = Some((candidate, value));
+                        break;
+                    }
+                    Ok(value) => {
+                        last_failure = if value.is_finite() {
+                            String::from("gradient is not finite")
+                        } else {
+                            format!("log density is {value}")
+                        };
+                    }
+                    Err(error) if error.kind() == crate::walnutpie::TargetErrorKind::Fatal => {
+                        return Err(Error::new(
+                            ErrorKind::Target,
+                            format!(
+                                "fatal target error while drawing the start of chain {chain}: {}",
+                                error.message()
+                            ),
+                        ));
+                    }
+                    Err(error) => last_failure = error.message().to_owned(),
+                }
+            }
+            match found {
+                Some(entry) => pool.push(entry),
+                None => {
+                    return Err(Error::new(
+                        ErrorKind::Numerical,
+                        format!(
+                            "no evaluable start for chain {chain} after {max_attempts} uniform(-{radius}, \
+                             {radius}) draws (last failure: {last_failure}); the log density and \
+                             gradient must be finite at the start, check the model or supply starts"
+                        ),
+                    ));
+                }
+            }
+        }
+        let chosen = match selection {
+            StartSelection::HighestDensity => {
+                let mut best = 0;
+                for (index, (_, value)) in pool.iter().enumerate() {
+                    if *value > pool[best].1 {
+                        best = index;
+                    }
+                }
+                best
+            }
+            StartSelection::MedianDensity => {
+                let mut order: Vec<usize> = (0..pool.len()).collect();
+                order.sort_by(|a, b| pool[*a].1.total_cmp(&pool[*b].1));
+                order[(pool.len() - 1) / 2]
+            }
+        };
+        out.candidate_log_densities
+            .push(pool.iter().map(|(_, value)| *value).collect());
+        out.start_log_densities.push(pool[chosen].1);
+        out.starts.push(pool.swap_remove(chosen).0);
+        out.chosen.push(chosen);
+        out.evaluations.push(evaluations);
+    }
+    Ok(out)
 }
 
 /// Kernel tuning: the macro step, tree depth, refinement, and error
@@ -945,7 +1147,8 @@ impl Sampler {
     /// Run from starts chosen by `init`.
     ///
     /// [`Init::Given`] is [`Sampler::run`]. [`Init::Uniform`] draws one start
-    /// per chain by [`uniform_starts`] with this sampler's seed; the chain
+    /// per chain by [`uniform_starts`] with this sampler's seed, and
+    /// [`Init::Candidates`] by [`candidate_starts`]; the chain
     /// count is [`Sampler::chains`] or, if unset, four.
     pub fn run_with_init<T: Target>(&self, target: &T, init: &Init) -> Result<Posterior, Error> {
         match init {
@@ -957,6 +1160,24 @@ impl Sampler {
                 let chains = self.chains.unwrap_or(DEFAULT_RANDOM_START_CHAINS);
                 let starts = uniform_starts(target, chains, self.seed, *radius, *max_attempts)?;
                 self.run(target, &starts)
+            }
+            Init::Candidates {
+                radius,
+                candidates,
+                max_attempts,
+                selection,
+            } => {
+                let chains = self.chains.unwrap_or(DEFAULT_RANDOM_START_CHAINS);
+                let chosen = candidate_starts(
+                    target,
+                    chains,
+                    self.seed,
+                    *radius,
+                    *candidates,
+                    *max_attempts,
+                    *selection,
+                )?;
+                self.run(target, &chosen.starts)
             }
         }
     }
