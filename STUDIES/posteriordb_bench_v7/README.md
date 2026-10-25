@@ -44,6 +44,20 @@ ESS-per-gradient losses concentrate on `accel_gp` (0.35x CmdStan),
 | wall per gradient, fixed 16 (P4, contended) | 15 | 1.849 |
 | bulk ESS/s vs nutpie, house (reported, v6 P5) | 16 | 1.226 |
 
+## Seed extension (WP62, added after this study)
+
+This study's verdict stands as written. `STUDIES/posteriordb_bench_v7_seed_extension`
+reran the fixed-16 oWALNUTS and CmdStan arms on three new seeds
+(620601–620603), with the same harness and an identical default sampler at
+`c5c60122`. The fixed-16 ESS-per-gradient geomean against CmdStan is **0.810**
+on the new seeds and **0.761** pooled over all six. The leave-one-seed-out
+interval is **[0.740, 0.822]**. So the 0.708 above was a low three-seed draw,
+not a sampler regression, consistent with WP60 and WP61. The pooled figure
+clears this study's 0.75 P3 threshold, but its interval straddles it. Gates
+are stable at 40/48 oWALNUTS cells on both seed sets, against CmdStan's 32 and
+30. Cite the per-gradient figure as about 0.76x CmdStan (six seeds,
++/-0.04), not as 0.71.
+
 ## What was tested
 
 The commit under test is **`f097391c`**, the head of `main` after the
