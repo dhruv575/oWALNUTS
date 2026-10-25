@@ -759,6 +759,17 @@ const CHECK_MIN_CHAINS: usize = 3;
 /// crawling or second-mode chains); runs that fail on ESS, divergences or
 /// all-chain R-hat produce none. Their sensitivity rests on one wrong-chain
 /// run and is not established.
+///
+/// One further variant is not a disagreement check:
+/// [`Self::NonfinitePositions`] reports a chain whose integrator produced a
+/// nonfinite position that [`crate::walnutpie::NonfinitePositionPolicy::RejectLeaf`]
+/// (the `sampler::Tuning` default since
+/// `STUDIES/nonfinite_policy_requalification_v1`, WP54) rescued as a
+/// zero-density leaf. The rescue records no divergence, so without this line
+/// the event is visible only in
+/// [`crate::walnutpie::WorkTotals::nonfinite_position_rejections`]. It reads
+/// the per-chain work counters, needs no minimum number of chains, and is
+/// printed on its own line.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum ChainWarning {
@@ -798,6 +809,17 @@ pub enum ChainWarning {
         /// Maximum rank R-hat over parameters without this chain.
         max_rhat_without: f64,
     },
+    /// The chain rejected nonfinite integrator positions as zero-density
+    /// leaves (`WorkTotals::nonfinite_position_rejections`, split into the
+    /// discarded warmup and the retained transitions). At least one count is
+    /// nonzero.
+    NonfinitePositions {
+        chain: usize,
+        /// Rejections over the warmup (discarded) transitions.
+        warmup: usize,
+        /// Rejections over the retained transitions.
+        sampling: usize,
+    },
 }
 
 impl ChainWarning {
@@ -807,14 +829,37 @@ impl ChainWarning {
             Self::WarmupStep { chain, .. }
             | Self::WarmupLogDensity { chain, .. }
             | Self::SampledLogDensity { chain, .. }
-            | Self::RHat { chain, .. } => *chain,
+            | Self::RHat { chain, .. }
+            | Self::NonfinitePositions { chain, .. } => *chain,
         }
+    }
+
+    /// Whether this is one of the chain-disagreement checks (every variant
+    /// except [`Self::NonfinitePositions`]).
+    pub fn is_disagreement(&self) -> bool {
+        !matches!(self, Self::NonfinitePositions { .. })
+    }
+
+    /// One [`Self::NonfinitePositions`] per chain with a nonzero count, from
+    /// `(warmup, sampling)` nonfinite-position rejection counts per chain.
+    pub fn nonfinite_positions(counts: &[(usize, usize)]) -> Vec<Self> {
+        counts
+            .iter()
+            .enumerate()
+            .filter(|(_, (warmup, sampling))| *warmup > 0 || *sampling > 0)
+            .map(|(chain, &(warmup, sampling))| Self::NonfinitePositions {
+                chain,
+                warmup,
+                sampling,
+            })
+            .collect()
     }
 
     /// Every check on chains from one run (or separate runs of one target):
     /// the end-of-warmup and retained-draw telemetry of each chain plus
-    /// [`ChainDisagreement`] on the retained draws. Ordered by check
-    /// (warmup step, warmup log density, sampled log density, R-hat), then
+    /// [`ChainDisagreement`] on the retained draws, then each chain's
+    /// nonfinite-position rejections. Ordered by check (warmup step, warmup
+    /// log density, sampled log density, R-hat, nonfinite positions), then
     /// chain. Empty when chains disagree on shape.
     pub fn from_chains(chains: &[ChainOutput]) -> Vec<Self> {
         let Some(first) = chains.first() else {
@@ -841,7 +886,19 @@ impl ChainWarning {
             .iter()
             .map(|chain| chain.telemetry().sampling_end())
             .collect();
-        Self::detect(&warmup, &sampling, disagreement)
+        let rejections: Vec<(usize, usize)> = chains
+            .iter()
+            .map(|chain| {
+                let telemetry = chain.telemetry();
+                (
+                    telemetry.discarded().nonfinite_position_rejections(),
+                    telemetry.retained().nonfinite_position_rejections(),
+                )
+            })
+            .collect();
+        let mut warnings = Self::detect(&warmup, &sampling, disagreement);
+        warnings.extend(Self::nonfinite_positions(&rejections));
+        warnings
     }
 
     /// The checks from their inputs: one end-of-warmup and one retained-draw
@@ -948,31 +1005,55 @@ impl fmt::Display for ChainWarning {
                 fmt_num(*max_rhat),
                 fmt_num(*max_rhat_without)
             ),
+            Self::NonfinitePositions {
+                warmup, sampling, ..
+            } => {
+                let noun = |n: usize| if n == 1 { "position" } else { "positions" };
+                match (*warmup, *sampling) {
+                    (w, 0) => write!(f, "rejected {w} nonfinite {} during warmup", noun(w)),
+                    (0, s) => write!(f, "rejected {s} nonfinite {} during sampling", noun(s)),
+                    (w, s) => write!(
+                        f,
+                        "rejected {w} nonfinite {} during warmup and {s} during sampling",
+                        noun(w)
+                    ),
+                }
+            }
         }
     }
 }
 
 impl ChainWarning {
-    /// One line per flagged chain, naming every check that fired and its
-    /// numbers; what [`Summary`] and the Python `summary_table()` print.
+    /// One line per flagged chain naming every disagreement check that fired
+    /// and its numbers, plus one line per chain that rejected nonfinite
+    /// positions (`warning: chain k rejected n nonfinite positions during
+    /// warmup`), ordered by chain; what [`Summary`] and the Python
+    /// `summary_table()` print.
     pub fn lines(warnings: &[ChainWarning]) -> Vec<String> {
         let mut chains: Vec<usize> = warnings.iter().map(ChainWarning::chain).collect();
         chains.sort_unstable();
         chains.dedup();
-        chains
-            .into_iter()
-            .map(|chain| {
-                let findings: Vec<String> = warnings
-                    .iter()
-                    .filter(|w| w.chain() == chain)
-                    .map(ToString::to_string)
-                    .collect();
-                format!(
+        let mut lines = Vec::new();
+        for chain in chains {
+            let findings: Vec<String> = warnings
+                .iter()
+                .filter(|w| w.chain() == chain && w.is_disagreement())
+                .map(ToString::to_string)
+                .collect();
+            if !findings.is_empty() {
+                lines.push(format!(
                     "warning: chain {chain} disagrees with the other chains: {}",
                     findings.join("; ")
-                )
-            })
-            .collect()
+                ));
+            }
+            lines.extend(
+                warnings
+                    .iter()
+                    .filter(|w| w.chain() == chain && !w.is_disagreement())
+                    .map(|w| format!("warning: chain {chain} {w}")),
+            );
+        }
+        lines
     }
 }
 
@@ -1057,8 +1138,9 @@ pub struct Summary {
     /// [`RHAT_DISAGREEMENT_THRESHOLD`] and there are at least three chains;
     /// see [`ChainDisagreement`].
     pub chain_disagreement: Option<ChainDisagreement>,
-    /// Observe-only end-of-warmup and retained-draw chain checks; see
-    /// [`ChainWarning`]. Empty when no chain disagrees.
+    /// Observe-only end-of-warmup and retained-draw chain checks and
+    /// per-chain nonfinite-position rejections; see [`ChainWarning`]. Empty
+    /// when no chain disagrees and no chain rejected a nonfinite position.
     pub chain_warnings: Vec<ChainWarning>,
 }
 

@@ -7,6 +7,89 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
+Three sampler-facade defaults change in this release: best-of-16 starts
+(WP52), `NonfinitePositionPolicy::RejectLeaf` (WP54) and the fixed dense
+warmup (WP48/WP51). Each is listed under Changed with the study that decided
+it. The retained kernel, `ALGORITHM_REVISION` and the kernel fingerprints are
+unchanged. Everything under Added is opt-in or observe-only.
+
+### Added
+
+- **Start candidates** (`STUDIES/init_rule_v1`, WP43): `sampler::Init::Candidates
+  { radius, candidates, max_attempts, selection }`, with `Init::best_of(k)`,
+  `Init::median_of(k)`, `StartSelection` and `candidate_starts`. Per chain, k
+  evaluable `Init::Uniform` draws come from the same start RNG stream and one
+  is kept by log density; k = 1 equals `uniform_starts` bit for bit. Every
+  candidate is a full gradient call and is counted. `best_of(16)` is now the
+  default (see Changed).
+- **Observe-only chain-disagreement checks** (`STUDIES/chain_disagreement_warning_v1`,
+  WP44). `walnutpie::ChainWindowSummary` via `RunTelemetry::warmup_end()` /
+  `sampling_end()` records the step and the median and IQR of the selected-state
+  log density over the last slow warmup window and over the retained draws.
+  `diagnostics::ChainWarning` (`Summary::chain_warnings`,
+  `Posterior::chain_warnings()`) flags a collapsed end-of-warmup step, a median
+  log density more than 3 typical IQRs below the other chains', or a chain whose
+  removal alone brings R-hat under 1.01. `Summary` prints one `warning: chain k
+  disagrees with the other chains: ...` line per flagged chain. Python adds
+  `SampleResult.chain_warnings()`, per-chain `warmup_end` / `sampling_end`, and
+  the same lines in `print(result)`. Draws are bit-identical; the kernel
+  revision is unchanged.
+- **Nonfinite-position rejections are reported** (WP59). The `RejectLeaf`
+  rescue that WP54 made the default records no divergence, so a rescued
+  overflow was visible only in `WorkTotals::nonfinite_position_rejections`.
+  `ChainWarning::NonfinitePositions { chain, warmup, sampling }` (from the
+  discarded and retained work totals; any number of chains) is now part of
+  `Summary::chain_warnings` and `Posterior::chain_warnings()`, and `Summary`
+  prints `warning: chain k rejected n nonfinite positions during warmup [and
+  m during sampling]` on its own line. `ChainWarning::is_disagreement()`
+  separates it from the WP44 checks. Python: `chain_warnings()` returns it as
+  `check == "nonfinite_positions"` with `warmup` / `sampling` counts,
+  `print(result)` prints the same line, and the `work_*` dicts gain
+  `nonfinite_position_rejections`. Observe-only: draws are bit-identical and
+  the kernel revision is unchanged (`tests/chain_warnings.rs`,
+  `nonfinite_rejections_are_reported_per_chain_and_by_phase`).
+- **Scale-free diagonal regularisation** (opt-in, WP41):
+  `walnutpie::DiagonalMetricRegularization::{ScaleFreeMedian, ScaleFreeStanMedian}`,
+  through `sampler::Adaptation::Custom` and the Python binding as
+  `"scale_free_median"` / `"scale_free_stan_median"`. They shrink each window
+  variance toward the window's median variance instead of an absolute
+  constant. Not a default: `STUDIES/metric_regularisation_scalefree_v1`
+  measured 1.007x / 0.949x the `Stan` default per gradient over 17
+  posteriordb models, 2.06x / 1.61x on `sblrc` (where `Stan`'s absolute prior
+  installs ~11x the posterior variance), 0.61x on `kidiq` for
+  `ScaleFreeMedian` (a two-scale target whose median over-states the small
+  coordinates ~20x) and a funnel z of -3.02 on one seed. Defaults and kernel
+  fingerprints unchanged.
+- **`owalnuts-bridgestan`: opt-in Windows multi-replica dispatch for
+  static-runtime DLLs** (WP50C, WP50D).
+  - **API:** `ReplicatedStanTarget::load_with_options(..,
+    &ReplicatedOptions::concurrent_if_static_runtime())`.
+  - **How it works:** the load first runs `check_static_runtime(model,
+    preload)`, which reads PE import tables in Rust. The model DLL and the
+    preloads must import no mingw/GCC runtime DLL, and every non-system
+    import must be one of the preloads.
+    - If the check passes, the requested replicas are loaded as distinct
+      cached copies and called directly from the sampler threads, without
+      the owned worker or the process-global native-call lock
+      (`Execution::ReplicatedConcurrent`).
+    - If it fails, the owned worker is kept, and `static_runtime_report()`
+      says why.
+  - **Defaults:** `ReplicatedStanTarget::load` and
+    `ReplicatedOptions::default()` are unchanged and keep the owned worker.
+    Off Windows the option has no effect.
+  - **Output parity:** both Windows dispatches return byte-identical
+    `(logp, gradient)` on every outcome, including recoverable failures.
+    The owned worker's contract is kept as is: the gradient buffer is zeroed
+    before each native call, so after a Stan exception the caller sees zeros
+    whatever it prefilled. Direct replicas now zero the buffer too (see
+    Fixed). Tested by `tests/static_runtime.rs`
+    (`recoverable_stan_exceptions_have_identical_outputs_under_both_dispatches`)
+    with the WP50C static sblrc and arK DLLs.
+  - **Status:** opt-in and not a candidate for the default; see Evidence.
+- `integrations/bridgestan/tools/build_static_runtime.py` builds model DLLs
+  and a private `tbb.dll` with the mingw runtime linked statically. Log
+  densities and gradients are bit-identical to stock builds (WP50C Phase A).
+
 ### Changed
 
 - **Default start rule is now `Init::best_of(16)`** (`STUDIES/init_rule_confirmation_v1`,
@@ -61,26 +144,10 @@ architecture and operating system (see the `walnutpie` module documentation).
   - the funnel check passes.
 
   The rejection happens in warmup and adds no retained divergence, so check
-  `nonfinite_position_rejections` to see whether it occurred.
+  `nonfinite_position_rejections` (or the WP59 `chain_warnings` line) to see
+  whether it occurred.
 
-### Added
-
-- Observe-only chain-disagreement checks (`STUDIES/chain_disagreement_warning_v1`,
-  WP44). `walnutpie::ChainWindowSummary` via `RunTelemetry::warmup_end()` /
-  `sampling_end()` records the step and the median and IQR of the selected-state
-  log density over the last slow warmup window and over the retained draws.
-  `diagnostics::ChainWarning` (`Summary::chain_warnings`,
-  `Posterior::chain_warnings()`) flags a collapsed end-of-warmup step, a median
-  log density more than 3 typical IQRs below the other chains', or a chain whose
-  removal alone brings R-hat under 1.01. `Summary` prints one `warning: chain k
-  disagrees with the other chains: ...` line per flagged chain. Python adds
-  `SampleResult.chain_warnings()`, per-chain `warmup_end` / `sampling_end`, and
-  the same lines in `print(result)`. Draws are bit-identical; the kernel
-  revision is unchanged.
-
-### Changed
-
-- **Dense facade warmup defaults changed.** `walnutpie::WarmupConfig`
+- **Dense facade warmup defaults changed** (WP48, WP51). `walnutpie::WarmupConfig`
   defaults (and therefore `Metric::dense()` + `Adaptation::default()`) now
   use `DenseWarmupSeeding::PerTransition`, `DenseMetricRegularization::Stan`
   and a symmetrised dense precision (`dense_symmetrized_precision() == true`).
@@ -101,6 +168,21 @@ architecture and operating system (see the `walnutpie` module documentation).
   retained kernel, `ALGORITHM_REVISION` and `tests/kernel_fingerprint.rs`
   are unchanged. `Metric::dense()` is still never selected automatically.
 
+### Fixed
+
+- `Metric::dense()` under the default `Limits::admit_worst_case()` failed
+  every run with about 1,000 retained draws: the inner retained call
+  re-checked the conservative ceiling. Fixed in admission only; draws are
+  unchanged, with a regression test in `tests/sampler_api.rs` (WP48).
+- `owalnuts-bridgestan` (Windows, opt-in dispatch only): after a
+  recoverable Stan exception, direct static-runtime replicas left the
+  caller's gradient prefill in the buffer (NaN from the kernel), where the
+  owned worker returns zeros. `NativeTarget::evaluate_unlocked` now zeroes
+  the gradient buffer on Windows before the native call. The owned worker
+  already evaluates into a zeroed buffer, so its outputs, and the default
+  path's retained draws, are unchanged. Off Windows nothing changes (found
+  by the WP50E replay).
+
 ### Python package
 
 - Callable targets at `threads > 1`: each sampler worker thread now keeps one
@@ -116,57 +198,18 @@ architecture and operating system (see the `walnutpie` module documentation).
 - README performance guidance rewritten from `STUDIES/python_callpath_v1`
   (per-call cost and thread scaling per path, nutpie comparison, numba
   `error_model="numpy"` for `from_cfunc`). [WP47]
+- **Fix:** `from_pymc(model, gil_free=True)` on models with `pm.Data` or dims
+  raised `NotImplementedError` on PyMC 5.28+, which exports
+  `freeze_dims_and_data` only from `pymc.model.transform.optimization`. The
+  adapter now imports it from there and falls back to `pymc.model.transform`
+  for older PyMC.
+- `chain_warnings()` / `print(result)` gain the WP44 chain-disagreement
+  lines and the WP59 nonfinite-rejection line, and `DEFAULTS` reports
+  `init_candidates` (see Added and Changed).
 
-#### Fixed
+### Evidence
 
-- `from_pymc(model, gil_free=True)` on models with `pm.Data` or dims raised
-  `NotImplementedError` on PyMC 5.28+, which exports `freeze_dims_and_data`
-  only from `pymc.model.transform.optimization`. The adapter now imports it
-  from there and falls back to `pymc.model.transform` for older PyMC.
-
-- `walnutpie::DiagonalMetricRegularization::{ScaleFreeMedian, ScaleFreeStanMedian}`
-  (opt-in through `sampler::Adaptation::Custom` and the Python binding as
-  `"scale_free_median"` / `"scale_free_stan_median"`): shrink each window
-  variance toward the window's median variance instead of an absolute
-  constant. Not a default: WP41 (`STUDIES/metric_regularisation_scalefree_v1`)
-  measured 1.007x / 0.949x the `Stan` default per gradient over 17 posteriordb
-  models, 2.06x / 1.61x on `sblrc` (where `Stan`'s absolute prior installs
-  ~11x the posterior variance), 0.61x on `kidiq` for `ScaleFreeMedian` (a
-  two-scale target whose median over-states the small coordinates ~20x) and
-  a funnel z of -3.02 on one seed. Defaults and kernel fingerprints unchanged.
-
-### Added
-
-- `owalnuts-bridgestan`: opt-in Windows multi-replica dispatch for
-  static-runtime DLLs.
-  - **API:** `ReplicatedStanTarget::load_with_options(..,
-    &ReplicatedOptions::concurrent_if_static_runtime())`.
-  - **How it works:** the load first runs `check_static_runtime(model,
-    preload)`, which reads PE import tables in Rust. The model DLL and the
-    preloads must import no mingw/GCC runtime DLL, and every non-system
-    import must be one of the preloads.
-    - If the check passes, the requested replicas are loaded as distinct
-      cached copies and called directly from the sampler threads, without
-      the owned worker or the process-global native-call lock
-      (`Execution::ReplicatedConcurrent`).
-    - If it fails, the owned worker is kept, and `static_runtime_report()`
-      says why.
-  - **Defaults:** `ReplicatedStanTarget::load` and
-    `ReplicatedOptions::default()` are unchanged and keep the owned worker.
-    Off Windows the option has no effect.
-  - **Output parity:** both Windows dispatches return byte-identical
-    `(logp, gradient)` on every outcome, including recoverable failures.
-    The owned worker's contract is kept as is: the gradient buffer is zeroed
-    before each native call, so after a Stan exception the caller sees zeros
-    whatever it prefilled. Direct replicas now zero the buffer too (see
-    Fixed). Tested by `tests/static_runtime.rs`
-    (`recoverable_stan_exceptions_have_identical_outputs_under_both_dispatches`)
-    with the WP50C static sblrc and arK DLLs.
-- `integrations/bridgestan/tools/build_static_runtime.py` builds model DLLs
-  and a private `tbb.dll` with the mingw runtime linked statically. Log
-  densities and gradients are bit-identical to stock builds (WP50C Phase A).
-
-### Evidence and status
+Windows BridgeStan static-runtime dispatch (WP50C–WP50E):
 
 - **Payoff.** WP50C Phase C: 3.2x (sblrc) and 4.0x (arK) contended sampling
   wall, with bit-identical draws.
@@ -184,22 +227,12 @@ architecture and operating system (see the `walnutpie` module documentation).
   so it is designed sampler behaviour, not a native fault. The frozen verdict
   was `NOT_ESTABLISHED`: the cross-dispatch stream hash differed, and the
   only difference was the gradient buffer on 1,512 recoverable evaluations
-  (fixed below). Positions, energies, call counts and draws were
+  (fixed above). Positions, energies, call counts and draws were
   bit-identical, including under `RejectLeaf`.
 - **Status.** The option stays opt-in and is not a candidate for the default.
   WP50D's frozen verdict is not supported. Reading the WP50E replay as
   dispatch-independent puts the static native-fault count at 0/1000, but the
   coordinator has not yet accepted that reading.
-
-### Fixed
-
-- `owalnuts-bridgestan` (Windows, opt-in dispatch only): after a
-  recoverable Stan exception, direct static-runtime replicas left the
-  caller's gradient prefill in the buffer (NaN from the kernel), where the
-  owned worker returns zeros. `NativeTarget::evaluate_unlocked` now zeroes
-  the gradient buffer on Windows before the native call. The owned worker
-  already evaluates into a zeroed buffer, so its outputs, and the default
-  path's retained draws, are unchanged. Off Windows nothing changes.
 
 ## [0.2.0] - 2026-09-04
 

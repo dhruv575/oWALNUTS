@@ -758,3 +758,42 @@ def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
     assert {"warmup_log_density", "sampled_log_density", "rhat"} <= {w["check"] for w in warnings}
     lines = [line for line in str(trapped).splitlines() if line.startswith("warning: chain")]
     assert len(lines) == 1 and lines[0].startswith("warning: chain 3 disagrees with the other chains: ")
+
+
+def _cliff(q: np.ndarray) -> tuple[float, np.ndarray]:
+    # The Rust tests/nonfinite_position_policy.rs cliff: -G |x| with G = 1e308;
+    # the first half-kick at step 4 overflows and RejectLeaf rescues the leaf.
+    x = float(q[0])
+    if abs(x) >= 1.0:
+        return -math.inf, np.zeros(1)
+    return -1e308 * abs(x), np.array([-1e308 * math.copysign(1.0, x)])
+
+
+def test_chain_warnings_report_nonfinite_position_rejections():
+    result = owalnuts.sample(
+        _cliff,
+        dim=1,
+        warmup=3,
+        draws=5,
+        seed=11,
+        chains=2,
+        init=np.array([[0.1], [-0.1]]),
+        tuning=owalnuts.Tuning(step_size=4.0, max_depth=3, max_refinement_levels=2),
+        adaptation=None,
+        mass=np.ones(1),
+    )
+    counts = [
+        (c["work_discarded"]["nonfinite_position_rejections"], c["work_retained"]["nonfinite_position_rejections"])
+        for c in result.chains
+    ]
+    assert all(w >= 3 and s >= 5 for w, s in counts), counts
+    assert result.health()["divergences"] == 0
+    warnings = result.chain_warnings()
+    assert [(w["chain"], w["check"], w["warmup"], w["sampling"]) for w in warnings] == [
+        (k, "nonfinite_positions", w, s) for k, (w, s) in enumerate(counts)
+    ]
+    lines = [line for line in str(result).splitlines() if line.startswith("warning: chain")]
+    assert lines == [
+        f"warning: chain {k} rejected {w} nonfinite positions during warmup and {s} during sampling"
+        for k, (w, s) in enumerate(counts)
+    ]

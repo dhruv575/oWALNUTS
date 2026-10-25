@@ -5054,8 +5054,12 @@ impl WorkTotals {
         self.recoverable_target_failures
     }
     /// Integrator positions that were not finite and were rejected as
-    /// zero-density leaves under [`NonfinitePositionPolicy::RejectLeaf`];
-    /// always zero under the default policy, which ends the run instead.
+    /// zero-density leaves under [`NonfinitePositionPolicy::RejectLeaf`] (the
+    /// `sampler::Tuning` default); always zero under
+    /// [`NonfinitePositionPolicy::Abort`] (the [`KernelTuning::default`]
+    /// policy), which ends the run instead. No divergence is recorded for the
+    /// event; `diagnostics::ChainWarning::NonfinitePositions` reports a
+    /// nonzero count per chain.
     pub fn nonfinite_position_rejections(&self) -> usize {
         self.nonfinite_position_rejections
     }

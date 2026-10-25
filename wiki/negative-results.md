@@ -25,14 +25,37 @@ where one was established. Details are in the
 
 ## Adaptation
 
-- **Making {PerTransition seeding, Stan regularisation, symmetrised
-  precision} the `Metric::dense()` warmup default** (WP51,
-  `dense_metric_confirmation_v1`). It is 3.21x the diagonal per gradient over
-  17 posteriordb models (`diamonds` 98.7x) with the funnel exact, but it passes
-  40/51 gates against 43, and `gp_pois_regr` drops 3/3 -> 0/3 (1.73x per
-  gradient, yet too few gradients per draw for the slow GP length-scale to
-  reach ESS 400). The frozen rule failed, so the three fixes stay opt-in.
-  The shipped dense defaults measure 0.055x, 12/51.
+- **WP51's frozen dense-default rule** (`dense_metric_confirmation_v1`).
+  The candidate {PerTransition seeding, Stan regularisation, symmetrised
+  precision} is 3.21x the diagonal per gradient over 17 posteriordb models
+  (`diamonds` 98.7x) with funnel |z| <= 1.36, but the rule compared it with
+  the diagonal default and failed on the deciding number, **40/51 gates
+  against the diagonal's 43/51** (the rule needed 42), and on `gp_pois_regr`
+  dropping 3/3 -> 0/3 (1.73x per gradient, yet too few gradients per draw for
+  the slow GP length-scale to reach ESS 400). The record stands as not
+  supported. The coordinator then made the candidate the `Metric::dense()`
+  warmup default anyway, as an engineering decision outside the rule, on
+  candidate-versus-old-dense evidence: the old dense defaults measure 0.055x
+  with 12/51 gates, and two of the three old behaviours were defects. Dense
+  is still never selected automatically.
+- **Scale-free diagonal regularisation as the default** (WP41,
+  `metric_regularisation_scalefree_v1`). Shrinking each window variance
+  toward the window's median variance instead of Stan's absolute
+  prior is parity overall (**1.007x**; `ScaleFreeStanMedian` 0.949x) against
+  a 1.10x bar. It is 2.06x on `sblrc`, where Stan's absolute prior installs
+  9.8–11.9x the posterior variance, but the median anchor is not scale-free
+  inside a two-scale model: on `kidiq` it installs 7.9x and 21.6x the small
+  coordinates' variance (0.61x), and one funnel seed reached z -3.02. Both
+  variants stay opt-in.
+- **A warmup-window leaf-error rule for `delta`** (WP49, `adaptive_delta_v1`).
+  The inverse-tail rule is **1.016x** and the refined-fraction controller
+  0.885x against a 1.10x bar. The tail that matters is invisible in warmup:
+  `accel_gp`'s warmup-window q0.99 is 1.25 against 3.9 on the retained
+  draws, so the rule raised its `delta` to 1.45. The visible tails mark the
+  models where fixed `delta = 2` already helps, and the controller form
+  raises `delta` with the tail by construction. Closed as a warmup-statistic
+  line; the study's `with_adaptive_delta` option is not in the library on
+  `main`.
 - **Appendix C as the default warmup** (WP22, WP23). From uniform starts the
   K-quantile rule installs delta near 0 at transition 74 and never recovers;
   after the v4 robust rule it is at parity with dual averaging (0.995x) and
@@ -87,7 +110,18 @@ where one was established. Details are in the
   distribution is one smooth population; `P(|dH| > 1)` goes from 0.4 to 6 %
   at h to 28 to 62 % at 2h. Every step-raising arm loses.
 - **Fixed delta 2** (WP34 near miss 1.070x; WP37A not qualified): `accel_gp`
-  0.68x; funnel gross-safety on 6 of 12 seeds.
+  0.68x; funnel gross-safety on 6 of 12 seeds. WP49's fixed-2 control was
+  1.141x with 43 gates but 34 funnel divergences against the default's 11
+  over 12 seeds; WP53 is pending.
+- **A lower fixed `delta` as the default** (WP42, `delta_half_default_v1`).
+  `delta = 0.5` at eight levels buys 1.385x funnel efficiency, but costs
+  **0.936x** over posteriordb (0.861x on the 14 healthy-ish models, seven
+  models below 0.85x) with 38 vs 41 gates; `delta = 0.75` is near free on
+  ordinary models (0.995x) but gains only 1.142x on the funnel. Each
+  tightening shows up as reverse-coarser truncation on smooth leaf-error
+  populations (median rc-stop fraction 0.025 -> 0.075 -> 0.166), and the
+  losses land on the smooth models, not the stiff ones predicted.
+  `delta = 1` stands; `delta = 0.5` stays the funnel opt-in.
 - **Coarsest-first reverse check order** (WP37B): paused after a target
   fault; descriptively 1.086x more reverse calls than the incumbent.
 - **Carrying the orbit past a failed reverse check** (WP39, WP39B): 0.981x
@@ -132,7 +166,30 @@ where one was established. Details are in the
   ridge.
 - **The path block at T=100** (WP14): no advantage.
 
+## Diagnostics
+
+- **The refined-leaf rate as a silent-funnel warning** (WP55,
+  `silent_funnel_diagnostic_v1`). A chain whose retained refined-leaf rate
+  exceeds 3x the clean models' median (0.00565) fires on 11 of 39 clean
+  cells: **specificity 0.718** against 0.929 required, sensitivity 0.667
+  against 0.75. The rate tracks stiff geometry (funnel, centred and
+  noncentred Eight Schools, `one_comp`, `garch11`), not wrong draws, and it
+  is low on the targeted positives (`seeds_centered` 0.0020, centred radon
+  0.0012). The step-collapse candidate and the union also failed; nothing
+  ships. The useful finding is the converse: 11 of 12 wrong cells had zero
+  retained divergences and all 12 failed the R-hat / ESS gates.
+
 ## Platforms
+
+- **Skipping the shared target-evaluation budget counter (F1)** (WP45,
+  `thread_scaling_v1`). `TargetEvaluationBudget::reserve` is one CAS per
+  gradient across all chains and saturates at ~18 M CAS/s in a micro-bench,
+  but skipping it when the private budget covers the worst case failed the
+  frozen no-regression clause: wall ratio **0.92 at C=T=1** (needed 0.952).
+  Its 1.98x at C=T=16 coincided with the fixed arm getting 4.3 vs 1.7
+  cores, and CPU per gradient did not move (1.00, 1.00, 1.10, 0.86). Draws
+  were bit-identical. Not merged; it needs an idle-machine rerun before it
+  is preregistered again.
 
 - **Enzyme autodiff on Windows** (WP15a): nightly accepts `-Zautodiff` but
   ships no `libEnzyme`.

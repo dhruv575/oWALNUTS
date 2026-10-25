@@ -923,6 +923,10 @@ fn work_totals<'py>(py: Python<'py>, totals: &WorkTotals) -> PyResult<Bound<'py,
         "zero_density_evaluations",
         totals.zero_density_evaluations(),
     )?;
+    d.set_item(
+        "nonfinite_position_rejections",
+        totals.nonfinite_position_rejections(),
+    )?;
     Ok(d)
 }
 
@@ -1732,21 +1736,29 @@ fn summary<'py>(
 
 /// Observe-only chain checks (`owalnuts::diagnostics::ChainWarning`) for a
 /// `(chains, draws, dim)` array of retained draws and the per-chain
-/// `warmup_end` / `sampling_end` window dicts (or `None`). Returns
-/// `(warnings, lines)`: one dict per finding and one text line per flagged
-/// chain, exactly as the Rust `Summary` prints them.
+/// `warmup_end` / `sampling_end` window dicts (or `None`), plus optional
+/// per-chain `(warmup, sampling)` nonfinite-position rejection counts.
+/// Returns `(warnings, lines)`: one dict per finding and one text line per
+/// flagged chain, exactly as the Rust `Summary` prints them.
 #[pyfunction]
-#[pyo3(signature = (samples, warmup_end, sampling_end))]
+#[pyo3(signature = (samples, warmup_end, sampling_end, nonfinite_rejections=None))]
 fn chain_warnings<'py>(
     py: Python<'py>,
     samples: PyReadonlyArray3<'py, f64>,
     warmup_end: Vec<Option<Bound<'py, PyDict>>>,
     sampling_end: Vec<Option<Bound<'py, PyDict>>>,
+    nonfinite_rejections: Option<Vec<(usize, usize)>>,
 ) -> PyResult<(Bound<'py, PyList>, Vec<String>)> {
     let view = samples.as_array();
     let (chains, draws, dimension) = view.dim();
     if warmup_end.len() != chains || sampling_end.len() != chains {
         return Err(value_error("one warmup and one sampling window per chain"));
+    }
+    let rejections = nonfinite_rejections.unwrap_or_default();
+    if !rejections.is_empty() && rejections.len() != chains {
+        return Err(value_error(
+            "one (warmup, sampling) nonfinite-rejection pair per chain",
+        ));
     }
     let warmup = warmup_end
         .into_iter()
@@ -1769,11 +1781,13 @@ fn chain_warnings<'py>(
             .map(|c| c.iter().map(Vec::as_slice).collect())
             .collect();
         let disagreement = ChainDisagreement::compute(&views);
-        ChainWarning::detect(
+        let mut warnings = ChainWarning::detect(
             &warmup.iter().map(Option::as_ref).collect::<Vec<_>>(),
             &sampling.iter().map(Option::as_ref).collect::<Vec<_>>(),
             disagreement.as_ref(),
-        )
+        );
+        warnings.extend(ChainWarning::nonfinite_positions(&rejections));
+        warnings
     });
     let out = PyList::empty(py);
     for warning in &warnings {
@@ -1818,6 +1832,14 @@ fn chain_warnings<'py>(
                 d.set_item("check", "rhat")?;
                 d.set_item("value", *max_rhat_without)?;
                 d.set_item("reference", *max_rhat)?;
+            }
+            ChainWarning::NonfinitePositions {
+                warmup, sampling, ..
+            } => {
+                d.set_item("check", "nonfinite_positions")?;
+                d.set_item("value", warmup + sampling)?;
+                d.set_item("warmup", *warmup)?;
+                d.set_item("sampling", *sampling)?;
             }
             _ => d.set_item("check", "other")?,
         }

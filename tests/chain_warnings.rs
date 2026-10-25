@@ -278,3 +278,114 @@ fn posterior_exposes_the_checks_and_the_default_draws_are_unchanged() {
     assert!(no_warmup.telemetry().all(|t| t.warmup_end().is_none()));
     assert!(no_warmup.telemetry().all(|t| t.sampling_end().is_some()));
 }
+
+/// The `tests/nonfinite_position_policy.rs` cliff: `log p(x) = -G |x|` with
+/// `G = 1e308`; the first half-kick at step 4 overflows and the default
+/// `RejectLeaf` policy rescues the leaf without recording a divergence.
+struct Cliff;
+
+impl Target for Cliff {
+    fn dimension(&self) -> usize {
+        1
+    }
+
+    fn log_density_gradient(&self, q: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
+        const G: f64 = 1e308;
+        let x = q[0];
+        if x.abs() >= 1.0 {
+            return Err(TargetError::recoverable("cliff: |x| >= 1"));
+        }
+        gradient[0] = -G * x.signum();
+        Ok(-G * x.abs())
+    }
+}
+
+#[test]
+fn nonfinite_rejections_are_reported_per_chain_and_by_phase() {
+    use owalnuts::sampler::{Adaptation, Tuning};
+    let posterior = Sampler::new()
+        .warmup(3)
+        .draws(5)
+        .chains(2)
+        .seed(11)
+        .metric(Metric::fixed_diagonal(vec![1.0]))
+        .adaptation(Adaptation::None)
+        .tuning(
+            Tuning::new()
+                .step_size(4.0)
+                .max_depth(3)
+                .max_refinement_levels(2),
+        )
+        .run(&Cliff, &[vec![0.1], vec![-0.1]])
+        .expect("the default policy rescues the overflowed leaves");
+    let counts: Vec<(usize, usize)> = posterior
+        .telemetry()
+        .map(|t| {
+            (
+                t.discarded().nonfinite_position_rejections(),
+                t.retained().nonfinite_position_rejections(),
+            )
+        })
+        .collect();
+    assert!(counts.iter().all(|&(w, s)| w >= 3 && s >= 5), "{counts:?}");
+    // The rescue records no divergence, which is why the warning exists.
+    assert!(posterior.telemetry().all(|t| t.total().divergences() == 0));
+
+    let expected: Vec<ChainWarning> = counts
+        .iter()
+        .enumerate()
+        .map(
+            |(chain, &(warmup, sampling))| ChainWarning::NonfinitePositions {
+                chain,
+                warmup,
+                sampling,
+            },
+        )
+        .collect();
+    let warnings = posterior.chain_warnings();
+    assert_eq!(warnings, expected);
+    assert!(warnings.iter().all(|w| !w.is_disagreement()));
+
+    let summary = Summary::from_output(posterior.inner(), None).unwrap();
+    assert_eq!(summary.chain_warnings, expected);
+    let text = summary.to_string();
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|line| line.starts_with("warning: chain"))
+        .collect();
+    let wanted: Vec<String> = counts
+        .iter()
+        .enumerate()
+        .map(|(chain, (w, s))| {
+            format!(
+                "warning: chain {chain} rejected {w} nonfinite positions during warmup and {s} during sampling"
+            )
+        })
+        .collect();
+    assert_eq!(lines, wanted, "{text}");
+
+    // Phase-only and singular wording; chains without rejections are silent.
+    let only = ChainWarning::nonfinite_positions(&[(0, 0), (1, 0), (0, 7)]);
+    assert_eq!(
+        ChainWarning::lines(&only),
+        vec![
+            "warning: chain 1 rejected 1 nonfinite position during warmup".to_string(),
+            "warning: chain 2 rejected 7 nonfinite positions during sampling".to_string(),
+        ]
+    );
+    // A disagreement finding and a rejection on the same chain print as
+    // two lines.
+    let mut mixed = vec![ChainWarning::RHat {
+        chain: 2,
+        max_rhat: 1.2,
+        max_rhat_without: 1.001,
+    }];
+    mixed.extend(only);
+    let mixed_lines = ChainWarning::lines(&mixed);
+    assert_eq!(mixed_lines.len(), 3);
+    assert!(mixed_lines[1].starts_with("warning: chain 2 disagrees with the other chains: "));
+    assert_eq!(
+        mixed_lines[2],
+        "warning: chain 2 rejected 7 nonfinite positions during sampling"
+    );
+}
