@@ -353,22 +353,37 @@ def run_phase(phase: str) -> None:
                           "cpu_count": os.cpu_count(), "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                           "builds": {b: PROTOCOL["builds"][b] for b in PROTOCOL["phases"][phase]["builds"]},
                           "note": "shared 16-core machine, ~10 concurrent agents: every wall is contended"})
+    a1 = PROTOCOL["amendment_A1"]["short_cells"]
     for i, step in enumerate(steps):
         out = out_path(step)
         if out.exists():
             continue
+        timeout = TIMEOUT
+        if (step[0] == "cell" and step[2] in a1["builds"] and step[4] in a1["arms"]
+                and int(step[5]) == a1["threads"]):
+            if int(step[6]) not in a1["run_seeds"]:
+                write_json(out, {"step": list(step), "status": "not_run_amendment_A1"})
+                log(f"{i + 1}/{len(steps)} {' '.join(step[2:])} not_run_amendment_A1")
+                continue
+            timeout = a1["timeout_seconds"]
         build = step[2]
         exe = PROTOCOL["builds"][build]["python"]
         env = dict(os.environ, JAX_PLATFORMS="cpu", PYTHONIOENCODING="utf-8",
                    PYTENSOR_FLAGS=f"compiledir={PROTOCOL['pytensor_compiledir']}")
         t = time.perf_counter()
+        p = subprocess.Popen([exe, str(Path(__file__)), *step], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, env=env)
         try:
-            p = subprocess.run([exe, str(Path(__file__)), *step], capture_output=True, text=True, timeout=TIMEOUT,
-                               env=env)
+            _, stderr = p.communicate(timeout=timeout)
             ok = p.returncode == 0 and out.exists()
-            err = None if ok else f"exit {p.returncode}: {p.stderr[-3000:]}"
+            err = None if ok else f"exit {p.returncode}: {stderr[-3000:]}"
         except subprocess.TimeoutExpired:
-            ok, err = False, f"timeout {TIMEOUT}s"
+            # The venv launcher spawns the real interpreter: kill the whole tree.
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+            p.communicate()
+            if out.exists():
+                out.unlink()
+            ok, err = False, f"timeout {timeout}s"
         if not ok:
             write_json(out, {"step": list(step), "status": "process_error", "error": err})
         rec = json.loads(out.read_text(encoding="utf-8"))

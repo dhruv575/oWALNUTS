@@ -171,3 +171,44 @@ geometric mean over seeds of the paired fix/baseline ESS/s ratio is >= 1.3 on
 at least one target for at least one touched arm/threads, and (iii) no
 touched arm/threads/target has that geometric mean below 0.9. The README's
 performance guidance is rewritten to match the measurements either way.
+
+## Amendment A1 (frozen after the harness smoke test, before the first phase-1 cell)
+
+The smoke cell `eight / pymc / threads=4` (seed 1) had not finished after
+35 minutes. A diagnostic probe (`from_pymc(model, thread_safe=True)`, Eight
+Schools, 4 chains x 30/30, threads=4, a counter on
+`Model.logp_dlogp_function`) logged **349 PyTensor compilations on the same 4
+OS threads in ~8 minutes**: the per-thread function cache of
+`thread_safe=True` (a `threading.local`) is empty on almost every callback.
+Mechanism (hypothesis, tested by the fix): at `threads > 1` the callbacks run
+on Rayon worker threads that have no Python thread state, so every
+`Python::attach` creates a fresh `PyThreadState` (`PyGILState_Ensure`) and
+destroys it on release — and every `threading.local` value with it. At
+`threads=1` the chains run on the calling (main) thread, whose thread state
+persists, so the bug is invisible there. The same churn taxes every Python
+callable at `threads > 1` (thread-state allocation per call, and any
+framework thread-local state such as JAX's is rebuilt per call).
+
+Consequences, fixed now:
+
+1. The baseline `pymc` and `pymc-numba` cells at `threads=4` cannot complete
+   (a full cell is ~10^5 callbacks at ~1 s each). They run for seed
+   `4747001` only, with a 600 s cap (a timeout is recorded as the result);
+   their other 12 cells are recorded as `not_run_amendment_A1`. Every other
+   cell is unchanged. The child-process timeout now kills the whole process
+   tree (the venv launcher spawns the interpreter).
+2. New fix candidate **F6**: pin one Python thread state per Rayon worker
+   thread for the duration of a callable run (created on the first callback
+   on a thread that has none, released when the scoped worker exits). It
+   changes no arithmetic, so draws are bit-identical by construction.
+3. Added predictions: **P7** the six short baseline cells time out at 600 s.
+   **P8** if F6 is selected: fixed `pymc` / `pymc-numba` at `threads=4`
+   complete every cell; fixed/baseline paired ESS/s at `threads=4` for
+   `py-numpy`, `py-njit`, `jax` and `torch` lies in [1.0, 1.6] (thread-state
+   churn is a small part of a GIL-serialised callback); `threads=1` cells are
+   unaffected (ratio in [0.9, 1.1]) and bit-identical.
+
+The selection rule and decision rule are unchanged; F6 joins F1–F5. For the
+`pymc` / `pymc-numba` t4 arms a baseline timeout counts as ESS/s = 0 (any
+completing fix cell satisfies the 1.3x criterion), and the paired ratio is
+reported for seed `4747001` only.
