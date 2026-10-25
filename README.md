@@ -118,12 +118,14 @@ One line each for the other front doors:
   divergence, so this line (or `WorkTotals::nonfinite_position_rejections`)
   is where an integrator overflow shows [E21].
 - **Zero divergences does not rule out a funnel.** On centred hierarchical
-  models refinement can absorb the energy error, so a run can be wrong with
-  no divergence at all. In WP55, 11 of 12
+  models a run can be wrong with no divergence at all. In WP55, 11 of 12
   wrong cells on the funnel, centred Eight Schools, `seeds_centered` and
   centred radon had zero retained divergences, and the R-hat / bulk ESS /
-  tail ESS gates caught every one of them [E23]. Check those gates, not the
-  divergence count.
+  tail ESS gates caught every one of them [E23]. This is not specific to
+  WALNUTS refinement: in posteriordb v7, CmdStan and nutpie also recorded
+  zero retained divergences on every `seeds_centered` cell, and failed it on
+  the same `sigma` [E26]. Check the R-hat / ESS gates, not the divergence
+  count.
 
 ## Threads and chains
 
@@ -161,6 +163,7 @@ Every number below is from a preregistered, checksummed study in
   funnel does not mix *well* at the defaults (one chain per seed adapts
   to `h ~ 0.01`, `omega` R-hat 1.01-1.04); `Tuning::new().max_error(0.5)`
   mixes better there at a 21 % cost on a 100-D Gaussian. [E11]
+  WP53 funnel 30-seed calibration: pending.
 - **Long state-space paths mix at depth 3–4.** On an exact Gaussian
   state-space model at `T = 1000`, supplying the posterior-precision
   tridiagonal metric (`Metric::Structured`) gives ESS per target call
@@ -179,17 +182,47 @@ Every number below is from a preregistered, checksummed study in
 
 ## Where it does not (yet)
 
-> **Note:** posteriordb v7 is running against the defaults listed under
-> "Defaults changed since 0.2.0"; until it reports, the figures below are
-> the v5 and v6 results and describe 0.2.0.
+**posteriordb v7 (WP56), the current defaults: mixed.** At the defaults
+listed under "Defaults changed since 0.2.0", oWALNUTS passes **43/51** house
+cells against CmdStan 34 and nutpie 26. The run used the 17 posteriordb
+posteriors, every sampler at its defaults, 4 chains, 1,000/1,000 and three
+fresh seeds. The gates were rank R-hat <= 1.01, bulk and tail ESS >= 400 and
+zero retained divergences, with CmdStan 2.39.0 and nutpie 0.16.8 on the same
+seeds. No passing reference cell is above |z| 3.82. All 66 oWALNUTS cells
+completed with no error, timeout or frozen chain. The funnel is unbiased on
+every seed (z +1.69, -0.59, +0.84). [E26]
 
-The last breadth benchmark admitted by its preregistered release rule is
+Five hard posteriors joined the benchmark in v7 (GLMM_Poisson,
+`seeds_centered`, kilpisjarvi, grsm and centred radon). There oWALNUTS
+passes 6/15, against CmdStan 7 and nutpie 3: 3/3 on kilpisjarvi and grsm,
+and 0/3 on GLMM_Poisson, `seeds_centered` and radon. Those three fail on a
+slow `sigma` or `beta[1]`, the same parameters that defeat the competitors
+(CmdStan passes one radon cell; nutpie none). [E26]
+
+ESS per gradient is **about 0.7x CmdStan's**: 0.708 over the 15 complete
+fixed-16 models, against v6's 0.848. The losses concentrate on `accel_gp`
+(0.35x), `one_comp` (0.50x) and `hmm_drive_0` (0.66x). Wall per gradient is
+1.85x CmdStan's, because the Windows owned worker serialises BridgeStan and
+the machine was contended. ESS per second is 1.23x nutpie's.
+
+v7 did **not** pass the v6 release rule. Its per-gradient clause (>= 0.75
+CmdStan) failed: the value was 0.708, and the clause was formally
+unevaluable because one CmdStan `lotka_volterra` cell errored. Its wall
+clause failed too. That per-gradient clause is now known to be seed-noisy.
+Paired reruns on the same seeds attribute the 0.848 -> 0.708 change neither
+to best-of-16 starts (1.061x uniform, WP60) nor to removing chain rescue
+(1.023x, WP61), but to seed-to-seed variation. The 3-seed geomean moves by
+about 0.1 between seed sets with no code change behind it [E27]. The pass
+counts are therefore the headline. Under its frozen rule, v7 does not
+replace v5 as the last release-qualified benchmark. v5 and v6 follow as
+history.
+
+**History: v5 and v6.** The last breadth benchmark admitted by its
+preregistered release rule is
 [`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md),
-17 posteriordb posteriors, every sampler at its defaults, 4 chains,
-1,000/1,000, three fresh seeds, gates rank R-hat <= 1.01, bulk and tail
-ESS >= 400, zero divergences, CmdStan 2.39.0 and nutpie 0.16.8 rerun on the
-same seeds. [E15] (v3 on the pre-WP31 defaults, kept as history: 35/51,
-0.34x CmdStan per gradient [E4].)
+on the same 17 posteriors and protocol, at the 0.2.0 defaults. [E15] (v3 on
+the pre-WP31 defaults, kept as history: 35/51, 0.34x CmdStan per gradient
+[E4].)
 
 WP33 subsequently made warmup restart-from-best chain rescue the default.
 The then-current-default validation, `posteriordb_bench_v6`, passes **45/51**
@@ -205,7 +238,7 @@ origin-safety and efficiency gates. That failure alone did not select
 `current` had registered red lines in four origin-overwrite cells (five
 events) plus unknown run history for HMM/92104, so the fallback selected
 `no_rescue`. The final 0.2 default therefore returns to the plain multi-chain
-warmup used by v5. The v5 numbers below remain the qualified headline; v6
+warmup used by v5. The v5 numbers below are the 0.2.0 release figures; v6
 remains the historical record of the temporary WP33 default and must be read
 beside it. [E16, E17, E18]
 
@@ -215,6 +248,8 @@ beside it. [E16, E17, E18]
 > under test `aa4510f`) first. At current HEAD,
 > `Adaptation::default()` intentionally means no rescue, whereas WP35 measured
 > the temporary restart-from-best default.
+
+v5 (0.2.0 defaults):
 
 - **More cells pass than CmdStan or nutpie.** oWALNUTS passes **42/51**
   cells; CmdStan 36, nutpie 28. Twelve models at 3/3 against ten and eight.
@@ -336,6 +371,9 @@ Opt-ins, each one builder call:
   oracle. It makes it less likely that the four chains visit a second mode
   (single-mode four-chain starts rose from 13 % to 23 % of seeds on a
   two-mode test target), so check `Summary::chain_warnings` as well as R-hat.
+  On `hmm_drive_0` it held one chain in a second mode on 2 of 5 fresh seeds
+  (gates 15/30 against uniform's 18/30 on six suspect models), and
+  `chain_warnings` named that chain in both cells (WP60) [E27].
   `Init::uniform()` (`run_with_init`) is the CmdStan rule;
   `.run(&target, &starts)` uses your own.
 - `Limits::new().max_target_evaluations(n)`, `.deadline(..)`, `.timeout(..)`,
@@ -383,6 +421,11 @@ went 1/3 -> 0/3 at 0.38x. Funnels and hierarchical scale problems also need
 care: on Neal's funnel the tail mass is exact, but there were 2 retained
 divergences against 0 for the diagonal. Over all 17 models dense passes
 40/51 gate cells against the diagonal's 43/51 (geomean 3.21x per gradient).
+On fresh seeds in posteriordb v7's descriptive dense arm, `Metric::dense()`
+passed 18/18 cells on the six correlated regressions above, at 13.4x the
+diagonal default's ESS per gradient (`diamonds` 67.5x) with max |z| 3.05.
+This supports dense as an opt-in for correlated regressions, not as a
+default [E26].
 
 Warmup uses per-transition seeding, Stan's dense regularisation and a
 symmetrised precision. These have been the defaults since WP51. Earlier
@@ -413,7 +456,8 @@ wraps (`tests/sampler_api.rs`).
 
 ## Known limitations
 
-- The posteriordb gaps above: 0.34x CmdStan per gradient, no throughput win
+- The posteriordb gaps above: about 0.7x CmdStan per gradient (v7 [E26];
+  0.34x on the v3 defaults), no throughput win
   on ordinary regressions, single chains stalled by bad starts on three
   models [E4, E10].
 - Paper adaptation runs on the diagonal and fixed-operator facades only; the
@@ -627,3 +671,21 @@ provenance.
   (`WP50C-BRIDGESTAN-WINDOWS-ROOT-CAUSE-V3`),
   [`STUDIES/bridgestan_windows_root_cause_v4`](STUDIES/bridgestan_windows_root_cause_v4/README.md)
   (`WP50D-BRIDGESTAN-WINDOWS-ROOT-CAUSE-V4`).
+- [E26] posteriordb v7 at the post-WP51–54 defaults (`f097391c`): 43/51
+  house cells against CmdStan 34 and nutpie 26, 6/15 on the five hard
+  posteriors against 7 and 3, all 66 oWALNUTS cells completed, largest
+  passing |z| 3.82, funnel z +1.69 / -0.59 / +0.84. ESS per gradient was
+  0.708x CmdStan over the 15 complete fixed-16 models (v6 0.848), and the
+  v6 release rule was not met. The descriptive dense arm passed 18/18 at
+  13.4x the diagonal on the six correlated regressions (`diamonds` 67.5x):
+  [`STUDIES/posteriordb_bench_v7`](STUDIES/posteriordb_bench_v7/README.md)
+  (`WP56-POSTERIORDB-BENCH-V7`).
+- [E27] Attribution of the v6 -> v7 per-gradient drop. Best-of-16 starts
+  were 1.061x uniform paired on six models (gates 15/30 vs 18/30;
+  `hmm_drive_0` second-mode chain on 2/5 seeds, named by `chain_warnings`),
+  and reinstalled chain rescue was 1.023x; seed variation explains the
+  rest:
+  [`STUDIES/start_rule_paired_v1`](STUDIES/start_rule_paired_v1/README.md)
+  (`WP60-START-RULE-PAIRED-V1`),
+  [`STUDIES/rescue_removal_paired_v1`](STUDIES/rescue_removal_paired_v1/README.md)
+  (`WP61-RESCUE-REMOVAL-PAIRED-V1`).
