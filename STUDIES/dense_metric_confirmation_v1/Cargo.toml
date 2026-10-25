@@ -1,0 +1,24 @@
+[package]
+name = "dense-metric-confirmation-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP51: preregistered confirmation of the dense-facade warmup default flip (PerTransition + Stan + symmetrised precision)"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "dense-cell"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[profile.release]
+debug = false
+
+[workspace]

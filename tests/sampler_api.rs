@@ -1080,13 +1080,14 @@ impl Target for Correlated {
 
 /// WP48: the legacy dense warmup seed `splitmix64(seed ^ t ^ segment)` is
 /// constant over warmup (`t == segment`); `DenseWarmupSeeding::PerTransition`
-/// gives fresh randomness and recovers the target precision.
+/// gives fresh randomness and recovers the target precision. PerTransition is
+/// the default since the WP51 engineering decision; Legacy stays selectable.
 #[test]
-fn dense_per_transition_seeding_is_opt_in_and_recovers_the_precision() {
+fn dense_per_transition_seeding_is_the_default_and_recovers_the_precision() {
     use owalnuts::walnutpie::{DenseMetricRegularization, DenseWarmupSeeding, MetricUpdateOutcome};
     assert_eq!(
         WarmupConfig::new(0.8).unwrap().dense_warmup_seeding(),
-        DenseWarmupSeeding::Legacy
+        DenseWarmupSeeding::PerTransition
     );
     let run = |seeding| {
         let warmup = WarmupConfig::new(0.8)

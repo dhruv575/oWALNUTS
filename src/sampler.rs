@@ -151,6 +151,15 @@ impl Metric {
     }
 
     /// Adaptive dense mass starting from the identity.
+    ///
+    /// Never selected automatically; the diagonal stays the default. Warmup
+    /// uses `DenseWarmupSeeding::PerTransition`,
+    /// `DenseMetricRegularization::Stan` and a symmetrised precision (the
+    /// `WarmupConfig` defaults since WP51; `STUDIES/dense_metric_confirmation_v1`).
+    /// For correlated near-Gaussian regressions it is 4–99x the diagonal per
+    /// gradient; on GP-hyperparameter posteriors it lost gates at 1,000 draws.
+    /// The pre-change warmup (`Legacy`, `MeanVarianceShrinkage`, no
+    /// symmetrisation) is available through [`Adaptation::Custom`].
     pub fn dense() -> Self {
         Self::Dense {
             adapt: true,

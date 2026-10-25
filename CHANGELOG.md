@@ -49,6 +49,29 @@ architecture and operating system (see the `walnutpie` module documentation).
   the same lines in `print(result)`. Draws are bit-identical; the kernel
   revision is unchanged.
 
+### Changed
+
+- **Dense facade warmup defaults changed.** `walnutpie::WarmupConfig`
+  defaults (and therefore `Metric::dense()` + `Adaptation::default()`) now
+  use `DenseWarmupSeeding::PerTransition`, `DenseMetricRegularization::Stan`
+  and a symmetrised dense precision (`dense_symmetrized_precision() == true`).
+  The old behaviour is the pre-change setting for reproduction:
+  `.with_dense_warmup_seeding(DenseWarmupSeeding::Legacy)
+  .with_dense_metric_regularization(DenseMetricRegularization::MeanVarianceShrinkage)
+  .with_dense_symmetrized_precision(false)`. **The change is an engineering
+  decision made on candidate-versus-old-dense evidence, not by WP51's frozen
+  rule.** That rule compared the candidate against the diagonal default and
+  failed (40 vs 43 gates; `gp_pois_regr` 3/3 -> 0/3). The evidence: against
+  the diagonal, over 17 posteriordb models, the candidate is 3.21x per
+  gradient with 40/51 gates, while the old dense defaults are 0.055x with
+  12/51. Two of the three old behaviours were defects: every warmup
+  transition reused one RNG stream, and a 64-eps symmetry check installed a
+  spurious 0.01–0.13 ridge (`STUDIES/dense_metric_posteriordb_v1`, WP48;
+  `STUDIES/dense_metric_confirmation_v1`, WP51). Dense runs from earlier
+  builds do not reproduce under the new defaults. The diagonal default, the
+  retained kernel, `ALGORITHM_REVISION` and `tests/kernel_fingerprint.rs`
+  are unchanged. `Metric::dense()` is still never selected automatically.
+
 ### Python package
 
 - Callable targets at `threads > 1`: each sampler worker thread now keeps one
