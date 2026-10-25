@@ -671,7 +671,7 @@ def _trap(q: np.ndarray) -> tuple[float, np.ndarray]:
 
 
 def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
-    quiet = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), dim=2, warmup=500, draws=300, seed=5, chains=4)
+    quiet = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), dim=2, warmup=500, draws=1000, seed=5, chains=4)
     assert quiet.chain_warnings() == []
     assert not any(line.startswith("warning: chain") for line in str(quiet).splitlines())
     for chain in quiet.chains:
