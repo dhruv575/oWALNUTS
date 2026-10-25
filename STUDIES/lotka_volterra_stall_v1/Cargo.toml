@@ -1,0 +1,23 @@
+[package]
+name = "lotka-volterra-stall-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP57: where the time goes in a stalled lotka_volterra run, and two opt-in mitigations"
+
+[dependencies]
+# `research` is needed for the observe-only comparison observer (per-transition
+# telemetry streamed during the run) and the opt-in initial-phase depth cap;
+# it changes no default.
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "stall-cell"
+path = "src/main.rs"
+
+[profile.release]
+debug = false
+
+[workspace]
