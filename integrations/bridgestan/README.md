@@ -74,6 +74,14 @@ python tools\build_static_runtime.py --out <dir> --tbb path\to\model.stan [more.
 - **Numerics are unchanged.** Static and stock builds give bit-identical log
   densities and gradients (`STUDIES/bridgestan_windows_root_cause_v3`,
   Phase A).
+- **Stress gate.** This was measured on the original concurrent 4-replica
+  code path, under PowerShell with the WinLibs PATH (Phase B):
+  - static DLLs: 0/360 faults;
+  - stock dynamic DLLs: 2/120 `STATUS_HEAP_CORRUPTION`.
+
+  The owned worker is still the Windows default. Phase C measured what
+  removing it would be worth: 3.2x (sblrc) and 4.0x (arK) contended sampling
+  wall, with bit-identical draws.
 
 A library built without `STAN_THREADS` has one global autodiff stack per
 *loaded module*, so a single `StanTarget` serialises its evaluations through
