@@ -1,0 +1,44 @@
+{
+  "schema": "bridgestan-windows-root-cause-v3",
+  "ledger_id": "WP50C",
+  "status": "PHASE_A_FROZEN_BEFORE_BUILD",
+  "frozen_utc": "2026-10-24",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "forbidden_seeds": [
+    90101,
+    90102,
+    90103
+  ],
+  "phase_a": {
+    "tool": "integrations/bridgestan/tools/build_static_runtime.py",
+    "command": "python integrations/bridgestan/tools/build_static_runtime.py --out STUDIES/bridgestan_windows_root_cause_v3/build/static --tbb <V1>/sblrc__blr.stan <V1>/arK__arK.stan",
+    "sources": {
+      "sblrc": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.stan",
+      "arK": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK.stan",
+      "note": "posteriordb 28f8d3d programs copied by WP50; data copied alongside"
+    },
+    "model_ldlibs_os": "-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic",
+    "tbb_ldflags": "-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic -Wl,--exclude-libs,ALL",
+    "acceptance": {
+      "A1_imports": "neither model DLL (sblrc, arK) nor the private tbb.dll imports libwinpthread-1.dll, libgcc_s_seh-1.dll or libstdc++-6.dll (objdump -p); the tool hard-fails otherwise",
+      "A2_exports": "each static model DLL's export-name list equals its dynamic WP50 counterpart; the private tbb.dll exports every stock tbb.dll export (extras reported; target zero)",
+      "A3_parity": "log density and gradient at 64 deterministic positions (numpy default_rng(50700000), N(0,1)) are bit-identical between static and dynamic builds of each model, each evaluated in its own process with its own tbb.dll",
+      "A4_load": "in the static-build parity process no libwinpthread-1/libgcc_s_seh-1/libstdc++-6 module is mapped and tbb.dll is the private one",
+      "fallback": "if A1 cannot be met, fall back to pinning an explicit DLL search path (SetDefaultDllDirectories/AddDllDirectory) to one runtime set, say so, and re-preregister"
+    },
+    "parity_pairs": {
+      "sblrc": {
+        "dynamic_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+        "static_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json"
+      },
+      "arK": {
+        "dynamic_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK_model.so",
+        "static_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\arK__arK_model.so",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK.data.json"
+      }
+    }
+  },
+  "phase_b": "preregistered separately (PREREGISTRATION.md section B) and committed before any Phase B child",
+  "phase_c": "preregistered separately and committed before any Phase C run, only if Phase B supports the fix"
+}
