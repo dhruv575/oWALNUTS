@@ -565,6 +565,44 @@ pub enum DiagonalMetricRegularization {
     Stan,
 }
 
+/// How the windowed dense covariance estimate is regularised before it is
+/// inverted and installed as the dense metric (dense facade only).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DenseMetricRegularization {
+    /// The shipped dense estimator: with `s = clamp(d / (n + d), 0.05, 0.8)`,
+    /// off-diagonal covariances are multiplied by `1 - s` and each variance
+    /// becomes `(1 - s) * var_i + s * mean_j(var_j)`, then the covariance's
+    /// pivot condition estimate is capped at `1e6` by an escalating ridge.
+    /// The diagonal target is the *mean* variance, so this is not scale-free:
+    /// coordinates whose variance is far below the mean are floored near
+    /// `s * mean_j(var_j)`.
+    #[default]
+    MeanVarianceShrinkage,
+    /// Stan's dense rule `(n / (n + 5)) * Sigma + 1e-3 * (5 / (n + 5)) * I`,
+    /// with no condition cap (an escalating ridge is added only if the
+    /// factorisation fails). Opt-in (`STUDIES/dense_metric_posteriordb_v1`).
+    Stan,
+}
+
+/// How the dense adaptive warmup seeds its per-transition kernel calls.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DenseWarmupSeeding {
+    /// The original rule `splitmix64(seed ^ transition ^ segment_index)`.
+    /// Both indices are equal at every warmup transition, so every warmup
+    /// transition of a chain draws from the same RNG stream (same initial
+    /// momentum and tree directions): warmup is not a Markov chain with
+    /// fresh randomness and the windowed covariance is estimated from a
+    /// deterministic orbit. Kept as the default for reproducibility of
+    /// existing dense runs (`STUDIES/dense_metric_posteriordb_v1`, WP48).
+    #[default]
+    Legacy,
+    /// A distinct stream per warmup transition:
+    /// `splitmix64(splitmix64(seed) ^ (transition + 1) * 0x9e3779b97f4a7c15)`.
+    PerTransition,
+}
+
 /// Identity of the opt-in JMLR Appendix C adaptation rules.
 ///
 /// Default warmup does not use these rules and keeps [`ALGORITHM_REVISION`].
@@ -1233,6 +1271,8 @@ pub struct WarmupConfig {
     dual_averaging_acceptance: DualAveragingAcceptance,
     paper_adaptation: Option<PaperAdaptationConfig>,
     metric_regularization: DiagonalMetricRegularization,
+    dense_metric_regularization: DenseMetricRegularization,
+    dense_warmup_seeding: DenseWarmupSeeding,
     stan_restart_reference: bool,
     initial_phase_max_error: Option<f64>,
     minimum_step: Option<f64>,
@@ -1259,6 +1299,8 @@ impl Default for WarmupConfig {
             dual_averaging_acceptance: DualAveragingAcceptance::CurrentCoarseEndpoint,
             paper_adaptation: None,
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
+            dense_metric_regularization: DenseMetricRegularization::MeanVarianceShrinkage,
+            dense_warmup_seeding: DenseWarmupSeeding::Legacy,
             stan_restart_reference: false,
             initial_phase_max_error: None,
             minimum_step: None,
@@ -1373,6 +1415,27 @@ impl WarmupConfig {
     }
     pub fn metric_regularization(&self) -> DiagonalMetricRegularization {
         self.metric_regularization
+    }
+    /// Select how the windowed dense covariance is regularised (dense
+    /// adaptive facade only; ignored by every other facade).
+    pub fn with_dense_metric_regularization(
+        mut self,
+        regularization: DenseMetricRegularization,
+    ) -> Self {
+        self.dense_metric_regularization = regularization;
+        self
+    }
+    pub fn dense_metric_regularization(&self) -> DenseMetricRegularization {
+        self.dense_metric_regularization
+    }
+    /// Select how dense adaptive warmup seeds its per-transition kernel
+    /// calls (dense adaptive facade only); see [`DenseWarmupSeeding`].
+    pub fn with_dense_warmup_seeding(mut self, seeding: DenseWarmupSeeding) -> Self {
+        self.dense_warmup_seeding = seeding;
+        self
+    }
+    pub fn dense_warmup_seeding(&self) -> DenseWarmupSeeding {
+        self.dense_warmup_seeding
     }
     /// Restart dual averaging after a metric update with Stan's reference
     /// `mu = ln(10 h)` instead of `mu = ln(h)`.
@@ -5791,6 +5854,7 @@ impl DenseCovariance {
 
     fn precision_candidate(
         &self,
+        regularization: DenseMetricRegularization,
     ) -> (
         MetricUpdateOutcome,
         Option<DenseMass>,
@@ -5812,6 +5876,9 @@ impl DenseCovariance {
             );
         }
         let n = self.count as f64;
+        if regularization == DenseMetricRegularization::Stan {
+            return self.stan_precision_candidate(n);
+        }
         // Full covariance estimation needs dimension-aware shrinkage: with
         // only O(d) warmup draws, a near-unregularized inverse is unstable.
         let shrinkage = (n_dim as f64 / (n + n_dim as f64)).clamp(0.05, 0.8);
@@ -5880,6 +5947,87 @@ impl DenseCovariance {
             MetricUpdateOutcome::IllConditionedFallback
         };
         (outcome, None, shrinkage, ridge, last_condition, failures)
+    }
+}
+
+impl DenseCovariance {
+    /// Stan's dense regularisation: `(n / (n + 5)) * Sigma + 1e-3 * (5 / (n + 5)) * I`.
+    /// The reported shrinkage is `5 / (n + 5)`; the reported condition is the
+    /// same squared Cholesky-pivot ratio as the default rule, but no cap is
+    /// applied. A ridge is added only when factorisation or inversion fails.
+    fn stan_precision_candidate(
+        &self,
+        n: f64,
+    ) -> (
+        MetricUpdateOutcome,
+        Option<DenseMass>,
+        f64,
+        f64,
+        Option<f64>,
+        usize,
+    ) {
+        let n_dim = self.mean.len();
+        let weight = n / (n + 5.0);
+        let shrinkage = 5.0 / (n + 5.0);
+        let prior = 1.0e-3 * shrinkage;
+        let covariance: Vec<f64> = self.m2.iter().map(|x| weight * x / (n - 1.0)).collect();
+        let mean_diagonal =
+            (0..n_dim).map(|i| covariance[i * n_dim + i]).sum::<f64>() / n_dim as f64;
+        let base_ridge = (mean_diagonal.abs().max(1.0) * 1.0e-10).max(f64::MIN_POSITIVE);
+        let mut ridge = 0.0;
+        let mut failures = 0;
+        let mut last_condition = None;
+        for _ in 0..10 {
+            let mut regularized = covariance.clone();
+            for i in 0..n_dim {
+                regularized[i * n_dim + i] += prior + ridge;
+            }
+            let next_ridge = if ridge == 0.0 {
+                base_ridge
+            } else {
+                ridge * 10.0
+            };
+            let Some(chol) = cholesky(&regularized, n_dim) else {
+                failures += 1;
+                ridge = next_ridge;
+                continue;
+            };
+            let (minimum_pivot, maximum_pivot) = (0..n_dim)
+                .map(|i| chol[i * n_dim + i])
+                .fold((f64::INFINITY, 0.0_f64), |(lo, hi), x| {
+                    (lo.min(x), hi.max(x))
+                });
+            last_condition = Some((maximum_pivot / minimum_pivot).powi(2));
+            let Some(precision) = inverse_from_cholesky(&chol, n_dim) else {
+                failures += 1;
+                ridge = next_ridge;
+                continue;
+            };
+            match DenseMass::from_matrix(precision, n_dim) {
+                Ok(candidate) => {
+                    return (
+                        MetricUpdateOutcome::Installed,
+                        Some(candidate),
+                        shrinkage,
+                        ridge,
+                        last_condition,
+                        failures,
+                    );
+                }
+                Err(_) => {
+                    failures += 1;
+                    ridge = next_ridge;
+                }
+            }
+        }
+        (
+            MetricUpdateOutcome::FactorizationFallback,
+            None,
+            shrinkage,
+            ridge,
+            last_condition,
+            failures,
+        )
     }
 }
 
@@ -8945,8 +9093,18 @@ pub fn sample_dense_with_control<T: Target>(
             let mut transition_config = config.clone();
             transition_config.discarded = 0;
             transition_config.retained = 1;
-            transition_config.seed =
-                splitmix64(config.seed ^ transition as u64 ^ segment_index as u64);
+            transition_config.seed = match warmup.dense_warmup_seeding {
+                // `transition == segment_index` at every warmup transition, so
+                // this is `splitmix64(config.seed)` for all of them: every
+                // warmup transition of a chain reuses one RNG stream.
+                DenseWarmupSeeding::Legacy => {
+                    splitmix64(config.seed ^ transition as u64 ^ segment_index as u64)
+                }
+                DenseWarmupSeeding::PerTransition => splitmix64(
+                    splitmix64(config.seed)
+                        ^ (transition as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15),
+                ),
+            };
             transition_config.warmup = None;
             transition_config.capture_acceptance = true;
             transition_config.acceptance_statistic = warmup.dual_averaging_acceptance;
@@ -9017,7 +9175,7 @@ pub fn sample_dense_with_control<T: Target>(
         )?
         .expect("nonempty metric window");
         let (outcome, candidate, shrinkage, ridge, condition, failures) =
-            covariance.precision_candidate();
+            covariance.precision_candidate(warmup.dense_metric_regularization);
         let step_before = active_step;
         let mass_dense_before = active_mass.matrix.clone();
         let mut step_after_search = None;
@@ -10328,6 +10486,15 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
     let execute = |chain: usize, position: &Vec<f64>| {
         let mut chain_config = config.clone();
         chain_config.seed = config.seed.wrapping_add(chain as u64);
+        // The whole run was admitted against `admission_limit` above (its
+        // exact worst case under `Limits::admit_worst_case`) and the runtime
+        // budget enforces it, so the inner per-phase fixed-dense calls must
+        // not re-check the conservative ceiling. Admission only; draws are
+        // unchanged (WP48, `STUDIES/dense_metric_posteriordb_v1`).
+        chain_config.limits.max_target_evaluations = chain_config
+            .limits
+            .max_target_evaluations
+            .max(admission_limit.maximum());
         sample_dense_with_control(&wrapped, position, mass, &chain_config, run_control)
             .map(|mut chain_output| {
                 chain_output.metadata.base_seed = config.seed;
@@ -13291,6 +13458,64 @@ mod tests {
         assert!((unit - expected_unit).abs() < 1.0e-9 * expected_unit);
         assert!((stan - expected_stan).abs() < 1.0e-9 * expected_stan);
         assert!(stan > 100.0 * unit);
+    }
+
+    #[test]
+    fn dense_stan_regularization_matches_stans_formula_and_default_is_unchanged() {
+        assert_eq!(
+            WarmupConfig::default().dense_metric_regularization(),
+            DenseMetricRegularization::MeanVarianceShrinkage
+        );
+        assert_eq!(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .dense_metric_regularization(),
+            DenseMetricRegularization::MeanVarianceShrinkage
+        );
+        // Strongly scale-heterogeneous, correlated 3-D draws.
+        let mut covariance = DenseCovariance::new(3);
+        let mut state = 7_u64;
+        let mut uniform = || {
+            state = splitmix64(state);
+            (state >> 11) as f64 / (1_u64 << 53) as f64 - 0.5
+        };
+        for _ in 0..200 {
+            let a = uniform();
+            let b = uniform();
+            let c = uniform();
+            covariance.update(&[a, 1.0e-3 * (a + 0.2 * b), 10.0 * c]);
+        }
+        let n = covariance.count as f64;
+        let (outcome, candidate, shrinkage, ridge, _, failures) =
+            covariance.precision_candidate(DenseMetricRegularization::Stan);
+        assert_eq!(outcome, MetricUpdateOutcome::Installed);
+        assert_eq!(failures, 0);
+        assert_eq!(ridge, 0.0);
+        assert!((shrinkage - 5.0 / (n + 5.0)).abs() < 1e-15);
+        let precision = candidate.unwrap().matrix;
+        let mut expected = covariance
+            .m2
+            .iter()
+            .map(|x| (n / (n + 5.0)) * x / (n - 1.0))
+            .collect::<Vec<_>>();
+        for i in 0..3 {
+            expected[i * 3 + i] += 1.0e-3 * 5.0 / (n + 5.0);
+        }
+        // precision * expected covariance = identity.
+        for i in 0..3 {
+            for j in 0..3 {
+                let product: f64 = (0..3)
+                    .map(|k| precision[i * 3 + k] * expected[k * 3 + j])
+                    .sum();
+                let target = if i == j { 1.0 } else { 0.0 };
+                assert!((product - target).abs() < 1e-8, "{i},{j}: {product}");
+            }
+        }
+        // The shipped rule floors the small coordinate near s * mean variance.
+        let (_, shipped, _, _, _, _) =
+            covariance.precision_candidate(DenseMetricRegularization::MeanVarianceShrinkage);
+        let shipped = shipped.unwrap().matrix;
+        assert!(shipped[4] < 0.1 * precision[4]);
     }
 
     #[test]

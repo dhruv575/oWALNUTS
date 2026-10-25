@@ -881,3 +881,103 @@ fn structured_metric_is_admitted_with_its_worst_case_under_research() {
         .run(&Gaussian(2), &starts(2)[..1]);
     assert_eq!(conservative.unwrap_err().kind(), ErrorKind::ResourceLimit);
 }
+
+/// WP48 (`STUDIES/dense_metric_posteriordb_v1`): under the default
+/// `Limits::admit_worst_case()`, the dense paths admit the run against its
+/// exact worst case, so the retained phase's inner fixed-dense call must not
+/// re-check the conservative ceiling. 1,000 draws at the default depth 10 and
+/// eight levels exceed that ceiling (113M) per chain, and failed before.
+#[test]
+fn dense_metric_runs_default_length_under_worst_case_admission() {
+    let target = Gaussian(2);
+    for metric in [
+        Metric::dense(),
+        Metric::fixed_dense(vec![1.0, 0.2, 0.2, 1.0]),
+    ] {
+        let posterior = Sampler::new()
+            .warmup(100)
+            .draws(1_000)
+            .chains(2)
+            .threads(1)
+            .seed(SEED)
+            .metric(metric)
+            .run(&target, &starts(2)[..2])
+            .unwrap();
+        assert_eq!(posterior.draws_per_chain(), 1_000);
+    }
+}
+
+struct Correlated;
+
+impl Target for Correlated {
+    fn dimension(&self) -> usize {
+        2
+    }
+    // Covariance [[1, 1.8], [1.8, 4]] (correlation 0.9); precision below.
+    fn log_density_gradient(
+        &self,
+        position: &[f64],
+        gradient: &mut [f64],
+    ) -> Result<f64, TargetError> {
+        let det = 4.0 - 1.8 * 1.8;
+        let (a, b, d) = (4.0 / det, -1.8 / det, 1.0 / det);
+        let (x, y) = (position[0], position[1]);
+        gradient[0] = -(a * x + b * y);
+        gradient[1] = -(b * x + d * y);
+        Ok(-0.5 * (a * x * x + 2.0 * b * x * y + d * y * y))
+    }
+}
+
+/// WP48: the legacy dense warmup seed `splitmix64(seed ^ t ^ segment)` is
+/// constant over warmup (`t == segment`); `DenseWarmupSeeding::PerTransition`
+/// gives fresh randomness and recovers the target precision.
+#[test]
+fn dense_per_transition_seeding_is_opt_in_and_recovers_the_precision() {
+    use owalnuts::walnutpie::{DenseMetricRegularization, DenseWarmupSeeding, MetricUpdateOutcome};
+    assert_eq!(
+        WarmupConfig::new(0.8).unwrap().dense_warmup_seeding(),
+        DenseWarmupSeeding::Legacy
+    );
+    let run = |seeding| {
+        let warmup = WarmupConfig::new(0.8)
+            .unwrap()
+            .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+            .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+            .with_dense_metric_regularization(DenseMetricRegularization::Stan)
+            .with_dense_warmup_seeding(seeding);
+        Sampler::new()
+            .warmup(1_000)
+            .draws(10)
+            .chains(1)
+            .threads(1)
+            .seed(SEED)
+            .metric(Metric::dense())
+            .adaptation(Adaptation::Custom(warmup))
+            .run(&Correlated, &[vec![0.5, -0.5]])
+            .unwrap()
+    };
+    let legacy = run(DenseWarmupSeeding::Legacy);
+    let fresh = run(DenseWarmupSeeding::PerTransition);
+    assert_ne!(legacy.chains(), fresh.chains());
+    let installed = fresh.chains()[0]
+        .telemetry()
+        .metric_updates()
+        .iter()
+        .rev()
+        .find(|u| u.outcome() == MetricUpdateOutcome::Installed)
+        .and_then(|u| u.mass_dense().map(<[f64]>::to_vec))
+        .unwrap();
+    // Whitened condition number: eigenvalues of precision x covariance
+    // (identity for the exact precision; the diagonal metric gives 19).
+    let cov = [1.0, 1.8, 1.8, 4.0];
+    let product = |i: usize, j: usize| {
+        (0..2)
+            .map(|k| installed[i * 2 + k] * cov[k * 2 + j])
+            .sum::<f64>()
+    };
+    let trace = product(0, 0) + product(1, 1);
+    let det = product(0, 0) * product(1, 1) - product(0, 1) * product(1, 0);
+    let root = (trace * trace / 4.0 - det).max(0.0).sqrt();
+    let kappa = (trace / 2.0 + root) / (trace / 2.0 - root);
+    assert!(kappa < 1.5, "{installed:?} kappa {kappa}");
+}
