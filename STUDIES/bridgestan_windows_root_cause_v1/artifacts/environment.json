@@ -1,0 +1,24 @@
+{
+  "schema": "bridgestan-windows-root-cause-v1-environment",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "cpu_count": 16,
+  "libwinpthread_on_child_PATH_in_search_order": [
+    {
+      "dir": "C:\\Program Files\\Git\\mingw64\\bin",
+      "bytes": 63875,
+      "sha256": "8d7a192a8fbbccb0cebeac272701f66a580f493eff2336739a96144119260723"
+    },
+    {
+      "dir": "C:\\Program Files\\Git\\mingw64\\bin",
+      "bytes": 63875,
+      "sha256": "8d7a192a8fbbccb0cebeac272701f66a580f493eff2336739a96144119260723"
+    },
+    {
+      "dir": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+      "bytes": 72171,
+      "sha256": "c29cbbe3a9c710df0dfecda4dbc1664b95658278511b961cbd2357c2a40d0494"
+    }
+  ],
+  "note": "Children inherit this PATH; Windows resolves the model DLLs import of libwinpthread-1.dll to the first PATH hit (no copy in the exe dir or System32). The models were compiled by the WinLibs GCC 16.1.0 toolchain, whose own libwinpthread is a different build. The prior studies did not record which copy their children loaded.",
+  "contention": "shared 16-core machine, ~10 concurrent agents; durations are descriptive only"
+}
