@@ -1,0 +1,26 @@
+### WP54-NONFINITE-POLICY-REQUALIFICATION-V1 — `RejectLeaf` is bit-identical to `Abort` on all 73 completed-abort cells and rescues the WP50 fatal case with every gate passing; frozen rule passes, `RejectLeaf` becomes the `sampler::Tuning` default
+
+- **When.** 2026-10-25. Preregistration and harness `a840bb9f`. 158 one-shot cells ran in manifest order (02:39–05:56, contended). Evidence `22b869d5`. No cell rerun.
+- **Protocol.** `STUDIES/nonfinite_policy_requalification_v1/{PREREGISTRATION.md,protocol.json}`. Arms: `abort` = `Tuning::default()` and `reject_leaf` = `.nonfinite_position(RejectLeaf)`. Everything else is the shipped default via the WP48 harness: diagonal metric, `Init::uniform()`, 4 x 1,000/1,000. Blocks:
+  - S1: sblrc seed 50801734 (targeted, not fresh), run with the house library and with the WP50D/E static library;
+  - S2: lotka_volterra on WP48 seeds 148101–148103 (targeted);
+  - S3: 10 fresh sblrc seeds;
+  - S4: 10 fresh lotka_volterra seeds;
+  - the funnel, 3 fresh seeds;
+  - the 17 house models x 3 fresh seeds.
+- **Outcome.**
+  - D1 bit-identical: 73/73 completed-abort cells (draw hash, per-chain calls, zero rejections).
+  - D2 completed: 75 vs 73 runs. Both rescues are S1: one rejected leaf at chain 2, warmup transition 9. Under `Abort` that leaf killed all four chains.
+  - D3: both rescues pass every gate (max |z| 1.63, R-hat 1.0035, bulk ESS 760), and the draw hash `5d7e4a62b998da28` equals WP50E's.
+  - D4 funnel: z +0.14, +0.59, -0.02 in both arms.
+  - House: 41/51 gates in both arms, geomean ratio exactly 1.000.
+  - Stress gates: 19 vs 17.
+  - Predictions: P1, P2, P3, P4 and P6 held. P1b failed: the four lotka_volterra timeouts (148101, 5403104, 5403107, 5403110) time out under both policies. P5 failed: the rescues have 0 retained divergences, because the rejection is in warmup.
+- **Conclusion.** The rule passes and the flip is supported, with one caveat: the benefit rests on one non-fresh seed. No fresh cell hit the event, and on every cell without the event the two policies are identical.
+- **Change.**
+  - `sampler::Tuning::default()` now uses `RejectLeaf`, and the setter is public without `research`.
+  - `walnutpie::KernelTuning::default()` (the frozen `v10` replay tuning) stays `Abort`.
+  - `ALGORITHM_REVISION` and the fingerprints are unchanged.
+  - `cargo test` passes 254 tests; with `research`, 276.
+- **Side finding.** At the defaults, lotka_volterra stalls past 900 s on 4 of 13 seeds and finishes with R-hat 1.04–1.59 on 3 more.
+- **Next.** Expose the warmup nonfinite-rejection count in `Summary` warnings, because the divergence count does not show it. Study the lotka_volterra stall separately.
