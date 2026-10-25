@@ -61,6 +61,12 @@ R-hat under 1.01 (`STUDIES/chain_disagreement_warning_v1`). The inputs are
 each chain dict's `warmup_end` / `sampling_end` and the draws; nothing acts
 on them, so the draws are unchanged. It catches one-wrong-chain failures
 only and does not replace the R-hat / ESS gates.
+It also reports, per chain, nonfinite integrator positions that the default
+`RejectLeaf` policy rescued as zero-density leaves (`check ==
+"nonfinite_positions"`, with `warmup` and `sampling` counts; printed as
+`warning: chain k rejected n nonfinite positions during warmup`). The rescue
+records no divergence, so this line is the only place it shows outside the
+`work_discarded` / `work_retained` dicts.
 
 `summary()` is the Rust `owalnuts::diagnostics` estimator set (rank-normalised
 folded split R-hat, bulk/tail ESS, MCSE; matches `az.rhat`/`az.ess`/`az.mcse`

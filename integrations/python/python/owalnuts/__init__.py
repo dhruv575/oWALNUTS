@@ -203,16 +203,30 @@ class SampleResult:
         ``threshold`` (density checks) and the printed ``text``. Inputs are
         each chain's ``warmup_end`` / ``sampling_end`` window (step, median
         and IQR of the selected-state log density) and the leave-one-chain-out
-        R-hat of the retained draws. Empty when no chain disagrees or with
-        fewer than three chains. A warning is a reason to inspect the chain,
-        not a verdict; the R-hat and ESS gates still apply."""
+        R-hat of the retained draws. These checks need at least three chains.
+        A warning is a reason to inspect the chain, not a verdict; the R-hat
+        and ESS gates still apply.
+
+        A chain that rejected nonfinite integrator positions (rescued as
+        zero-density leaves by the default ``RejectLeaf`` policy, which
+        records no divergence) adds one dict with ``check`` equal to
+        ``nonfinite_positions``, ``warmup`` and ``sampling`` counts and
+        ``value`` their sum, for any number of chains. Empty when no chain
+        disagrees and none rejected a nonfinite position."""
         return [dict(w) for w in self._chain_warnings()[0]]
 
     def _chain_warnings(self) -> tuple[list[dict[str, Any]], list[str]]:
         warmup = [c.get("warmup_end") for c in self.chains]
         sampling = [c.get("sampling_end") for c in self.chains]
+        rejections = [
+            (
+                int(c.get("work_discarded", {}).get("nonfinite_position_rejections", 0)),
+                int(c.get("work_retained", {}).get("nonfinite_position_rejections", 0)),
+            )
+            for c in self.chains
+        ]
         samples = np.ascontiguousarray(self.samples, dtype=np.float64)
-        warnings, lines = _owalnuts.chain_warnings(samples, warmup, sampling)
+        warnings, lines = _owalnuts.chain_warnings(samples, warmup, sampling, rejections)
         return list(warnings), list(lines)
 
     def __str__(self) -> str:

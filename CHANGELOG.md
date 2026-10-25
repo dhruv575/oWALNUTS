@@ -61,7 +61,8 @@ architecture and operating system (see the `walnutpie` module documentation).
   - the funnel check passes.
 
   The rejection happens in warmup and adds no retained divergence, so check
-  `nonfinite_position_rejections` to see whether it occurred.
+  `nonfinite_position_rejections` (or the WP59 `chain_warnings` line) to see
+  whether it occurred.
 
 ### Added
 
@@ -77,6 +78,21 @@ architecture and operating system (see the `walnutpie` module documentation).
   `SampleResult.chain_warnings()`, per-chain `warmup_end` / `sampling_end`, and
   the same lines in `print(result)`. Draws are bit-identical; the kernel
   revision is unchanged.
+- Warmup and sampling nonfinite-position rejections are now reported
+  (WP59). The `RejectLeaf` rescue that WP54 made the default records no
+  divergence, so a rescued overflow was visible only in
+  `WorkTotals::nonfinite_position_rejections`. `ChainWarning::NonfinitePositions
+  { chain, warmup, sampling }` (from the discarded and retained work totals;
+  any number of chains) is now part of `Summary::chain_warnings` and
+  `Posterior::chain_warnings()`, and `Summary` prints `warning: chain k
+  rejected n nonfinite positions during warmup [and m during sampling]` on
+  its own line. `ChainWarning::is_disagreement()` separates it from the WP44
+  checks. Python: `chain_warnings()` returns it as `check ==
+  "nonfinite_positions"` with `warmup` / `sampling` counts, `print(result)`
+  prints the same line, and the `work_*` dicts gain
+  `nonfinite_position_rejections`. Observe-only: draws are bit-identical and
+  the kernel revision is unchanged (`tests/chain_warnings.rs`,
+  `nonfinite_rejections_are_reported_per_chain_and_by_phase`).
 
 ### Changed
 

@@ -1571,7 +1571,10 @@ impl Posterior {
     /// other chains' at the end of warmup or over the retained draws, and the
     /// leave-one-chain-out R-hat (`STUDIES/chain_disagreement_warning_v1`).
     /// Per-chain inputs are [`RunTelemetry::warmup_end`] and
-    /// [`RunTelemetry::sampling_end`]; nothing here changes the draws. See
+    /// [`RunTelemetry::sampling_end`]; nothing here changes the draws. The
+    /// list also reports each chain that rejected nonfinite integrator
+    /// positions under the default [`NonfinitePositionPolicy::RejectLeaf`]
+    /// (counted, but recorded as no divergence). See
     /// [`crate::diagnostics::ChainWarning`]; [`crate::diagnostics::Summary`]
     /// carries the same list and prints one line per flagged chain.
     pub fn chain_warnings(&self) -> Vec<crate::diagnostics::ChainWarning> {
