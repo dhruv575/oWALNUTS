@@ -14,10 +14,11 @@ use owalnuts::sampler::{
     uniform_starts,
 };
 use owalnuts::walnutpie::{
-    DenseMass, DiagonalMass, KernelOptions, KernelTuning, PaperAdaptationConfig, RunConfig,
-    RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
-    sample_chains, sample_chains_dense, sample_chains_structured, sample_chains_structured_refresh,
-    sample_chains_with_control, sample_chains_with_target_budget,
+    DenseMass, DiagonalMass, KernelOptions, KernelTuning, NonfinitePositionPolicy,
+    PaperAdaptationConfig, RunConfig, RunControl, TargetEvaluationAdmissionLimit,
+    TargetEvaluationBudget, WarmupConfig, sample_chains, sample_chains_dense,
+    sample_chains_structured, sample_chains_structured_refresh, sample_chains_with_control,
+    sample_chains_with_target_budget,
 };
 
 struct Gaussian(usize);
@@ -89,7 +90,8 @@ fn starts(dimension: usize) -> Vec<Vec<f64>> {
 /// The same numbers and kernel options as `Tuning::default()`: `h = 0.5`,
 /// depth 10, one micro-step, eight levels, `delta = 1`, and the momentum-sum
 /// U-turn rule (the post-WP31 default; `KernelOptions::default()` is the
-/// frozen endpoint rule).
+/// frozen endpoint rule), and the `RejectLeaf` nonfinite-position policy
+/// (the sampler default since WP54; `KernelTuning::default()` keeps `Abort`).
 fn kernel_tuning() -> KernelTuning {
     KernelTuning::new(0.5, nz(10), nz(1), nz(8), 1.0)
         .unwrap()
@@ -97,6 +99,7 @@ fn kernel_tuning() -> KernelTuning {
             u_turn: DEFAULT_U_TURN_RULE,
             ..KernelOptions::default()
         })
+        .with_nonfinite_position(NonfinitePositionPolicy::RejectLeaf)
 }
 
 fn config(warmup: Option<WarmupConfig>) -> RunConfig {
@@ -822,8 +825,9 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
     assert_eq!(posterior.chains(), direct.chains());
     assert_eq!(posterior.chain_count(), 3);
 
-    // `Init::Given` is `run`; `run_from_random_starts` is `Init::uniform()`
-    // with four chains when none were requested.
+    // `Init::Given` is `run`; `run_from_random_starts` is `Init::default()`
+    // (`Init::best_of(16)` since WP52) with four chains when none were
+    // requested.
     let given = sampler()
         .metric(Metric::Identity)
         .run_with_init(&target, &Init::Given(starts.clone()))
@@ -834,7 +838,22 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
         .run_from_random_starts(&target)
         .unwrap();
     assert_eq!(random.chain_count(), DEFAULT_RANDOM_START_CHAINS);
-    assert_eq!(Init::default(), Init::uniform());
+    assert_eq!(Init::default(), Init::best_of(16));
+    let chosen = candidate_starts(
+        &target,
+        DEFAULT_RANDOM_START_CHAINS,
+        SEED,
+        2.0,
+        16,
+        100,
+        StartSelection::HighestDensity,
+    )
+    .unwrap();
+    let from_default_starts = sampler()
+        .metric(Metric::Identity)
+        .run(&target, &chosen.starts)
+        .unwrap();
+    assert_eq!(random.chains(), from_default_starts.chains());
     let again = sampler()
         .metric(Metric::Identity)
         .run_from_random_starts(&target)
@@ -971,8 +990,8 @@ fn run_with_candidate_init_matches_run_from_the_chosen_starts() {
             .unwrap();
         assert_eq!(posterior.chains(), direct.chains());
     }
-    // The default is unchanged.
-    assert_eq!(Init::default(), Init::uniform());
+    // The default is best-of-16 since WP52 (`STUDIES/init_rule_confirmation_v1`).
+    assert_eq!(Init::default(), Init::best_of(16));
 }
 
 /// The structured paths have no budgeted admission variant; with the
@@ -1064,13 +1083,14 @@ impl Target for Correlated {
 
 /// WP48: the legacy dense warmup seed `splitmix64(seed ^ t ^ segment)` is
 /// constant over warmup (`t == segment`); `DenseWarmupSeeding::PerTransition`
-/// gives fresh randomness and recovers the target precision.
+/// gives fresh randomness and recovers the target precision. PerTransition is
+/// the default since the WP51 engineering decision; Legacy stays selectable.
 #[test]
-fn dense_per_transition_seeding_is_opt_in_and_recovers_the_precision() {
+fn dense_per_transition_seeding_is_the_default_and_recovers_the_precision() {
     use owalnuts::walnutpie::{DenseMetricRegularization, DenseWarmupSeeding, MetricUpdateOutcome};
     assert_eq!(
         WarmupConfig::new(0.8).unwrap().dense_warmup_seeding(),
-        DenseWarmupSeeding::Legacy
+        DenseWarmupSeeding::PerTransition
     );
     let run = |seeding| {
         let warmup = WarmupConfig::new(0.8)

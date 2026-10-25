@@ -25,6 +25,14 @@ where one was established. Details are in the
 
 ## Adaptation
 
+- **Making {PerTransition seeding, Stan regularisation, symmetrised
+  precision} the `Metric::dense()` warmup default** (WP51,
+  `dense_metric_confirmation_v1`). It is 3.21x the diagonal per gradient over
+  17 posteriordb models (`diamonds` 98.7x) with the funnel exact, but it passes
+  40/51 gates against 43, and `gp_pois_regr` drops 3/3 -> 0/3 (1.73x per
+  gradient, yet too few gradients per draw for the slow GP length-scale to
+  reach ESS 400). The frozen rule failed, so the three fixes stay opt-in.
+  The shipped dense defaults measure 0.055x, 12/51.
 - **Appendix C as the default warmup** (WP22, WP23). From uniform starts the
   K-quantile rule installs delta near 0 at transition 74 and never recovers;
   after the v4 robust rule it is at parity with dual averaging (0.995x) and
@@ -88,7 +96,8 @@ where one was established. Details are in the
   The WP34 truncation hypothesis is closed.
 - **`RejectLeaf` for a non-finite proposed position** (WP38): exact and
   bit-identical elsewhere, but the registered health gate failed on the
-  target itself for both arms.
+  target itself for both arms. Superseded: WP54 adopted it as the
+  `sampler::Tuning` default.
 - **Fixing the step from the first warmup transition** (WP39B fixed arms):
   2 to 8x warmup gradients and `arma11` never builds a leaf. Any fixed-step
   design must fix the step after the step search and first mass window.

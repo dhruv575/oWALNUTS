@@ -7,6 +7,62 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
+### Changed
+
+- **Default start rule is now `Init::best_of(16)`** (`STUDIES/init_rule_confirmation_v1`,
+  WP52, the preregistered default-flip confirmation of WP43's
+  `STUDIES/init_rule_v1`). `Init::default()` and `Sampler::run_from_random_starts`
+  now draw 16 evaluable uniform(-2, 2) starts per chain from the same start
+  stream and keep the highest log density. The new constant
+  `sampler::DEFAULT_INIT_CANDIDATES` is 16. `Init::uniform()` (the CmdStan
+  rule and the previous default) remains available through `run_with_init`.
+  The frozen rule passed on fresh seeds 952201-952203:
+  - 1.254x geomean min-bulk-ESS per gradient over 17 posteriordb models,
+    and 42 vs 42 gate passes of 51;
+  - funnel |z| <= 1.11;
+  - no hide event on a 0.7/0.3 two-Gaussian mixture, where R-hat detected
+    both modes on every seed in both arms.
+
+  The gain comes from `arma11` (59.8x) and `lotka_volterra` (17.1x). On the
+  other 14 models best-of-16 was 0.862x, and it lost an `earnings` cell
+  (warmup step collapse) and an `hmm_drive_0` cell. In that cell one chain
+  spent its first 46 retained draws in a second mode. Rank R-hat was 1.0087,
+  but `chain_warnings` named the chain. Starts, and therefore draws for a given
+  seed, differ from 0.2.0 for `run_from_random_starts` and `Init::default()`
+  callers. `Sampler::run`, `RunConfig`, the kernel, its fingerprints and
+  `ALGORITHM_REVISION` are unchanged, and so is the Python package's `init`
+  handling (`init=None` jitter, `init="uniform"`); `DEFAULTS` adds
+  `init_candidates`.
+
+- **DEFAULT CHANGE (WP54): an integrator overflow no longer kills the run.**
+  `sampler::Tuning::default()` now uses
+  `NonfinitePositionPolicy::RejectLeaf`. When the momentum or drift
+  overflows, the nonfinite position is treated as a zero-density leaf: it is
+  refined and then rejected, like a recoverable target failure. The event is
+  counted in `WorkTotals::nonfinite_position_rejections` and the transition
+  continues. Stan treats the same event as a divergent leaf. Previously
+  (`Abort`) one chain's overflow ended the whole multi-chain run with
+  `ErrorKind::Numerical`. `Tuning::nonfinite_position`,
+  `KernelTuning::with_nonfinite_position` and `sampler::NonfinitePositionPolicy`
+  are no longer behind the `research` feature, so
+  `Tuning::default().nonfinite_position(NonfinitePositionPolicy::Abort)`
+  restores the old behaviour. `walnutpie::KernelTuning::default()`, the frozen
+  replay tuning, keeps `Abort`. `ALGORITHM_REVISION` and the kernel
+  fingerprints are unchanged: every run that produced draws before produces
+  the same draws. Chosen by the preregistered default-flip confirmation
+  `STUDIES/nonfinite_policy_requalification_v1` (WP54), whose frozen rule
+  passed:
+  - draws were bit-identical on 73/73 cells that `Abort` completed (17
+    posteriordb models x 3 seeds, sblrc and lotka_volterra stress seeds,
+    funnel);
+  - 75 vs 73 runs completed;
+  - the WP50D/E fatal case (sblrc seed 50801734, one rejected leaf in chain
+    2's warmup) now completes and passes every gate (max |z| 1.63);
+  - the funnel check passes.
+
+  The rejection happens in warmup and adds no retained divergence, so check
+  `nonfinite_position_rejections` to see whether it occurred.
+
 ### Added
 
 - Observe-only chain-disagreement checks (`STUDIES/chain_disagreement_warning_v1`,
@@ -21,6 +77,29 @@ architecture and operating system (see the `walnutpie` module documentation).
   `SampleResult.chain_warnings()`, per-chain `warmup_end` / `sampling_end`, and
   the same lines in `print(result)`. Draws are bit-identical; the kernel
   revision is unchanged.
+
+### Changed
+
+- **Dense facade warmup defaults changed.** `walnutpie::WarmupConfig`
+  defaults (and therefore `Metric::dense()` + `Adaptation::default()`) now
+  use `DenseWarmupSeeding::PerTransition`, `DenseMetricRegularization::Stan`
+  and a symmetrised dense precision (`dense_symmetrized_precision() == true`).
+  The old behaviour is the pre-change setting for reproduction:
+  `.with_dense_warmup_seeding(DenseWarmupSeeding::Legacy)
+  .with_dense_metric_regularization(DenseMetricRegularization::MeanVarianceShrinkage)
+  .with_dense_symmetrized_precision(false)`. **The change is an engineering
+  decision made on candidate-versus-old-dense evidence, not by WP51's frozen
+  rule.** That rule compared the candidate against the diagonal default and
+  failed (40 vs 43 gates; `gp_pois_regr` 3/3 -> 0/3). The evidence: against
+  the diagonal, over 17 posteriordb models, the candidate is 3.21x per
+  gradient with 40/51 gates, while the old dense defaults are 0.055x with
+  12/51. Two of the three old behaviours were defects: every warmup
+  transition reused one RNG stream, and a 64-eps symmetry check installed a
+  spurious 0.01–0.13 ridge (`STUDIES/dense_metric_posteriordb_v1`, WP48;
+  `STUDIES/dense_metric_confirmation_v1`, WP51). Dense runs from earlier
+  builds do not reproduce under the new defaults. The diagonal default, the
+  retained kernel, `ALGORITHM_REVISION` and `tests/kernel_fingerprint.rs`
+  are unchanged. `Metric::dense()` is still never selected automatically.
 
 ### Python package
 
@@ -37,6 +116,13 @@ architecture and operating system (see the `walnutpie` module documentation).
 - README performance guidance rewritten from `STUDIES/python_callpath_v1`
   (per-call cost and thread scaling per path, nutpie comparison, numba
   `error_model="numpy"` for `from_cfunc`). [WP47]
+
+#### Fixed
+
+- `from_pymc(model, gil_free=True)` on models with `pm.Data` or dims raised
+  `NotImplementedError` on PyMC 5.28+, which exports `freeze_dims_and_data`
+  only from `pymc.model.transform.optimization`. The adapter now imports it
+  from there and falls back to `pymc.model.transform` for older PyMC.
 
 - `walnutpie::DiagonalMetricRegularization::{ScaleFreeMedian, ScaleFreeStanMedian}`
   (opt-in through `sampler::Adaptation::Custom` and the Python binding as

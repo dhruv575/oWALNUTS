@@ -44,7 +44,7 @@ let posterior = Sampler::new()
     .draws(1_000)
     .chains(4)
     .seed(0x5eed)
-    .run_from_random_starts(&Gaussian)?;   // uniform(-2, 2) starts, retried until finite
+    .run_from_random_starts(&Gaussian)?;   // best of 16 uniform(-2, 2) starts per chain
 
 let summary = Summary::from_output(posterior.inner(), None)?;
 println!("{summary}");                     // mean, sd, MCSE, quantiles, ESS, R-hat, health
@@ -258,9 +258,17 @@ Opt-ins, each one builder call:
   CmdStan per gradient on the healthy models (1.07x over 17 with `arma11`),
   0.80x wall per gradient, 1.40x / 3.09x ESS per second; funnel exact at
   the defaults on every seed [E15].
-- `Init::uniform()` (`run_from_random_starts`, `run_with_init`): Stan's
-  uniform(-2, 2) starts redrawn until the log density and gradient are
-  finite; `.run(&target, &starts)` uses your own.
+- `Init::best_of(16)`, the default (`run_from_random_starts`, `Init::default()`):
+  per chain, 16 Stan-style uniform(-2, 2) starts, each redrawn until the log
+  density and gradient are finite, keeping the highest log density (about 64
+  extra gradient calls per run; WP43, confirmed as the default by WP52,
+  `STUDIES/init_rule_confirmation_v1`). It removes most of the start lottery
+  on `arma11` and `lotka_volterra`, but a highest-density start is not a mode
+  oracle. It makes it less likely that the four chains visit a second mode
+  (single-mode four-chain starts rose from 13 % to 23 % of seeds on a
+  two-mode test target), so check `Summary::chain_warnings` as well as R-hat.
+  `Init::uniform()` (`run_with_init`) is the CmdStan rule;
+  `.run(&target, &starts)` uses your own.
 - `Limits::new().max_target_evaluations(n)`, `.deadline(..)`, `.timeout(..)`,
   `.cancellation(..)`: an exact runtime evaluation ceiling and cooperative
   stopping; `.admit_conservative()` restores the 0.1 admission check.
@@ -278,6 +286,41 @@ posterior mean. When the right block depends on parameters being sampled,
 `Metric::StructuredRefresh` rebuilds it from a caller-supplied
 `StructuredMetricRefresh` at every completed slow warmup window and freezes it
 before retention, with a typed `StructuredRefreshUpdate` per boundary.
+
+## Dense metric (`Metric::dense()`)
+
+`Sampler::new().metric(Metric::dense())` adapts a full dense metric during
+warmup. It is **never selected automatically**, and the adapted diagonal
+remains the default.
+
+**When to use it:** correlated or collinear near-Gaussian regression and
+autoregression posteriors. These are min-bulk-ESS-per-gradient ratios
+against the diagonal default, posteriordb, 3 fresh seeds, all gates passed
+in both arms [E19]:
+
+| model | dense / diagonal |
+|---|---:|
+| `diamonds` | 98.7x (step 0.0036 -> 0.28; depth caps 10 % -> 0) |
+| `nes2000` | 15.5x |
+| `mesquite` | 15.3x |
+| `arK` | 7.6x |
+| `kidiq` | 5.4x |
+| `earnings` | 4.5x |
+
+**When not to:** GP-hyperparameter posteriors. At 1,000 draws `gp_pois_regr`
+went 3/3 -> 0/3 gates: it is 1.73x per gradient, but it takes fewer
+gradients per draw and the length-scale's ESS falls below 400. `accel_gp`
+went 1/3 -> 0/3 at 0.38x. Funnels and hierarchical scale problems also need
+care: on Neal's funnel the tail mass is exact, but there were 2 retained
+divergences against 0 for the diagonal. Over all 17 models dense passes
+40/51 gate cells against the diagonal's 43/51 (geomean 3.21x per gradient).
+
+Warmup uses per-transition seeding, Stan's dense regularisation and a
+symmetrised precision. These have been the defaults since WP51. Earlier
+builds used `Legacy` / `MeanVarianceShrinkage` / no symmetrisation, which was
+0.055x the diagonal with 12/51 gates; that setting is still available
+through `Adaptation::Custom` for reproduction
+(`STUDIES/dense_metric_posteriordb_v1`, `STUDIES/dense_metric_confirmation_v1`).
 
 ## Oracle parity
 
@@ -466,3 +509,13 @@ provenance.
   Gaussian; lower `delta` alone makes the four-level bias worse:
   [`STUDIES/funnel_defaults_v1`](STUDIES/funnel_defaults_v1/README.md)
   (`WP28-FUNNEL-DEFAULTS-V1`).
+- [E19] Dense metric: the old `Metric::dense()` warmup reused one RNG stream
+  and installed a spurious ridge (0.08x the diagonal, 17/51 gates); fixed, it
+  is 3.21x the diagonal per gradient over 17 posteriordb models with 40/51
+  gates against 43/51 (`diamonds` 98.7x; `gp_pois_regr` 3/3 -> 0/3). The
+  default change was an engineering decision on candidate-versus-old-dense
+  evidence, not the frozen rule (which failed):
+  [`STUDIES/dense_metric_posteriordb_v1`](STUDIES/dense_metric_posteriordb_v1/README.md)
+  (`WP48-DENSE-METRIC-POSTERIORDB-V1`),
+  [`STUDIES/dense_metric_confirmation_v1`](STUDIES/dense_metric_confirmation_v1/README.md)
+  (`WP51-DENSE-METRIC-CONFIRMATION-V1`).

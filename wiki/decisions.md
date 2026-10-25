@@ -29,6 +29,7 @@ kernel. Full evidence for each study is in the
 | `UTurnRule::MomentumSum` + `DiagonalMetricRegularization::Stan` | WP31 `joint_default_v1` (rule failed on C2), flipped post hoc, validated WP32 `posteriordb_bench_v5` | **post hoc**; validation predictions 5/5 held | 1.508x per gradient, 41 vs 35 gates, `sblrc` 9x, `earnings` recovered; C2 failed only on the two fail-everywhere cells (`hmm_drive_0` mode lottery, centered eight schools). Documented as post hoc in CHANGELOG, README, release notes |
 | chain rescue `restart_from_best` | WP33 `chain_rescue_v1` | yes | 25 of 27 cells vs 21; `lotka_volterra` 0/3 to 3/3 |
 | chain rescue back to none | WP36 `chain_rescue_v2` | mechanical fallback | `two_hit` failed its conjunctive gates; `current` hit its mapped-origin-overwrite red lines; the registered fallback is `no_rescue` |
+| `NonfinitePositionPolicy::RejectLeaf` (`sampler::Tuning` only; `KernelTuning::default()` keeps `Abort`) | WP54 `nonfinite_policy_requalification_v1` | yes | bit-identical on 73/73 completed-abort cells; 75 vs 73 runs completed; rescues the WP50 sblrc fatal case with every gate passing; funnel passes |
 
 ## Candidates measured and not adopted
 
@@ -48,7 +49,7 @@ kernel. Full evidence for each study is in the
 | coarsest-first reverse check order | WP37B | paused; descriptive reverse calls 1.086x against it | no evidence it is cheaper |
 | `ReverseCoarserPolicy::ZeroWeightBeyond` | WP39 | 0.981x | step confound: zero-weight leaves diluted the statistic, h +3 to 30 % |
 | `ZeroWeightBeyondAdaptSelected` | WP39B | 0.878x; fixed-step 0.908x on targets | the untruncated orbit pays only on the noncentered eight schools |
-| `NonfinitePositionPolicy::RejectLeaf` | WP38 | not qualified | health gate measured the target, not the policy |
+| `NonfinitePositionPolicy::RejectLeaf` | WP38 | not qualified (superseded: adopted by WP54) | health gate measured the target, not the policy |
 | warmup-only untruncated orbits, skip single-leaf statistic, descent bound, NUTS initial phase, Stan step search | WP40 `warmup_gap_diag_v1` | best combination 1.05x overall, 0.78x on targets | every arm that saves warmup gradients ends at a larger step |
 | acceptance target 0.85 or 0.9 with the skip statistic | WP40 addendum | 0.90 to 0.96x, `accel_gp` 0.52 to 0.65x | the higher target costs sampling efficiency on every model and does not restore the targets |
 | floored single-leaf crash statistic (0.3, 0.5, 0.8) | WP40 addendum 2 | best 1.014x on the nine-model screen, `gp_pois_regr` 0.73, `accel_gp` 0.63 | the GP targets need the smaller step the crash gives them |

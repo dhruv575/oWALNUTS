@@ -238,9 +238,16 @@ pub use crate::kernel::ReverseCoarserPolicy;
 /// a zero-density evaluation with a zero gradient, exactly like a recoverable
 /// target failure, so the leaf is rejected and the transition continues; the
 /// event is counted in [`WorkTotals::nonfinite_position_rejections`]. Stan
-/// treats the same event as a divergent leaf. The non-default variant is
-/// exposed only by the crate's `research` facade and is measured in
-/// `STUDIES/nonfinite_position_policy_v1`; no default changes.
+/// treats the same event as a divergent leaf. Runs in which the event never
+/// occurs are bit-identical under either policy.
+///
+/// Defaults: [`KernelTuning::default`] (the frozen replay tuning of
+/// [`ALGORITHM_REVISION`]) keeps [`Self::Abort`]; `sampler::Tuning::default()`
+/// uses [`Self::RejectLeaf`] since `STUDIES/nonfinite_policy_requalification_v1`
+/// (WP54): draws were bit-identical on every run `Abort` completed, and the
+/// 4-chain run that `Abort` killed over one chain's warmup overflow completed
+/// and passed every gate. First measured in
+/// `STUDIES/nonfinite_position_policy_v1` (WP38).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NonfinitePositionPolicy {
     #[default]
@@ -456,10 +463,10 @@ impl KernelTuning {
         self.reverse_coarser_policy = policy;
         self
     }
-    /// Select the treatment of a nonfinite integrator position. Research-only;
-    /// the default remains [`NonfinitePositionPolicy::Abort`], and any run in
+    /// Select the treatment of a nonfinite integrator position. This frozen
+    /// replay tuning defaults to [`NonfinitePositionPolicy::Abort`] (the `v10`
+    /// behaviour); `sampler::Tuning` defaults to `RejectLeaf`. Any run in
     /// which the event never occurs is bit-identical under either policy.
-    #[cfg(feature = "research")]
     pub fn with_nonfinite_position(mut self, policy: NonfinitePositionPolicy) -> Self {
         self.nonfinite_position = policy;
         self
@@ -593,12 +600,14 @@ pub enum DenseMetricRegularization {
     /// pivot condition estimate is capped at `1e6` by an escalating ridge.
     /// The diagonal target is the *mean* variance, so this is not scale-free:
     /// coordinates whose variance is far below the mean are floored near
-    /// `s * mean_j(var_j)`.
-    #[default]
+    /// `s * mean_j(var_j)`. The default before the WP51 engineering
+    /// decision; kept to reproduce earlier dense runs.
     MeanVarianceShrinkage,
     /// Stan's dense rule `(n / (n + 5)) * Sigma + 1e-3 * (5 / (n + 5)) * I`,
     /// with no condition cap (an escalating ridge is added only if the
-    /// factorisation fails). Opt-in (`STUDIES/dense_metric_posteriordb_v1`).
+    /// factorisation fails). The default since the WP51 engineering decision
+    /// (`STUDIES/dense_metric_posteriordb_v1`, `STUDIES/dense_metric_confirmation_v1`).
+    #[default]
     Stan,
 }
 
@@ -611,12 +620,15 @@ pub enum DenseWarmupSeeding {
     /// transition of a chain draws from the same RNG stream (same initial
     /// momentum and tree directions): warmup is not a Markov chain with
     /// fresh randomness and the windowed covariance is estimated from a
-    /// deterministic orbit. Kept as the default for reproducibility of
-    /// existing dense runs (`STUDIES/dense_metric_posteriordb_v1`, WP48).
-    #[default]
+    /// deterministic orbit (`STUDIES/dense_metric_posteriordb_v1`, WP48).
+    /// The default before the WP51 engineering decision; kept to reproduce
+    /// earlier dense runs.
     Legacy,
     /// A distinct stream per warmup transition:
     /// `splitmix64(splitmix64(seed) ^ (transition + 1) * 0x9e3779b97f4a7c15)`.
+    /// The default since the WP51 engineering decision
+    /// (`STUDIES/dense_metric_confirmation_v1`).
+    #[default]
     PerTransition,
 }
 
@@ -1317,9 +1329,9 @@ impl Default for WarmupConfig {
             dual_averaging_acceptance: DualAveragingAcceptance::CurrentCoarseEndpoint,
             paper_adaptation: None,
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
-            dense_metric_regularization: DenseMetricRegularization::MeanVarianceShrinkage,
-            dense_warmup_seeding: DenseWarmupSeeding::Legacy,
-            dense_symmetrize_precision: false,
+            dense_metric_regularization: DenseMetricRegularization::Stan,
+            dense_warmup_seeding: DenseWarmupSeeding::PerTransition,
+            dense_symmetrize_precision: true,
             stan_restart_reference: false,
             initial_phase_max_error: None,
             minimum_step: None,
@@ -1457,7 +1469,8 @@ impl WarmupConfig {
         self.dense_warmup_seeding
     }
     /// Symmetrise each candidate dense precision, `(P + P^T) / 2`, before it
-    /// is validated (dense adaptive facade only; default off). The precision
+    /// is validated (dense adaptive facade only; **default on** since the
+    /// WP51 engineering decision; `false` reproduces earlier dense runs). The precision
     /// is inverted column by column, so for a covariance with condition
     /// number above roughly 1e4 its roundoff asymmetry exceeds the
     /// `64 * eps` symmetry check of [`DenseMass::from_matrix`]; without this
@@ -9424,8 +9437,8 @@ pub fn sample_dense_with_control<T: Target>(
             warmup.dynamic_floor(search_step, stream_step),
         )?
         .expect("nonempty metric window");
-        let (outcome, candidate, shrinkage, ridge, condition, failures) =
-            covariance.precision_candidate(
+        let (outcome, candidate, shrinkage, ridge, condition, failures) = covariance
+            .precision_candidate(
                 warmup.dense_metric_regularization,
                 warmup.dense_symmetrize_precision,
             );
@@ -13736,16 +13749,16 @@ mod tests {
     }
 
     #[test]
-    fn dense_stan_regularization_matches_stans_formula_and_default_is_unchanged() {
+    fn dense_stan_regularization_matches_stans_formula_and_is_the_default() {
         assert_eq!(
             WarmupConfig::default().dense_metric_regularization(),
-            DenseMetricRegularization::MeanVarianceShrinkage
+            DenseMetricRegularization::Stan
         );
         assert_eq!(
             WarmupConfig::new(0.8)
                 .unwrap()
                 .dense_metric_regularization(),
-            DenseMetricRegularization::MeanVarianceShrinkage
+            DenseMetricRegularization::Stan
         );
         // Strongly scale-heterogeneous, correlated 3-D draws.
         let mut covariance = DenseCovariance::new(3);
@@ -13820,7 +13833,7 @@ mod tests {
             plain_failures > 0 && plain_ridge > 0.0,
             "{plain_outcome:?} {plain_failures} {plain_ridge}"
         );
-        assert!(!WarmupConfig::default().dense_symmetrized_precision());
+        assert!(WarmupConfig::default().dense_symmetrized_precision());
     }
 
     #[test]

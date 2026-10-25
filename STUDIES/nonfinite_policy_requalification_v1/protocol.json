@@ -1,0 +1,234 @@
+{
+ "schema": "nonfinite-policy-requalification-v1-protocol",
+ "ledger_id": "WP54",
+ "status": "FROZEN_BEFORE_EVIDENCE",
+ "question": "Should NonfinitePositionPolicy::RejectLeaf become the default nonfinite-position policy?",
+ "change_under_test": "Tuning::default().nonfinite_position(NonfinitePositionPolicy::RejectLeaf) versus Tuning::default() (shipped Abort); everything else the shipped sampler default (Metric::diagonal, Adaptation::default, Init::uniform at its shipped radius via uniform_starts, Limits::admit_worst_case), 4 chains x 1000/1000, 4 threads",
+ "baseline_commit": "3924b090",
+ "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+ "arms": [
+  "abort",
+  "reject_leaf"
+ ],
+ "arm_order_within_pair": "abort then reject_leaf, back to back, same seed",
+ "models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "posteriordb": {
+  "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+  "path": "C:/dev/owalnuts-wt/posteriordb-breadth/STUDIES/posteriordb_breadth_v1/posteriordb/posterior_database"
+ },
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "note": "on every posteriordb reference parameter; plus finite draws; a cell that did not complete fails every gate"
+ },
+ "statistic": "geomean over the 17 house models of the per-model seed-median min bulk ESS per gradient (total target calls incl. warmup), ratio reject_leaf / abort",
+ "house_block": "H-house",
+ "smoke_seed": 5409901,
+ "wp50_assets": {
+  "model": "models/wp50/sblrc__blr_model.so",
+  "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+  "preload": "models/wp50/tbb.dll",
+  "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+  "construct_seed": 50801734,
+  "source": "C:/dev/owalnuts-wt/windows-native-root-cause/STUDIES/bridgestan_windows_root_cause_v3/build/static/ (the WP50D/E static-runtime build, hashes as in bridgestan_windows_root_cause_v5/protocol.json)"
+ },
+ "blocks": [
+  {
+   "name": "S1-replication-house",
+   "stress": true,
+   "models": [
+    "sblrc-blr"
+   ],
+   "seeds": [
+    50801734
+   ],
+   "assets": "house",
+   "cell_timeout_seconds": 900,
+   "note": "targeted replication of the WP50D/E fatal case; seed NOT fresh (declared); house-built sblrc library, construct seed 1, default preload (the WP48 harness)"
+  },
+  {
+   "name": "S1-replication-wp50",
+   "stress": true,
+   "models": [
+    "sblrc-blr"
+   ],
+   "seeds": [
+    50801734
+   ],
+   "assets": "wp50",
+   "cell_timeout_seconds": 900,
+   "note": "same seed with the exact WP50D/E static-runtime library, its tbb.dll and construct seed 50801734; NOT fresh (declared)"
+  },
+  {
+   "name": "S2-lotka-wp48",
+   "stress": true,
+   "models": [
+    "hudson_lynx_hare-lotka_volterra"
+   ],
+   "seeds": [
+    148101,
+    148102,
+    148103
+   ],
+   "assets": "house",
+   "cell_timeout_seconds": 900,
+   "note": "the WP48 seeds on which lotka_volterra lost cells; NOT fresh (declared targeted replication)"
+  },
+  {
+   "name": "S3-sblrc-fresh",
+   "stress": true,
+   "models": [
+    "sblrc-blr"
+   ],
+   "seeds": [
+    5402101,
+    5402102,
+    5402103,
+    5402104,
+    5402105,
+    5402106,
+    5402107,
+    5402108,
+    5402109,
+    5402110
+   ],
+   "assets": "house",
+   "cell_timeout_seconds": 900
+  },
+  {
+   "name": "S4-lotka-fresh",
+   "stress": true,
+   "models": [
+    "hudson_lynx_hare-lotka_volterra"
+   ],
+   "seeds": [
+    5403101,
+    5403102,
+    5403103,
+    5403104,
+    5403105,
+    5403106,
+    5403107,
+    5403108,
+    5403109,
+    5403110
+   ],
+   "assets": "house",
+   "cell_timeout_seconds": 900
+  },
+  {
+   "name": "F-funnel",
+   "kind": "funnel",
+   "seeds": [
+    5404101,
+    5404102,
+    5404103
+   ]
+  },
+  {
+   "name": "H-house",
+   "stress": false,
+   "seeds": [
+    5401101,
+    5401102,
+    5401103
+   ],
+   "assets": "house",
+   "cell_timeout_seconds": 2700
+  }
+ ],
+ "funnel": {
+  "chains": 4,
+  "warmup": 2000,
+  "draws": 20000,
+  "exact_tail_mass": 0.0478,
+  "max_abs_z": 2,
+  "cell_timeout_seconds": 1800,
+  "gate": "|MCSE z| <= 2 for P(omega < -5) on every seed",
+  "starts": "omega in {-3,-1,1,3}, others 0"
+ },
+ "fresh_seeds": {
+  "house": [
+   5401101,
+   5401102,
+   5401103
+  ],
+  "sblrc_stress": [
+   5402101,
+   5402102,
+   5402103,
+   5402104,
+   5402105,
+   5402106,
+   5402107,
+   5402108,
+   5402109,
+   5402110
+  ],
+  "lotka_stress": [
+   5403101,
+   5403102,
+   5403103,
+   5403104,
+   5403105,
+   5403106,
+   5403107,
+   5403108,
+   5403109,
+   5403110
+  ],
+  "funnel": [
+   5404101,
+   5404102,
+   5404103
+  ],
+  "smoke_non_evidence": [
+   5409901
+  ],
+  "verification": "git grep -E '\b540(1|2|3|4|9)[0-9]{3}\b' over main and every owalnuts-wt worktree: only decimal-fraction substrings, no seed use"
+ },
+ "non_fresh_seeds_declared": {
+  "50801734": "WP50D/E fatal case (targeted replication)",
+  "148101-148103": "WP48 lotka_volterra lost seeds (targeted replication)"
+ },
+ "predictions": {
+  "P1": "reject_leaf completes every run abort completes, plus every stress case abort loses",
+  "P2": "draws (and per-chain target calls) bit-identical on every cell where abort completed",
+  "P3": "reject_leaf passes >= as many stress-set gate cells as abort",
+  "P4": "on every rescued cell (abort did not complete, reject_leaf did) max |z| <= 3",
+  "P5": "every rescued run shows >= 1 retained divergence",
+  "P6": "funnel |z| <= 2 on every seed under both arms"
+ },
+ "decision_rule": {
+  "flip_iff": [
+   "D1: bit-identical on 100% of completed-abort cells (all blocks incl. funnel)",
+   "D2: reject_leaf completes strictly more runs than abort, counted over the whole manifest",
+   "D3: no rescued posterior run has max |z| > 4 on a reference parameter while passing all other gates",
+   "D4: the funnel check (|z| <= 2 every seed) passes under reject_leaf",
+   "and every manifest cell recorded"
+  ],
+  "if_flip": "make RejectLeaf the default in walnutpie::KernelTuning and sampler::Tuning; tests/kernel_fingerprint.rs changes only if a fingerprint changes; CHANGELOG entry naming this study; cargo test",
+  "if_not": "document why; Abort stays the default"
+ },
+ "rules": "cells strictly sequential in manifest order, one at a time, 4 threads; no cell rerun or tuned after results; a timeout, error or abort is a recorded result; amendments only for cells not yet run and committed before them"
+}

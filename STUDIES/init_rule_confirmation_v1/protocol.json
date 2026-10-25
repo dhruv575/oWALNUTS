@@ -1,0 +1,118 @@
+{
+  "schema": "init-rule-confirmation-v1",
+  "ledger_id": "WP52",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "question": "Should Init::best_of(16) (16 uniform(-2,2) candidates per chain, keep the highest log density; WP43, STUDIES/init_rule_v1) replace Init::uniform() as the default start rule? Open concern: picking the highest-density start could bias every chain toward the dominant mode and hide multimodality that uniform starts reveal through R-hat.",
+  "baseline_commit": "3924b090",
+  "change_under_test": "Start rule only: Init::uniform() (shipped default) vs Init::best_of(16) (opt-in on main since WP43). No library change is made before the evidence; a default flip is implemented only if the frozen decision rule passes.",
+  "arms_order": ["uniform", "best_of_16"],
+  "arms": {
+    "uniform": "Init::uniform(): uniform(-2,2) unconstrained, up to 100 draws per chain until log density and gradient are finite (uniform_starts)",
+    "best_of_16": "Init::best_of(16) = Init::Candidates { radius 2, candidates 16, max_attempts 100 per candidate, selection HighestDensity } (candidate_starts)"
+  },
+  "common": "Sampler at the shipped defaults: Tuning::default(), Metric::diagonal() (Stan regularisation), Adaptation::default() (dual averaging 0.8, no chain rescue), Limits::admit_worst_case(), 4 threads; posteriordb cells via owalnuts-bridgestan ReplicatedStanTarget (BridgeStan 2.9.0, no STAN_THREADS). Every init evaluation, rejected draws included, counts in gradients_total; the uniform arm's start log densities are measured with one extra call per chain that is subtracted.",
+  "harness": "Reused from WP43 (STUDIES/init_rule_v1: src/main.rs, src/bin/funnel.rs, run_init.py) with arms renamed, median16 dropped, Summary::chain_warnings recorded, and a new two-mode target (src/bin/two_mode.rs).",
+  "models_source": "BridgeStan libraries, data and Stan sources copied from C:/dev/owalnuts-wt/dense-metric/STUDIES/dense_metric_posteriordb_v1/models/ (sibling build of the same posteriordb 28f8d3d sources, BridgeStan 2.9.0)",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "C:/dev/owalnuts-wt/posteriordb-breadth/STUDIES/posteriordb_breadth_v1/posteriordb/posterior_database",
+    "access": "read-only reference to the sibling checkout"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "lottery_models": [
+    "arma-arma11",
+    "bball_drive_event_0-hmm_drive_0",
+    "hudson_lynx_hare-lotka_volterra"
+  ],
+  "seeds": [952201, 952202, 952203],
+  "seeds_verified_unused": "git grep -w over the whole repository at 3924b090 finds no occurrence of 952201-952203, and no protocol.json or PREREGISTRATION.md in any sibling worktree names them. The start-only tally seeds 952210000-952210999 have no git grep -w hit either.",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "run_order": "(a) two-mode target: seeds ascending, arms uniform then best_of_16; (b) two-mode start-only tally, arms in order; (c) funnel: seeds ascending, arms in order; (d) the 17 posteriordb models in listed order, seeds ascending within a model, arms in order within a seed. Strictly sequential, one cell at a time, one harness process per cell. The cheap safety cells run first so a budget overrun can only truncate the screen, never the safety check.",
+  "cell_timeout_seconds": 2700,
+  "parameter_set": "columns of the posteriordb reference draws; draws constrained through BridgeStan with transformed parameters included",
+  "estimators": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS at 0.05/0.95, mean MCSE (posteriordb_bench_v6 functions, reused verbatim through WP43)",
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "hidden_mode": {
+    "definition": "WP43: a cell whose max rank R-hat <= 1.01 but whose mean on some reference parameter is more than 3 reference SD from the posteriordb reference mean; never a credited pass",
+    "reference_sd_threshold": 3.0
+  },
+  "chain_mode": {
+    "rust": "owalnuts::diagnostics::ChainDisagreement and Summary::chain_warnings (WP44) on the unconstrained draws",
+    "reference_distance": "per chain, max over reference parameters of |chain mean - reference mean| / reference SD; above 3 = off reference",
+    "reference_sd_threshold": 3.0
+  },
+  "gate_statistic": "credited passes over the 51 cells (17 models x 3 seeds) per arm: all gates pass and not hidden-mode",
+  "efficiency": "WP43 statistic: per cell min over reference parameters of bulk ESS / gradients_total (init included); per model the geometric mean over the seeds where both arms are ok; ratio best_of_16/uniform per model; geometric mean of the 17 per-model ratios. Reported also: geomean over the 3 lottery models and over the other 14.",
+  "funnel": {
+    "target": "Neal's 10-D funnel at the sampler defaults (no rescue); exact P(omega < -5) = 0.0478",
+    "chains": 4, "warmup": 2000, "draws": 20000,
+    "seeds": [952201, 952202, 952203],
+    "starts": "as WP43: uniform arm = the house starts omega in {-3,-1,1,3}, x = 0 (the WP43 default arm); best_of_16 arm = 16 candidates per chain from uniform(-3,3)^10, highest log density, via candidate_starts (the WP43 best16 arm)",
+    "statistic": "per-seed MCSE z of P(omega < -5); gate |z| <= 2 every seed; batch-means z, omega bulk ESS and R-hat reported",
+    "abs_z_max": 2.0
+  },
+  "two_mode": {
+    "target": "d = 10 mixture 0.7 N(+4 e1, I) + 0.3 N(-4 e1, I): unit covariances, means 8 SD apart along coordinate 1, symmetric about the centre of the uniform(-2,2)^10 start box (so box geometry favours neither mode)",
+    "placement_rationale": "With the major mode inside or nearer the start box, every uniform start lands in its basin and uniform could never detect the minor mode; with the minor mode nearer, both arms start everything in the minor basin. Only the symmetric placement lets uniform starts reach both basins, which is what the question needs.",
+    "exact_occupancy": "major weight 0.7; mass of the major responsibility basin x1 > b, b = -ln(0.7/0.3)/8 = -0.10591, is 0.700001",
+    "mode_assignment": "a draw or start is in the major mode iff x1 > b; a chain's start mode is that of its start, its end mode the majority over its 1,000 retained draws",
+    "chains": 4, "warmup": 1000, "retained": 1000,
+    "seeds": [952201, 952202, 952203],
+    "rhat_threshold": 1.01,
+    "rhat": "maximum over the 10 coordinates of the rank-normalised folded split R-hat (owalnuts::diagnostics, Summary::parameters[].rhat)",
+    "per_cell_record": "each chain's start, start log density, start mode, retained fraction in the major mode, end mode, boundary crossings among retained draws; max split R-hat and x1 split R-hat; ChainDisagreement; Summary::chain_warnings and whether it fired; pooled major fraction vs 0.7; divergences; gradients",
+    "detected": "a cell with max split R-hat > 1.01 and >= 1 chain ending in the minor mode",
+    "hide_event": "a seed on which the uniform cell is detected (R-hat > 1.01 with >= 1 minor-mode chain) while the best_of_16 cell has R-hat <= 1.01 with 0 minor-mode chains",
+    "start_only": {"first_seed": 952210000, "count": 1000,
+                   "description": "secondary, descriptive, not in the decision rule: the start rule alone (no sampling) on 1,000 consecutive seeds; per arm the fraction of chains starting in the minor basin and the histogram of minor starts per 4-chain seed"},
+    "design_calculation": "Before any cell, a numpy Monte Carlo of the start rules alone on this target (200,000 replicate seeds, not the Rust RNG, not the protocol seeds): P(chain starts major) uniform 0.527, best_of_16 0.672; P(all 4 chains major) uniform 0.077, best_of_16 0.204; P(all 4 major on >= 2 of 3 seeds) best_of_16 0.108. If the end mode equals the start mode, a hide event has probability about 0.92 x 0.20 = 0.19 per seed and about 0.47 of occurring on at least one of 3 seeds."
+  },
+  "decision_rule": {
+    "text": "Flip the default to Init::best_of(16) iff all hold: (F1) the 17-model geomean ESS/gradient ratio best_of_16/uniform >= 1.10; (F2) best_of_16 credited passes >= uniform credited passes - 1 (51 cells each); (F3) funnel |z| <= 2 on every one of the 3 seeds for the best_of_16 arm (uniform's funnel is the shipped incumbent and is reported, not gated); (F4) no hide event on any of the 3 two-mode seeds. Every cell of the protocol must exist (an error or timeout cell counts as a failure, not as missing). Otherwise keep Init::uniform() as the default and best_of(16) as an opt-in, documenting the trade-off.",
+    "geomean_min": 1.10,
+    "gate_slack": 1,
+    "funnel_abs_z_max": 2.0,
+    "two_mode_rhat_threshold": 1.01,
+    "if_flip": "set Init::default() to Init::best_of(16) and make the sampler's default random-start path use it; update tests/kernel_fingerprint.rs if any pinned fingerprint changes, bump the kernel revision string per the walnutpie module docs if retained draws under defaults change, cargo test, CHANGELOG entry naming this study",
+    "if_no_flip": "document the negative and the two-mode finding in README.md and wiki/open-questions.md (worktree copy)"
+  },
+  "predictions": {
+    "P1": "best_of_16/uniform geomean ESS/gradient >= 1.10",
+    "P2": "best_of_16 credited passes >= uniform's",
+    "P3": "funnel |z| <= 2 on every seed for both arms",
+    "P4": "two-mode, uniform: >= 1 of 4 chains in the minor mode and max split R-hat > 1.01 on >= 2 of 3 seeds (multimodality detected)",
+    "P5": "two-mode, best_of_16: all 4 chains in the major mode and max split R-hat <= 1.01 on >= 2 of 3 seeds (multimodality hidden)",
+    "note": "P1-P5 are the coordinator's predictions, written before any cell. The design calculation above gives P5 a probability of about 0.11, so the agent expects P5 to fail and F4 to be close to a coin flip (about 0.47 to trip). If P5 holds, F4 fails by construction and the recommendation is 'keep opt-in, document the trade-off'."
+  },
+  "rules": "Preregistration committed before the first evidence cell. Report all cells; no result-driven reruns; failures are results; nothing tuned after seeing results. A process crash may be relaunched and only a cell without a completed artifact may be run, with the deviation recorded. Before freezing, the harness was smoke-tested on seed 1 (not a protocol seed) with outputs in the session scratchpad, which are not evidence. Walls are contended (up to six sibling agents on 16 cores) and are not evidence."
+}

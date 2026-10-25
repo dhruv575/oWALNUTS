@@ -29,6 +29,7 @@ evidence cell. Every study has a ledger entry in the
 | `neal_funnel_health_pilot_v1` | pre-WP2 | yes | No grid setting passed the health requirements; no selection. |
 | `neal_funnel_intervention_pilot_v2` | pre-WP2 | yes | Longer warmup plus initial step search is falsified; no selection. |
 | `nonfinite_position_policy_v1` | WP38 | yes | `NOT_QUALIFIED`; the health gate failed on the target for both arms. |
+| [`nonfinite_policy_requalification_v1`](../STUDIES/nonfinite_policy_requalification_v1/README.md) | WP54 | yes | Rule passed. Bit-identical on 73/73 completed-abort cells; 75 vs 73 runs completed; `RejectLeaf` became the `sampler::Tuning` default. |
 | `numpyro_comparisons_v10_v1` | WP14 | yes | sspd-05 timing claim supported at a corrected 4x; per-work efficiency is parity; NumPyro under-covers the funnel neck. |
 | [`options_flow_v1`](../STUDIES/options_flow_v1/README.md) | application workflow, 2026-10-03 | no | Exploratory uncertainty/precision and Python-interface tests; no broad speed or market-calibration qualification. PyMC nonfinite transport fixed; fixed Fisher geometry failed its screen. |
 | `outer_selection_bps_vs_multinomial_v1` | WP3-1 | yes | Biased progressive selection confirmed at 1.745x over exact multinomial; default stands. |

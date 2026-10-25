@@ -716,7 +716,15 @@ def test_from_pymc_gil_free_ordinary_model_still_supported(monkeypatch):
     import pymc.model.transform
     def unexpected_freeze(*args, **kwargs):
         raise AssertionError("ordinary model should not require graph cloning")
-    monkeypatch.setattr(pymc.model.transform, "freeze_dims_and_data", unexpected_freeze)
+    # Patch every layout the adapter may import from (PyMC 5.28+ has it only
+    # in pymc.model.transform.optimization).
+    monkeypatch.setattr(pymc.model.transform, "freeze_dims_and_data", unexpected_freeze, raising=False)
+    try:
+        import pymc.model.transform.optimization as optimization
+    except ImportError:
+        pass
+    else:
+        monkeypatch.setattr(optimization, "freeze_dims_and_data", unexpected_freeze, raising=False)
     target, dim, q0, names, _ = owalnuts.from_pymc(model, gil_free=True)
     assert dim == 1 and names == ["x"]
     np.testing.assert_array_equal(q0, [.3])

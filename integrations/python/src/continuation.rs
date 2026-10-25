@@ -200,6 +200,7 @@ impl CFuncSession {
 
 #[pyfunction]
 #[pyo3(signature = (owner, address, dimension, starts, config, user_data=0, parameter_names=None))]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn start_cfunc_session(
     py: Python<'_>,
     owner: Py<PyAny>,

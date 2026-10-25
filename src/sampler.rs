@@ -43,10 +43,11 @@
 //! [`Init`] chooses the starting positions: [`Init::Given`] (the positions
 //! passed to [`Sampler::run`]), [`Init::Uniform`], the CmdStan rule of
 //! uniform(-r, r) unconstrained starts redrawn until the log density and
-//! gradient are finite ([`Sampler::run_with_init`],
-//! [`Sampler::run_from_random_starts`]), or the opt-in
+//! gradient are finite ([`Sampler::run_with_init`]), or the
 //! [`Init::Candidates`] rule, which draws several such starts per chain and
-//! keeps one by its log density ([`candidate_starts`]).
+//! keeps one by its log density ([`candidate_starts`]). The default
+//! ([`Init::default`], [`Sampler::run_from_random_starts`]) is
+//! [`Init::best_of`]`(16)` since WP52 (`STUDIES/init_rule_confirmation_v1`).
 //!
 //! [`Adaptation`] selects the warmup rules: acceptance-driven dual averaging
 //! (`WarmupConfig::new(target_accept)`, the default), the JMLR Appendix C
@@ -71,7 +72,6 @@ use std::time::{Duration, Instant};
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
-#[cfg(feature = "research")]
 pub use crate::walnutpie::NonfinitePositionPolicy;
 #[cfg(feature = "research")]
 pub use crate::walnutpie::ReverseCoarseningOrder;
@@ -150,6 +150,15 @@ impl Metric {
     }
 
     /// Adaptive dense mass starting from the identity.
+    ///
+    /// Never selected automatically; the diagonal stays the default. Warmup
+    /// uses `DenseWarmupSeeding::PerTransition`,
+    /// `DenseMetricRegularization::Stan` and a symmetrised precision (the
+    /// `WarmupConfig` defaults since WP51; `STUDIES/dense_metric_confirmation_v1`).
+    /// For correlated near-Gaussian regressions it is 4–99x the diagonal per
+    /// gradient; on GP-hyperparameter posteriors it lost gates at 1,000 draws.
+    /// The pre-change warmup (`Legacy`, `MeanVarianceShrinkage`, no
+    /// symmetrisation) is available through [`Adaptation::Custom`].
     pub fn dense() -> Self {
         Self::Dense {
             adapt: true,
@@ -387,6 +396,22 @@ impl Adaptation {
 /// `STUDIES/posteriordb_bench_v1` drew one uniform(-2, 2) start per chain and
 /// aborted when it was not evaluable (two `lotka_volterra` seeds); with this
 /// rule those runs proceed exactly as CmdStan's do.
+///
+/// **Default: [`Init::best_of`]`(16)`** ([`DEFAULT_INIT_CANDIDATES`]), since
+/// the preregistered default-flip confirmation `STUDIES/init_rule_confirmation_v1`
+/// (WP52) after `STUDIES/init_rule_v1` (WP43). Each chain draws 16 evaluable
+/// [`Init::Uniform`] starts from the same start stream and keeps the one with
+/// the highest log density. This costs about 64 extra log-density-and-gradient
+/// calls per four-chain run. On fresh seeds it gave 1.254x geomean min-bulk-ESS
+/// per gradient over 17 posteriordb models (42 vs 42 gate passes), all of it
+/// from `arma11`, `lotka_volterra` and `hmm_drive_0`; the other 14 models were
+/// 0.862x. On a 0.7/0.3 two-Gaussian mixture with the modes 8 SD apart,
+/// symmetric about the start box, 32.6 % of best-of-16 chains start in the
+/// minor mode (uniform: 47.5 %), and 21 % of four-chain seeds start every
+/// chain in the major mode (uniform: 7 %); R-hat saw both modes on all three
+/// sampled seeds in both arms. A highest-density start is not a mode oracle:
+/// it lowers, but does not remove, the chance that a second mode is visited.
+/// Use [`Init::uniform`] for the CmdStan rule.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Init {
@@ -399,7 +424,7 @@ pub enum Init {
         /// Draws tried per chain before the run errors; nonzero.
         max_attempts: usize,
     },
-    /// Opt-in candidate-pool starts: per chain, `candidates` evaluable
+    /// Candidate-pool starts (the default is [`Init::best_of`]`(16)`): per chain, `candidates` evaluable
     /// [`Init::Uniform`] draws, of which the one picked by `selection` (by its
     /// log density) is the start; see [`candidate_starts`]. With
     /// `candidates = 1` the starts are exactly the [`Init::Uniform`] starts.
@@ -430,8 +455,13 @@ pub enum StartSelection {
 /// independent of the chain seeds `splitmix64(seed + i)`.
 pub const INIT_SEED_TAG: u64 = 0x5eed_1417_0000_0000_u64;
 
+/// Candidates per chain of the default start rule, [`Init::best_of`]`(16)`
+/// (WP52, `STUDIES/init_rule_confirmation_v1`).
+pub const DEFAULT_INIT_CANDIDATES: usize = 16;
+
 impl Init {
-    /// Stan's default: uniform(-2, 2) with up to 100 attempts per chain.
+    /// Stan's default: uniform(-2, 2) with up to 100 attempts per chain. The
+    /// sampler default up to WP52; now an opt-in (see [`Init`]).
     pub fn uniform() -> Self {
         Self::Uniform {
             radius: 2.0,
@@ -442,7 +472,8 @@ impl Init {
 
 impl Init {
     /// Best-of-`candidates`: uniform(-2, 2) candidates (up to 100 draws
-    /// each), start at the highest log density. Opt-in; not the default.
+    /// each), start at the highest log density. `Init::best_of(16)` is the
+    /// default ([`Init::default`], [`Sampler::run_from_random_starts`]).
     pub fn best_of(candidates: usize) -> Self {
         Self::Candidates {
             radius: 2.0,
@@ -465,8 +496,9 @@ impl Init {
 }
 
 impl Default for Init {
+    /// [`Init::best_of`]`(`[`DEFAULT_INIT_CANDIDATES`]`)` since WP52.
     fn default() -> Self {
-        Self::uniform()
+        Self::best_of(DEFAULT_INIT_CANDIDATES)
     }
 }
 
@@ -736,7 +768,6 @@ pub struct Tuning {
     kernel_options: KernelOptions,
     #[cfg(feature = "research")]
     reverse_coarsening_order: ReverseCoarseningOrder,
-    #[cfg(feature = "research")]
     nonfinite_position: NonfinitePositionPolicy,
     #[cfg(feature = "research")]
     reverse_coarser_policy: ReverseCoarserPolicy,
@@ -757,8 +788,7 @@ impl Default for Tuning {
             },
             #[cfg(feature = "research")]
             reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
-            #[cfg(feature = "research")]
-            nonfinite_position: NonfinitePositionPolicy::Abort,
+            nonfinite_position: NonfinitePositionPolicy::RejectLeaf,
             #[cfg(feature = "research")]
             reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
         }
@@ -820,10 +850,17 @@ impl Tuning {
         self.reverse_coarsening_order = order;
         self
     }
-    /// Select how a transition treats a nonfinite integrator position.
-    /// Research-only; the default remains `Abort`, which ends the run with
-    /// `ErrorKind::Numerical`. See `STUDIES/nonfinite_position_policy_v1`.
-    #[cfg(feature = "research")]
+    /// Select how a transition treats a nonfinite integrator position (the
+    /// momentum or drift overflowed). The default is
+    /// [`NonfinitePositionPolicy::RejectLeaf`]: the point is a zero-density
+    /// leaf (refined, then rejected, like a recoverable target failure), the
+    /// run continues and the event is counted in
+    /// `WorkTotals::nonfinite_position_rejections`; Stan treats the same event
+    /// as a divergent leaf. [`NonfinitePositionPolicy::Abort`] (the frozen
+    /// `v10` behaviour and the default through 0.2) ends the run with
+    /// `ErrorKind::Numerical`. Runs in which the event never occurs are
+    /// bit-identical under either policy. Default chosen by
+    /// `STUDIES/nonfinite_policy_requalification_v1` (WP54).
     pub fn nonfinite_position(mut self, policy: NonfinitePositionPolicy) -> Self {
         self.nonfinite_position = policy;
         self
@@ -858,7 +895,6 @@ impl Tuning {
         .map(|tuning| tuning.with_options(self.kernel_options))?;
         #[cfg(feature = "research")]
         let tuning = tuning.with_reverse_coarsening_order(self.reverse_coarsening_order);
-        #[cfg(feature = "research")]
         let tuning = tuning.with_nonfinite_position(self.nonfinite_position);
         #[cfg(feature = "research")]
         let tuning = tuning.with_reverse_coarser_policy(self.reverse_coarser_policy);
@@ -1182,11 +1218,14 @@ impl Sampler {
         }
     }
 
-    /// Run from Stan-style random starts ([`Init::uniform`]): uniform(-2, 2)
-    /// unconstrained coordinates, redrawn up to 100 times per chain until the
-    /// log density and gradient are finite. Deterministic given the seed.
+    /// Run from the default random starts ([`Init::default`], which is
+    /// [`Init::best_of`]`(16)` since WP52): per chain, 16 uniform(-2, 2)
+    /// unconstrained candidates, each redrawn up to 100 times until the log
+    /// density and gradient are finite, and the highest-density candidate
+    /// kept. Deterministic given the seed. For the CmdStan rule pass
+    /// [`Init::uniform`] to [`Sampler::run_with_init`].
     pub fn run_from_random_starts<T: Target>(&self, target: &T) -> Result<Posterior, Error> {
-        self.run_with_init(target, &Init::uniform())
+        self.run_with_init(target, &Init::default())
     }
 
     /// Run the configured sampler from `starts` (one position per chain).

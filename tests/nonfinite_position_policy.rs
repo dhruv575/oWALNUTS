@@ -1,10 +1,11 @@
-//! `NonfinitePositionPolicy` (research-only): the default `Abort` ends a run
-//! whose integrator overflowed with `ErrorKind::Numerical`; the opt-in
-//! `RejectLeaf` treats the overflowed point as a zero-density leaf and the run
-//! completes. When the event never occurs the two policies are bit-identical.
-//! Motivated by `STUDIES/sspd_target_fatal_diag_v1`; measured in
-//! `STUDIES/nonfinite_position_policy_v1`.
-#![cfg(feature = "research")]
+//! `NonfinitePositionPolicy`: `Abort` ends a run whose integrator overflowed
+//! with `ErrorKind::Numerical`; `RejectLeaf` (the `sampler::Tuning` default
+//! since `STUDIES/nonfinite_policy_requalification_v1`, WP54) treats the
+//! overflowed point as a zero-density leaf and the run completes. The frozen
+//! `walnutpie::KernelTuning::default()` keeps `Abort`. When the event never
+//! occurs the two policies are bit-identical. Motivated by
+//! `STUDIES/sspd_target_fatal_diag_v1`; measured in
+//! `STUDIES/nonfinite_position_policy_v1` (WP38) and WP54.
 
 use owalnuts::sampler::{
     Adaptation, ErrorKind, Metric, NonfinitePositionPolicy, Sampler, Target, Tuning,
@@ -53,19 +54,47 @@ fn cliff_sampler(policy: NonfinitePositionPolicy) -> Sampler {
 }
 
 #[test]
-fn default_policy_is_abort_and_threads_to_kernel_tuning() {
+fn sampler_default_is_reject_leaf_and_kernel_default_is_abort() {
     assert_eq!(
         Tuning::default().to_kernel().unwrap().nonfinite_position(),
-        NonfinitePositionPolicy::Abort
+        NonfinitePositionPolicy::RejectLeaf
     );
     assert_eq!(
         Tuning::default()
-            .nonfinite_position(NonfinitePositionPolicy::RejectLeaf)
+            .nonfinite_position(NonfinitePositionPolicy::Abort)
             .to_kernel()
             .unwrap()
             .nonfinite_position(),
-        NonfinitePositionPolicy::RejectLeaf
+        NonfinitePositionPolicy::Abort
     );
+    assert_eq!(
+        owalnuts::walnutpie::KernelTuning::default().nonfinite_position(),
+        NonfinitePositionPolicy::Abort
+    );
+}
+
+#[test]
+fn sampler_default_completes_the_overflowing_run() {
+    let posterior = Sampler::new()
+        .warmup(0)
+        .draws(5)
+        .chains(1)
+        .seed(11)
+        .metric(Metric::fixed_diagonal(vec![1.0]))
+        .adaptation(Adaptation::None)
+        .tuning(
+            Tuning::new()
+                .step_size(4.0)
+                .max_depth(3)
+                .max_refinement_levels(2),
+        )
+        .run(&Cliff, &[vec![0.1]])
+        .expect("the default policy rejects the overflowed leaf");
+    let rejections: usize = posterior
+        .telemetry()
+        .map(|telemetry| telemetry.total().nonfinite_position_rejections())
+        .sum();
+    assert!(rejections >= 5, "got {rejections}");
 }
 
 #[test]
