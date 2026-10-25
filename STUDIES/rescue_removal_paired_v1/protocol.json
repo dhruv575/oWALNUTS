@@ -1,0 +1,45 @@
+{
+  "schema": "rescue-removal-paired-v1",
+  "ledger_id": "WP61",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "question": "Does the WP36 removal of chain rescue (sampler::DEFAULT_CHAIN_RESCUE = None; v6 ran with ChainRescueConfig::restart_from_best()) explain the posteriordb v6 -> v7 drop in oWALNUTS min-bulk-ESS per gradient (0.848 -> 0.708x CmdStan over the fixed 16)?",
+  "source_commit_under_test": "c8b4bb2d",
+  "commit_note": "main c8b4bb2d; its src/ differs from f097391c (the v7 commit) only in documentation and in diagnostics::ChainWarning reporting nonfinite-position rejections (WP59); the sampler, kernel and defaults are the same, so draws at c8b4bb2d equal draws at f097391c. The worktree was fast-forwarded to c8b4bb2d and the driver checks src/, integrations/, tests/ and Cargo.toml against it.",
+  "arms": {
+    "rescue_off": "Sampler::new() with only warmup 1000, draws 1000, chains 4, seed, threads 4 and Limits::new().admit_worst_case(); Adaptation::default() (no chain rescue, the current default); starts Init::default() = best_of(16)",
+    "rescue_on": "identical, plus .adaptation(Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION).with_chain_rescue(ChainRescueConfig::restart_from_best()))): exactly what Adaptation::default() built under the WP33 rescue default used by v6, and how WP36's `current` arm was built"
+  },
+  "not_v6": "rescue_on is current defaults plus rescue, not v6: v6 also used Init::uniform() starts (WP52 changed that; WP60 found best_of_16 / uniform = 1.061 on six models) and v6's seeds.",
+  "arms_order": ["rescue_off", "rescue_on"],
+  "models": [
+    "mcycle_gp-accel_gp",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "bball_drive_event_0-hmm_drive_0",
+    "eight_schools-eight_schools_centered",
+    "nes2000-nes"
+  ],
+  "model_selection": "accel_gp, one_comp and hmm_drive_0 (named), plus the two fixed-16 models with the largest v6 -> v7 oWALNUTS min-bulk-ESS/gradient drop other than those, computed from STUDIES/posteriordb_bench_v7/artifacts/summary.json versus_v6 (v7/v6 seed-median ratio): eight_schools_centered 0.594 and nes2000 0.908 (the named three are 0.423, 0.688, 0.710).",
+  "posteriordb": {"commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "../posteriordb_bench_v7/posteriordb/posterior_database"},
+  "models_source": "BridgeStan libraries copied from STUDIES/posteriordb_bench_v7/models",
+  "seeds": [610601, 610602, 610603, 610604, 610605],
+  "seeds_verified_unused": "git grep -w over every tracked file of the worktree at c8b4bb2d found none of 610601-610605",
+  "chains": 4, "warmup": 1000, "retained": 1000, "threads": 4,
+  "run_order": "models in listed order; within a model seeds ascending; within a seed rescue_off then rescue_on; strictly sequential",
+  "cell_timeout_seconds": 2700,
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "parameter_set": "posteriordb reference-draw columns; ArviZ 0.23.4; reference z reported",
+  "statistic": {
+    "cell": "min over reference parameters of bulk ESS / gradients_total (start search, warmup, sampling)",
+    "model_ratio": "geomean over the paired seeds of rescue_on / rescue_off",
+    "primary": "geomean of the five model ratios; also the count of models above and below 1.0",
+    "telemetry": "every ChainRescueUpdate that is not `kept` (restarts with criterion, source, transition, step before/after), restart counts per cell, per-chain end-of-warmup step, warmup gradients, per-chain ESS, chain warnings, max |z|"
+  },
+  "hypotheses": {
+    "H1": "rescue removal explains the drop: rescue_on / rescue_off paired geomean >= 1.15",
+    "H0": "it does not (fresh seeds do): paired geomean < 1.05",
+    "between": "1.05 <= geomean < 1.15: partial, supports neither"
+  },
+  "decision_rule": "Attribution only. No default flip and no recommendation to restore rescue follows from any outcome: WP36 rejected restart_from_best as the default for mode-hiding reasons (the density rule fires on merely late chains and on every fresh-seed second-mode hmm_drive_0 draw, and the frozen origin classifier could not show the moved chains were nuisance rather than genuine modes). A failed cell is a result; its seed is unpaired for that model.",
+  "rules": "No reruns, no tuning after results; walls contended and not evidence."
+}
