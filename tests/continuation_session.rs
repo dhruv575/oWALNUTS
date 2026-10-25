@@ -370,17 +370,17 @@ fn parallel_four_chains_match_sequential_chunks_and_ordinary_run() {
             let b = par.draw(n).unwrap();
             assert_eq!(a.target_calls, b.target_calls);
             assert_eq!(a.cumulative_target_calls, b.cumulative_target_calls);
-            for i in 0..4 {
+            for (i, sample) in samples.iter_mut().enumerate() {
                 assert_eq!(a.chains[i].samples, b.chains[i].samples);
                 assert_eq!(a.chains[i].diagnostics, b.chains[i].diagnostics);
                 assert_eq!(a.chains[i].telemetry, b.chains[i].telemetry);
                 assert_eq!(a.chains[i].mass_diagonal, b.chains[i].mass_diagonal);
                 assert_eq!(a.chains[i].tuning, b.chains[i].tuning);
-                samples[i].extend_from_slice(&b.chains[i].samples);
+                sample.extend_from_slice(&b.chains[i].samples);
             }
         }
-        for i in 0..4 {
-            assert_eq!(samples[i], full.chains()[i].samples());
+        for (i, sample) in samples.iter().enumerate() {
+            assert_eq!(*sample, full.chains()[i].samples());
         }
         seq.close().unwrap();
         par.close().unwrap();

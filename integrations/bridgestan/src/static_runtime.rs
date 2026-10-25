@@ -357,7 +357,7 @@ mod tests {
                 "m_model.so",
                 &["KERNEL32.dll", "api-ms-win-crt-heap-l1-1-0.dll", "tbb.dll"],
             ),
-            file(r"C:\x\tbb.dll", &["KERNEL32.dll", "msvcrt.dll"]),
+            file("x/tbb.dll",&["KERNEL32.dll", "msvcrt.dll"]),
         ]);
         assert!(ok.passed(), "{:?}", ok.problems);
 
@@ -366,13 +366,13 @@ mod tests {
                 "m_model.so",
                 &["KERNEL32.dll", "libwinpthread-1.dll", "tbb.dll"],
             ),
-            file(r"C:\x\tbb.dll", &["KERNEL32.dll"]),
+            file("x/tbb.dll",&["KERNEL32.dll"]),
         ]);
         assert!(!dynamic_model.passed());
 
         let stock_tbb = evaluate_imports(vec![
             file("m_model.so", &["KERNEL32.dll", "tbb.dll"]),
-            file(r"C:\x\tbb.dll", &["libgcc_s_seh-1.dll", "libstdc++-6.dll"]),
+            file("x/tbb.dll",&["libgcc_s_seh-1.dll", "libstdc++-6.dll"]),
         ]);
         assert_eq!(stock_tbb.problems.len(), 2);
 
