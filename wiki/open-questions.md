@@ -168,8 +168,12 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     divergence tripling did not replicate (37 vs 43 at 20,000 draws), no
     seed beyond |z| 2, the same pooled tail deficit as the default, and
     0.94x the default's funnel ESS per gradient; its rule R2 passed, so the
-    next step is a preregistered posteriordb confirmation of `delta = 2`
-    on fresh seeds with extra seeds on `accel_gp` and `hmm_drive_0`.
+    confirmation ran as WP63 (`STUDIES/delta2_default_confirmation_v1`,
+    4 paired fresh seeds): paired geomean 0.896x, leave-one-seed-out
+    minimum 0.860, funnel divergences 26 vs 5, and one passing `accel_gp`
+    cell with |z| 5.07; the rule failed on four of six clauses, so
+    `delta = 1` stays. The 1.07x (WP34) and 1.14x (WP49) gains did not
+    replicate. Closed.
 15. **The silent funnel** (WP46, WP55, WP56): oWALNUTS can sample centred
     hierarchical funnels with zero divergences. In WP55, 11 of 12 wrong
     positive cells had zero retained divergences, and all 12 failed the
