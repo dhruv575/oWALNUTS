@@ -283,3 +283,25 @@ fix/baseline geomean ESS/s >= 1.3 on all three targets, largest on `hier`.
 Q5: threads=1 cells of the F6-only arms and both thread counts of
 `cfunc-guarded` have fix/baseline geomean in [0.9, 1.1]. Decision rule
 unchanged.
+
+## Amendment A4 (implementation note, before phase 1b / phase 2)
+
+The first F6 implementation (worker states deleted by the calling thread
+after the run) was replaced before any phase-2 cell: on Python 3.12+
+`PyThreadState_Delete` of a GILState-bound state from another thread
+unbinds the *calling* thread's GILState slot. The second (release by
+`PyGILState_Release` from a worker TLS destructor) passed the probes but
+left the process exiting with code 127 after any threads > 1 run: the TLS
+destructors run after the scoped pool returns and could block on the GIL
+into finalisation. The committed fix (`06a551a7`) keeps the TLS-destructor
+release and makes `sample_callable` wait, detached, until every pinned state
+of its run is released (bounded at 10 s). Probes: one `threading.local`
+initialisation per worker thread (4 for 2,105 callbacks; baseline 2,105),
+clean exit code 0 after threads 1/2/4 runs, 150 consecutive threads=4 runs
+and 30 fatal-callback runs in one process. Test suite on the fix wheel: 34
+passed, 3 failed — the three `gil_free` freeze tests, which fail identically
+on the baseline wheel (PyMC 5.28.5 has no `pymc.model.transform.freeze_dims_and_data`).
+New tests: worker `threading.local` persistence with bit-identical t1/t4
+draws, `from_pymc(thread_safe=True)` compiling at most once per thread, and
+clean interpreter exit after a threads=4 run (they fail on the baseline).
+Wheel hashes are in `protocol.json`.
