@@ -141,3 +141,15 @@ def test_from_stan_accepts_prebuilt_library_and_json_text(eight_schools):
 
     again = owalnuts.from_stan(eight_schools.model_so, json.dumps(DATA), seed=1)
     assert again.dim == 10 and again.parameter_names == eight_schools.parameter_names
+
+
+def test_sample_stan_default_init_is_best_of(eight_schools):
+    d = owalnuts.best_of_starts(eight_schools, chains=2, seed=7, return_details=True)
+    assert d["starts"].shape == (2, 10) and np.all(np.abs(d["starts"]) <= 2.0)
+    for c in range(2):
+        cands = d["candidate_log_densities"][c]
+        assert len(cands) == 16 and d["chosen"][c] == int(np.argmax(cands))
+        assert np.isfinite(d["start_log_densities"][c])
+    a = owalnuts.sample(eight_schools, chains=2, warmup=200, draws=100, seed=7, threads=2)
+    b = owalnuts.sample(eight_schools, init=d["starts"], chains=2, warmup=200, draws=100, seed=7, threads=2)
+    np.testing.assert_array_equal(a.samples, b.samples)

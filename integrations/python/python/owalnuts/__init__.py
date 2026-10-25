@@ -41,7 +41,8 @@ HAS_STAN: bool = bool(getattr(_owalnuts, "HAS_STAN", False))
 #: ``exhaustion_rule`` (retained transitions), ``warmup_exhaustion_rule``
 #: (``DEFAULT_WARMUP_EXHAUSTION``), ``metric_regularization``
 #: (``DEFAULT_METRIC_REGULARIZATION``), ``target_accept``, ``adapt_mass``,
-#: ``init_radius``, ``init_max_attempts``, ``cache_initial_evaluation``,
+#: ``init`` (the default start rule, ``"best_of"`` = ``Init::default()``),
+#: ``init_candidates``, ``init_radius``, ``init_max_attempts``, ``cache_initial_evaluation``,
 #: ``admit_worst_case``, ``chain_rescue`` (``None`` after WP36),
 #: ``algorithm_revision`` and
 #: ``paper_adaptation_revision``. ``Tuning()`` and ``Adaptation()`` take
@@ -323,10 +324,26 @@ def _normalize_mass(mass: Any) -> Any:
     raise TypeError("mass must be None, a 1-D float64 array (momentum covariance diagonal), or a list of block dicts")
 
 
-def _starts(init: Any, dim: int, chains: int, seed: int, jitter: float) -> np.ndarray:
-    if isinstance(init, str):
-        raise ValueError(f"init={init!r}: only init='uniform' is a named start rule")
+#: Named start rules of ``sample(init=...)``; ``None`` means ``DEFAULTS["init"]``.
+START_RULES: tuple[str, ...] = ("best_of", "uniform", "jitter")
+
+
+def _start_rule(init: Any) -> str | None:
+    """The named start rule ``init`` selects, or ``None`` for an explicit array."""
     if init is None:
+        return str(DEFAULTS["init"])
+    if isinstance(init, str):
+        if init not in START_RULES:
+            raise ValueError(f"init={init!r}: named start rules are {', '.join(map(repr, START_RULES))}")
+        return init
+    return None
+
+
+def _starts(init: Any, dim: int, chains: int, seed: int, jitter: float) -> np.ndarray:
+    """``init="jitter"`` (the pre-WP58 ``init=None``) and explicit arrays."""
+    if isinstance(init, str) and init != "jitter":
+        raise ValueError(f"init={init!r} is not an unchecked start rule")
+    if init is None or (isinstance(init, str) and init == "jitter"):
         rng = np.random.default_rng(seed)
         starts = rng.uniform(-jitter, jitter, size=(chains, dim))
     else:
@@ -578,6 +595,7 @@ def sample(
     init_jitter: float = 2.0,
     init_radius: float = DEFAULTS["init_radius"],
     init_max_attempts: int = DEFAULTS["init_max_attempts"],
+    init_candidates: int = DEFAULTS["init_candidates"],
     coerce: bool = True,
     refresh: Callable[..., Any] | None = None,
     refresh_restart: str = "continue",
@@ -594,14 +612,25 @@ def sample(
     ``logp_and_grad`` is a callable, a ``CFuncTarget`` (``from_cfunc``) or a
     ``StanTarget`` (``from_stan``); ``dim`` may be omitted for the latter two.
 
-    ``init`` is ``None`` (independent uniform(-``init_jitter``, ``init_jitter``)
-    starts drawn in numpy without evaluating the target), a ``(dim,)`` point
-    (jittered per chain), a ``(chains, dim)`` array, or ``"uniform"``: Stan's
-    rule as implemented by ``owalnuts::sampler::Init::uniform`` — uniform
-    (-``init_radius``, ``init_radius``) starts redrawn up to
-    ``init_max_attempts`` times per chain until the log density and gradient
-    are finite, deterministic given ``seed`` and identical to the Rust
-    sampler's starts for the same seed.
+    ``init`` selects the starts (``START_RULES``):
+
+    * ``None`` (default) or ``"best_of"``: the Rust default
+      ``owalnuts::sampler::Init::best_of(init_candidates)`` (16 since WP52) —
+      per chain, ``init_candidates`` evaluable uniform(-``init_radius``,
+      ``init_radius``) candidates (each redrawn up to ``init_max_attempts``
+      times until the log density and gradient are finite), keeping the one
+      of highest log density. Identical to the Rust sampler's starts for the
+      same seed. The candidate evaluations (about 64 for four chains) are
+      not counted in ``target_calls``.
+    * ``"uniform"``: Stan's rule, ``Init::uniform`` — one evaluable
+      uniform(-``init_radius``, ``init_radius``) start per chain.
+    * ``"jitter"``: independent uniform(-``init_jitter``, ``init_jitter``)
+      starts drawn in numpy without evaluating the target — the ``init=None``
+      behaviour before WP58 (``STUDIES/nutpie_per_gradient_gap_v1``: it
+      failed every lotka_volterra run at transition 0). Kept for
+      reproducibility.
+    * a ``(dim,)`` point (jittered per chain by ``init_jitter``) or a
+      ``(chains, dim)`` array: used as given.
 
     ``mass`` is the momentum covariance: ``None`` (identity), a 1-D array
     (diagonal), or a list of structured blocks such as
@@ -642,7 +671,13 @@ def sample(
         if st.dim != dim:
             raise ValueError(f"StanTarget dim {st.dim} != sample dim {dim}")
         preload = list(st.preload) or None
-        if isinstance(init, str) and init == "uniform":
+        rule = _start_rule(init)
+        if rule == "best_of":
+            starts = _owalnuts.best_of_starts_stan(
+                st.model_so, st.data, chains, seed, init_candidates, init_radius, init_max_attempts, st.seed,
+                preload,
+            )[0]
+        elif rule == "uniform":
             starts = _owalnuts.uniform_starts_stan(
                 st.model_so, st.data, chains, seed, init_radius, init_max_attempts, st.seed, preload,
             )
@@ -661,7 +696,12 @@ def sample(
         cft = logp_and_grad
         if cft.dim != dim:
             raise ValueError(f"CFuncTarget dim {cft.dim} != sample dim {dim}")
-        if isinstance(init, str) and init == "uniform":
+        rule = _start_rule(init)
+        if rule == "best_of":
+            starts = _owalnuts.best_of_starts_cfunc(
+                cft.address, cft.dim, chains, seed, init_candidates, init_radius, init_max_attempts, cft.user_data,
+            )[0]
+        elif rule == "uniform":
             starts = _owalnuts.uniform_starts_cfunc(
                 cft.address, cft.dim, chains, seed, init_radius, init_max_attempts, cft.user_data,
             )
@@ -675,7 +715,12 @@ def sample(
         result.parameter_names = list(cft.parameter_names) if cft.parameter_names else None
         return result
     target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
-    if isinstance(init, str) and init == "uniform":
+    rule = _start_rule(init)
+    if rule == "best_of":
+        starts = _owalnuts.best_of_starts_callable(
+            target, dim, chains, seed, init_candidates, init_radius, init_max_attempts, nonfinite,
+        )[0]
+    elif rule == "uniform":
         starts = _owalnuts.uniform_starts_callable(
             target, dim, chains, seed, init_radius, init_max_attempts, nonfinite,
         )
@@ -885,6 +930,41 @@ def uniform_starts(logp_and_grad: LogpGrad, dim: int, *, chains: int = 4, seed: 
             logp_and_grad.user_data))
     target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
     return np.asarray(_owalnuts.uniform_starts_callable(target, dim, chains, seed, radius, max_attempts, nonfinite))
+
+
+def best_of_starts(logp_and_grad: "LogpGrad | CFuncTarget | StanTarget", dim: int | None = None, *,
+                   chains: int = 4, seed: int = 0, candidates: int = DEFAULTS["init_candidates"],
+                   radius: float = DEFAULTS["init_radius"], max_attempts: int = DEFAULTS["init_max_attempts"],
+                   nonfinite: str = "zero_density", coerce: bool = True,
+                   return_details: bool = False) -> "np.ndarray | dict[str, Any]":
+    """Draw ``(chains, dim)`` starts by the default ``init="best_of"`` rule
+    (``owalnuts::sampler::candidate_starts``, highest density) without
+    sampling: the starts ``sample(init=None, seed=seed)`` uses.
+
+    With ``return_details=True`` returns a dict with ``starts``,
+    ``start_log_densities`` (per chain), ``candidate_log_densities`` (per
+    chain, every evaluable candidate in draw order), ``chosen`` (index of the
+    kept candidate) and ``evaluations`` (target calls per chain, including
+    redrawn non-evaluable candidates)."""
+    if isinstance(logp_and_grad, StanTarget):
+        st = logp_and_grad
+        raw = _owalnuts.best_of_starts_stan(st.model_so, st.data, chains, seed, candidates, radius, max_attempts,
+                                            st.seed, list(st.preload) or None)
+    elif isinstance(logp_and_grad, CFuncTarget):
+        raw = _owalnuts.best_of_starts_cfunc(logp_and_grad.address, logp_and_grad.dim, chains, seed, candidates,
+                                             radius, max_attempts, logp_and_grad.user_data)
+    else:
+        if dim is None:
+            raise ValueError("dim is required for a callable target")
+        target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
+        raw = _owalnuts.best_of_starts_callable(target, dim, chains, seed, candidates, radius, max_attempts,
+                                                nonfinite)
+    starts = np.asarray(raw[0])
+    if not return_details:
+        return starts
+    return {"starts": starts, "start_log_densities": list(raw[1]),
+            "candidate_log_densities": [list(c) for c in raw[2]], "chosen": list(raw[3]),
+            "evaluations": list(raw[4])}
 
 
 # ── Structured metrics ───────────────────────────────────────────────────
@@ -1305,7 +1385,7 @@ def eight_schools_logp_grad(y: np.ndarray, se: np.ndarray, q: np.ndarray) -> tup
 __all__ = [
     "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "HAS_STAN", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
-    "summary", "format_summary", "uniform_starts", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
+    "summary", "format_summary", "uniform_starts", "best_of_starts", "START_RULES", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
     "start_session", "CFuncSession", "ContinuationChunk",
     "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",

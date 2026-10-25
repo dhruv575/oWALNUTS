@@ -125,3 +125,20 @@ refines.
 * The Python package exposes no acceptance statistic. The Rust value is the
   arm's own dual-averaging statistic over the last 100 warmup transitions,
   which is 0.80 by construction.
+
+## Follow-up: Python `init=None` is now `best_of` (post-hoc confirmation, not rule evidence)
+
+Following recommendation 2, the Python package's `init=None` now routes
+through the Rust `Init::best_of(16)` for all three target kinds
+(`init="best_of"`, `owalnuts.best_of_starts`; `init="jitter"` keeps the old
+unchecked starts). See CHANGELOG, Python package. `posthoc_bestof.py` reran
+the 12 `lotka_volterra` Python cells (py-default / delta2 / levels1 /
+nutpiemetric x 3) under the new default on fresh seeds 5858201–5858203.
+This is a declared post-hoc confirmation, not evidence for the frozen rule.
+
+Result: **12/12 ran and 11/12 passed the gates**, against 0/12 run under
+the old `init=None`. py-default passed 3/3, with min bulk ESS 914–1,039 and
+ESS/grad 3.2–3.6e-3. The start search cost 75–83 calls. The one failure is
+py-nutpiemetric seed 5858203 (R-hat 1.0124). Its metric was transplanted
+from a nutpie run that itself failed R-hat (1.012). Cells:
+`artifacts/posthoc-bestof/`.

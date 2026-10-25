@@ -23,7 +23,8 @@ use numpy::{
 use owalnuts::diagnostics::{ChainDisagreement, ChainWarning, ParameterSummary};
 use owalnuts::sampler::{
     Adaptation, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION,
-    Init, Limits, Metric, Posterior, Sampler, Tuning, uniform_starts,
+    CandidateStarts, DEFAULT_INIT_CANDIDATES, Init, Limits, Metric, Posterior, Sampler,
+    StartSelection, Tuning, candidate_starts, uniform_starts,
 };
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput, ChainWindowSummary,
@@ -1444,6 +1445,68 @@ mod stan {
         })?;
         starts_array(py, starts, dimension)
     }
+
+    /// Best-of-`candidates` starts (`owalnuts::sampler::candidate_starts`,
+    /// highest density; the `Init::default()` rule) for a BridgeStan model.
+    #[pyfunction]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (model_so, data, chains, seed, candidates=None, radius=2.0, max_attempts=100, model_seed=1, preload=None))]
+    pub fn best_of_starts_stan<'py>(
+        py: Python<'py>,
+        model_so: &str,
+        data: Option<&str>,
+        chains: usize,
+        seed: u64,
+        candidates: Option<usize>,
+        radius: f64,
+        max_attempts: usize,
+        model_seed: u32,
+        preload: Option<Vec<String>>,
+    ) -> PyResult<Bound<'py, PyTuple>> {
+        let (dimension, chosen) = py.detach(|| {
+            let target = load(model_so, data, model_seed, 1, preload)?;
+            let chosen = candidate_starts(
+                &target,
+                chains,
+                seed,
+                radius,
+                candidates.unwrap_or(DEFAULT_INIT_CANDIDATES),
+                max_attempts,
+                StartSelection::HighestDensity,
+            )
+            .map_err(facade_error)?;
+            Ok::<_, PyErr>((target.dimension(), chosen))
+        })?;
+        candidate_tuple(py, chosen, dimension)
+    }
+}
+
+/// `(starts, start_log_densities, candidate_log_densities, chosen,
+/// evaluations)` from a [`CandidateStarts`].
+fn candidate_tuple<'py>(
+    py: Python<'py>,
+    chosen: CandidateStarts,
+    dimension: usize,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let CandidateStarts {
+        starts,
+        start_log_densities,
+        candidate_log_densities,
+        chosen,
+        evaluations,
+        ..
+    } = chosen;
+    let starts = starts_array(py, starts, dimension)?;
+    PyTuple::new(
+        py,
+        [
+            starts.into_any(),
+            start_log_densities.into_pyobject(py)?.into_any(),
+            candidate_log_densities.into_pyobject(py)?.into_any(),
+            chosen.into_pyobject(py)?.into_any(),
+            evaluations.into_pyobject(py)?.into_any(),
+        ],
+    )
 }
 
 /// Standard Gaussian reference target for the defaults-parity test: the log
@@ -1498,6 +1561,37 @@ fn reference_gaussian_sampler_run<'py>(
     flat.into_pyarray(py).reshape([chains, retained, dimension])
 }
 
+/// Draws of `Sampler::new().warmup(..).draws(..).chains(..).seed(..)` run
+/// from `Init::default()` (`run_from_random_starts`, best-of-16 since WP52)
+/// on the standard Gaussian. The Python test suite checks that
+/// `owalnuts.sample(init=None)` reproduces these draws bit for bit, i.e.
+/// that the package's default start rule is the Rust default.
+#[pyfunction]
+fn reference_gaussian_default_init_run<'py>(
+    py: Python<'py>,
+    dimension: usize,
+    chains: usize,
+    warmup: usize,
+    draws: usize,
+    seed: u64,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let target = StandardGaussian(dimension);
+    let sampler = Sampler::new()
+        .warmup(warmup)
+        .draws(draws)
+        .chains(chains)
+        .seed(seed);
+    let posterior = py
+        .detach(|| sampler.run_from_random_starts(&target))
+        .map_err(facade_error)?;
+    let retained = posterior.draws_per_chain();
+    let mut flat = Vec::with_capacity(chains * retained * dimension);
+    for chain in posterior.chains() {
+        flat.extend_from_slice(chain.samples());
+    }
+    flat.into_pyarray(py).reshape([chains, retained, dimension])
+}
+
 /// The `owalnuts::sampler` defaults the package inherits, read from the Rust
 /// values (not restated): `Tuning::default()` through its validated kernel
 /// tuning, the sampler's warmup exhaustion rule and metric regularisation,
@@ -1541,9 +1635,10 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         "adapt_mass",
         matches!(Metric::default(), Metric::Diagonal { adapt: true, .. }),
     )?;
-    // The Rust default is `Init::best_of(16)` since WP52; the package's
-    // `init="uniform"` path keeps the CmdStan rule and reads its radius and
-    // attempts from here, and `init_candidates` reports the Rust default.
+    // The Rust default is `Init::best_of(16)` since WP52, and the package's
+    // `init=None` / `init="best_of"` routes through the same
+    // `candidate_starts` rule; `init="uniform"` (the CmdStan rule) shares its
+    // radius and attempts. `init` names the default rule.
     match Init::default() {
         Init::Uniform {
             radius,
@@ -1552,6 +1647,7 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("init_radius", radius)?;
             d.set_item("init_max_attempts", max_attempts)?;
             d.set_item("init_candidates", 1)?;
+            d.set_item("init", "uniform")?;
         }
         Init::Candidates {
             radius,
@@ -1562,6 +1658,7 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("init_radius", radius)?;
             d.set_item("init_max_attempts", max_attempts)?;
             d.set_item("init_candidates", candidates)?;
+            d.set_item("init", "best_of")?;
         }
         other => {
             return Err(PyRuntimeError::new_err(format!(
@@ -1665,6 +1762,94 @@ fn uniform_starts_cfunc<'py>(
         .detach(|| uniform_starts(&target, chains, seed, radius, max_attempts))
         .map_err(facade_error)?;
     starts_array(py, starts, dimension)
+}
+
+/// Best-of-`candidates` starts (`owalnuts::sampler::candidate_starts`,
+/// highest density; the `Init::default()` rule) for a callable target.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (target, dimension, chains, seed, candidates=None, radius=2.0, max_attempts=100, nonfinite="zero_density"))]
+fn best_of_starts_callable<'py>(
+    py: Python<'py>,
+    target: Py<PyAny>,
+    dimension: usize,
+    chains: usize,
+    seed: u64,
+    candidates: Option<usize>,
+    radius: f64,
+    max_attempts: usize,
+    nonfinite: &str,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py_target = PyTarget {
+        callable: target,
+        dimension,
+        policy: NonFinitePolicy::parse(nonfinite)?,
+        calls: AtomicUsize::new(0),
+        recoverable: AtomicUsize::new(0),
+        attached_nanos: AtomicU64::new(0),
+        last_fatal: Mutex::new(None),
+        pinned: None,
+    };
+    let candidates = candidates.unwrap_or(DEFAULT_INIT_CANDIDATES);
+    let chosen = py
+        .detach(|| {
+            candidate_starts(
+                &py_target,
+                chains,
+                seed,
+                radius,
+                candidates,
+                max_attempts,
+                StartSelection::HighestDensity,
+            )
+        })
+        .map_err(|e| py_target.fatal_error(e))?;
+    candidate_tuple(py, chosen, dimension)
+}
+
+/// Best-of-`candidates` starts for a GIL-free `cfunc` target.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (address, dimension, chains, seed, candidates=None, radius=2.0, max_attempts=100, user_data=0))]
+fn best_of_starts_cfunc<'py>(
+    py: Python<'py>,
+    address: usize,
+    dimension: usize,
+    chains: usize,
+    seed: u64,
+    candidates: Option<usize>,
+    radius: f64,
+    max_attempts: usize,
+    user_data: usize,
+) -> PyResult<Bound<'py, PyTuple>> {
+    if address == 0 {
+        return Err(value_error("address must be a nonzero cfunc address"));
+    }
+    // SAFETY: see `sample_cfunc`; the same `from_cfunc` contract applies.
+    let function: RawTargetFn = unsafe { std::mem::transmute::<usize, RawTargetFn>(address) };
+    // SAFETY: as in `sample_cfunc`.
+    let target = unsafe {
+        RawTarget::new(
+            nonzero(dimension, "dimension")?,
+            function,
+            user_data as *mut core::ffi::c_void,
+        )
+    };
+    let candidates = candidates.unwrap_or(DEFAULT_INIT_CANDIDATES);
+    let chosen = py
+        .detach(|| {
+            candidate_starts(
+                &target,
+                chains,
+                seed,
+                radius,
+                candidates,
+                max_attempts,
+                StartSelection::HighestDensity,
+            )
+        })
+        .map_err(facade_error)?;
+    candidate_tuple(py, chosen, dimension)
 }
 
 fn starts_array<'py>(
@@ -1878,15 +2063,19 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eight_schools_logp_grad, m)?)?;
     m.add_function(wrap_pyfunction!(uniform_starts_callable, m)?)?;
     m.add_function(wrap_pyfunction!(uniform_starts_cfunc, m)?)?;
+    m.add_function(wrap_pyfunction!(best_of_starts_callable, m)?)?;
+    m.add_function(wrap_pyfunction!(best_of_starts_cfunc, m)?)?;
     m.add_function(wrap_pyfunction!(summary, m)?)?;
     m.add_function(wrap_pyfunction!(chain_warnings, m)?)?;
     m.add_function(wrap_pyfunction!(reference_gaussian_sampler_run, m)?)?;
+    m.add_function(wrap_pyfunction!(reference_gaussian_default_init_run, m)?)?;
     m.add("HAS_STAN", cfg!(feature = "stan"))?;
     #[cfg(feature = "stan")]
     {
         m.add_function(wrap_pyfunction!(stan::sample_stan, m)?)?;
         m.add_function(wrap_pyfunction!(stan::stan_model_info, m)?)?;
         m.add_function(wrap_pyfunction!(stan::uniform_starts_stan, m)?)?;
+        m.add_function(wrap_pyfunction!(stan::best_of_starts_stan, m)?)?;
     }
     Ok(())
 }
