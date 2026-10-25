@@ -874,6 +874,9 @@ def evaluate_predictions(per_model, comparisons, funnel, kernel_cost, v6) -> dic
     return out
 
 
+NL = chr(10)
+
+
 def run_posthoc() -> None:
     """Post-hoc diagnostic: diag versus dense-stan with symmetrized precision on the target models."""
     global CELLS, DRAWS
@@ -888,8 +891,7 @@ def run_posthoc() -> None:
                 try:
                     cell = run_owalnuts(model, arm, seed, ref)
                 except Exception as e:  # noqa: BLE001
-                    cell = failure(model, arm, seed, "error", f"{e}
-{traceback.format_exc()[-1500:]}")
+                    cell = failure(model, arm, seed, "error", f"{e} {traceback.format_exc()[-1500:]}")
                 write_cell(cell)
 
 
@@ -925,13 +927,9 @@ def analyze_posthoc() -> None:
             L.append(f"| {model} | {arm} | {e['passed']}/{e['n']} | {e['gradients_total']:,.0f} | {e['min_bulk_ess']:,.0f} | "
                      f"{e['min_bulk_ess_per_gradient'] * 1e3:.3f} | {e['ratio']:.2f} | {e['step']:.3g} | {e['preconditioned_condition_median']:.3g} | "
                      f"{e['max_last_ridge']:.2g} | {e['max_rank_rhat']:.4f} | {e['divergences']} |")
-    (ART / "posthoc" / "posthoc-summary.json").write_text(json.dumps(out, indent=1, sort_keys=True) + "
-", encoding="utf-8")
-    (ART / "posthoc" / "posthoc-table.md").write_text("
-".join(L) + "
-", encoding="utf-8")
-    print("
-".join(L))
+    (ART / "posthoc" / "posthoc-summary.json").write_text(json.dumps(out, indent=1, sort_keys=True) + NL, encoding="utf-8")
+    (ART / "posthoc" / "posthoc-table.md").write_text(NL.join(L) + NL, encoding="utf-8")
+    print(NL.join(L))
 
 
 def main() -> None:
