@@ -338,7 +338,12 @@ def from_cfunc(
 
     The callback must be thread-safe, reentrant, deterministic, write every
     gradient element on finite returns, return ``-inf`` for zero-density
-    points (refined, then zero weight), and never raise across the ABI.
+    points (refined, then zero weight), and never raise across the ABI. A
+    finite value with a nonfinite gradient is a fatal error, not a
+    zero-density point. For numba, compile the ``cfunc`` and its ``njit``
+    helpers with ``error_model="numpy"``: the default ``"python"`` raises
+    ``ZeroDivisionError`` on a float division by zero, which cannot cross
+    the ABI (STUDIES/python_callpath_v1).
     """
     address = getattr(cfunc_or_address, "address", cfunc_or_address)
     return CFuncTarget(
@@ -1118,7 +1123,9 @@ def from_pymc(model: Any, *, mode: str | None = None, gil_free: bool = False,
     call from concurrent sampler threads. ``thread_safe=True`` lazily compiles
     one function per calling thread (a small one-time cost per thread), which
     restores ``threads > 1`` sampling on the callable transport. The default
-    single-function wrapper is only safe with ``threads=1``.
+    single-function wrapper is only safe with ``threads=1``. Either way this
+    is a Python callable serialised by the GIL, so ``threads=1`` is faster;
+    ``gil_free=True`` is the parallel, compiled transport.
     """
     import pymc as pm  # noqa: F401
 

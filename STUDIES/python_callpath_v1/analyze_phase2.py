@@ -162,3 +162,54 @@ def phase2(out: dict, md: list[str]) -> None:
             bm, fm = mt.get(f"baseline|{target}|{path}", {}), mt.get(f"fix|{target}|{path}", {})
             md.append(f"| {target} | {path} | {fmt(bm.get('adapter_call'))} | {fmt(fm.get('adapter_call'))} |")
     md.append("\n**Decision:**\n\n```json\n" + json.dumps(dec, indent=1, default=str) + "\n```")
+
+
+def phase1c(out: dict, md: list[str]) -> None:
+    """Amendment A5: cfunc-safe (error_model='numpy' + guard), primed."""
+    if not (ART / "phase1c" / "cells").exists():
+        return
+    cells, micro = load("phase1c")
+    p1, _ = load("phase1")
+    p1b, _ = load("phase1b")
+    b = "baseline"
+    md.append("\n## Phase 1c (amendment A5: `cfunc-safe`, primed; run after phase 2; wall CONTENDED)\n")
+    md.append("| target | threads | ok | ESS/s (gm) | wall/call µs | ESS/call (gm) | max R-hat | min bulk | min tail | div | vs nutpie ESS/s (phase 1) | vs nutpie ESS/gradient | vs py-njit primed ESS/s (phase 1b) |")
+    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    agg = {}
+    for target in TARGETS:
+        for t in PROTOCOL["threads"]:
+            a = _agg(cells, b, target, "cfunc-safe", t)
+            vn, vg, vj = [], [], []
+            for s in SEEDS:
+                c, n, j = cells.get((b, target, "cfunc-safe", t, s)), p1.get((b, target, "nutpie", t, s)), p1b.get((b, target, "py-njit", t, s))
+                if ok(c) and ok(n):
+                    vn.append(c["ess_per_second"] / n["ess_per_second"])
+                    vg.append(c["ess_per_call"] / n["ess_per_call"])
+                if ok(c) and ok(j):
+                    vj.append(c["ess_per_second"] / j["ess_per_second"])
+            a.update(vs_nutpie_ess_per_second=gm(vn), vs_nutpie_ess_per_gradient=gm(vg), vs_py_njit_primed=gm(vj))
+            agg[f"{target}|t{t}"] = a
+            md.append(f"| {target} | {t} | {a['n_ok']}/3 | {fmt(a['ess_per_second_gm'])} | {fmt(a['wall_per_call_us_median'])} | "
+                      f"{fmt(a['ess_per_call_gm'], 4)} | {fmt(a['max_rhat'], 4)} | {fmt(a['min_bulk'])} | {fmt(a['min_tail'])} | "
+                      f"{a['divergences']} | {fmt(a['vs_nutpie_ess_per_second'], 3)} | {fmt(a['vs_nutpie_ess_per_gradient'], 3)} | {fmt(a['vs_py_njit_primed'], 3)} |")
+        a1, a4 = agg[f"{target}|t1"]["ess_per_second_gm"], agg[f"{target}|t4"]["ess_per_second_gm"]
+        agg[f"{target}|t4/t1"] = a4 / a1 if a1 and a4 else None
+    out["phase1c_cells"] = agg
+    bit = defaultdict(list)
+    for target in TARGETS:
+        for s in SEEDS:
+            for t in PROTOCOL["threads"]:
+                c = cells.get((b, target, "cfunc-safe", t, s))
+                for other, src in (("py-njit(phase1)", p1.get((b, target, "py-njit", t, s))),
+                                   ("py-njit(phase1b)", p1b.get((b, target, "py-njit", t, s))),
+                                   ("cfunc(phase1)", p1.get((b, target, "cfunc", t, s))),
+                                   ("cfunc-guarded(phase1b)", p1b.get((b, target, "cfunc-guarded", t, s)))):
+                    bit[f"cfunc-safe=={other}|{target}"].append(
+                        (c["samples_sha256"] == src["samples_sha256"]) if ok(c) and ok(src) else None)
+    out["phase1c_bit_identity"] = dict(bit)
+    md.append("\n| comparison | identical / compared |\n|---|---|")
+    for k, v in bit.items():
+        md.append(f"| {k} | {sum(1 for x in v if x)}/{sum(1 for x in v if x is not None)} |")
+    md.append("\n| target | cfunc-safe t4/t1 ESS/s |\n|---|---|")
+    for target in TARGETS:
+        md.append(f"| {target} | {fmt(agg[f'{target}|t4/t1'], 3)} |")

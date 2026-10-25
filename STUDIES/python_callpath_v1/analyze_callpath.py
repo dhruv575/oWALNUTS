@@ -218,10 +218,12 @@ def main() -> None:
     phase1(out, md)
     import analyze_phase2
     analyze_phase2.phase1b(out, md)
+    analyze_phase2.phase1c(out, md)
     analyze_phase2.phase2(out, md)
     (ART / "summary.json").write_text(json.dumps(out, indent=1, default=str), encoding="utf-8")
     (ART / "results-table.md").write_text("\n".join(md) + "\n", encoding="utf-8")
-    print("\n".join(md))
+    sys.stdout.reconfigure(encoding="utf-8")
+    print(f"wrote {ART / 'summary.json'} and {ART / 'results-table.md'} ({len(md)} lines)")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,24 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, target
 architecture and operating system (see the `walnutpie` module documentation).
 
+## [Unreleased]
+
+### Python package
+
+- Callable targets at `threads > 1`: each sampler worker thread now keeps one
+  Python thread state for the whole run (released on that thread at worker
+  exit, before `sample` returns). Previously every callback created and
+  destroyed a thread state, so `threading.local` was empty on every call and
+  `from_pymc(model, thread_safe=True)` recompiled its PyTensor function per
+  callback (a threads=4 run did not finish). Python callables at threads=4
+  are 1.1–1.9x faster; draws are bit-identical. [WP47]
+- `from_jax(logp)` (jitted) passes the numpy position straight to the jitted
+  function instead of a separate `jnp.asarray` dispatch: 2.0–2.6x ESS/s,
+  bit-identical draws. [WP47]
+- README performance guidance rewritten from `STUDIES/python_callpath_v1`
+  (per-call cost and thread scaling per path, nutpie comparison, numba
+  `error_model="numpy"` for `from_cfunc`). [WP47]
+
 ## [0.2.0] - 2026-09-04
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`

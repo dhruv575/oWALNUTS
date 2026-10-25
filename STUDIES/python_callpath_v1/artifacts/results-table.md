@@ -18,6 +18,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | pymc-numba | 19.25 | 5.30 | 6.20 | — | — | — | — | 4.80 | 3.20 | 6.30 |
 | pymc-gilfree | 4.21 | — | 3.60 | — | — | — | — | — | — | — |
 | cfunc-guarded | — | — | — | — | — | — | — | — | — | — |
+| cfunc-safe | — | — | — | — | — | — | — | — | — | — |
 
 ### eight
 
@@ -32,6 +33,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | pymc-numba | 26.19 | 7.40 | 8.40 | — | — | — | — | 6.80 | 5.10 | 8.60 |
 | pymc-gilfree | 5.73 | — | 4.80 | — | — | — | — | — | — | — |
 | cfunc-guarded | — | — | — | — | — | — | — | — | — | — |
+| cfunc-safe | — | — | — | — | — | — | — | — | — | — |
 
 ### hier
 
@@ -46,8 +48,9 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | pymc-numba | 36.71 | 22.30 | 21.80 | — | — | — | — | 21.10 | 20.20 | 23.30 |
 | pymc-gilfree | 24.15 | — | 24.10 | — | — | — | — | — | — | — |
 | cfunc-guarded | — | — | — | — | — | — | — | — | — | — |
+| cfunc-safe | — | — | — | — | — | — | — | — | — | — |
 
-## Phase 1 — sampler cells (geomean over 3 seeds; wall CONTENDED)
+## Phase 1 — sampler cells (geomean over 3 seeds; wall CONTENDED; walls of py-njit, jax, torch and pymc-numba include first-call compilation, amendment A3)
 
 
 ### gauss100
@@ -72,6 +75,8 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | pymc-gilfree | 4 | 3/3 | 28,374 | 0.0561 | 0.14 | 73,170 | 2.43 | 0.00 | 3,837 | 2,370 | 1.0044 | 0 | 0 |
 | cfunc-guarded | 1 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
 | cfunc-guarded | 4 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
+| cfunc-safe | 1 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
+| cfunc-safe | 4 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
 | nutpie | 1 | 3/3 | 17,518 | 0.0934 | 0.33 | 62,079 | 4.81 | 0.00 | 5,630 | 2,003 | 1.0091 | 0 | 0 |
 | nutpie | 4 | 3/3 | 30,662 | 0.0934 | 0.19 | 62,079 | 3.68 | 0.00 | 5,630 | 2,003 | 1.0091 | 0 | 0 |
 
@@ -97,6 +102,8 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | pymc-gilfree | 4 | 3/3 | 3,591 | 0.0278 | 0.54 | 70,234 | 2.30 | 0.00 | 1,577 | 1,358 | 1.0065 | 0 | 0 |
 | cfunc-guarded | 1 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
 | cfunc-guarded | 4 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
+| cfunc-safe | 1 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
+| cfunc-safe | 4 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
 | nutpie | 1 | 3/3 | 4,734 | 0.0417 | 0.49 | 55,508 | 6.69 | 0.00 | 1,984 | 1,636 | 1.0044 | 5 | 0 |
 | nutpie | 4 | 3/3 | 7,573 | 0.0417 | 0.31 | 55,508 | 5.06 | 0.00 | 1,984 | 1,636 | 1.0044 | 5 | 0 |
 
@@ -122,6 +129,8 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | pymc-gilfree | 4 | 3/3 | 408 | 0.0041 | 2.12 | 211,767 | 9.78 | 0.00 | 729 | 751 | 1.0073 | 0 | 0 |
 | cfunc-guarded | 1 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
 | cfunc-guarded | 4 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
+| cfunc-safe | 1 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
+| cfunc-safe | 4 | 0/3 | — | — | — | — | — | — | — | — | — | 0 | 0 |
 | nutpie | 1 | 3/3 | 330 | 0.0087 | 2.93 | 111,670 | 25.77 | 0.00 | 827 | 467 | 1.0065 | 0 | 0 |
 | nutpie | 4 | 3/3 | 746 | 0.0087 | 1.30 | 111,670 | 10.23 | 0.00 | 827 | 467 | 1.0065 | 0 | 0 |
 
@@ -144,6 +153,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | t1==t4|pymc-numba|gauss100 | 0/0 |
 | t1==t4|pymc-gilfree|gauss100 | 3/3 |
 | t1==t4|cfunc-guarded|gauss100 | 0/0 |
+| t1==t4|cfunc-safe|gauss100 | 0/0 |
 | py-njit==cfunc|eight | 6/6 |
 | pymc-numba==pymc-gilfree|eight | 3/3 |
 | pymc==pymc-numba|eight | 0/3 |
@@ -159,6 +169,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | t1==t4|pymc-numba|eight | 0/0 |
 | t1==t4|pymc-gilfree|eight | 3/3 |
 | t1==t4|cfunc-guarded|eight | 0/0 |
+| t1==t4|cfunc-safe|eight | 0/0 |
 | py-njit==cfunc|hier | 0/0 |
 | pymc-numba==pymc-gilfree|hier | 3/3 |
 | pymc==pymc-numba|hier | 0/3 |
@@ -174,6 +185,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | t1==t4|pymc-numba|hier | 0/0 |
 | t1==t4|pymc-gilfree|hier | 3/3 |
 | t1==t4|cfunc-guarded|hier | 0/0 |
+| t1==t4|cfunc-safe|hier | 0/0 |
 
 ## Phase 1 — ratios (geomean over seeds)
 
@@ -188,6 +200,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | gauss100 | pymc-numba | — | 0.119 | — | 1.016 |
 | gauss100 | pymc-gilfree | 2.99 | 0.541 | 0.925 | 1.016 |
 | gauss100 | cfunc-guarded | — | — | — | — |
+| gauss100 | cfunc-safe | — | — | — | — |
 | gauss100 | nutpie | 1.75 | — | — | 1.690 |
 | eight | py-numpy | 0.40 | 0.431 | 0.109 | 1.236 |
 | eight | py-njit | 0.49 | 0.366 | 0.112 | 1.000 |
@@ -198,6 +211,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | eight | pymc-numba | — | 0.234 | — | 1.084 |
 | eight | pymc-gilfree | 0.76 | 0.996 | 0.474 | 1.084 |
 | eight | cfunc-guarded | — | — | — | — |
+| eight | cfunc-safe | — | — | — | — |
 | eight | nutpie | 1.60 | — | — | 1.630 |
 | hier | py-numpy | 0.54 | 0.197 | 0.047 | — |
 | hier | py-njit | 0.50 | 0.748 | 0.166 | — |
@@ -208,6 +222,7 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 | hier | pymc-numba | — | 0.310 | — | — |
 | hier | pymc-gilfree | 2.45 | 0.505 | 0.547 | — |
 | hier | cfunc-guarded | — | — | — | — |
+| hier | cfunc-safe | — | — | — | — |
 | hier | nutpie | 2.26 | — | — | — |
 
 ## Phase 1 — callable transport overhead estimate (in-sampler wall/call t1 − micro wrap_callable(adapter) − cfunc wall/call), µs
@@ -251,3 +266,243 @@ Walls are CONTENDED (shared 16-core machine, ~10 concurrent agents); ESS/call an
 - {'cell': ['baseline', 'hier', 'pymc', 4, 4747003], 'status': 'not_run_amendment_A1', 'error': ''}
 - {'cell': ['baseline', 'hier', 'torch', 1, 4747002], 'max_rhat': 1.011005045183154, 'div': 0, 'min_bulk': 717.6405914889341, 'min_tail': 745.5541046139182}
 - {'cell': ['baseline', 'hier', 'torch', 4, 4747002], 'max_rhat': 1.011005045183154, 'div': 0, 'min_bulk': 717.6405914889341, 'min_tail': 745.5541046139182}
+
+## Phase 1b (amendments A2/A3: `cfunc-guarded`, primed targets; run after phase 1; wall CONTENDED)
+
+| target | arm | threads | ok | ESS/s (gm) | wall/call µs | ESS/call (gm) | max R-hat | min bulk | min tail | div |
+|---|---|---|---|---|---|---|---|---|---|---|
+| gauss100 | cfunc-guarded | 1 | 3/3 | 27,714 | 1.95 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 |
+| gauss100 | cfunc-guarded | 4 | 3/3 | 74,001 | 0.69 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 |
+| gauss100 | py-njit | 1 | 3/3 | 15,100 | 3.63 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 |
+| gauss100 | py-njit | 4 | 3/3 | 2,557 | 20.84 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 |
+| gauss100 | cfunc | 1 | 3/3 | 28,920 | 1.88 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 |
+| gauss100 | cfunc | 4 | 3/3 | 87,233 | 0.63 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 |
+| eight | cfunc-guarded | 1 | 3/3 | 32,948 | 0.75 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 |
+| eight | cfunc-guarded | 4 | 3/3 | 89,890 | 0.28 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 |
+| eight | py-njit | 1 | 3/3 | 10,484 | 2.43 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 |
+| eight | py-njit | 4 | 3/3 | 1,458 | 18.00 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 |
+| eight | cfunc | 1 | 3/3 | 32,104 | 0.77 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 |
+| eight | cfunc | 4 | 3/3 | 75,982 | 0.36 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 |
+| hier | cfunc-guarded | 1 | 0/3 | — | — | — | — | — | — | 0 |
+| hier | cfunc-guarded | 4 | 0/3 | — | — | — | — | — | — | 0 |
+| hier | py-njit | 1 | 3/3 | 624 | 5.85 | 0.0037 | 1.0066 | 715 | 444 | 0 |
+| hier | py-njit | 4 | 3/3 | 162 | 23.25 | 0.0037 | 1.0066 | 715 | 444 | 0 |
+| hier | cfunc | 1 | 0/3 | — | — | — | — | — | — | 0 |
+| hier | cfunc | 4 | 0/3 | — | — | — | — | — | — | 0 |
+
+| comparison | identical / compared |
+|---|---|
+| cfunc-guarded==py-njit(phase1)|gauss100 | 6/6 |
+| cfunc-guarded==cfunc(phase1)|gauss100 | 6/6 |
+| py-njit phase1==phase1b|gauss100 | 6/6 |
+| cfunc phase1==phase1b|gauss100 | 6/6 |
+| t1==t4|cfunc-guarded|gauss100 | 3/3 |
+| cfunc-guarded==py-njit(phase1)|eight | 6/6 |
+| cfunc-guarded==cfunc(phase1)|eight | 6/6 |
+| py-njit phase1==phase1b|eight | 6/6 |
+| cfunc phase1==phase1b|eight | 6/6 |
+| t1==t4|cfunc-guarded|eight | 3/3 |
+| cfunc-guarded==py-njit(phase1)|hier | 0/0 |
+| cfunc-guarded==cfunc(phase1)|hier | 0/0 |
+| py-njit phase1==phase1b|hier | 6/6 |
+| cfunc phase1==phase1b|hier | 0/0 |
+| t1==t4|cfunc-guarded|hier | 0/0 |
+
+| ratio (geomean over seeds) | value |
+|---|---|
+| cfunc-guarded / nutpie (phase 1) ESS/s|gauss100|t1 | 1.582 |
+| cfunc-guarded / nutpie ESS per gradient|gauss100|t1 | 0.592 |
+| cfunc-guarded / nutpie (phase 1) ESS/s|gauss100|t4 | 2.413 |
+| cfunc-guarded / nutpie ESS per gradient|gauss100|t4 | 0.592 |
+| cfunc-guarded t4/t1 ESS/s (primed)|gauss100 | 2.670 |
+| py-njit t4/t1 ESS/s (primed)|gauss100 | 0.169 |
+| cfunc t4/t1 ESS/s (primed)|gauss100 | 3.016 |
+| cfunc-guarded / nutpie (phase 1) ESS/s|eight|t1 | 6.961 |
+| cfunc-guarded / nutpie ESS per gradient|eight|t1 | 0.613 |
+| cfunc-guarded / nutpie (phase 1) ESS/s|eight|t4 | 11.869 |
+| cfunc-guarded / nutpie ESS per gradient|eight|t4 | 0.613 |
+| cfunc-guarded t4/t1 ESS/s (primed)|eight | 2.728 |
+| py-njit t4/t1 ESS/s (primed)|eight | 0.139 |
+| cfunc t4/t1 ESS/s (primed)|eight | 2.367 |
+| cfunc-guarded / nutpie (phase 1) ESS/s|hier|t1 | — |
+| cfunc-guarded / nutpie ESS per gradient|hier|t1 | — |
+| cfunc-guarded / nutpie (phase 1) ESS/s|hier|t4 | — |
+| cfunc-guarded / nutpie ESS per gradient|hier|t4 | — |
+| cfunc-guarded t4/t1 ESS/s (primed)|hier | — |
+| py-njit t4/t1 ESS/s (primed)|hier | 0.260 |
+| cfunc t4/t1 ESS/s (primed)|hier | — |
+
+## Phase 1c (amendment A5: `cfunc-safe`, primed; run after phase 2; wall CONTENDED)
+
+| target | threads | ok | ESS/s (gm) | wall/call µs | ESS/call (gm) | max R-hat | min bulk | min tail | div | vs nutpie ESS/s (phase 1) | vs nutpie ESS/gradient | vs py-njit primed ESS/s (phase 1b) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| gauss100 | 1 | 3/3 | 40,923 | 1.32 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 | 2.336 | 0.592 | 2.710 |
+| gauss100 | 4 | 3/3 | 122,148 | 0.44 | 0.0553 | 1.0043 | 3,686 | 2,231 | 0 | 3.984 | 0.592 | 47.777 |
+| eight | 1 | 3/3 | 42,779 | 0.59 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 | 9.037 | 0.613 | 4.081 |
+| eight | 4 | 3/3 | 121,896 | 0.20 | 0.0256 | 1.0034 | 1,842 | 1,446 | 0 | 16.096 | 0.613 | 83.584 |
+| hier | 1 | 3/3 | 1,301 | 2.86 | 0.0037 | 1.0066 | 715 | 444 | 0 | 3.946 | 0.425 | 2.087 |
+| hier | 4 | 3/3 | 4,291 | 0.85 | 0.0037 | 1.0066 | 715 | 444 | 0 | 5.754 | 0.425 | 26.480 |
+
+| comparison | identical / compared |
+|---|---|
+| cfunc-safe==py-njit(phase1)|gauss100 | 6/6 |
+| cfunc-safe==py-njit(phase1b)|gauss100 | 6/6 |
+| cfunc-safe==cfunc(phase1)|gauss100 | 6/6 |
+| cfunc-safe==cfunc-guarded(phase1b)|gauss100 | 6/6 |
+| cfunc-safe==py-njit(phase1)|eight | 6/6 |
+| cfunc-safe==py-njit(phase1b)|eight | 6/6 |
+| cfunc-safe==cfunc(phase1)|eight | 6/6 |
+| cfunc-safe==cfunc-guarded(phase1b)|eight | 6/6 |
+| cfunc-safe==py-njit(phase1)|hier | 6/6 |
+| cfunc-safe==py-njit(phase1b)|hier | 6/6 |
+| cfunc-safe==cfunc(phase1)|hier | 0/0 |
+| cfunc-safe==cfunc-guarded(phase1b)|hier | 0/0 |
+
+| target | cfunc-safe t4/t1 ESS/s |
+|---|---|
+| gauss100 | 2.985 |
+| eight | 2.849 |
+| hier | 3.298 |
+
+## Phase 2 — fix vs baseline (paired, builds interleaved, same seeds, primed; wall CONTENDED)
+
+| target | arm | threads | fix/baseline ESS/s (gm) | per seed | bit-identical | wall/call µs base → fix | ESS/s base → fix (gm) | fix ok | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| gauss100 | py-numpy | 1 | 0.999 | 1.02, 0.98, 1.01 | 3/3 | 3.75 → 3.84 | 15,247 → 15,235 | 3/3 |  |
+| gauss100 | py-numpy | 4 | 1.643 | 1.48, 1.49, 2.01 | 3/3 | 14.19 → 9.42 | 4,029 → 6,622 | 3/3 |  |
+| gauss100 | py-njit | 1 | 1.007 | 0.94, 1.04, 1.04 | 3/3 | 3.01 → 2.90 | 18,593 → 18,717 | 3/3 |  |
+| gauss100 | py-njit | 4 | 1.895 | 1.80, 1.63, 2.32 | 3/3 | 13.40 → 8.23 | 3,900 → 7,392 | 3/3 |  |
+| gauss100 | jax | 1 | 2.049 | 2.18, 2.04, 1.94 | 3/3 | 44.97 → 22.07 | 1,286 → 2,636 | 3/3 |  |
+| gauss100 | jax | 4 | 2.113 | 2.06, 2.14, 2.14 | 3/3 | 171 → 79.85 | 374 → 789 | 3/3 |  |
+| gauss100 | torch | 1 | 1.132 | 1.52, 0.98, 0.97 | 3/3 | 65.61 → 66.85 | 784 → 887 | 3/3 |  |
+| gauss100 | torch | 4 | 1.091 | 1.09, 1.00, 1.19 | 3/3 | 199 → 199 | 293 → 319 | 3/3 |  |
+| gauss100 | pymc | 1 | 1.003 | 0.94, 1.01, 1.06 | 3/3 | 7.23 → 7.18 | 7,831 → 7,851 | 3/3 |  |
+| gauss100 | pymc | 4 | inf (baseline timeout) | inf | 0/0 | — → 21.37 | — → 3,002 | 3/3 | seed 4747001: baseline timeout 600s, fix ok; seed 4747002: baseline not_run_amendment_A1, fix ok; seed 4747003: baseline not_run_amendment_A1, fix ok |
+| gauss100 | pymc-numba | 1 | 0.983 | 1.00, 1.10, 0.86 | 3/3 | 9.31 → 9.01 | 6,569 → 6,458 | 3/3 |  |
+| gauss100 | pymc-numba | 4 | inf (baseline timeout) | inf | 0/0 | — → 21.80 | — → 2,790 | 3/3 | seed 4747001: baseline timeout 600s, fix ok; seed 4747002: baseline not_run_amendment_A1, fix ok; seed 4747003: baseline not_run_amendment_A1, fix ok |
+| gauss100 | cfunc-guarded | 1 | 0.989 | 0.96, 1.00, 1.01 | 3/3 | 1.39 → 1.45 | 39,467 → 39,021 | 3/3 |  |
+| gauss100 | cfunc-guarded | 4 | 1.026 | 1.07, 0.98, 1.03 | 3/3 | 0.46 → 0.43 | 112,754 → 115,638 | 3/3 |  |
+| eight | py-numpy | 1 | 1.037 | 1.08, 1.06, 0.98 | 3/3 | 9.17 → 8.66 | 3,605 → 3,739 | 3/3 |  |
+| eight | py-numpy | 4 | 1.432 | 1.30, 1.61, 1.40 | 3/3 | 16.93 → 12.49 | 1,825 → 2,615 | 3/3 |  |
+| eight | py-njit | 1 | 0.981 | 0.99, 0.95, 1.00 | 3/3 | 1.84 → 1.86 | 14,090 → 13,823 | 3/3 |  |
+| eight | py-njit | 4 | 1.701 | 1.57, 1.65, 1.89 | 3/3 | 10.22 → 6.49 | 2,493 → 4,240 | 3/3 |  |
+| eight | jax | 1 | 2.058 | 2.00, 2.21, 1.97 | 3/3 | 41.95 → 19.48 | 717 → 1,475 | 3/3 |  |
+| eight | jax | 4 | 2.158 | 2.36, 1.99, 2.14 | 3/3 | 152 → 64.63 | 211 → 455 | 3/3 |  |
+| eight | torch | 1 | 1.011 | 0.99, 0.99, 1.05 | 3/3 | 292 → 296 | 109 → 110 | 3/3 |  |
+| eight | torch | 4 | 1.029 | 1.00, 1.04, 1.05 | 3/3 | 467 → 468 | 69.46 → 71.47 | 3/3 |  |
+| eight | pymc | 1 | 1.054 | 1.08, 1.05, 1.03 | 3/3 | 11.94 → 11.06 | 2,767 → 2,918 | 3/3 |  |
+| eight | pymc | 4 | inf (baseline timeout) | inf | 0/0 | — → 33.90 | — → 970 | 3/3 | seed 4747001: baseline timeout 600s, fix ok; seed 4747002: baseline not_run_amendment_A1, fix ok; seed 4747003: baseline not_run_amendment_A1, fix ok |
+| eight | pymc-numba | 1 | 0.955 | 0.97, 0.98, 0.92 | 3/3 | 8.58 → 8.88 | 3,283 → 3,134 | 3/3 |  |
+| eight | pymc-numba | 4 | inf (baseline timeout) | inf | 0/0 | — → 33.38 | — → 874 | 3/3 | seed 4747001: baseline timeout 600s, fix ok; seed 4747002: baseline not_run_amendment_A1, fix ok; seed 4747003: baseline not_run_amendment_A1, fix ok |
+| eight | cfunc-guarded | 1 | 0.951 | 0.93, 1.01, 0.92 | 3/3 | 0.60 → 0.64 | 41,137 → 39,104 | 3/3 |  |
+| eight | cfunc-guarded | 4 | 0.980 | 0.97, 0.99, 0.98 | 3/3 | 0.23 → 0.23 | 110,151 → 107,919 | 3/3 |  |
+| hier | py-numpy | 1 | 0.982 | 0.99, 1.00, 0.96 | 3/3 | 35.88 → 35.91 | 118 → 116 | 3/3 |  |
+| hier | py-numpy | 4 | 1.139 | 1.14, 1.14, 1.13 | 3/3 | 82.74 → 72.63 | 49.94 → 56.86 | 3/3 |  |
+| hier | py-njit | 1 | 1.000 | 0.98, 1.02, 1.00 | 3/3 | 4.17 → 4.09 | 863 → 863 | 3/3 |  |
+| hier | py-njit | 4 | 1.629 | 1.69, 1.55, 1.65 | 3/3 | 11.52 → 7.38 | 297 → 485 | 3/3 |  |
+| hier | jax | 1 | 2.595 | 2.69, 2.55, 2.54 | 3/3 | 82.41 → 32.26 | 43.48 → 113 | 3/3 |  |
+| hier | jax | 4 | 2.176 | 2.26, 2.26, 2.02 | 3/3 | 185 → 81.72 | 22.64 → 49.28 | 3/3 |  |
+| hier | torch | 1 | 1.037 | 0.96, 1.17, 1.00 | 3/3 | 496 → 491 | 7.32 → 7.59 | 3/3 |  |
+| hier | torch | 4 | 1.058 | 1.07, 1.07, 1.03 | 3/3 | 569 → 533 | 6.38 → 6.74 | 3/3 |  |
+| hier | pymc | 1 | 1.007 | 1.03, 0.97, 1.02 | 3/3 | 30.93 → 32.02 | 120 → 120 | 3/3 |  |
+| hier | pymc | 4 | inf (baseline timeout) | inf | 0/0 | — → 43.02 | — → 83.06 | 3/3 | seed 4747001: baseline timeout 600s, fix ok; seed 4747002: baseline not_run_amendment_A1, fix ok; seed 4747003: baseline not_run_amendment_A1, fix ok |
+| hier | pymc-numba | 1 | 0.990 | 0.97, 1.01, 0.99 | 3/3 | 20.28 → 20.06 | 200 → 198 | 3/3 |  |
+| hier | pymc-numba | 4 | inf (baseline timeout) | inf | 0/0 | — → 33.39 | — → 108 | 3/3 | seed 4747001: baseline timeout 600s, fix ok; seed 4747002: baseline not_run_amendment_A1, fix ok; seed 4747003: baseline not_run_amendment_A1, fix ok |
+| hier | cfunc-guarded | 1 | — |  | 0/0 | — → — | — → — | 0/3 | seed 4747001: baseline error, fix error; seed 4747002: baseline error, fix error; seed 4747003: baseline error, fix error |
+| hier | cfunc-guarded | 4 | — |  | 0/0 | — → — | — → — | 0/3 | seed 4747001: baseline error, fix error; seed 4747002: baseline error, fix error; seed 4747003: baseline error, fix error |
+
+### Phase 2 micro (median µs per call through the adapter)
+
+| target | path | baseline | fix |
+|---|---|---|---|
+| gauss100 | py-numpy | 1.30 | 1.30 |
+| gauss100 | py-njit | 0.70 | 0.70 |
+| gauss100 | jax | 40.20 | 18.10 |
+| gauss100 | torch | 51.30 | 52.20 |
+| gauss100 | pymc | 4.60 | 4.10 |
+| gauss100 | pymc-numba | 5.80 | 5.60 |
+| gauss100 | cfunc-guarded | 2.70 | 2.90 |
+| eight | py-numpy | 7.70 | 7.80 |
+| eight | py-njit | 0.70 | 0.70 |
+| eight | jax | 38.10 | 19.50 |
+| eight | torch | 277 | 275 |
+| eight | pymc | 8.80 | 9.70 |
+| eight | pymc-numba | 7.10 | 7.70 |
+| eight | cfunc-guarded | 2.70 | 2.80 |
+| hier | py-numpy | 38.90 | 38.10 |
+| hier | py-njit | 2.50 | 2.40 |
+| hier | jax | 50.00 | 29.50 |
+| hier | torch | 514 | 522 |
+| hier | pymc | 32.80 | 33.40 |
+| hier | pymc-numba | 20.00 | 20.00 |
+| hier | cfunc-guarded | 4.50 | 4.50 |
+
+**Decision:**
+
+```json
+{
+ "rule": {
+  "i_bit_identical": true,
+  "identical_compared": [
+   102,
+   102
+  ],
+  "ii_ge_1.3_somewhere": true,
+  "iii_none_below_0.9": true,
+  "below_0.9": {},
+  "merge": true
+ },
+ "F3_jax_t1": {
+  "gauss100|jax|t1": 2.048935758176713,
+  "eight|jax|t1": 2.058109730124669,
+  "hier|jax|t1": 2.594724011154439
+ },
+ "F6_t4": {
+  "gauss100|py-numpy|t4": 1.6434192542286779,
+  "gauss100|py-njit|t4": 1.895474659059522,
+  "gauss100|torch|t4": 1.090771181006771,
+  "gauss100|pymc|t4": Infinity,
+  "gauss100|pymc-numba|t4": Infinity,
+  "eight|py-numpy|t4": 1.4323954497629232,
+  "eight|py-njit|t4": 1.70054260546258,
+  "eight|torch|t4": 1.028964146324281,
+  "eight|pymc|t4": Infinity,
+  "eight|pymc-numba|t4": Infinity,
+  "hier|py-numpy|t4": 1.1385860142807058,
+  "hier|py-njit|t4": 1.628866780677915,
+  "hier|torch|t4": 1.0577970309480453,
+  "hier|pymc|t4": Infinity,
+  "hier|pymc-numba|t4": Infinity
+ },
+ "t1_no_regression": {
+  "gauss100|py-numpy|t1": 0.9992221647842598,
+  "gauss100|py-njit|t1": 1.0066793386773325,
+  "gauss100|torch|t1": 1.1319100251508456,
+  "gauss100|pymc|t1": 1.0026058933593727,
+  "gauss100|pymc-numba|t1": 0.983041435337397,
+  "eight|py-numpy|t1": 1.0371202334992473,
+  "eight|py-njit|t1": 0.9810468742818742,
+  "eight|torch|t1": 1.010810793840369,
+  "eight|pymc|t1": 1.0543232845033366,
+  "eight|pymc-numba|t1": 0.9548794125604819,
+  "hier|py-numpy|t1": 0.9817892978022307,
+  "hier|py-njit|t1": 0.9995543357133303,
+  "hier|torch|t1": 1.037113219084157,
+  "hier|pymc|t1": 1.0071522937778867,
+  "hier|pymc-numba|t1": 0.9902780226228141
+ },
+ "jax_t4_joint": {
+  "gauss100|jax|t4": 2.113415091840362,
+  "eight|jax|t4": 2.1580857185433557,
+  "hier|jax|t4": 2.176213953107082
+ },
+ "control": {
+  "gauss100|cfunc-guarded|t1": 0.9887082650662603,
+  "gauss100|cfunc-guarded|t4": 1.0255807831584995,
+  "eight|cfunc-guarded|t1": 0.9505772793629029,
+  "eight|cfunc-guarded|t4": 0.9797442028592261
+ },
+ "F3_passes_own_cells": true,
+ "F6_passes_own_cells": true
+}
+```
