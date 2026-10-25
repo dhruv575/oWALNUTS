@@ -1004,8 +1004,15 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
     frozen_model = model
     if shared_inputs or shared_dimensions:
         try:
-            from pymc.model.transform import freeze_dims_and_data
+            # PyMC 5.28+ exports it only from the optimization submodule;
+            # older releases also re-export it from pymc.model.transform.
+            from pymc.model.transform.optimization import freeze_dims_and_data
         except ImportError:
+            try:
+                from pymc.model.transform import freeze_dims_and_data
+            except ImportError:
+                freeze_dims_and_data = None
+        if freeze_dims_and_data is None:
             raise NotImplementedError(
                 "gil_free=True requires PyMC freeze_dims_and_data for shared data; "
                 "upgrade PyMC or use gil_free=False"
