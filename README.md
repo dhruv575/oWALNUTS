@@ -163,7 +163,14 @@ Every number below is from a preregistered, checksummed study in
   funnel does not mix *well* at the defaults (one chain per seed adapts
   to `h ~ 0.01`, `omega` R-hat 1.01-1.04); `Tuning::new().max_error(0.5)`
   mixes better there at a 21 % cost on a 100-D Gaussian. [E11]
-  WP53 funnel 30-seed calibration: pending.
+  Over 30 fresh seeds (WP53, 4 x 2,000/20,000) the default's tail estimate
+  is biased low: mean z -0.42, 4/30 seeds beyond |z| 2 and all low, pooled
+  P(omega < -5) 0.0458 +/- 0.0014 against the exact 0.0478, with no
+  divergences or warnings to show for it. `delta = 2` shares the deficit
+  (pooled 0.0455) with no seed beyond |z| 2. A three-seed |z| <= 2 funnel
+  gate fails the unchanged default about 35 % of the time, so read
+  single-seed funnel z values as noise and pooled tail mass as the check
+  [E29].
 - **Long state-space paths mix at depth 3–4.** On an exact Gaussian
   state-space model at `T = 1000`, supplying the posterior-precision
   tridiagonal metric (`Metric::Structured`) gives ESS per target call
@@ -703,3 +710,11 @@ provenance.
   three-seed value:
   [`STUDIES/posteriordb_bench_v7_seed_extension`](STUDIES/posteriordb_bench_v7_seed_extension/README.md)
   (`WP62-POSTERIORDB-V7-SEED-EXTENSION`).
+- [E29] Funnel calibration at the defaults over 30 fresh seeds, arms default
+  and `delta = 2` at 4 x 2,000/20,000 plus three arms at 1,000/1,000. Default
+  mean z -0.419 (p 0.022), exceedance 4/30, pooled tail mass 0.0458; `delta
+  = 2` 0/30 exceedances, mean z -0.408, 37 vs 43 divergences, 0.94x the
+  default's funnel ESS per gradient; R2 passed, so `delta = 2` is a
+  posteriordb confirmation candidate; no default changed:
+  [`STUDIES/funnel_defaults_30seed_v1`](STUDIES/funnel_defaults_30seed_v1/README.md)
+  (`WP53-FUNNEL-DEFAULTS-30SEED-V1`).

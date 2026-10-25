@@ -37,7 +37,14 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
    collapses or misses on the funnel needs more seeds before anything is
    designed around it. posteriordb v7 had the funnel unbiased on all three
    seeds (z +1.69, -0.59, +0.84), with per-chain steps from 0.009 to 0.2.
-   WP53 funnel 30-seed calibration: pending.
+   WP53 (`STUDIES/funnel_defaults_30seed_v1`, 30 fresh seeds) answered the
+   frequency: the default misses |z| <= 2 on 4/30 seeds, all low, with mean
+   z -0.42 and a pooled tail mass of 0.0458 against 0.0478; the misses are
+   silent (no divergences, no `chain_warnings`, R-hat <= 1.008). The gate on
+   three seeds is a lottery (about 35 % failure for the unchanged default);
+   future funnel checks should pool tail mass over 12 or more seeds and
+   count divergences. The 4-5 % tail deficit at the defaults is a new open
+   item (why both `delta = 1` and `delta = 2` under-sample `omega < -5`).
 4. **Closed as a warmup-statistic line (WP49): target-adaptive `delta`.** A
    rule driven by the warmup-window level-0 leaf-error tail does not qualify:
    the inverse-tail rule is 1.016x and the refined-fraction controller
@@ -154,12 +161,15 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     on `gp_pois_regr` and `lotka_volterra`). The Python `init=None` default
     now follows the Rust best-of-16 rule, after `init=None` failed all 12
     Python `lotka_volterra` cells in WP58.
-14. **Fixed `delta = 2`** (WP34, WP37A, WP49; pending WP53): WP37A did not
+14. **Fixed `delta = 2`** (WP34, WP37A, WP49, WP53): WP37A did not
     qualify it (funnel gates F3 and F4 failed). As WP49's control it is
     1.141x over posteriordb with 43 gates (1.067x without two seed
-    pathologies, matching WP34's 1.070x), but it triples funnel divergences
-    (34 against the default's 11 over 12 seeds). WP53 is the pending
-    decision.
+    pathologies, matching WP34's 1.070x). WP53 (30 seeds) found WP49's
+    divergence tripling did not replicate (37 vs 43 at 20,000 draws), no
+    seed beyond |z| 2, the same pooled tail deficit as the default, and
+    0.94x the default's funnel ESS per gradient; its rule R2 passed, so the
+    next step is a preregistered posteriordb confirmation of `delta = 2`
+    on fresh seeds with extra seeds on `accel_gp` and `hmm_drive_0`.
 15. **The silent funnel** (WP46, WP55, WP56): oWALNUTS can sample centred
     hierarchical funnels with zero divergences. In WP55, 11 of 12 wrong
     positive cells had zero retained divergences, and all 12 failed the
