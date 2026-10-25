@@ -1,0 +1,137 @@
+{
+ "model": "lotka_volterra",
+ "arm": "rs-meanaccept",
+ "seed": 5858103,
+ "path": "rust",
+ "status": "ok",
+ "wall_seconds": 35.3725025,
+ "dimension": 8,
+ "threads": 4,
+ "gradients_total": 280318,
+ "gradients_sampling": 133638,
+ "gradients_warmup": 146598,
+ "gradients_start_selection": 82,
+ "gradients_initial_evaluation": 4,
+ "gradients_kernel_telemetry_total": 280236,
+ "gradients_counted_callbacks": 280318,
+ "accounting_check": {
+  "kernel_plus_start_minus_counted": 0,
+  "posterior_total_minus_kernel": 0
+ },
+ "final_step_size": [
+  0.10949575784102504,
+  0.14161028901035638,
+  0.1860421538291486,
+  0.03681809420353579
+ ],
+ "mean_depth": 4.25325,
+ "mean_gradients_per_transition": 33.4095,
+ "mean_leaves_built": 22.908250000000002,
+ "mean_orbit_states": 19.509,
+ "mean_macro_length": 2.2240375835367656,
+ "fraction_selected_refined": 0.26675,
+ "retained_reverse_calls": 13202,
+ "retained_leaves_built": 91633,
+ "retained_refinement_level_built": [
+  85340,
+  3802,
+  2461,
+  30,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "max_depth_stops": 0,
+ "refinement_exhaustion_stops": 0,
+ "acceptance_statistic": 0.7963301668550847,
+ "acceptance_statistic_note": "mean of the arm's own dual-averaging statistic over the last 100 warmup transitions (retained transitions are not captured by the facade)",
+ "mass_diagonal": [
+  [
+   67.38201514531639,
+   40.039548820830504,
+   73.59855201496549,
+   41.88621277309929,
+   115.70377167279858,
+   110.88221384491304,
+   29.080050917187116,
+   34.52322369047716
+  ],
+  [
+   79.59009398894844,
+   44.245168405148895,
+   85.24971981607678,
+   48.59539932198919,
+   126.36835879271013,
+   152.74862672355505,
+   40.76550703084725,
+   31.90276243879738
+  ],
+  [
+   14.096398467325722,
+   9.662472101023312,
+   15.264522385650361,
+   11.709079409560298,
+   21.82929234500955,
+   19.449235427706295,
+   43.27254819101424,
+   40.82915204460501
+  ],
+  [
+   9.342095430944841,
+   5.171296433372525,
+   11.501018158382221,
+   6.9509622316486155,
+   14.881526971411112,
+   6.605387841577936,
+   4.779663918079492,
+   3.4097307938321535
+  ]
+ ],
+ "tuning": {
+  "divergence_threshold": 1000.0,
+  "exhaustion": "Stop",
+  "max_depth": 10,
+  "max_error": 1.0,
+  "max_refinement_levels": 8,
+  "step_size": 0.5,
+  "u_turn": "MomentumSum"
+ },
+ "adaptation": "Custom(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: MeanTrajectoryAcceptance, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: None })",
+ "init": {
+  "candidates": 16,
+  "evaluations_per_chain": [
+   23,
+   20,
+   18,
+   21
+  ],
+  "max_attempts": 100,
+  "radius": 2.0,
+  "rule": "sampler::Init::default() via candidate_starts",
+  "start_log_densities": [
+   -326.3966583551615,
+   -384.10950187387306,
+   -301.42047895037206,
+   -717.3296192047712
+  ]
+ },
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "min_bulk_ess": 705.8565848761463,
+ "argmin_bulk": "q0",
+ "min_tail_ess": 830.6175960669037,
+ "max_rhat": 1.0036799714711786,
+ "finite_draws": true,
+ "divergences": 0,
+ "gates": {
+  "max_rank_rhat": true,
+  "min_bulk_ess": true,
+  "min_tail_ess": true,
+  "sampling_divergences": true,
+  "finite_draws": true
+ },
+ "passed": true,
+ "ess_per_gradient": 0.0025180565817255625,
+ "ess_per_gradient_sampling": 0.005281855347102966
+}

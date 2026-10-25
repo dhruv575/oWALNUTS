@@ -1,0 +1,137 @@
+{
+ "model": "lotka_volterra",
+ "arm": "rs-nutslike",
+ "seed": 5858101,
+ "path": "rust",
+ "status": "ok",
+ "wall_seconds": 31.5103918,
+ "dimension": 8,
+ "threads": 4,
+ "gradients_total": 279121,
+ "gradients_sampling": 140156,
+ "gradients_warmup": 138891,
+ "gradients_start_selection": 74,
+ "gradients_initial_evaluation": 4,
+ "gradients_kernel_telemetry_total": 279047,
+ "gradients_counted_callbacks": 279121,
+ "accounting_check": {
+  "kernel_plus_start_minus_counted": 0,
+  "posterior_total_minus_kernel": 0
+ },
+ "final_step_size": [
+  0.09014305370759486,
+  0.12476760717790977,
+  0.1105848907694573,
+  0.11256628028731687
+ ],
+ "mean_depth": 5.049499999999999,
+ "mean_gradients_per_transition": 35.039,
+ "mean_leaves_built": 35.039,
+ "mean_orbit_states": 29.559,
+ "mean_macro_length": 3.76100286043018,
+ "fraction_selected_refined": 0.0,
+ "retained_reverse_calls": 0,
+ "retained_leaves_built": 140156,
+ "retained_refinement_level_built": [
+  140156,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "max_depth_stops": 0,
+ "refinement_exhaustion_stops": 0,
+ "acceptance_statistic": 0.7962798633266762,
+ "acceptance_statistic_note": "mean of the arm's own dual-averaging statistic over the last 100 warmup transitions (retained transitions are not captured by the facade)",
+ "mass_diagonal": [
+  [
+   88.3543827719838,
+   52.94184401087469,
+   91.58231505668559,
+   53.10082635326458,
+   127.03755527287122,
+   141.46263001791527,
+   37.324368100059296,
+   40.46900526164445
+  ],
+  [
+   70.75338245755954,
+   42.22804346225508,
+   77.5025790502591,
+   43.726124962402636,
+   132.66442454859515,
+   112.13642040602757,
+   39.86294205091037,
+   33.82605482636285
+  ],
+  [
+   79.50447560295933,
+   51.05337422138636,
+   90.65775920610008,
+   49.159686743050024,
+   104.84902354160255,
+   125.7764794754115,
+   32.142168614502594,
+   32.53410953875461
+  ],
+  [
+   77.3345157250936,
+   44.49776384303691,
+   80.3123541674627,
+   51.47489867803261,
+   133.272822355741,
+   116.90955261710104,
+   40.44846546306534,
+   32.945257385252425
+  ]
+ ],
+ "tuning": {
+  "divergence_threshold": 1000.0,
+  "exhaustion": "AcceptUnlessDivergent",
+  "max_depth": 10,
+  "max_error": 1.0,
+  "max_refinement_levels": 1,
+  "step_size": 0.5,
+  "u_turn": "MomentumSum"
+ },
+ "adaptation": "Custom(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: MeanTrajectoryAcceptance, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: None })",
+ "init": {
+  "candidates": 16,
+  "evaluations_per_chain": [
+   18,
+   20,
+   19,
+   17
+  ],
+  "max_attempts": 100,
+  "radius": 2.0,
+  "rule": "sampler::Init::default() via candidate_starts",
+  "start_log_densities": [
+   -306.6004137975325,
+   -1311.0132703233867,
+   -572.9583790828615,
+   -369.95478719226327
+  ]
+ },
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "min_bulk_ess": 1134.558255805074,
+ "argmin_bulk": "q2",
+ "min_tail_ess": 1371.338995585587,
+ "max_rhat": 1.002544829919924,
+ "finite_draws": true,
+ "divergences": 0,
+ "gates": {
+  "max_rank_rhat": true,
+  "min_bulk_ess": true,
+  "min_tail_ess": true,
+  "sampling_divergences": true,
+  "finite_draws": true
+ },
+ "passed": true,
+ "ess_per_gradient": 0.004064754195510456,
+ "ess_per_gradient_sampling": 0.008094967434894502
+}

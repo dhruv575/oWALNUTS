@@ -1,0 +1,137 @@
+{
+ "model": "lotka_volterra",
+ "arm": "rs-nutslike",
+ "seed": 5858102,
+ "path": "rust",
+ "status": "ok",
+ "wall_seconds": 33.4781199,
+ "dimension": 8,
+ "threads": 4,
+ "gradients_total": 303639,
+ "gradients_sampling": 139840,
+ "gradients_warmup": 163720,
+ "gradients_start_selection": 79,
+ "gradients_initial_evaluation": 4,
+ "gradients_kernel_telemetry_total": 303560,
+ "gradients_counted_callbacks": 303639,
+ "accounting_check": {
+  "kernel_plus_start_minus_counted": 0,
+  "posterior_total_minus_kernel": 0
+ },
+ "final_step_size": [
+  0.10840120880731026,
+  0.11166885984929402,
+  0.0897670464821629,
+  0.11190466956639192
+ ],
+ "mean_depth": 5.06175,
+ "mean_gradients_per_transition": 34.96,
+ "mean_leaves_built": 34.959999999999994,
+ "mean_orbit_states": 28.924999999999997,
+ "mean_macro_length": 3.662045840939116,
+ "fraction_selected_refined": 0.0,
+ "retained_reverse_calls": 0,
+ "retained_leaves_built": 139840,
+ "retained_refinement_level_built": [
+  139840,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "max_depth_stops": 0,
+ "refinement_exhaustion_stops": 0,
+ "acceptance_statistic": 0.7990643024357399,
+ "acceptance_statistic_note": "mean of the arm's own dual-averaging statistic over the last 100 warmup transitions (retained transitions are not captured by the facade)",
+ "mass_diagonal": [
+  [
+   66.10732812874942,
+   37.93279988114537,
+   72.63077866077973,
+   41.494176519727496,
+   123.69771371321215,
+   124.99103896207754,
+   39.094999434093126,
+   35.45243823668907
+  ],
+  [
+   88.10108560037771,
+   51.415649573617685,
+   95.32259194102282,
+   53.221629582890984,
+   137.90861285116804,
+   138.06673959616722,
+   37.969960588659156,
+   36.629769823781615
+  ],
+  [
+   63.553599548043174,
+   39.110467036973574,
+   67.08231379652163,
+   39.67742271551137,
+   127.61518614805637,
+   130.39813267834518,
+   32.750964066948555,
+   28.134580285013925
+  ],
+  [
+   69.42037388750839,
+   41.89028301104355,
+   76.05973426641812,
+   45.18990053076133,
+   135.6689018512528,
+   133.5501665409629,
+   36.15432563577512,
+   35.62943692836085
+  ]
+ ],
+ "tuning": {
+  "divergence_threshold": 1000.0,
+  "exhaustion": "AcceptUnlessDivergent",
+  "max_depth": 10,
+  "max_error": 1.0,
+  "max_refinement_levels": 1,
+  "step_size": 0.5,
+  "u_turn": "MomentumSum"
+ },
+ "adaptation": "Custom(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: MeanTrajectoryAcceptance, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: None })",
+ "init": {
+  "candidates": 16,
+  "evaluations_per_chain": [
+   18,
+   23,
+   19,
+   19
+  ],
+  "max_attempts": 100,
+  "radius": 2.0,
+  "rule": "sampler::Init::default() via candidate_starts",
+  "start_log_densities": [
+   -380.9227829776494,
+   -294.91202735540725,
+   -444.39343689021666,
+   -604.2183267229024
+  ]
+ },
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "min_bulk_ess": 1114.0747130650057,
+ "argmin_bulk": "q2",
+ "min_tail_ess": 1470.2353384821301,
+ "max_rhat": 1.0012161959633548,
+ "finite_draws": true,
+ "divergences": 0,
+ "gates": {
+  "max_rank_rhat": true,
+  "min_bulk_ess": true,
+  "min_tail_ess": true,
+  "sampling_divergences": true,
+  "finite_draws": true
+ },
+ "passed": true,
+ "ess_per_gradient": 0.003669076479190768,
+ "ess_per_gradient_sampling": 0.007966781414938541
+}
