@@ -1,0 +1,44 @@
+{
+  "schema": "funnel-defaults-30seed-v1",
+  "ledger_id": "WP53",
+  "status": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+  "frozen_utc": "2026-10-25",
+  "library_under_test": "wt/funnel-defaults fast-forwarded to main e89f54b9 before the build (includes f097391c: Init::default() = best_of(16), NonfinitePositionPolicy::RejectLeaf default). ALGORITHM_REVISION walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10. The house funnel check passes explicit starts, so the Init default does not enter; RejectLeaf is the live nonfinite policy and its rejection counts are recorded.",
+  "question": [
+    "Q1: is the shipped default's funnel tail estimate calibrated: is the distribution of z over 30 fresh seeds consistent with N(0,1), and what is the exceedance rate of |z| > 2?",
+    "Q2: does delta = 2 (the WP49 efficiency candidate) stay calibrated, and what does it cost in divergences and depth caps?",
+    "Q3: at the house 1,000/1,000 budget, how do default, delta 2 and delta 0.5 compare on the same seeds?"
+  ],
+  "change_under_test": "None in the library. Arms differ only in Tuning::max_error (delta); everything else is the shipped sampler default (Tuning::default(), Adaptation::default(), Metric::diagonal(), Limits::admit_worst_case()).",
+  "arms": {
+    "default": "Tuning::default() (delta 1)",
+    "delta2": "Tuning::default().max_error(2.0) (WP34/WP49 d2)",
+    "delta0.5": "Tuning::default().max_error(0.5) (WP42 d05)"
+  },
+  "target": "Neal's 10-D funnel, omega ~ N(0, 3^2), x_i | omega ~ N(0, exp(omega)); starts omega in {-3,-1,1,3}, x = 0; four chains, four threads.",
+  "statistic": "P(omega < -5) pooled over the 4 chains, exact 0.0477903522728147; z = (estimate - exact) / MCSE where MCSE = diagnostics::mcse_mean of the indicator (ArviZ-style; the house gate statistic). Also recorded: P(omega < -6) (exact 0.0227501319481792) and its z, batch-means z (40 batches per chain), omega variance (exact 9), rank R-hat / bulk / tail ESS of all 10 coordinates, retained divergences, depth caps, refinement exhaustions, invalid stops, nonfinite-position rejections, total and retained gradients, end-of-warmup step per chain, Posterior::chain_warnings().",
+  "seeds": [530101, 530102, 530103, 530104, 530105, 530106, 530107, 530108, 530109, 530110, 530111, 530112, 530113, 530114, 530115, 530116, 530117, 530118, 530119, 530120, 530121, 530122, 530123, 530124, 530125, 530126, 530127, 530128, 530129, 530130],
+  "seed_check": "git grep -lwE '5301(0[1-9]|[12][0-9]|30)' over every tracked file of main e89f54b9 (artifacts included): no hit; regex over 2,019 protocol.json / PREREGISTRATION.md files in C:/dev/owalnuts-wt/*/STUDIES and C:/dev/owalnuts/STUDIES: no hit.",
+  "blocks": {
+    "A": {"arms": ["default", "delta2"], "warmup": 2000, "draws": 20000, "role": "core; decides R1 and R2"},
+    "B": {"arms": ["default", "delta2", "delta0.5"], "warmup": 1000, "draws": 1000, "role": "companion at the house budget; descriptive except prediction P5. Coordinator scope rule: run B only if block A finishes within 2.5 h of the freeze, otherwise record it as not run."}
+  },
+  "run_order": "Block A: seeds ascending, within a seed arms in order default, delta2. Then block B: seeds ascending, within a seed default, delta2, delta0.5. One process per cell, strictly sequential, four threads. A cell that errors is recorded as an error file and counts as a failure (|z| > 2, not gross-safe); never rerun.",
+  "calibration_tests": "Over the 30 block-A z values per arm: exceedance count k = #{|z| > 2} with the exact binomial upper tail P(X >= k | n 30, p 0.0455); mean z with the test mean * sqrt(30) ~ N(0,1); sample sd (n-1) with the chi-square variance test (29 df, two-sided); one-sample Kolmogorov-Smirnov against N(0,1) (asymptotic Kolmogorov p). 'Consistent with N(0,1)' = all three p-values (mean, variance, KS) >= 0.05. The text histogram uses bins of width 1 on [-5, 5] with open end bins.",
+  "predictions": {
+    "P1_default_exceedance_seeds": [2, 6],
+    "P2_default_mean_z": [-0.4, 0.4],
+    "P2_default_sd_z": [0.7, 1.4],
+    "P3_delta2_exceedance_le_default_plus": 2,
+    "P4_delta2_divergences_le_x_default": 3.0,
+    "P4_definition": "block A total retained divergences over 30 cells; delta2 total <= 3 x default total (if default total is 0, held iff delta2 total is 0)",
+    "P5_block_B": "block B total retained divergences over 30 seeds: delta0.5 strictly fewest and delta2 strictly most (ties fail)"
+  },
+  "decision_rules": {
+    "R1": "If default's block-A exceedance rate exceeds 20 % (k > 6 of 30) or |mean z| > 0.5, the headline is a calibration failure of the shipped default, with the direction of bias (sign of mean z, and of the pooled tail-mass error).",
+    "R2": "Recommend delta = 2 as a default candidate for a posteriordb confirmation iff ALL of: (a) delta2 block-A exceedance count <= default's + 2; (b) |mean z (delta2)| <= 0.5; (c) pooled block-A retained divergence rate of delta2 = total retained divergences / (30 x 4 x 20,000) < 0.001.",
+    "no_flip": "No default changes in this study under any outcome; output is a safety verdict plus a recommendation."
+  },
+  "descriptive": "WP37A F3 gross safety per seed (zero retained divergences, rank R-hat(omega) <= 1.05, |P5 - exact| <= 0.025, |P6 - exact| <= 0.015, omega variance in [5, 13]); pooled tail mass across seeds; min bulk ESS per gradient; depth caps; end-of-warmup steps; chain_warnings counts by kind; at 1,000/1,000 also the house health gates (max rank R-hat <= 1.01, min bulk and tail ESS >= 400 over all 10 coordinates, zero retained divergences). Wall times are contended and labelled so.",
+  "pre_freeze_runs": "Non-evidence, disclosed: (1) default 2,000/20,000 seed 94902 reproduced WP49's cell exactly (z -4.21, 3,233,034 calls) both before and after the merge of main; (2) delta2 2,000/20,000 seed 94902 (z -0.09, pre-merge); (3) delta0.5 and default 1,000/1,000 seed 5 (pipeline checks). Outputs in the session scratchpad, uncommitted. The WP49 12-seed funnel table and WP42's 3-seed d05 row were known before the predictions were written (they are the task's predictions)."
+}
