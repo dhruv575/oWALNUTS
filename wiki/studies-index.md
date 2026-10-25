@@ -37,6 +37,7 @@ evidence cell. Every study has a ledger entry in the
 | `joint_default_v1` | WP31 | yes | Rule not met (C2 on two fail-everywhere models); four of five criteria hold; the flip was made post hoc and validated by WP32. |
 | `kernel_efficiency_v1` | WP30 | no | `cache_initial_evaluation` (bit-identical) and `MomentumSum` recommended for a preregistered rerun. |
 | `kernel_gap_v1` | WP30 | no | `MomentumSum` is the fix for the largest kernel-side gap (0.77x to 0.90x). |
+| [`lotka_volterra_stall_v1`](../STUDIES/lotka_volterra_stall_v1/README.md) | WP57 | yes | Mixed. 0/12 stalls at the new defaults vs 4/4 with uniform starts; a secondary-mode trap remains on 2/12 (R-hat 1.59). Neither `best_of(64)` nor an initial-phase depth cap fixes it; the S1 step rule flags 10/10 trapped chains, 0/139 healthy. |
 | [`metric_regularisation_scalefree_v1`](../STUDIES/metric_regularisation_scalefree_v1/README.md) | WP41 | yes | Not supported. Scale-free median regularisation is 1.007x (`ScaleFreeStanMedian` 0.949x); 2.06x on `sblrc` but 0.61x on `kidiq` and a funnel z of -3.02. Both stay opt-in; `Stan` stays the default. |
 | `neal_funnel_dual_averaging_diagnostic_v3` | pre-WP2 | yes | Preflighted, never authorised or sampled; no results. |
 | `neal_funnel_health_pilot_v1` | pre-WP2 | yes | No grid setting passed the health requirements; no selection. |
@@ -44,6 +45,7 @@ evidence cell. Every study has a ledger entry in the
 | [`nonfinite_policy_requalification_v1`](../STUDIES/nonfinite_policy_requalification_v1/README.md) | WP54 | yes | Rule passed. Bit-identical on 73/73 completed-abort cells; 75 vs 73 runs completed; `RejectLeaf` became the `sampler::Tuning` default. |
 | `nonfinite_position_policy_v1` | WP38 | yes | `NOT_QUALIFIED`; the health gate failed on the target for both arms. |
 | `numpyro_comparisons_v10_v1` | WP14 | yes | sspd-05 timing claim supported at a corrected 4x; per-work efficiency is parity; NumPyro under-covers the funnel neck. |
+| [`nutpie_per_gradient_gap_v1`](../STUDIES/nutpie_per_gradient_gap_v1/README.md) | WP58 | yes | Documentation only. nutpie's 1.70x ESS-per-gradient lead is warmup spend (44 %) and its mass matrix (transplant closes 44–60 %), not accounting (0.15 %) or refinement (5–7 %). Python `init=None` follow-up fix. |
 | [`options_flow_v1`](../STUDIES/options_flow_v1/README.md) | application workflow, 2026-10-03 | no | Exploratory uncertainty/precision and Python-interface tests; no broad speed or market-calibration qualification. PyMC nonfinite transport fixed; fixed Fisher geometry failed its screen. |
 | `outer_selection_bps_vs_multinomial_v1` | WP3-1 | yes | Biased progressive selection confirmed at 1.745x over exact multinomial; default stands. |
 | `paper_adaptation_robust_v1` | post-WP22 | yes | `zero-wide` clears the bar (7/7 models, 1.036x DA) and becomes paper-adaptation v4. |
@@ -57,12 +59,14 @@ evidence cell. Every study has a ledger entry in the
 | `posteriordb_bench_v4` | WP29 | yes | Eight levels are free; Stan regularisation alone loses five gates. |
 | `posteriordb_bench_v5` | WP32 | yes | Predictions 5/5: 42 of 51 against CmdStan 36 and nutpie 28 at 0.82x CmdStan per gradient. |
 | `posteriordb_bench_v6` | WP35 | yes | 45 of 51 on the temporary rescue default; the release rule fails on one |z| cell and one process fault. |
+| [`posteriordb_bench_v7`](../STUDIES/posteriordb_bench_v7/README.md) | WP56 | yes | Mixed. Post-WP51–54 defaults pass 43/51 house cells (CmdStan 34, nutpie 26) and 6/15 on five hard posteriors (CmdStan 7, nutpie 3), max passing |z| 3.82, funnel unbiased; release rule not met (0.708x CmdStan per gradient vs 0.75; wall 1.85x). Dense descriptive arm 18/18 at 13.4x. |
 | [`posteriordb_breadth_v1`](../STUDIES/posteriordb_breadth_v1/README.md) | WP46 | yes | Shipped defaults on 19 unseen posteriors: 40/42 on the reference tier, 8/15 gates-only; two new failure classes (box-constraint corner traps, silent funnel). No default change. |
 | [`python_callpath_v1`](../STUDIES/python_callpath_v1/README.md) | WP47 | yes | Merge rule met. Thread-state pinning (Python callables 1.14–1.90x at threads=4) and `from_jax` without `jnp.asarray` (2.05–2.59x), bit-identical in 102/102 cells; nutpie 1.6–2.4x more ESS per gradient. |
 | `rank_two_projected_gaussian_v1` | pre-WP2 | yes | Diagnostic; see ledger. |
 | `rank_two_projected_gaussian_v2` | pre-WP2 | yes | Pooled diagnostic; see ledger. |
 | `real_target_path_metric_v1` | WP4b | yes | Arm P 2.8x per call with the globals free, 50 to 200x with them frozen; the residual is global to path coupling. |
 | `refinement_role_v1` | WP34 | yes | No arm meets the rule; `da-d2` near miss at 1.070x; the leaf-error distribution is one smooth population. |
+| [`rescue_removal_paired_v1`](../STUDIES/rescue_removal_paired_v1/README.md) | WP61 | yes | Attribution only. Reinstalled `restart_from_best` is 1.023x, not the cause; seed variation explains 0.848 -> 0.708, and a 3-seed per-gradient figure is too noisy for a 0.75 release gate. |
 | `reverse_coarsening_order_v1` | WP37B | yes | Paused at 72 of 84 cells after a target fault; `KEEP_FINEST_TO_COARSEST`. |
 | `reverse_coarser_policy_v1` | WP39 | yes | `ZeroWeightBeyond` exact but 0.981x; step confound identified. |
 | `reverse_coarser_policy_v2` | WP39B | yes | 0.878x; truncation hypothesis not supported with or without the step confound. |
@@ -71,6 +75,7 @@ evidence cell. Every study has a ledger entry in the
 | `sspd11_confirmation_v1` | WP12 | yes | Arm I confirmed on sspd-11; arm P 2/3, not confirmed under the conjunctive rule. |
 | `sspd11_refreshed_block_v1` | WP16 | yes | Arm P confirmed 3/3 at 4,000 draws; per-window refresh not confirmed. |
 | `sspd_target_fatal_diag_v1` | WP37B follow-up | no | The fatal target error reproduces at initial step 0.5 and is fixed at 0.1. |
+| [`start_rule_paired_v1`](../STUDIES/start_rule_paired_v1/README.md) | WP60 | yes | KEEP. Best-of-16 is 1.061x uniform paired on six models, not the cause of the v6 -> v7 drop; gates 15/30 vs 18/30, `hmm_drive_0` second-mode chain on 2/5 seeds, named by `chain_warnings`. |
 | `step_collapse_v1` | WP27 | yes | Stan regularisation fixes `sblrc` (9.7x) but drops `earnings` gates; stays opt-in. |
 | [`thread_scaling_v1`](../STUDIES/thread_scaling_v1/README.md) | WP45 | yes | Mixed. Draws bit-identical across every thread count; contended C=16 speedups 4.6x / 3.9x / 2.8x, capped by contention and the slowest chain. Budget-CAS fix F1 not merged (0.92 at C=T=1). |
 | `uturn_default_v1` | WP26 | yes | `MomentumSum` alone is not the default: three of four criteria fail. |

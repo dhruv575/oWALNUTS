@@ -228,6 +228,16 @@ unchanged. Everything under Added is opt-in or observe-only.
 
 ### Evidence
 
+- **posteriordb v7** (WP56, `STUDIES/posteriordb_bench_v7`, defaults at
+  `f097391c`): 43/51 house cells against CmdStan 34 and nutpie 26, 6/15 on
+  five new hard posteriors against 7 and 3, all 66 oWALNUTS cells completed,
+  largest passing |z| 3.82, funnel z +1.69 / -0.59 / +0.84. ESS per
+  gradient 0.708x CmdStan over the 15 complete fixed-16 models (v6 0.848), so
+  the v6 release rule is not met. Paired reruns attribute the drop to seed
+  variation, not best-of-16 starts (1.061x, WP60) or rescue removal (1.023x,
+  WP61). The descriptive dense arm passed 18/18 at 13.4x the diagonal on six
+  correlated regressions (`diamonds` 67.5x).
+
 Windows BridgeStan static-runtime dispatch (WP50C–WP50E):
 
 - **Payoff.** WP50C Phase C: 3.2x (sblrc) and 4.0x (arK) contended sampling

@@ -2,7 +2,7 @@
 
 Ordered by expected value. Each names the evidence that opened it. Closed
 items keep their number so that study documents that cite "open question n"
-still resolve; new items from the WP41–WP55 round start at 11.
+still resolve; new items from the WP41–WP61 rounds start at 11.
 
 1. **The step the GP targets need is per-model, not a statistic.** WP40 and
    its two addenda (2026-09-06, 2026-09-07) showed that the healthy-model
@@ -35,7 +35,9 @@ still resolve; new items from the WP41–WP55 round start at 11.
    R-hat 1.003). WP49 then saw the default fail the funnel |z| check on 1 of
    12 seeds (z -4.21, `STUDIES/adaptive_delta_v1`). How often the default
    collapses or misses on the funnel needs more seeds before anything is
-   designed around it.
+   designed around it. posteriordb v7 had the funnel unbiased on all three
+   seeds (z +1.69, -0.59, +0.84), with per-chain steps from 0.009 to 0.2.
+   WP53 funnel 30-seed calibration: pending.
 4. **Closed as a warmup-statistic line (WP49): target-adaptive `delta`.** A
    rule driven by the warmup-window level-0 leaf-error tail does not qualify:
    the inverse-tail rule is 1.016x and the refined-fraction controller
@@ -61,11 +63,17 @@ still resolve; new items from the WP41–WP55 round start at 11.
    `lotka_volterra` freezes; the other 14 models are 0.862x. Still open:
    - **Healthy-model cost.** The 0.862x is driven by one `earnings` warmup
      step collapse and centered eight schools; the other 12 models are 1.01x.
-     Is it real or seed noise?
+     A paired rerun on six suspect models (WP60,
+     `STUDIES/start_rule_paired_v1`) puts best-of-16 at 1.061x uniform per
+     gradient, so it is not the cause of the v6 -> v7 drop (item 20). It
+     does cost gates there: 15/30 against 18/30.
    - **Hidden modes.** Best-of-16 produced one hidden-mode `hmm_drive_0` cell:
      46 second-mode retained draws at rank R-hat 1.0087, which only
      `chain_warnings` caught. Pooled over WP43 and WP52 that is 1 for best-of-16
-     against uniform's 0 (uniform had 1 *visible* failure instead).
+     against uniform's 0 (uniform had 1 *visible* failure instead). In WP60,
+     best-of-16 held one `hmm_drive_0` chain about 62 nats down in a second
+     mode on 2 of 5 fresh seeds (per-chain ESS 7–14), and `chain_warnings`
+     named it in both cells.
    - **Two-mode bias.** On a symmetric 0.7/0.3 two-Gaussian target, best-of-16
      raises single-basin four-chain starts from 12.8 % to 22.7 % of seeds. No
      mode was hidden on the 3 sampled seeds, partly because warmup crosses an
@@ -116,31 +124,50 @@ still resolve; new items from the WP41–WP55 round start at 11.
     `accel_gp` is 0.38x, 0/3 against the diagonal's 1/3 (R-hat 1.05–1.06).
     Whether longer runs, or a metric aimed at the length-scale coordinate,
     fix either is unmeasured; see also items 1 and 9.
-12. **`lotka_volterra` stalls** (WP54 side finding, WP44, WP48, WP51): with
-    the shipped sampler settings and `Init::uniform()` starts it stalls past
-    900 s on 4 of 13 seeds and finishes with R-hat 1.04–1.59 on 3 more; the
-    four timeouts happen under both nonfinite policies
-    (`STUDIES/nonfinite_policy_requalification_v1`). Earlier studies lost
-    single cells to the same timeout (WP44 seed 97464, WP48 seed 148101,
-    WP51 seed 151302). Best-of-16 starts passed this model on every seed in
-    WP43 (5/5) and WP52 (3/3); whether the new default start rule avoids the
-    stall in general has not been studied.
-13. **The per-gradient gap to nutpie on PyMC models** (WP47): nutpie gets
-    1.6–2.4x more ESS per gradient than oWALNUTS on all three models of
-    `STUDIES/python_callpath_v1` (the preregistered band was 0.6–1.6x; the
-    observed 1.63–2.35x fell outside it). `from_pymc(gil_free=True)` reaches
-    0.51–1.0x nutpie's ESS/s at one core. A kernel study of that gap was
-    recommended and has not been run.
+12. **`lotka_volterra`: the stall is gone; a secondary-mode trap remains**
+    (WP54 side finding, WP57). With `Init::uniform()` starts the model
+    stalled past 900 s on 4 of 13 seeds in WP54, under both nonfinite
+    policies. WP57 (`STUDIES/lotka_volterra_stall_v1`) found **0/12 stalls at
+    the new defaults** (best-of-16), against 4/4 on the WP54 stall seeds with
+    uniform starts, all at the 1,200 s cap. The failure that remains is a
+    trapped chain on 2 of 12 default seeds. It sits at log density about -430
+    against -137, 139–162 reference SD off, with R-hat 1.59. 95–99.5 % of its
+    transitions end refinement-exhausted and 6–43 % of its gradients are
+    zero-density `rk45` failures. It is not depth caps (at most 6.4 %) and
+    not per-call ODE cost. Neither `best_of(64)` (1/12 trapped, plus R-hat
+    1.039 on another seed) nor an initial-phase depth cap (the same 2/12)
+    fixes it. Open: the trap rate over many seeds, and the restart in
+    item 19.
+13. **The per-gradient gap to nutpie on PyMC models** (WP47, WP58): nutpie
+    gets 1.6–2.4x more ESS per gradient than oWALNUTS on all three models of
+    `STUDIES/python_callpath_v1`. WP58 (`STUDIES/nutpie_per_gradient_gap_v1`)
+    reproduced it (pooled 1.70x on the Python path, 1.64x on Rust) and
+    decomposed it. Gradient accounting is 0.15 % of the gap and WALNUTS
+    refinement 5–7 %. Warmup spend is 44 % (hier 83 %: 72 % of oWALNUTS's
+    gradients are warmup, against nutpie's 49 %). nutpie's mass matrix,
+    transplanted, closes 44 % (Python) / 60 % (Rust). So the cost is warmup
+    spend and nutpie's gradient-informed diagonal metric, not the kernel. On
+    eight schools the residual is mostly unexplained, and there nutpie
+    diverges (0/3 gates; 0/9 on eight_nc and `gp_pois_regr`, where
+    oWALNUTS passes 9/9). Open: an opt-in gradient-informed diagonal metric
+    and faster early windows (non-rule follow-ups; the transplant lost gates
+    on `gp_pois_regr` and `lotka_volterra`). The Python `init=None` default
+    now follows the Rust best-of-16 rule, after `init=None` failed all 12
+    Python `lotka_volterra` cells in WP58.
 14. **Fixed `delta = 2`** (WP34, WP37A, WP49; pending WP53): WP37A did not
     qualify it (funnel gates F3 and F4 failed). As WP49's control it is
     1.141x over posteriordb with 43 gates (1.067x without two seed
     pathologies, matching WP34's 1.070x), but it triples funnel divergences
     (34 against the default's 11 over 12 seeds). WP53 is the pending
     decision.
-15. **The silent funnel** (WP46, WP55): oWALNUTS can sample centred
-    hierarchical funnels with zero divergences, because refinement absorbs
-    the energy error. In WP55, 11 of 12 wrong positive cells had zero
-    retained divergences, and all 12 failed the R-hat / ESS gates. The
+15. **The silent funnel** (WP46, WP55, WP56): oWALNUTS can sample centred
+    hierarchical funnels with zero divergences. In WP55, 11 of 12 wrong
+    positive cells had zero retained divergences, and all 12 failed the
+    R-hat / ESS gates. WP46 attributed this to refinement absorbing the
+    energy error. posteriordb v7 does not support that reading: CmdStan and
+    nutpie also record zero retained divergences on all six of their
+    `seeds_centered` cells and fail on the same `sigma`. At this run length
+    plain NUTS gives no divergence signal there either. The
     refined-leaf rate is not the warning (sensitivity 0.667, specificity
     0.718 against 0.75 and 0.929 required); nothing ships
     (`STUDIES/silent_funnel_diagnostic_v1`). A future instrument needs
@@ -166,6 +193,33 @@ still resolve; new items from the WP41–WP55 round start at 11.
     at ~18 M CAS/s in a micro-bench; fix F1 was not merged
     (`STUDIES/thread_scaling_v1`). `RUN-QUIET.md` there is the idle-box rerun
     that would show whether it matters for sub-µs gradients.
+19. **Trapped-chain restart by the early step rule** (WP57, WP36). In WP57
+    the WP44 step rule, applied at the end of the first warmup stage (S1),
+    flagged 10/10 trapped or stalled `lotka_volterra` chains and 0 of 139
+    healthy chains, within 0.7–4.5 % of the wall; the density rule there had
+    26 false positives.
+    `chain_warnings` named the trapped chain in 5/5 completed trapped cells.
+    WP57's next step is to restart the flagged chain at the first slow-window
+    boundary. The objection is WP36's. A restart copies another chain's
+    state, so the independent-start reading of R-hat no longer holds, and
+    `restart_from_best` overwrote mapped origins in four cells. WP36 could
+    not bound the mode-destruction risk, and WP61 declined to recommend
+    restoring rescue for that reason. This is the step-only rescue that
+    item 7 lists as unmeasured. WP57 says it would need its own
+    confirmation.
+20. **The per-gradient release figure is seed-noisy** (WP56, WP60, WP61).
+    posteriordb v7 (`STUDIES/posteriordb_bench_v7`) passed 43/51 house cells
+    (CmdStan 34, nutpie 26) and 6/15 on the five hard posteriors (CmdStan 7,
+    nutpie 3). It failed the v6 release rule on the per-gradient clause:
+    0.708x CmdStan against 0.75, formally unevaluable because of one CmdStan
+    `lotka_volterra` error. The wall clause failed too (1.85x, Windows
+    owned worker). Paired reruns attribute the 0.848 -> 0.708 change neither
+    to best-of-16 starts (1.061x) nor to rescue removal (1.023x), but to seed
+    variation: the 3-seed geomean moves by about 0.1 between seed sets
+    (`STUDIES/rescue_removal_paired_v1`). Open: a breadth headline with more
+    seeds, or a seed interval, before a per-gradient threshold is used as a
+    release gate. Also open: the v7 per-model losses on `accel_gp` (0.35x
+    CmdStan), `one_comp` (0.50x) and `hmm_drive_0` (0.66x).
 
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the
@@ -175,4 +229,6 @@ healthy-model gap (WP40 and addenda); scale-free diagonal regularisation as
 the default (WP41); a lower fixed `delta` as the default (WP42);
 `Init::median_of` (WP43); an automatic dense switch from dimension and
 `max|corr|` (WP48); a warmup-window leaf-error rule for `delta` (WP49); the
-refined-leaf rate as a silent-funnel warning (WP55).
+refined-leaf rate as a silent-funnel warning (WP55); best-of-16 starts and
+rescue removal as the cause of the v6 -> v7 per-gradient drop (WP60, WP61);
+refinement as the cause of the nutpie gap (WP58).
