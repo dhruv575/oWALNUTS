@@ -151,6 +151,8 @@ def save_draws(model: str, arm: str, seed: int, samples: np.ndarray) -> None:
 def py_arm_config(arm: str, model: str, seed: int, dim: int):
     import owalnuts
 
+    arm = arm.removesuffix("-uinit")  # amendment A1: same arm, init="uniform"
+
     if arm == "py-default":
         return owalnuts.Tuning(), owalnuts.Adaptation(), None
     if arm == "py-delta2":
@@ -172,8 +174,10 @@ def run_owalnuts_py(model: str, arm: str, seed: int) -> dict:
     counter = Counter(fn)
     tuning, adaptation, mass = py_arm_config(arm, model, seed, dim)
     t = time.perf_counter()
+    uinit = arm.endswith("-uinit")
     res = owalnuts.sample(counter, dim, chains=CH, warmup=WU, draws=DR, seed=seed, threads=1,
-                          tuning=tuning, adaptation=adaptation, mass=mass)
+                          tuning=tuning, adaptation=adaptation, mass=mass, init="uniform" if uinit else None)
+    start_calls = counter.n - int(res.target_calls) if uinit else 0
     wall = time.perf_counter() - t
     chains = res.chains
     wt = lambda c, k: int(c[k]["target_calls_total"])  # noqa: E731
@@ -186,12 +190,12 @@ def run_owalnuts_py(model: str, arm: str, seed: int) -> dict:
     rec = {
         "model": model, "arm": arm, "seed": seed, "path": "python", "status": "ok", "wall_seconds": wall,
         "dimension": dim, "threads": 1,
-        "gradients_total": int(res.target_calls),
-        "gradients_sampling": g_samp, "gradients_warmup": g_warm, "gradients_start_selection": 0,
+        "gradients_total": int(res.target_calls) + start_calls, "init": "uniform" if uinit else "None (numpy uniform(-2,2))",
+        "gradients_sampling": g_samp, "gradients_warmup": g_warm, "gradients_start_selection": start_calls,
         "gradients_initial_evaluation": g_initial,
         "gradients_kernel_telemetry_total": g_kernel_total,
         "gradients_counted_callbacks": counter.n,
-        "accounting_check": {"transport_minus_counted": int(res.target_calls) - counter.n,
+        "accounting_check": {"transport_minus_counted": int(res.target_calls) + start_calls - counter.n,
                              "kernel_minus_counted": g_kernel_total - counter.n},
         "final_step_size": [float(c["metadata"]["final_step_size"]) for c in chains],
         "mean_depth": float(np.mean([np.asarray(c["depth"])[WU:].mean() for c in chains])),
@@ -385,7 +389,11 @@ def arms_for(model: str) -> list[str]:
 def plan() -> list[tuple[str, str, int]]:
     """Frozen order: seeds outer, models in protocol order, arms in protocol
     order (nutpie first: the *-nutpiemetric arms transplant its metric)."""
-    return [(m, a, s) for s in PROTOCOL["seeds"] for m in PROTOCOL["models"] for a in arms_for(m)]
+    steps = [(m, a, s) for s in PROTOCOL["seeds"] for m in PROTOCOL["models"] for a in arms_for(m)]
+    a1 = PROTOCOL.get("amendment_A1")
+    if a1:
+        steps += [(m, a, s) for s in PROTOCOL["seeds"] for m in a1["added_models"] for a in a1["added_arms"]]
+    return steps
 
 
 def cell_path(model: str, arm: str, seed: int) -> Path:

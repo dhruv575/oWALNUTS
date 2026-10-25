@@ -109,3 +109,18 @@ cells) and no fewer than 5/6, recommend a preregistered default-candidate
 study for that arm. Otherwise report the decomposition and recommend
 documentation only. The diagnostic arms do not trigger the rule. No default
 is changed by this study; failures are results and are not rerun.
+
+## Amendment A1 (committed after the seed-5858101 block, before every cell it adds)
+
+All four `lotka_volterra` py-* cells of seed 5858101 failed at transition 0:
+the package's `init=None` draws unchecked numpy uniform(-2, 2) starts, chain
+0's start is not evaluable (the ODE solve throws; the callable returns -inf)
+and `owalnuts.sample` raises "current position is not evaluable". These are
+results and stay recorded; the `init=None` cells of the later seeds run as
+preregistered. A1 appends, after the frozen 225-cell plan, four arms on
+`lotka_volterra` only — `py-default-uinit`, `py-delta2-uinit`,
+`py-levels1-uinit`, `py-nutpiemetric-uinit` — identical except
+`init="uniform"` (Stan's redraw rule); their start-search calls count in
+the total gradients. They stand in for the py-* arms on `lotka_volterra` in
+the Python-path statistics (P4). The decision rule's Python-path fractions
+are on the PyMC models and are unaffected.
