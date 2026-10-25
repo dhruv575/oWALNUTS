@@ -314,7 +314,7 @@ regression that CmdStan already samples cleanly still costs oWALNUTS
 | warmup / draws / chains | 1,000 / 1,000 / one per start | Stan's shape |
 | `Tuning::max_depth` | 10 | ablation over nine posteriordb models: 1.45x ESS per gradient and 17/18 gates against depth 8 [E7] |
 | `Tuning::step_size` (`h`) | 0.5 | initial macro step; dual averaging adapts it |
-| `Tuning::max_refinement_levels` | 8 | micro-steps down to `h / 256`; four levels halve the funnel's tail mass at the adapted step, eight are exact and never engage on Eight Schools or a 100-D Gaussian [E11] |
+| `Tuning::max_refinement_levels` | 8 | micro-steps down to `h / 128`; four levels halve the funnel's tail mass at the adapted step, eight are exact and never engage on Eight Schools or a 100-D Gaussian [E11] |
 | `Tuning::max_error` (`delta`) | 1 | energy-error threshold per macro step |
 | `Tuning::kernel_options` U-turn rule | `UTurnRule::MomentumSum` (Stan's generalised criterion) | **post-hoc default change after WP31**, validated by WP32: with Stan's metric prior it is 1.51x the endpoint rule per gradient over 17 posteriordb models; the frozen `v10` endpoint rule is `KernelOptions::default()` [E14, E15] |
 | `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75); warmup exhaustion rule `AcceptUnlessDivergent` [E10] |
