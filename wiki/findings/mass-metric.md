@@ -16,6 +16,7 @@ The diagonal metric the sampler adapts during warmup, and how its variances are 
 - **WP30** `STUDIES/kernel_gap_v1`: at CmdStan's own step, metric and starts, the kernel-side gap is leaves per orbit under the endpoint U-turn statistic; `MomentumSum` recovers 0.77x to 0.90x. This is the other half of the metric finding.
 - **WP31** `STUDIES/joint_default_v1`: the pair `MomentumSum` plus `Stan` regularisation. C1 held at 1.508x the default per gradient (rhosum alone 1.116, stanreg alone 1.257), 41 versus 35 gates, `earnings` 3.69x and 3/3, `sblrc` 9.12x, funnel and Eight Schools safe. The preregistered "no model below 0.85x" clause failed on `hmm_drive_0` (a mode lottery) and the centred eight schools (fails every arm). Mechanism of the interaction: `stanreg` alone on `earnings` installs mass entries of 9.5e4 to 9.8e4 (the Stan floor) because short endpoint-rule orbits leave the window variance unmeasured; under `MomentumSum` the window measures it and installs 5.8e3 to 6.2e3, which is CmdStan's 1.6e-4 variance.
 - **WP32** `STUDIES/posteriordb_bench_v5`: the post-hoc default change validated on fresh seeds against rerun CmdStan and nutpie. 42/51 gates versus 36 and 28, `sblrc` 0/3 to 3/3 at h 0.10 to 0.12, 2.01x the old default per gradient, no model below 0.8x, funnel exact. The honest per-gradient figure against CmdStan on healthy models is 0.82x.
+- **WP41** `STUDIES/metric_regularisation_scalefree_v1`: two opt-in scale-free rules (`ScaleFreeMedian`: `(n/(n+5)) var + (5/(n+5)) median`; `ScaleFreeStanMedian`: the same with Stan's 1e-3) against the default on 17 models x 3 fresh seeds. Geomean 1.007x and 0.949x; neither meets the rule (C2 `kidiq` 0.61x / centred eight schools 0.51x; `ScaleFreeMedian` funnel z -3.02 on one seed, `ScaleFreeStanMedian` 15/4/1 retained funnel divergences). Mechanism: Stan's absolute prior installs 9.8-11.9x the posterior variance on `sblrc`'s ~1e-6 coefficients and 4.3x on one `diamonds` coordinate (WP27's "CmdStan's 1.07e-5 is the posterior variance" was the regularised value); the scale-free rules install ~1.0x and give `sblrc` 2.06x / 1.61x at `h` 0.33-0.36. The median anchor over-states `kidiq`'s two small coordinates 8x and 22x (median ~2.5 of {33, 5, 0.0035, 0.0012}). Keep `Stan`.
 
 ## What worked
 
@@ -45,7 +46,7 @@ The diagonal metric the sampler adapts during warmup, and how its variances are 
 
 ## Open questions
 
-- A scale-free regularisation toward the window's median variance was named in WP27 as an alternative default candidate and has not been measured.
+- Closed by WP41: shrinking toward the window's median variance does not beat `Stan` (see the timeline). Open instead: an absolute floor sized to the smallest well-measured scale, which would keep `sblrc`'s 2x without `kidiq`'s loss.
 - `diamonds` at depth 10 is capped in every arm at h about 0.003 to 0.005 and is not a floor case; the depth cap itself is the item there (WP31, WP32).
 - The global-to-path scale coupling on state-space targets is the mechanism behind the arrowhead line; it needs a generalisation beyond a handful of globals, Python exposure and a preregistered confirmation (WP21).
 - A final-boundary-only rebuild of the path block from the longest window, or arm P with a calibrated globals diagonal, is the candidate production path named in WP16 and is unmeasured.

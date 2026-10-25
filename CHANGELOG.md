@@ -5,6 +5,21 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, target
 architecture and operating system (see the `walnutpie` module documentation).
 
+## [Unreleased]
+
+### Added
+
+- `walnutpie::DiagonalMetricRegularization::{ScaleFreeMedian, ScaleFreeStanMedian}`
+  (opt-in through `sampler::Adaptation::Custom` and the Python binding as
+  `"scale_free_median"` / `"scale_free_stan_median"`): shrink each window
+  variance toward the window's median variance instead of an absolute
+  constant. Not a default: WP41 (`STUDIES/metric_regularisation_scalefree_v1`)
+  measured 1.007x / 0.949x the `Stan` default per gradient over 17 posteriordb
+  models, 2.06x / 1.61x on `sblrc` (where `Stan`'s absolute prior installs
+  ~11x the posterior variance), 0.61x on `kidiq` for `ScaleFreeMedian` (a
+  two-scale target whose median over-states the small coordinates ~20x) and
+  a funnel z of -3.02 on one seed. Defaults and kernel fingerprints unchanged.
+
 ## [0.2.0] - 2026-09-04
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`
