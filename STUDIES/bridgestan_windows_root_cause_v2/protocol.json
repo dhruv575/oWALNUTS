@@ -1,0 +1,118 @@
+{
+  "schema": "bridgestan-windows-root-cause-v2",
+  "ledger_id": "WP50B",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-24",
+  "purpose": "2x2 process diagnostic: libwinpthread-1.dll source (Git for Windows copy vs WinLibs copy matching the toolchain that built the models) x launcher (PowerShell vs Git Bash), through the integration's original reproducing code path at commit 9edcbac. Diagnostic only; no fix is implemented.",
+  "forbidden_seeds": [
+    90101,
+    90102,
+    90103
+  ],
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "code_path": {
+    "commit": "9edcbac",
+    "description": "resident model/preload DLLs, scoped joined sampler pools, ReplicatedStanTarget with 4 concurrently evaluated replica modules on Windows (the bridgestan_owned_worker_v1 comparator, 16/180 0xC0000374)"
+  },
+  "model": {
+    "path": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+    "sha256": "29625697cfdef3e328601682ccd44cc9350791674dfc43f5ec5ddc503c90fccc",
+    "note": "WP50 rebuild (BridgeStan 2.9.0, Stan 2.39.0, WinLibs GCC 16.1.0, no STAN_THREADS); the prior studies' model binary no longer exists"
+  },
+  "data": {
+    "path": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+    "sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e"
+  },
+  "preload_note_dlls": [
+    "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll"
+  ],
+  "libwinpthread": {
+    "git": {
+      "path": "C:\\Program Files\\Git\\mingw64\\bin\\libwinpthread-1.dll",
+      "bytes": 63875,
+      "sha256": "8d7a192a8fbbccb0cebeac272701f66a580f493eff2336739a96144119260723"
+    },
+    "winlibs": {
+      "path": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libwinpthread-1.dll",
+      "bytes": 72171,
+      "sha256": "c29cbbe3a9c710df0dfecda4dbc1664b95658278511b961cbd2357c2a40d0494"
+    }
+  },
+  "libwinpthread_manipulation": "the chosen copy sits beside a byte-identical child exe in build/arms/<git|winlibs>/; the application directory is first in the Windows DLL search order, so it binds regardless of PATH. Verified per child from GetModuleFileNameW.",
+  "launchers": {
+    "powershell": {
+      "executable": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "invocation": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& '<exe>' <args>; exit $LASTEXITCODE\"",
+      "environment": "registry Machine;User PATH, no Git Bash variables (a fresh user PowerShell session)",
+      "exit_code_fidelity": "full NTSTATUS passed through"
+    },
+    "bash": {
+      "executable": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "invocation": "-l -c '\"$0\" \"$@\"; exit $?' <exe> <args>",
+      "environment": "same registry base; the Git Bash login profile then prepends its own directories (incl. Git mingw64\bin) as an interactive Git Bash session does",
+      "exit_code_fidelity": "MSYS maps NTSTATUS crashes to 127; true code recovered from Application Error Event 1000 correlated by child PID and exe path"
+    }
+  },
+  "child_shape": {
+    "shape": "sblrc",
+    "requested_replicas": 4,
+    "chains": 4,
+    "threads": 4,
+    "warmup": 4,
+    "retained": 4,
+    "note": "identical to the bridgestan_owned_worker_v1 comparator child (+ runtime-module logging)"
+  },
+  "seeds": {
+    "first": 50600001,
+    "last": 50600060,
+    "note": "each seed runs once in every one of the 4 cells (paired); exact-word search found base 50600000 unused"
+  },
+  "cell_order": [
+    "powershell/git",
+    "powershell/winlibs",
+    "bash/git",
+    "bash/winlibs"
+  ],
+  "ordering": "ascending seed; within seed i (0-based) the 4 cells run in cell_order rotated left by i mod 4 (balanced Latin square), strictly sequential",
+  "children_per_cell": 60,
+  "total_children": 240,
+  "timeout_seconds_per_child": 90,
+  "event_settle_seconds": 20,
+  "expected_heartbeats": [
+    "process/start",
+    "load/before",
+    "load/after",
+    "initialization/before",
+    "initialization/after",
+    "sampling/before",
+    "sampling/after",
+    "result_write/before",
+    "result_write/after",
+    "drop/before",
+    "drop/after",
+    "process/complete"
+  ],
+  "power": {
+    "assumed_rate": 0.089,
+    "source": "bridgestan_owned_worker_v1 comparator 16/180 heap corruption (sblrc-only 10/60 fault union = 0.167)",
+    "P_at_least_one_per_cell_n60": {
+      "0.089": 0.9963,
+      "0.167": 1.0,
+      "0.044": 0.9328,
+      "0.022": 0.7368
+    },
+    "margin_test": "one-sided Fisher exact on factor margins (120 vs 120): k faults vs 0 gives p=0.030 at k=5; P(Bin(120,0.089)>=5)=0.985"
+  },
+  "classification": {
+    "fault": "launcher timeout, nonzero launcher return code, missing/non-ok raw output, heartbeat sequence != expected, or a correlated Application Error Event 1000",
+    "heap_corruption": "launcher return code 0xC0000374 or correlated Event 1000 exception code c0000374",
+    "manipulation_failure": "loaded libwinpthread-1.dll path not inside the cell's launch directory"
+  },
+  "decision_rule": {
+    "cell_reproduces": ">=1 fault",
+    "factor_implicated": "both cells at one level reproduce, both cells at the other level have 0 faults, and the one-sided Fisher margin p<0.05 in that direction",
+    "interaction": "exactly one cell reproduces, or the pattern fits neither main effect: reported as an interaction / single-cell result with its counts",
+    "no_reproduction": "all 4 cells 0 faults: non-reproduction on this code path; neither factor implicated; per-cell 95% upper bound 4.9%",
+    "no_fix": "no fix is implemented in this study; mechanism and recommended fix reported for a separate decision"
+  }
+}
