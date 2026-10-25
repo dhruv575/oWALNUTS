@@ -1,0 +1,276 @@
+{
+  "schema": "dense-metric-posteriordb-v1",
+  "ledger_id": "WP48",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "target_models": [
+    "diamonds-diamonds",
+    "mcycle_gp-accel_gp",
+    "gp_pois_regr-gp_pois_regr"
+  ],
+  "arms": {
+    "owalnuts-diag": "owalnuts::sampler defaults: Metric::diagonal(), Adaptation::default() (Stan diagonal regularisation, MomentumSum U-turn, no chain rescue)",
+    "owalnuts-dense": "Metric::dense() + Adaptation::default(), literally as shipped (MeanVarianceShrinkage, DenseWarmupSeeding::Legacy), plus the WP48 admission fix without which it cannot run 1,000 draws",
+    "owalnuts-dense-seeded": "Metric::dense() + Adaptation::Custom(WarmupConfig::new(0.8) + DEFAULT_WARMUP_EXHAUSTION + DEFAULT_METRIC_REGULARIZATION + DenseWarmupSeeding::PerTransition); shipped shrinkage",
+    "owalnuts-dense-stan": "as owalnuts-dense-seeded plus DenseMetricRegularization::Stan"
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "seeds": [
+    148101,
+    148102,
+    148103
+  ],
+  "cell_timeout_seconds": 2700,
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "cmdstan_dense": {
+    "cmdstan_home": "C:\\dev\\polyscope\\STUDIES\\matched_competitor_eight_schools_v38\\cmdstan\\cmdstan-2.39.0",
+    "version": "2.39.0",
+    "driver": "cmdstanpy 1.3.0",
+    "settings": "defaults except metric=dense_e",
+    "models": "target_models",
+    "seeds": "same three seeds"
+  },
+  "funnel": {
+    "arms": [
+      "dense",
+      "dense-seeded",
+      "dense-stan"
+    ],
+    "seeds": [
+      148101,
+      148102,
+      148103
+    ],
+    "chains": 4,
+    "warmup": 2000,
+    "draws": 20000,
+    "gate": "|MCSE z| <= 2 for P(omega < -5) on every seed"
+  },
+  "auto_rule": {
+    "D_star": 100,
+    "c_star": 0.6,
+    "statistic": "seed-median over the three owalnuts-diag cells of the maximum absolute off-diagonal correlation of the unconstrained draws, first 500 retained draws per chain pooled (stand-in for the last slow window; same metric)",
+    "winner": "seed-median dense/diag min-bulk-ESS-per-gradient >= 1.5 and dense gate passes >= diag",
+    "loser": "ratio < 1.0 or dense gate passes < diag",
+    "neutral": "otherwise",
+    "recommend_iff": "the predictor selects every winner and no loser, at least one winner exists, and the arm passes D3 (funnel); evaluated separately for each dense arm"
+  },
+  "frozen_utc": "2026-10-24",
+  "decision_rules": {
+    "D1": "For each target model and each dense arm (owalnuts-dense, owalnuts-dense-seeded, owalnuts-dense-stan) separately: advised iff seed-median dense/diag min-bulk-ESS-per-gradient >= 1.5 AND dense gate passes >= diag gate passes (of 3). Verdict per arm: supported if 3/3 targets advised, mixed if 1-2, not supported if 0. Advice for dense-seeded / dense-stan is conditional on adopting the respective opt-ins.",
+    "D2": "auto_rule as specified",
+    "D3": "Each dense arm is funnel-harmless iff |MCSE z| <= 2 for P(omega < -5) on every seed; failure blocks an auto recommendation for that arm."
+  },
+  "predictions": {
+    "per_model_ess_per_gradient_ratio_vs_diag": {
+      "eight_schools-eight_schools_noncentered": {
+        "dense": 1.0,
+        "dense_stan": 1.0,
+        "basis": "no parameter-block reference columns; noncentered posterior nearly independent",
+        "class_dense": "neutral",
+        "class_dense_stan": "neutral",
+        "d": 10,
+        "ref_max_abs_corr": null
+      },
+      "eight_schools-eight_schools_centered": {
+        "dense": 1.0,
+        "dense_stan": 1.0,
+        "basis": "funnel; a global linear metric cannot fix it; formula would say 2.6/3.8",
+        "class_dense": "neutral or loser (0/3 gates every arm)",
+        "class_dense_stan": "neutral or loser (0/3 gates every arm)",
+        "d": 10,
+        "ref_max_abs_corr": 0.6066770634191293
+      },
+      "diamonds-diamonds": {
+        "dense": 9.9,
+        "dense_stan": 94.62,
+        "basis": "formula",
+        "class_dense": "winner",
+        "class_dense_stan": "winner",
+        "d": 26,
+        "ref_max_abs_corr": 0.8881350967395318
+      },
+      "earnings-logearn_interaction": {
+        "dense": 0.2,
+        "dense_stan": 9.75,
+        "basis": "formula",
+        "class_dense": "loser",
+        "class_dense_stan": "winner",
+        "d": 5,
+        "ref_max_abs_corr": 0.9992010998172018,
+        "gates_dense_below_diag": true
+      },
+      "mesquite-logmesquite_logvash": {
+        "dense": 6.86,
+        "dense_stan": 17.39,
+        "basis": "formula",
+        "class_dense": "winner",
+        "class_dense_stan": "winner",
+        "d": 7,
+        "ref_max_abs_corr": 0.951726939973203
+      },
+      "kidiq-kidscore_momhsiq": {
+        "dense": 0.14,
+        "dense_stan": 10.97,
+        "basis": "formula",
+        "class_dense": "loser",
+        "class_dense_stan": "winner",
+        "d": 4,
+        "ref_max_abs_corr": 0.9462286114510863,
+        "gates_dense_below_diag": true
+      },
+      "sblrc-blr": {
+        "dense": 0.39,
+        "dense_stan": 0.83,
+        "basis": "formula",
+        "class_dense": "loser",
+        "class_dense_stan": "loser",
+        "d": 6,
+        "ref_max_abs_corr": 0.8155705937146528,
+        "gates_dense_below_diag": true
+      },
+      "nes2000-nes": {
+        "dense": 2.61,
+        "dense_stan": 14.8,
+        "basis": "formula",
+        "class_dense": "winner",
+        "class_dense_stan": "winner",
+        "d": 10,
+        "ref_max_abs_corr": 0.7839497774566706
+      },
+      "arK-arK": {
+        "dense": 4.48,
+        "dense_stan": 8.22,
+        "basis": "formula",
+        "class_dense": "winner",
+        "class_dense_stan": "winner",
+        "d": 7,
+        "ref_max_abs_corr": 0.6291378941333566
+      },
+      "arma-arma11": {
+        "dense": 0.85,
+        "dense_stan": 1.06,
+        "basis": "formula",
+        "class_dense": "loser",
+        "class_dense_stan": "neutral",
+        "d": 4,
+        "ref_max_abs_corr": 0.25963857546071356
+      },
+      "garch-garch11": {
+        "dense": 1.37,
+        "dense_stan": 2.37,
+        "basis": "formula",
+        "class_dense": "neutral",
+        "class_dense_stan": "winner",
+        "d": 4,
+        "ref_max_abs_corr": 0.7009092703996044
+      },
+      "gp_pois_regr-gp_pois_regr": {
+        "dense": 1.2,
+        "dense_stan": 1.3,
+        "basis": "no parameter-block reference columns (f_tilde absent); noncentered GP, alpha/rho-f_tilde coupling is nonlinear",
+        "class_dense": "neutral",
+        "class_dense_stan": "neutral",
+        "d": 13,
+        "ref_max_abs_corr": null
+      },
+      "hmm_example-hmm_example": {
+        "dense": 1.08,
+        "dense_stan": 3.48,
+        "basis": "formula",
+        "class_dense": "neutral",
+        "class_dense_stan": "winner",
+        "d": 4,
+        "ref_max_abs_corr": 0.894215334550252
+      },
+      "bball_drive_event_0-hmm_drive_0": {
+        "dense": 0.66,
+        "dense_stan": 1.0,
+        "basis": "formula; mode lottery decides gates",
+        "class_dense": "loser",
+        "class_dense_stan": "neutral",
+        "d": 6,
+        "ref_max_abs_corr": 0.15217935810426378
+      },
+      "one_comp_mm_elim_abs-one_comp_mm_elim_abs": {
+        "dense": 0.93,
+        "dense_stan": 1.82,
+        "basis": "formula",
+        "class_dense": "loser",
+        "class_dense_stan": "winner",
+        "d": 4,
+        "ref_max_abs_corr": 0.6355116953351911
+      },
+      "hudson_lynx_hare-lotka_volterra": {
+        "dense": 5.34,
+        "dense_stan": 12.59,
+        "basis": "formula",
+        "class_dense": "winner",
+        "class_dense_stan": "winner",
+        "d": 8,
+        "ref_max_abs_corr": 0.954990591676039
+      },
+      "mcycle_gp-accel_gp": {
+        "dense": 0.69,
+        "dense_stan": 2.0,
+        "basis": "formula says 0.69 / 12.3; the sdgp/lscale-to-zgp scale coupling is nonlinear, so dense-stan is tempered to 2.0",
+        "class_dense": "loser",
+        "class_dense_stan": "winner",
+        "d": 66,
+        "ref_max_abs_corr": 0.7697253803156707
+      }
+    },
+    "prediction_rule": "Formula: sqrt(kappa_diag / (kappa_dense * w)), kappa from the reference-posterior unconstrained covariance with each estimator applied at n = 500 (artifacts/reference-geometry.json), w = ((1 + sqrt(d/n)) / (1 - sqrt(d/n)))^2 the Wishart estimation-noise factor for a dense estimate. A per-model ratio prediction holds if the observed seed-median ratio is within a factor 2 of it.",
+    "P1": "geometric-mean ESS/gradient ratio versus diag over the 17 models: owalnuts-dense-stan >= 2.0 (formula about 4); owalnuts-dense-seeded between 0.6 and 1.5 (formula 1.22); owalnuts-dense (literal) <= 0.7",
+    "P2": "owalnuts-dense-seeded loses gate passes versus diag on earnings, kidiq and sblrc (scale-dependent floor), and its installed kappa on those three exceeds the diag arm's",
+    "P3": "diamonds: diag depth-cap fraction >= 0.05 and step <= 0.006; dense-stan zero depth caps in at least 2 of 3 seeds and median step >= 0.05; dense-seeded median step between diag and dense-stan",
+    "P4": "D1: owalnuts-dense (literal) not supported; owalnuts-dense-seeded mixed (diamonds advised only); owalnuts-dense-stan mixed (diamonds and accel_gp advised, gp_pois_regr not)",
+    "P5": "D2: no auto rule for any dense arm at c* = 0.6. For dense-stan the predicted false positive is sblrc (max|corr| 0.82; Stan's absolute 1e-3 prior floors its 1e-5 variances); for dense-seeded several (earnings, kidiq, sblrc, accel_gp); for the literal arm most selected models",
+    "P6": "funnel: dense-seeded and dense-stan |z| <= 2 on every seed; literal dense reported (no prediction of the sign; its warmup is not ergodic)",
+    "P7": "kernel overhead per gradient (dense minus diag, iid Gaussian, quiet minimum): <= 0.5 us at d <= 10 and <= 3 us at d = 66",
+    "P8": "CmdStan dense_e: on diamonds >= 20x the v6 CmdStan diag_e ESS/gradient; owalnuts-dense-stan between 0.6x and 1.2x CmdStan dense_e ESS/gradient on each target model where both pass",
+    "per_model_ess_per_gradient_ratio_vs_diag_note": "'dense' entries in the table are now the dense-seeded predictions (shipped shrinkage, fresh seeds); 'dense_stan' unchanged. The literal owalnuts-dense arm (Legacy seeding) has no formula: predicted ratio < 1.0 on at least 12 of 17 models and gate passes <= diag on every model.",
+    "P9": "whitened kappa (median over chains, seed median): dense-stan below diag on every model whose reference kappa_stan_diag_oracle >= 50 except sblrc; literal dense above diag on at least 12 of 17 models"
+  },
+  "library_changes_before_freeze": {
+    "admission_fix": "sample_chains_dense_with_target_budget_and_control raises each chain's inner max_target_evaluations to the admitted ceiling; before it, Metric::dense() under the default Limits::admit_worst_case() failed every run with >= ~430 retained draws at depth 10 / eight levels ('target-evaluation bound exceeds its resource limit (chain 0)'). Admission only; draws unchanged. Regression test tests/sampler_api.rs::dense_metric_runs_default_length_under_worst_case_admission.",
+    "DenseWarmupSeeding": "opt-in PerTransition; default Legacy reproduces existing runs. Legacy seed splitmix64(seed ^ transition ^ segment_index) is constant over warmup because transition == segment_index.",
+    "DenseMetricRegularization": "opt-in Stan; default MeanVarianceShrinkage.",
+    "tests": "cargo test: all suites pass, kernel_fingerprint unchanged"
+  },
+  "pre_freeze_smoke_tests": "Non-evidence seed 1 only, artifacts not kept: eight_schools_noncentered and arma11 for diag, literal dense and (Legacy-seeded) dense-stan before the seeding fix (literal dense kappa 184 and 170 against diag 2.2 and 1.8; this exposed the seed defect), and eight_schools_noncentered for dense-seeded and dense-stan after it (kappa 2.1 and 2.2). They informed the seeding fix and the decision to add the dense-seeded arm, nothing else.",
+  "run_order": "models in listed order; arms owalnuts-diag, owalnuts-dense, owalnuts-dense-seeded, owalnuts-dense-stan; seeds ascending; strictly sequential; then CmdStan dense_e on the target models; then the funnel; then the cost decomposition"
+}
