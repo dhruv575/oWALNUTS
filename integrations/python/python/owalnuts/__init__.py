@@ -114,7 +114,9 @@ class Adaptation:
     which applies ``DEFAULT_WARMUP_EXHAUSTION`` and
     ``DEFAULT_METRIC_REGULARIZATION`` (``DEFAULTS["warmup_exhaustion_rule"]``,
     ``DEFAULTS["metric_regularization"]``). ``metric_regularization``
-    (``"stan"`` | ``"toward_unit"``) overrides the diagonal-metric prior;
+    (``"stan"`` | ``"toward_unit"`` | ``"scale_free_median"`` |
+    ``"scale_free_stan_median"``, the last two opt-in from WP41) overrides the
+    diagonal-metric prior;
     ``adapt_step_size=False`` and an override are expressed through
     ``Adaptation::Custom`` with the same warmup exhaustion rule."""
 

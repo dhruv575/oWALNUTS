@@ -471,6 +471,8 @@ fn regularization_name(regularization: DiagonalMetricRegularization) -> &'static
     match regularization {
         DiagonalMetricRegularization::TowardUnit => "toward_unit",
         DiagonalMetricRegularization::Stan => "stan",
+        DiagonalMetricRegularization::ScaleFreeMedian => "scale_free_median",
+        DiagonalMetricRegularization::ScaleFreeStanMedian => "scale_free_stan_median",
         _ => "unknown",
     }
 }
@@ -479,8 +481,10 @@ fn parse_regularization(name: &str) -> PyResult<DiagonalMetricRegularization> {
     match name {
         "toward_unit" => Ok(DiagonalMetricRegularization::TowardUnit),
         "stan" => Ok(DiagonalMetricRegularization::Stan),
+        "scale_free_median" => Ok(DiagonalMetricRegularization::ScaleFreeMedian),
+        "scale_free_stan_median" => Ok(DiagonalMetricRegularization::ScaleFreeStanMedian),
         other => Err(value_error(format!(
-            "unknown metric_regularization {other:?} (toward_unit | stan)"
+            "unknown metric_regularization {other:?} (toward_unit | stan | scale_free_median | scale_free_stan_median)"
         ))),
     }
 }
