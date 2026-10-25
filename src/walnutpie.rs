@@ -563,6 +563,23 @@ pub enum DiagonalMetricRegularization {
     TowardUnit,
     /// Stan's `(n / (n + 5)) * var + 1e-3 * (5 / (n + 5))`.
     Stan,
+    /// Scale-free shrinkage toward the window's median variance (opt-in,
+    /// `STUDIES/metric_regularisation_scalefree_v1`, WP41):
+    /// `(n / (n + 5)) * var_i + (5 / (n + 5)) * m`, where `m` is the median
+    /// over coordinates of the window variances `var_j`. Rescaling every
+    /// coordinate by a common factor rescales the installed variances by the
+    /// same factor (this is [`Self::TowardUnit`] with the unit replaced by
+    /// `m`). A coordinate whose window variance is zero (the chain did not
+    /// move in it) is installed at `(5 / (n + 5)) * m`. If `m` is not finite
+    /// and positive (more than half the coordinates did not move), the anchor
+    /// falls back to `1`, i.e. to [`Self::TowardUnit`] for that window.
+    ScaleFreeMedian,
+    /// Stan's rule made scale-free (opt-in, WP41):
+    /// `(n / (n + 5)) * var_i + 1e-3 * (5 / (n + 5)) * m` with `m` the
+    /// window's median variance as in [`Self::ScaleFreeMedian`]; identical to
+    /// [`Self::Stan`] when `m = 1`. If `m` is not finite and positive the
+    /// anchor falls back to `1`, i.e. to [`Self::Stan`] for that window.
+    ScaleFreeStanMedian,
 }
 
 /// Identity of the opt-in JMLR Appendix C adaptation rules.
@@ -5902,6 +5919,30 @@ impl DiagonalVariance {
         }
     }
 
+    /// The median over coordinates of the window variances `m2 / (n - 1)`
+    /// (mean of the two middle values for an even dimension), or `1` when
+    /// that median is not finite and positive. Used by the scale-free
+    /// regularisations; requires `count >= 2`.
+    fn median_variance_anchor(&self) -> f64 {
+        let denominator = self.count as f64 - 1.0;
+        let mut variances: Vec<f64> = self.m2.iter().map(|m2| m2 / denominator).collect();
+        if variances.is_empty() {
+            return 1.0;
+        }
+        variances.sort_by(f64::total_cmp);
+        let mid = variances.len() / 2;
+        let median = if variances.len() % 2 == 1 {
+            variances[mid]
+        } else {
+            0.5 * (variances[mid - 1] + variances[mid])
+        };
+        if median.is_finite() && median > 0.0 {
+            median
+        } else {
+            1.0
+        }
+    }
+
     fn regularized_mass(&self, regularization: DiagonalMetricRegularization) -> Option<Vec<f64>> {
         if self.count < 2 {
             return None;
@@ -5910,6 +5951,12 @@ impl DiagonalVariance {
         let prior = match regularization {
             DiagonalMetricRegularization::TowardUnit => 5.0 / (n + 5.0),
             DiagonalMetricRegularization::Stan => 1.0e-3 * (5.0 / (n + 5.0)),
+            DiagonalMetricRegularization::ScaleFreeMedian => {
+                self.median_variance_anchor() * (5.0 / (n + 5.0))
+            }
+            DiagonalMetricRegularization::ScaleFreeStanMedian => {
+                1.0e-3 * self.median_variance_anchor() * (5.0 / (n + 5.0))
+            }
         };
         Some(
             self.m2
@@ -13291,6 +13338,59 @@ mod tests {
         assert!((unit - expected_unit).abs() < 1.0e-9 * expected_unit);
         assert!((stan - expected_stan).abs() < 1.0e-9 * expected_stan);
         assert!(stan > 100.0 * unit);
+    }
+
+    #[test]
+    fn scale_free_metric_regularisations_match_the_formula_and_are_scale_free() {
+        // Three coordinates at scales 1e-3, 1, 1e2 (times the same pattern),
+        // plus a fourth that never moves.
+        let values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let scales = [1.0e-3, 1.0, 1.0e2];
+        let build = |factor: f64| {
+            let mut variance = DiagonalVariance::new(4);
+            for value in values {
+                let mut point: Vec<f64> = scales.iter().map(|s| factor * s * value).collect();
+                point.push(factor * 0.5);
+                variance.update(&point);
+            }
+            variance
+        };
+        let n: f64 = 10.0;
+        let base: f64 = 9.166_666_666_666_666;
+        let window: Vec<f64> = scales.iter().map(|s| s * s * base).chain([0.0]).collect();
+        // Median of {0, 1e-6 b, b, 1e4 b} is the mean of the middle two.
+        let median = 0.5 * (window[0] + window[1]);
+        for (rule, weight) in [
+            (DiagonalMetricRegularization::ScaleFreeMedian, 1.0),
+            (DiagonalMetricRegularization::ScaleFreeStanMedian, 1.0e-3),
+        ] {
+            let mass = build(1.0).regularized_mass(rule).unwrap();
+            for (installed, var) in mass.iter().zip(&window) {
+                let expected =
+                    ((n / (n + 5.0)) * var + weight * median * (5.0 / (n + 5.0))).recip();
+                assert!((installed - expected).abs() < 1.0e-9 * expected, "{rule:?}");
+            }
+            // Rescaling every coordinate by 1e-4 rescales every installed
+            // variance by 1e-8: the mass by 1e8.
+            let scaled = build(1.0e-4).regularized_mass(rule).unwrap();
+            for (a, b) in scaled.iter().zip(&mass) {
+                assert!((a / b - 1.0e8).abs() < 1.0e-6 * 1.0e8, "{rule:?}");
+            }
+        }
+        // With more than half of the coordinates unmeasured the anchor falls
+        // back to 1: the absolute rule the variant generalises.
+        let mut stuck = DiagonalVariance::new(3);
+        for value in values {
+            stuck.update(&[0.01 * value, 2.0, 3.0]);
+        }
+        assert_eq!(
+            stuck.regularized_mass(DiagonalMetricRegularization::ScaleFreeMedian),
+            stuck.regularized_mass(DiagonalMetricRegularization::TowardUnit)
+        );
+        assert_eq!(
+            stuck.regularized_mass(DiagonalMetricRegularization::ScaleFreeStanMedian),
+            stuck.regularized_mass(DiagonalMetricRegularization::Stan)
+        );
     }
 
     #[test]

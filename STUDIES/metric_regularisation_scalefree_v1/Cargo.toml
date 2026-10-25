@@ -1,0 +1,21 @@
+[package]
+name = "metric-regularisation-scalefree-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "oWALNUTS arms of the preregistered scale-free diagonal-metric regularisation study (WP41): Stan's absolute prior versus shrinkage toward the window's median variance; posteriordb 17-model screen and Neal's funnel"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "posteriordb-cell"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]
