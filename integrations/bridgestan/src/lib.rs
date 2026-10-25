@@ -554,6 +554,14 @@ impl NativeTarget {
     ) -> Result<f64, TargetError> {
         #[cfg(windows)]
         let _process_guard = process_guard(self.process_lock);
+        // Windows buffer contract: the owned worker evaluates into a fresh
+        // zeroed buffer and copies all of it back, so on a Stan exception
+        // (which leaves the buffer unwritten) the caller sees zeros, not its
+        // own prefill. Zeroing here gives direct static-runtime replicas
+        // byte-identical (logp, gradient) outputs on every outcome; for the
+        // owned worker the buffer is already zero, so nothing changes there.
+        #[cfg(windows)]
+        gradient.fill(0.0);
         let model = &self
             .loaded
             .as_ref()

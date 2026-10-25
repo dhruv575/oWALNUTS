@@ -127,3 +127,119 @@ fn dynamic_runtime_dlls_fall_back_to_the_owned_worker() {
         assert_eq!(target.execution(), Execution::OwnedSerialised);
     }
 }
+
+/// One evaluation as bits: `Ok(logp)` or the error kind and message, plus the
+/// gradient buffer the caller sees afterwards.
+type Observed = (Result<u64, (String, String)>, Vec<u64>);
+
+fn observe(target: &ReplicatedStanTarget, q: &[f64], prefill: f64) -> Observed {
+    let mut g = vec![prefill; q.len()];
+    let outcome = target
+        .log_density_gradient(q, &mut g)
+        .map(f64::to_bits)
+        .map_err(|e| (format!("{:?}", e.kind()), e.message().to_owned()));
+    (outcome, g.iter().map(|x| x.to_bits()).collect())
+}
+
+/// Positions that fail recoverably, mixed with ordinary ones. `sigma` is the
+/// last unconstrained coordinate of sblrc/arK: -1000 gives `sigma = 0` and a
+/// NaN coordinate fails the argument checks (both Stan exceptions, which
+/// leave the gradient unwritten); +1000 gives `sigma = inf` and a `-inf` log
+/// density with a written gradient.
+fn throwing_positions(dimension: usize) -> Vec<Vec<f64>> {
+    let mut out = Vec::new();
+    for base in positions(dimension).into_iter().take(4) {
+        out.push(base.clone());
+        for bad in [1000.0, -1000.0] {
+            let mut q = base.clone();
+            q[dimension - 1] = bad;
+            out.push(q);
+        }
+        let mut q = base;
+        q[0] = f64::NAN;
+        out.push(q);
+    }
+    out
+}
+
+/// WP50E parity: on a recoverable Stan exception the owned worker returns a
+/// zeroed gradient buffer; the direct static-runtime dispatch must return the
+/// same bytes, whatever the caller prefilled (the kernel prefills NaN).
+#[test]
+fn recoverable_stan_exceptions_have_identical_outputs_under_both_dispatches() {
+    let Some((model, tbb, data)) = static_assets() else {
+        return;
+    };
+    let owned = ReplicatedStanTarget::load(&model, std::slice::from_ref(&tbb), Some(&data), 1, 4)
+        .expect("owned load");
+    let concurrent = ReplicatedStanTarget::load_with_options(
+        &model,
+        std::slice::from_ref(&tbb),
+        Some(&data),
+        1,
+        4,
+        &ReplicatedOptions::concurrent_if_static_runtime(),
+    )
+    .expect("concurrent load");
+    assert_eq!(concurrent.execution(), Execution::ReplicatedConcurrent);
+    if cfg!(windows) {
+        assert_eq!(owned.execution(), Execution::OwnedSerialised);
+    }
+
+    let qs = throwing_positions(owned.dimension());
+    let prefills = [f64::NAN, -7.25, f64::INFINITY];
+    let expected: Vec<Vec<Observed>> = prefills
+        .iter()
+        .map(|&p| qs.iter().map(|q| observe(&owned, q, p)).collect())
+        .collect();
+    let stan_exceptions = expected[0]
+        .iter()
+        .filter(|(outcome, _)| {
+            outcome.as_ref().is_err_and(|(kind, message)| {
+                kind == "Recoverable" && message.starts_with("stan exception")
+            })
+        })
+        .count();
+    let recoverable = expected[0].iter().filter(|(o, _)| o.is_err()).count();
+    assert_eq!((stan_exceptions, recoverable), (8, 12), "{:?}", expected[0]);
+    if cfg!(windows) {
+        // The owned worker's documented contract: the buffer does not depend
+        // on the caller's prefill, and is zero after a Stan exception.
+        for observed in &expected[1..] {
+            assert_eq!(observed, &expected[0]);
+        }
+        for (outcome, g) in &expected[0] {
+            if outcome
+                .as_ref()
+                .is_err_and(|(_, message)| message.starts_with("stan exception"))
+            {
+                assert!(g.iter().all(|&bits| bits == 0), "{g:?}");
+            }
+        }
+    }
+
+    // Single thread, then four threads so every replica is exercised.
+    for (p, want) in prefills.iter().zip(&expected) {
+        let got: Vec<Observed> = qs.iter().map(|q| observe(&concurrent, q, *p)).collect();
+        assert_eq!(&got, want, "prefill {p}");
+    }
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| {
+                for _ in 0..25 {
+                    for (p, want) in prefills.iter().zip(&expected) {
+                        for (q, w) in qs.iter().zip(want) {
+                            assert_eq!(&observe(&concurrent, q, *p), w, "prefill {p}");
+                        }
+                    }
+                }
+            });
+        }
+    });
+    if cfg!(windows) {
+        assert_eq!(
+            concurrent.recoverable_failures(),
+            owned.recoverable_failures() * 101
+        );
+    }
+}

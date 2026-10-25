@@ -26,6 +26,14 @@ architecture and operating system (see the `walnutpie` module documentation).
   - **Defaults:** `ReplicatedStanTarget::load` and
     `ReplicatedOptions::default()` are unchanged and keep the owned worker.
     Off Windows the option has no effect.
+  - **Output parity:** both Windows dispatches return byte-identical
+    `(logp, gradient)` on every outcome, including recoverable failures.
+    The owned worker's contract is kept as is: the gradient buffer is zeroed
+    before each native call, so after a Stan exception the caller sees zeros
+    whatever it prefilled. Direct replicas now zero the buffer too (see
+    Fixed). Tested by `tests/static_runtime.rs`
+    (`recoverable_stan_exceptions_have_identical_outputs_under_both_dispatches`)
+    with the WP50C static sblrc and arK DLLs.
 - `integrations/bridgestan/tools/build_static_runtime.py` builds model DLLs
   and a private `tbb.dll` with the mingw runtime linked statically. Log
   densities and gradients are bit-identical to stock builds (WP50C Phase A).
@@ -40,8 +48,30 @@ architecture and operating system (see the `walnutpie` module documentation).
     sampler-reported nonfinite-position error, not a crash.
   - Dynamic DLLs on the same target: 4/300 crashes.
   - Dynamic DLLs under the owned worker: 0/300.
-- **Status.** The option stays opt-in, and is not a candidate for the default,
-  until the static fault is classified by a deterministic replay.
+- **Replay.** WP50E, `STUDIES/bridgestan_windows_root_cause_v5`: the single
+  WP50D static fault (seed 50801734) reproduced 6/6 under both dispatches,
+  plus 3/3 with the original exe. It is the same `Numerical` "nonfinite
+  target position" error each time, from an integrator overflow in early
+  warmup. The shipped `Abort` policy stops it before the target is called,
+  so it is designed sampler behaviour, not a native fault. The frozen verdict
+  was `NOT_ESTABLISHED`: the cross-dispatch stream hash differed, and the
+  only difference was the gradient buffer on 1,512 recoverable evaluations
+  (fixed below). Positions, energies, call counts and draws were
+  bit-identical, including under `RejectLeaf`.
+- **Status.** The option stays opt-in and is not a candidate for the default.
+  WP50D's frozen verdict is not supported. Reading the WP50E replay as
+  dispatch-independent puts the static native-fault count at 0/1000, but the
+  coordinator has not yet accepted that reading.
+
+### Fixed
+
+- `owalnuts-bridgestan` (Windows, opt-in dispatch only): after a
+  recoverable Stan exception, direct static-runtime replicas left the
+  caller's gradient prefill in the buffer (NaN from the kernel), where the
+  owned worker returns zeros. `NativeTarget::evaluate_unlocked` now zeroes
+  the gradient buffer on Windows before the native call. The owned worker
+  already evaluates into a zeroed buffer, so its outputs, and the default
+  path's retained draws, are unchanged. Off Windows nothing changes.
 
 ## [0.2.0] - 2026-09-04
 
