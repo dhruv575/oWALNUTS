@@ -40,6 +40,41 @@ Measurements: `STUDIES/posteriordb_bench_v1/artifacts/wall-gap/README.md`.
 .\.venv-bs\Scripts\python -c "import bridgestan.compile as c; c.compile_model('bridgestan/models/eight_schools.stan')"
 ```
 
+### Windows GNU: static mingw runtime (recommended)
+
+A stock Windows build resolves the mingw runtime DLLs through the DLL search
+order, and therefore through whatever PATH the launching shell has:
+
+- the model DLL imports `libwinpthread-1.dll`;
+- the stock `tbb.dll` imports `libgcc_s_seh-1.dll` and `libstdc++-6.dll`.
+
+A PowerShell session binds the WinLibs copies; a Git Bash session binds Git's.
+The post-sampling `STATUS_HEAP_CORRUPTION` reproduced only with one of those
+sets (`STUDIES/bridgestan_windows_root_cause_v2`).
+
+`tools/build_static_runtime.py` removes that dependence. It works on copies
+and never modifies the shared `~/.bridgestan` tree.
+
+```powershell
+python tools\build_static_runtime.py --out <dir> --tbb path\to\model.stan [more.stan ...]
+```
+
+- **Model DLLs.** Compiled with the make override
+  `LDLIBS_OS=-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic`.
+  `LDLIBS_OS` is Stan Math's per-OS link-library slot. Plain `-static` does
+  not work, because it also forces a static `-ltbb`.
+- **`tbb.dll`.** A private `<dir>/tbb/tbb.dll` is built from a copy of Stan
+  Math's `tbb_2020.3`, using Stan Math's own `Makefile.tbb` invocation with
+  `LDFLAGS=-static-libgcc -static-libstdc++ <static winpthread> -Wl,--exclude-libs,ALL`.
+  Its export table equals the stock one. Pass it as the preload, e.g.
+  `StanTarget::load(so, &[private_tbb], ...)`, instead of
+  `default_preload()`. The model's `tbb.dll` import then binds to it.
+- **Verification.** The tool hard-fails if any product still imports one of
+  the three runtime DLLs, and writes `static-runtime-manifest.json`.
+- **Numerics are unchanged.** Static and stock builds give bit-identical log
+  densities and gradients (`STUDIES/bridgestan_windows_root_cause_v3`,
+  Phase A).
+
 A library built without `STAN_THREADS` has one global autodiff stack per
 *loaded module*, so a single `StanTarget` serialises its evaluations through
 a mutex (shared by every `StanTarget` loaded from the same file).

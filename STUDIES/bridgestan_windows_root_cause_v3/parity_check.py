@@ -43,7 +43,11 @@ def mapped_modules() -> dict:
 
 def child(tbb: str, model: str, data: str) -> None:
     import numpy as np
-    ctypes.CDLL(tbb)  # full-path preload; the model's tbb.dll import binds to it
+    # Full-path preload; the model's tbb.dll import binds to it. winmode=0 uses
+    # the legacy search order (incl. PATH) for the stock tbb.dll's own
+    # libgcc_s_seh/libstdc++ dependencies; with the default safe search the
+    # stock tbb.dll cannot load at all (attempt 1, preserved in artifacts).
+    ctypes.CDLL(tbb, winmode=0)
     import bridgestan as bs
     sm = bs.StanModel(model, data=Path(data).read_text(encoding="utf-8"), seed=50700000,
                       capture_stan_prints=False)
