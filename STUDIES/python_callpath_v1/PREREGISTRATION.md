@@ -212,3 +212,25 @@ The selection rule and decision rule are unchanged; F6 joins F1–F5. For the
 `pymc` / `pymc-numba` t4 arms a baseline timeout counts as ESS/s = 0 (any
 completing fix cell satisfies the 1.3x criterion), and the paired ratio is
 reported for seed `4747001` only.
+
+## Amendment A2 (post hoc; frozen after the first `hier / cfunc` cells failed, before any supplementary cell)
+
+The phase-1 `hier / cfunc` cells fail at transition 0 with `raw target wrote
+a nonfinite gradient element (NaN)`: the raw C ABI (`RawTarget`) treats a
+finite log density with a nonfinite gradient as fatal, whereas the callable
+transport's default `nonfinite="zero_density"` turns any nonfinite value or
+gradient into a recoverable zero-density proposal (and `from_pymc(gil_free=True)`
+guards its cfunc the same way). My cfunc wrapper did not guard. The failed
+cells stand as results (a naive cfunc port of a callable that samples fine
+can fail on the first diverging leapfrog — a usability finding the README
+must state); they are not rerun.
+
+Supplementary arm, run after phase 1 as phase `phase1b` (same seeds, same
+cells, `baseline` build, interleaved with fresh `py-njit` and `cfunc` cells
+for a contemporaneous wall reference): **`cfunc-guarded`** = the same njit
+kernel in a cfunc that zeroes the gradient and returns `-inf` when the value
+or any gradient element is nonfinite (exactly the callable path's default
+policy). Predictions: `cfunc-guarded` ≡ `py-njit` (bit-identical) on every
+target, seed and thread count, and ≡ `cfunc` wherever `cfunc` completes;
+`cfunc-guarded` replaces `cfunc` as the compiled reference in P1/P5 and as
+the untouched control arm of phase 2.
