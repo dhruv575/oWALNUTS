@@ -1,0 +1,145 @@
+{
+ "model": "eight",
+ "arm": "rs-nutslike",
+ "seed": 5858102,
+ "path": "rust",
+ "status": "ok",
+ "wall_seconds": 0.0172977,
+ "dimension": 10,
+ "threads": 4,
+ "gradients_total": 67633,
+ "gradients_sampling": 28365,
+ "gradients_warmup": 39204,
+ "gradients_start_selection": 64,
+ "gradients_initial_evaluation": 4,
+ "gradients_kernel_telemetry_total": 67569,
+ "gradients_counted_callbacks": 67633,
+ "accounting_check": {
+  "kernel_plus_start_minus_counted": 0,
+  "posterior_total_minus_kernel": 0
+ },
+ "final_step_size": [
+  0.49837021815033955,
+  0.5378417512040156,
+  0.44873652613836384,
+  0.495423190706761
+ ],
+ "mean_depth": 2.99425,
+ "mean_gradients_per_transition": 7.09125,
+ "mean_leaves_built": 7.091000000000001,
+ "mean_orbit_states": 7.829999999999999,
+ "mean_macro_length": 3.5009623057809707,
+ "fraction_selected_refined": 0.0,
+ "retained_reverse_calls": 0,
+ "retained_leaves_built": 28364,
+ "retained_refinement_level_built": [
+  28364,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "max_depth_stops": 0,
+ "refinement_exhaustion_stops": 1,
+ "acceptance_statistic": 0.8012558699844239,
+ "acceptance_statistic_note": "mean of the arm's own dual-averaging statistic over the last 100 warmup transitions (retained transitions are not captured by the facade)",
+ "mass_diagonal": [
+  [
+   0.09463032515937463,
+   0.6851319557478339,
+   1.0544586620683511,
+   1.1602264502302553,
+   1.1633799325306104,
+   1.1390212325284919,
+   1.3146457531932392,
+   1.2364535351705048,
+   1.1574412198230466,
+   1.049103289456628
+  ],
+  [
+   0.0874490952750166,
+   0.8695069334575749,
+   1.190482810475729,
+   1.0011333074054194,
+   1.1613771561510862,
+   1.1980795469978511,
+   1.2637979281689578,
+   0.9908709224735995,
+   1.253049983377051,
+   0.9949013319421034
+  ],
+  [
+   0.09920407069119783,
+   0.7630464629914894,
+   1.072137599464818,
+   1.1453204483031942,
+   1.0007076466387599,
+   1.159220624674793,
+   1.3766882431915468,
+   0.9639389087166996,
+   1.3811655613334564,
+   1.0921418727044967
+  ],
+  [
+   0.09674042923205427,
+   0.7968727777447742,
+   0.9868869498710494,
+   1.2535356087276754,
+   1.1104945902004564,
+   1.2510010125611533,
+   1.163942416910922,
+   1.3367042846384398,
+   1.122145644190872,
+   1.2349000418259575
+  ]
+ ],
+ "tuning": {
+  "divergence_threshold": 1000.0,
+  "exhaustion": "AcceptUnlessDivergent",
+  "max_depth": 10,
+  "max_error": 1.0,
+  "max_refinement_levels": 1,
+  "step_size": 0.5,
+  "u_turn": "MomentumSum"
+ },
+ "adaptation": "Custom(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: MeanTrajectoryAcceptance, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: None })",
+ "init": {
+  "candidates": 16,
+  "evaluations_per_chain": [
+   16,
+   16,
+   16,
+   16
+  ],
+  "max_attempts": 100,
+  "radius": 2.0,
+  "rule": "sampler::Init::default() via candidate_starts",
+  "start_log_densities": [
+   -6.823306058934983,
+   -6.529679595599034,
+   -8.17673117065898,
+   -4.361063829164782
+  ]
+ },
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "min_bulk_ess": 2399.6039812830527,
+ "argmin_bulk": "q1",
+ "min_tail_ess": 1997.5328175246777,
+ "max_rhat": 1.0029900293504597,
+ "finite_draws": true,
+ "divergences": 1,
+ "gates": {
+  "max_rank_rhat": true,
+  "min_bulk_ess": true,
+  "min_tail_ess": true,
+  "sampling_divergences": false,
+  "finite_draws": true
+ },
+ "passed": false,
+ "ess_per_gradient": 0.03547978030374303,
+ "ess_per_gradient_sampling": 0.08459735523649049
+}

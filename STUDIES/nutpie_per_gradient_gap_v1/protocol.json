@@ -1,0 +1,130 @@
+{
+ "study": "nutpie_per_gradient_gap_v1",
+ "ledger_id": "WP58",
+ "frozen": "2026-10-25, before the first evidence cell (smoke checks on seed 1 only, outside artifacts/)",
+ "base_commit": "f097391c",
+ "question": "Decompose the 1.6-2.4x min-bulk-ESS-per-gradient advantage of nutpie 0.16.8 over oWALNUTS on the WP47 PyMC models into gradient accounting, model class, kernel refinement (levels, delta) and adaptation (step-size statistic, mass matrix).",
+ "seeds": [
+  5858101,
+  5858102,
+  5858103
+ ],
+ "seed_check": "exact-word git grep over every local branch (main and all wt/*) found none of 5858101-5858103",
+ "models": [
+  "gauss100",
+  "eight",
+  "hier",
+  "eight_nc",
+  "gp_pois_regr",
+  "lotka_volterra"
+ ],
+ "pymc_models": [
+  "gauss100",
+  "eight",
+  "hier"
+ ],
+ "stan_models": {
+  "eight_nc": "eight_schools__eight_schools_noncentered",
+  "gp_pois_regr": "gp_pois_regr__gp_pois_regr",
+  "lotka_volterra": "hudson_lynx_hare__lotka_volterra"
+ },
+ "model_sources": {
+  "pymc": "callpath_targets.py copied verbatim from STUDIES/python_callpath_v1 (WP47): same PyMC models, same hier data seed 4747900; the Rust harness implements the same densities natively (models/hier_data.json written from callpath_targets.hier_data()); checked equal to the numpy densities to 1e-11 in the gradient",
+  "stan": "BridgeStan *_model.so + .data.json + .stan copied from C:/dev/owalnuts-wt/dense-metric/STUDIES/dense_metric_posteriordb_v1/models (sibling build of the same posteriordb sources)",
+  "posteriordb_selection_rule": "from STUDIES/posteriordb_bench_v6/artifacts/summary.json: the two models with the largest seed-median owalnuts-da / nutpie min-bulk-ESS-per-gradient ratio among models where owalnuts-da passed 3/3 gates and nutpie's seed-median min bulk ESS >= 100 (excludes hmm_drive_0, nutpie ESS 17, and accel_gp, owalnuts 1/3): gp_pois_regr (1.056) and lotka_volterra (1.046). eight_nc (v6 ratio 0.671) is the bridge model: the same model as the PyMC 'eight' in Stan's parametrisation, run through the Stan paths",
+  "v6_note": "v6's owalnuts-da / nutpie geomean was 0.900 over 15 models and only four models were above 1; the brief's '0.6-1.6x' range is not what v6 records"
+ },
+ "sampler": {
+  "chains": 4,
+  "warmup": 1000,
+  "draws": 1000
+ },
+ "python_threads": 1,
+ "python_threads_note": "Python callables use threads=1 (WP47: a callable holds the GIL, threads>1 is slower); nutpie cores=1",
+ "rust_threads": 4,
+ "python_nutpie_arms": [
+  "nutpie",
+  "nutpie-counted",
+  "nutpie-drawmetric"
+ ],
+ "python_owalnuts_arms": [
+  "py-default",
+  "py-delta2",
+  "py-levels1",
+  "py-nutpiemetric"
+ ],
+ "rust_arms": [
+  "rs-default",
+  "rs-delta2",
+  "rs-levels1",
+  "rs-meanaccept",
+  "rs-nutslike",
+  "rs-nutpiemetric"
+ ],
+ "arm_definitions": {
+  "nutpie": "PyMC models: nutpie.compile_pymc_model(model) (numba backend), as WP47. Stan models: nutpie.from_pyfunc around the bridgestan callable (counted). nutpie.sample(draws=1000, tune=1000, chains=4, cores=1, seed, store_mass_matrix=True); nutpie defaults otherwise (target_accept 0.8, gradient-based diagonal mass matrix)",
+  "nutpie-counted": "PyMC models only: nutpie.from_pyfunc around the same from_pymc callable the py-* arms use, wrapped in a call counter; uniform(-2,2) starts. Verifies nutpie's n_steps against counted callbacks",
+  "nutpie-drawmetric": "as nutpie with use_grad_based_mass_matrix=False (nutpie's draw-variance mass matrix, closer to Stan/oWALNUTS)",
+  "py-default": "owalnuts.sample(counted callable, threads=1) at the package defaults (f097391c); init=None (numpy uniform(-2,2) starts, no target evaluations). Callable: owalnuts.from_pymc(model) (PyMC) or a bridgestan StanModel.log_density_gradient callable, propto=False, jacobian=True, Stan exception -> zero density (Stan models)",
+  "py-delta2": "py-default with Tuning(max_error=2.0)",
+  "py-levels1": "py-default with Tuning(max_refinement_levels=1): only the coarsest level; a leaf whose local energy error exceeds delta stops the orbit (retained exhaustion rule 'stop')",
+  "py-nutpiemetric": "py-default with mass = 1 / (chain-mean final nutpie mass_matrix_inv of the same model and seed) and Adaptation(adapt_mass=False): step adaptation only",
+  "rs-default": "Rust gap-harness, sampler::Sampler defaults at f097391c (Tuning::default, Adaptation::default, Metric::diagonal), starts from Init::default() = best_of(16) via candidate_starts, threads=4",
+  "rs-delta2": "rs-default with Tuning::max_error(2.0)",
+  "rs-levels1": "rs-default with Tuning::max_refinement_levels(1)",
+  "rs-meanaccept": "rs-default with Adaptation::Custom(WarmupConfig::new(0.8).with_dual_averaging_acceptance(MeanTrajectoryAcceptance) + DEFAULT_WARMUP_EXHAUSTION + DEFAULT_METRIC_REGULARIZATION): only the dual-averaging statistic changes, from the per-leaf coarse endpoint exp(-|dH_local|) to Stan's accept_stat__",
+  "rs-nutslike": "rs-meanaccept with max_refinement_levels(1) and the retained exhaustion rule AcceptUnlessDivergent (a leaf is kept unless H rises > 1000 above H_0): the closest the facade gets to Stan/nutpie NUTS",
+  "rs-nutpiemetric": "rs-default with Metric::fixed_diagonal(1 / chain-mean final nutpie mass_matrix_inv), step adaptation only"
+ },
+ "order": "seeds outer; models in 'models' order; arms in the order python_nutpie_arms (minus nutpie-counted on Stan models), python_owalnuts_arms, rust_arms. Strictly sequential, one cell at a time. nutpie runs first because the *-nutpiemetric arms transplant its metric.",
+ "per_cell_record": "gradients total / warmup / sampling / start selection / initial evaluation, counted callbacks and the reported count, min bulk and tail ESS and max rank R-hat over the functionals, divergences, mean tree depth, mean gradients per retained transition, mean leaves built (oWALNUTS), fraction of selected leaves refined, retained reverse-check calls, final step size per chain, acceptance statistic (nutpie mean_tree_accept over draws; Rust harness: the arm's own dual-averaging statistic over the last 100 warmup transitions; the Python package exposes none), ESS per gradient (total and sampling-only)",
+ "functionals": "every unconstrained coordinate, plus theta_1..theta_8 for both Eight Schools parametrisations; ESS, R-hat by owalnuts.summary (matches ArviZ to 1e-6)",
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0
+ },
+ "statistic": "per (model, arm): geometric mean over the three seeds of min bulk ESS / total gradients (warmup + sampling + start selection + initial evaluations; nutpie: n_steps warmup + sampling). gap(model) = ln(ESS/grad nutpie) - ln(ESS/grad default) on the same path (py-default for the Python path, rs-default for the Rust path; nutpie is the same arm for both). Fraction of the gap closed by arm X: f_X = [ln(X) - ln(default)] / gap, pooled over a model set as the sum of numerators over the sum of gaps.",
+ "decomposition": {
+  "accounting": "A = |ln(reported nutpie/default ratio) - ln(callback-verified ratio)| / reported gap, pooled over the PyMC models on the Python path; the verified ratio uses counted callbacks for py-default and the nutpie-counted arm's counted/n_steps factor applied to nutpie. Start selection (0 calls in Python, best-of-16 in Rust) is reported as the difference between the Python and Rust default gaps that it explains.",
+  "model_class": "descriptive: the default gap on the PyMC models vs on gp_pois_regr / lotka_volterra, with the eight / eight_nc bridge (same model, PyMC callable vs Stan) on both paths",
+  "kernel": "f for py-levels1, py-delta2, rs-levels1, rs-delta2",
+  "adaptation": "f for rs-meanaccept (step statistic), py-/rs-nutpiemetric (mass matrix), and the nutpie-side counterpart ln(nutpie) - ln(nutpie-drawmetric) as a fraction of the gap; rs-nutslike reports what remains when the kernel and statistic are both NUTS-like"
+ },
+ "predictions": {
+  "P1": "accounting explains < 15 % of the PyMC-model gap (A < 0.15)",
+  "P2": "py-levels1 recovers at least half of the gap on the PyMC models (pooled f >= 0.5)",
+  "P3": "py-delta2 recovers less than py-levels1 on the PyMC models (pooled f_delta2 < f_levels1)",
+  "P4": "on gp_pois_regr and lotka_volterra, owalnuts-default stays >= 0.9x nutpie per gradient (each model, both paths)",
+  "P5": "(own) the step-size statistic is the largest single adaptation factor: rs-meanaccept pooled f on the PyMC models >= 0.5 and larger than rs-nutpiemetric's",
+  "P6": "(own) the mass matrix explains little on gauss100 (|f_nutpiemetric| < 0.25 there, the identity is already optimal) and less than the step statistic on hier",
+  "P7": "(own) the gap on the bridge model eight_nc (Rust path) is within a factor 1.25 of the PyMC eight gap (Python path): the path is not the cause",
+  "P8": "(own) the Rust and Python default ESS per gradient agree within 0.8-1.25x on every PyMC model (start selection costs 64 calls, < 1 % of a run)"
+ },
+ "decision_rule": "FROZEN. If py-levels1 or py-delta2 closes >= 50 % of the pooled gap on the three PyMC models (Python path) AND the same arm on the Rust path passes at least as many gate cells as rs-default on gp_pois_regr + lotka_volterra (6 cells) with no fewer than 5/6, recommend a preregistered default-candidate study for that arm. Otherwise report the decomposition and recommend documentation only. The diagnostic arms (meanaccept, nutslike, nutpiemetric, nutpie-drawmetric) do not trigger the rule; any follow-up they suggest is reported as a separate, non-rule recommendation. No default is changed by this study.",
+ "cell_timeout_seconds": 1800,
+ "pytensor_compiledir": "C:/Users/dhruv/AppData/Local/Temp/claude/C--dev-owalnuts/1f373de9-31a5-456c-a915-e435ff4ab78a/scratchpad/pytensor-wp58",
+ "environment": {
+  "python": "CPython 3.11 (uv), study venv STUDIES/nutpie_per_gradient_gap_v1/.venv (not committed)",
+  "packages": "numpy 2.4.6, numba 0.67.0, llvmlite 0.49.0, pymc 5.28.5, pytensor 2.38.2, nutpie 0.16.8, arviz 0.23.4, bridgestan 2.9.0, maturin 1.15.0 (WP47's versions)",
+  "owalnuts_extension": "maturin develop --release (GNU 1.88 toolchain) from this worktree at f097391c",
+  "rust_harness": "STUDIES/nutpie_per_gradient_gap_v1/rust (gap-harness), cargo build --release, GNU 1.88 toolchain"
+ },
+ "amendment_A1": {
+  "committed": "2026-10-25, after the seed-5858101 block and before any cell it adds",
+  "trigger": "all four lotka_volterra py-* cells of seed 5858101 failed at transition 0: the package's init=None draws unchecked numpy uniform(-2,2) starts and chain 0's start is not evaluable (the ODE solve throws, the callable returns -inf), so owalnuts.sample raises 'current position is not evaluable'. These cells are results and stay as recorded; the init=None lotka_volterra cells of the later seeds run as preregistered.",
+  "added_arms": [
+   "py-default-uinit",
+   "py-delta2-uinit",
+   "py-levels1-uinit",
+   "py-nutpiemetric-uinit"
+  ],
+  "added_models": [
+   "lotka_volterra"
+  ],
+  "definition": "the same arm with init='uniform' (owalnuts::sampler::Init::uniform, Stan's rule: redraw up to 100 times until finite); gradients_total = counted callbacks including the start search, which is reported as gradients_start_selection",
+  "order": "appended after the frozen 225-cell plan: seeds outer, the four arms in this order",
+  "use": "replaces the py-* arms on lotka_volterra in the Python-path statistics (P4 Python path); the rule's Python-path fractions are on the PyMC models and are unaffected"
+ }
+}

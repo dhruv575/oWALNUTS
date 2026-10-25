@@ -1,0 +1,137 @@
+{
+ "model": "lotka_volterra",
+ "arm": "rs-nutslike",
+ "seed": 5858103,
+ "path": "rust",
+ "status": "ok",
+ "wall_seconds": 32.4088928,
+ "dimension": 8,
+ "threads": 4,
+ "gradients_total": 282788,
+ "gradients_sampling": 142636,
+ "gradients_warmup": 140070,
+ "gradients_start_selection": 82,
+ "gradients_initial_evaluation": 4,
+ "gradients_kernel_telemetry_total": 282706,
+ "gradients_counted_callbacks": 282788,
+ "accounting_check": {
+  "kernel_plus_start_minus_counted": 0,
+  "posterior_total_minus_kernel": 0
+ },
+ "final_step_size": [
+  0.116720162735467,
+  0.10803635405914704,
+  0.10770738704372354,
+  0.09221167114920206
+ ],
+ "mean_depth": 5.08125,
+ "mean_gradients_per_transition": 35.659,
+ "mean_leaves_built": 35.659000000000006,
+ "mean_orbit_states": 29.9185,
+ "mean_macro_length": 3.753063680688133,
+ "fraction_selected_refined": 0.0,
+ "retained_reverse_calls": 0,
+ "retained_leaves_built": 142636,
+ "retained_refinement_level_built": [
+  142636,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "max_depth_stops": 0,
+ "refinement_exhaustion_stops": 0,
+ "acceptance_statistic": 0.7962470751171369,
+ "acceptance_statistic_note": "mean of the arm's own dual-averaging statistic over the last 100 warmup transitions (retained transitions are not captured by the facade)",
+ "mass_diagonal": [
+  [
+   81.17346453940219,
+   46.97475725324163,
+   85.73712198266276,
+   48.38967939605531,
+   138.16914510065115,
+   134.1206804610968,
+   37.33581962632317,
+   38.110664305350575
+  ],
+  [
+   73.3735832324034,
+   41.87425743997456,
+   77.90930672727117,
+   46.18294967106105,
+   143.72389577181022,
+   134.46188131800133,
+   39.51141195742887,
+   36.422807090018
+  ],
+  [
+   76.94665937379138,
+   41.56103451424534,
+   83.13348648894112,
+   49.620699402162266,
+   128.9313004529068,
+   116.9088794030481,
+   36.741931995653815,
+   32.4407334267059
+  ],
+  [
+   69.5168418239897,
+   37.826071596151145,
+   73.77212549882942,
+   45.65775119227911,
+   170.41020334376557,
+   141.36131541933597,
+   34.86109433272771,
+   37.94529138371978
+  ]
+ ],
+ "tuning": {
+  "divergence_threshold": 1000.0,
+  "exhaustion": "AcceptUnlessDivergent",
+  "max_depth": 10,
+  "max_error": 1.0,
+  "max_refinement_levels": 1,
+  "step_size": 0.5,
+  "u_turn": "MomentumSum"
+ },
+ "adaptation": "Custom(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: MeanTrajectoryAcceptance, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: None })",
+ "init": {
+  "candidates": 16,
+  "evaluations_per_chain": [
+   23,
+   20,
+   18,
+   21
+  ],
+  "max_attempts": 100,
+  "radius": 2.0,
+  "rule": "sampler::Init::default() via candidate_starts",
+  "start_log_densities": [
+   -326.3966583551615,
+   -384.10950187387306,
+   -301.42047895037206,
+   -717.3296192047712
+  ]
+ },
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "min_bulk_ess": 1037.6002055105632,
+ "argmin_bulk": "q2",
+ "min_tail_ess": 1556.0703402984661,
+ "max_rhat": 1.001376965621894,
+ "finite_draws": true,
+ "divergences": 0,
+ "gates": {
+  "max_rank_rhat": true,
+  "min_bulk_ess": true,
+  "min_tail_ess": true,
+  "sampling_divergences": true,
+  "finite_draws": true
+ },
+ "passed": true,
+ "ess_per_gradient": 0.0036691804656158082,
+ "ess_per_gradient_sampling": 0.007274462306223977
+}
