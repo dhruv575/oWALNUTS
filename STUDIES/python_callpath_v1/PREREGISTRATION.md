@@ -305,3 +305,23 @@ New tests: worker `threading.local` persistence with bit-identical t1/t4
 draws, `from_pymc(thread_safe=True)` compiling at most once per thread, and
 clean interpreter exit after a threads=4 run (they fail on the baseline).
 Wheel hashes are in `protocol.json`.
+
+## Amendment A5 (post hoc; after phase 1b, before any `cfunc-safe` cell)
+
+`cfunc-guarded` also fails on `hier` (all six cells, phase 1b). Root cause,
+from a probe that called the guarded cfunc through ctypes inside a callable:
+numba's default `error_model="python"` makes `1.0 / (sigma * sigma)` raise
+`ZeroDivisionError` when `sigma` underflows to 0 on a diverging leapfrog
+step. Inside a `cfunc` the exception cannot propagate ("Exception ignored in
+CPUContext"), the function returns a meaningless value with a partly
+written gradient, and the guard never sees a nonfinite value. In the
+`py-njit` arm the same exception propagates into the callable transport,
+which classifies `ZeroDivisionError` as a recoverable zero-density point,
+so that arm samples normally. The failed cells stand as results.
+
+Supplementary arm **`cfunc-safe`** (phase `phase1c`, run after phase 2,
+primed, same seeds and cells): the kernel and the cfunc compiled with
+`error_model="numpy"` (division by zero gives IEEE inf/nan) plus the guard.
+Prediction: `cfunc-safe` ≡ `py-njit` bit for bit on every target, seed and
+thread count (every point where `py-njit` raises is a point where
+`cfunc-safe` returns `-inf`; elsewhere the arithmetic is identical).

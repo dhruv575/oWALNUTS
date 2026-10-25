@@ -71,6 +71,9 @@ def build_target(target: str, arm: str, threads: int):
     if arm == "cfunc-guarded":
         cft, raw, core = T.cfunc_guarded_target(target)
         return cft, dim, (raw, core)
+    if arm == "cfunc-safe":
+        cft, raw, core = T.cfunc_safe_target(target)
+        return cft, dim, (raw, core)
     if arm == "jax":
         return owalnuts.from_jax(T.jax_logp(target)), dim, None
     if arm == "torch":
@@ -156,7 +159,7 @@ def run_micro(phase: str, build: str, target: str, path: str) -> dict:
         wrapped = owalnuts.wrap_callable(tgt)
         rec["components"]["wrap_callable(adapter)"] = time_calls(wrapped, qs, N_MICRO)
     # Decomposition: the raw compiled function without adapter glue.
-    if path in ("py-njit", "cfunc", "cfunc-guarded"):
+    if path in ("py-njit", "cfunc", "cfunc-guarded", "cfunc-safe"):
         core = keep if path == "py-njit" else keep[1]
         g = np.empty(dim)
         rec["components"]["njit_core_from_python"] = time_calls(lambda q: core(q, g), qs, N_MICRO)

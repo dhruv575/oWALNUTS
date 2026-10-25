@@ -30,7 +30,8 @@
   "pymc",
   "pymc-numba",
   "pymc-gilfree",
-  "cfunc-guarded"
+  "cfunc-guarded",
+  "cfunc-safe"
  ],
  "nutpie_arms": [
   "nutpie"
@@ -44,7 +45,8 @@
   "pymc",
   "pymc-numba",
   "pymc-gilfree",
-  "cfunc-guarded"
+  "cfunc-guarded",
+  "cfunc-safe"
  ],
  "arm_definitions": {
   "py-numpy": "plain Python callable written in idiomatic numpy (callpath_targets.numpy_target)",
@@ -56,7 +58,8 @@
   "pymc-numba": "owalnuts.from_pymc(model, mode='NUMBA') (same numba-compiled function as gil_free; thread_safe=True when threads > 1)",
   "pymc-gilfree": "owalnuts.from_pymc(model, gil_free=True)",
   "nutpie": "nutpie.compile_pymc_model(model) (numba backend), nutpie.sample(draws, tune, chains, cores=threads, seed)",
-  "cfunc-guarded": "amendment A2: the cfunc arm's njit kernel with the callable path's default nonfinite policy (zero gradient, return -inf)"
+  "cfunc-guarded": "amendment A2: the cfunc arm's njit kernel with the callable path's default nonfinite policy (zero gradient, return -inf)",
+  "cfunc-safe": "amendment A5: cfunc-guarded with the kernel and cfunc compiled with numba error_model='numpy'"
  },
  "threads": [
   1,
@@ -145,6 +148,17 @@
    "nutpie_arms": [],
    "note": "amendment A2 supplementary phase",
    "prime": true
+  },
+  "phase1c": {
+   "builds": [
+    "baseline"
+   ],
+   "arms": [
+    "cfunc-safe"
+   ],
+   "nutpie_arms": [],
+   "prime": true,
+   "note": "amendment A5 supplementary phase, run after phase 2"
   }
  },
  "order": "strictly sequential child processes; micro cells first (targets outer, paths rotated per target); then seeds outer, targets, (arm x threads) list rotated by (3*seed_index + target_index); in phase 2 builds alternate inside each arm/threads pair",

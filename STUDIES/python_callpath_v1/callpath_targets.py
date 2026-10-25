@@ -94,12 +94,16 @@ def numpy_target(name: str):
 # ── numba: one njit kernel shared by the callable and the cfunc paths ────
 
 
-def njit_core(name: str):
-    """``core(q, g) -> logp`` compiled with numba (writes the gradient)."""
+def njit_core(name: str, error_model: str = "python"):
+    """``core(q, g) -> logp`` compiled with numba (writes the gradient).
+
+    ``error_model="python"`` (numba's default) raises ZeroDivisionError on a
+    float division by zero; ``"numpy"`` returns IEEE inf/nan instead
+    (amendment A5)."""
     import numba
 
     if name == "gauss100":
-        @numba.njit(cache=False)
+        @numba.njit(cache=False, error_model=error_model)
         def core(q, g):
             s = 0.0
             for i in range(q.shape[0]):
@@ -110,7 +114,7 @@ def njit_core(name: str):
     if name == "eight":
         y, se2 = Y8.copy(), SE8 ** 2
 
-        @numba.njit(cache=False)
+        @numba.njit(cache=False, error_model=error_model)
         def core(q, g):
             mu = q[0]
             log_tau = q[1]
@@ -133,7 +137,7 @@ def njit_core(name: str):
     x, y = hier_data()
     n = float(J * NJ)
 
-    @numba.njit(cache=False)
+    @numba.njit(cache=False, error_model=error_model)
     def core(q, g):
         tau = np.empty(3)
         value = 0.0
@@ -200,6 +204,34 @@ def cfunc_target(name: str):
         q = numba.carray(q_ptr, (dim,))
         g = numba.carray(g_ptr, (dim,))
         return core(q, g)
+
+    return owalnuts.from_cfunc(raw, dim), raw, core
+
+
+def cfunc_safe_target(name: str):
+    """Amendment A5: the guarded cfunc of a kernel compiled with
+    ``error_model="numpy"`` so a division by zero yields inf/nan (caught by
+    the guard) instead of a Python exception that cannot cross the C ABI."""
+    import numba
+    import owalnuts
+
+    core = njit_core(name, error_model="numpy")
+    dim = DIM[name]
+
+    @numba.cfunc(owalnuts.numba_raw_signature(), nopython=True, error_model="numpy")
+    def raw(n, q_ptr, g_ptr, _user):
+        q = numba.carray(q_ptr, (dim,))
+        g = numba.carray(g_ptr, (dim,))
+        value = core(q, g)
+        finite = np.isfinite(value)
+        for i in range(dim):
+            if not np.isfinite(g[i]):
+                finite = False
+        if not finite:
+            for i in range(dim):
+                g[i] = 0.0
+            return -np.inf
+        return value
 
     return owalnuts.from_cfunc(raw, dim), raw, core
 
