@@ -1,0 +1,105 @@
+{
+  "schema": "dense-metric-confirmation-v1",
+  "ledger_id": "WP51",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "confirms": "STUDIES/dense_metric_posteriordb_v1 (WP48), recommendation 2 / next decision (2)",
+  "question": "Should the dense facade's internal warmup defaults (what a user gets from Metric::dense() + Adaptation::default()) become {DenseWarmupSeeding::PerTransition, DenseMetricRegularization::Stan, symmetrised precision}? Metric::dense() stays opt-in relative to the diagonal default; no automatic switching is considered.",
+  "change_under_test": "WarmupConfig::default() dense fields: dense_warmup_seeding Legacy -> PerTransition, dense_metric_regularization MeanVarianceShrinkage -> Stan, dense_symmetrize_precision false -> true (dense adaptive facade only; the diagonal, identity and structured paths do not read these fields)",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "C:\\dev\\owalnuts-wt\\posteriordb-breadth\\STUDIES\\posteriordb_breadth_v1\\posteriordb\\posterior_database",
+    "note": "sibling checkout referenced read-only"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "arms": {
+    "owalnuts-diag": "Metric::diagonal() + Adaptation::default(): the shipped default",
+    "owalnuts-dense-legacy": "Metric::dense() + Adaptation::Custom(WarmupConfig::new(0.8) + DEFAULT_WARMUP_EXHAUSTION + DEFAULT_METRIC_REGULARIZATION + DenseWarmupSeeding::Legacy + DenseMetricRegularization::MeanVarianceShrinkage + symmetrised precision off): the current dense defaults stated explicitly (bit-identical to Metric::dense() + Adaptation::default() on the pre-flip library, verified by `funnel selfcheck`, seed 1)",
+    "owalnuts-dense-candidate": "as owalnuts-dense-legacy but DenseWarmupSeeding::PerTransition + DenseMetricRegularization::Stan + with_dense_symmetrized_precision(true): the candidate defaults"
+  },
+  "library_commit_for_cells": "3924b090 (main at worktree creation); every arm is stated explicitly so the cells do not depend on library defaults",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "tuning": "Tuning::default(), Init::uniform(), Limits::admit_worst_case(), BridgeStan 2.9.0 ReplicatedStanTarget (models copied from the WP48 sibling build)",
+  "seeds": [
+    151301,
+    151302,
+    151303
+  ],
+  "seed_check": "exact-word git grep over main found no use of 151301-151304; also searched every owalnuts-wt sibling STUDIES tree",
+  "cell_timeout_seconds": 2700,
+  "order": "phase 1: models in listed order, within a model arms owalnuts-diag then owalnuts-dense-candidate, seeds ascending; then the funnel side check (diag seeds ascending, then dense-candidate seeds ascending); then phase 2: owalnuts-dense-legacy over the models in listed order, seeds ascending. Strictly sequential, one cell at a time. Phase 2 is reported but does not enter the decision rule; it runs last so that the decision arms are complete first.",
+  "phases": {
+    "phase_1_arms": [
+      "owalnuts-diag",
+      "owalnuts-dense-candidate"
+    ],
+    "phase_2_arms": [
+      "owalnuts-dense-legacy"
+    ]
+  },
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "statistic": "per cell: minimum over reference parameters of bulk ESS (ArviZ 0.23.4) divided by all target calls including warmup (start search excluded); per model: median over the arm's ok cells; ratio = arm median / diag median; summary = geometric mean of the per-model ratios over models where both arms have at least one ok cell (models excluded for lack of an ok cell are listed; their cells count as gate failures)",
+  "funnel": {
+    "arms": [
+      "diag",
+      "dense-candidate"
+    ],
+    "seeds": [
+      151301,
+      151302,
+      151303
+    ],
+    "chains": 4,
+    "warmup": 2000,
+    "draws": 20000,
+    "starts": "omega in {-3,-1,1,3}, other coordinates 0",
+    "exact_tail_mass": 0.0477903522728147,
+    "gate": "|MCSE z| <= 2 for P(omega < -5) on every seed; a funnel cell that errors or times out fails the gate"
+  },
+  "decision_rule": {
+    "statement": "Flip the dense facade warmup defaults to {PerTransition, Stan, symmetrised precision} iff ALL of: (1) candidate/diag geomean min-bulk-ESS-per-gradient ratio >= 1.5; (2) candidate gate passes (of 51) >= diag gate passes - 1; (3) candidate funnel |MCSE z| <= 2 on every one of the three seeds; (4) no model passes 3/3 gate cells under diag and 0/3 under the candidate. Timeouts and errors are gate failures; no cell is rerun. Otherwise leave all three as opt-ins, document the negative and recommend nothing.",
+    "min_geomean_ratio": 1.5,
+    "max_gate_deficit": 1,
+    "funnel_abs_z": 2.0,
+    "dense_legacy_role": "reported only (what a dense user gets today); not part of the rule"
+  },
+  "predictions": {
+    "P1": "candidate/diag geomean ratio >= 2.0",
+    "P2": "diamonds candidate/diag ratio >= 20",
+    "P3": "accel_gp passes 0/3 gate cells in every arm",
+    "P4": "candidate total gate passes >= diag total gate passes",
+    "P5": "candidate funnel |z| <= 2 on all three seeds AND total candidate retained funnel divergences (3 seeds) <= 2 x total diag retained funnel divergences",
+    "P6": "(secondary) legacy/diag geomean <= 0.5 and legacy gate passes < diag gate passes"
+  },
+  "on_pass": "implement the flip in src/walnutpie.rs (WarmupConfig::default dense fields and the enums' #[default]); tests/kernel_fingerprint.rs: record a dense fingerprint if it covers the dense facade, the diagonal default fingerprint must not change; cargo test; CHANGELOG entry naming this study; README section on Metric::dense() for correlated near-Gaussian regressions with the measured ratios, stating that it is never switched on automatically",
+  "on_fail": "leave the opt-ins, document the negative, recommend nothing",
+  "frozen_utc": "2026-10-25"
+}
