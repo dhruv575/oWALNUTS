@@ -1273,6 +1273,7 @@ pub struct WarmupConfig {
     metric_regularization: DiagonalMetricRegularization,
     dense_metric_regularization: DenseMetricRegularization,
     dense_warmup_seeding: DenseWarmupSeeding,
+    dense_symmetrize_precision: bool,
     stan_restart_reference: bool,
     initial_phase_max_error: Option<f64>,
     minimum_step: Option<f64>,
@@ -1301,6 +1302,7 @@ impl Default for WarmupConfig {
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
             dense_metric_regularization: DenseMetricRegularization::MeanVarianceShrinkage,
             dense_warmup_seeding: DenseWarmupSeeding::Legacy,
+            dense_symmetrize_precision: false,
             stan_restart_reference: false,
             initial_phase_max_error: None,
             minimum_step: None,
@@ -1436,6 +1438,21 @@ impl WarmupConfig {
     }
     pub fn dense_warmup_seeding(&self) -> DenseWarmupSeeding {
         self.dense_warmup_seeding
+    }
+    /// Symmetrise each candidate dense precision, `(P + P^T) / 2`, before it
+    /// is validated (dense adaptive facade only; default off). The precision
+    /// is inverted column by column, so for a covariance with condition
+    /// number above roughly 1e4 its roundoff asymmetry exceeds the
+    /// `64 * eps` symmetry check of [`DenseMass::from_matrix`]; without this
+    /// option every such window is counted as a factorisation failure and
+    /// the escalating ridge (up to 0.01-0.1 in absolute units) is installed
+    /// instead (`STUDIES/dense_metric_posteriordb_v1`, post-hoc finding).
+    pub fn with_dense_symmetrized_precision(mut self, enabled: bool) -> Self {
+        self.dense_symmetrize_precision = enabled;
+        self
+    }
+    pub fn dense_symmetrized_precision(&self) -> bool {
+        self.dense_symmetrize_precision
     }
     /// Restart dual averaging after a metric update with Stan's reference
     /// `mu = ln(10 h)` instead of `mu = ln(h)`.
@@ -4406,6 +4423,17 @@ fn cholesky(matrix: &[f64], n: usize) -> Option<Vec<f64>> {
     Some(lower)
 }
 
+fn symmetrized(mut matrix: Vec<f64>, n: usize) -> Vec<f64> {
+    for i in 0..n {
+        for j in 0..i {
+            let mean = 0.5 * (matrix[i * n + j] + matrix[j * n + i]);
+            matrix[i * n + j] = mean;
+            matrix[j * n + i] = mean;
+        }
+    }
+    matrix
+}
+
 fn inverse_from_cholesky(lower: &[f64], n: usize) -> Option<Vec<f64>> {
     let mut inverse = vec![0.0; n * n];
     let mut column = vec![0.0; n];
@@ -5855,6 +5883,7 @@ impl DenseCovariance {
     fn precision_candidate(
         &self,
         regularization: DenseMetricRegularization,
+        symmetrize: bool,
     ) -> (
         MetricUpdateOutcome,
         Option<DenseMass>,
@@ -5877,7 +5906,7 @@ impl DenseCovariance {
         }
         let n = self.count as f64;
         if regularization == DenseMetricRegularization::Stan {
-            return self.stan_precision_candidate(n);
+            return self.stan_precision_candidate(n, symmetrize);
         }
         // Full covariance estimation needs dimension-aware shrinkage: with
         // only O(d) warmup draws, a near-unregularized inverse is unstable.
@@ -5924,6 +5953,11 @@ impl DenseCovariance {
                 ridge *= 10.0;
                 continue;
             };
+            let precision = if symmetrize {
+                symmetrized(precision, n_dim)
+            } else {
+                precision
+            };
             match DenseMass::from_matrix(precision, n_dim) {
                 Ok(candidate) => {
                     return (
@@ -5958,6 +5992,7 @@ impl DenseCovariance {
     fn stan_precision_candidate(
         &self,
         n: f64,
+        symmetrize: bool,
     ) -> (
         MetricUpdateOutcome,
         Option<DenseMass>,
@@ -6002,6 +6037,11 @@ impl DenseCovariance {
                 failures += 1;
                 ridge = next_ridge;
                 continue;
+            };
+            let precision = if symmetrize {
+                symmetrized(precision, n_dim)
+            } else {
+                precision
             };
             match DenseMass::from_matrix(precision, n_dim) {
                 Ok(candidate) => {
@@ -9175,7 +9215,10 @@ pub fn sample_dense_with_control<T: Target>(
         )?
         .expect("nonempty metric window");
         let (outcome, candidate, shrinkage, ridge, condition, failures) =
-            covariance.precision_candidate(warmup.dense_metric_regularization);
+            covariance.precision_candidate(
+                warmup.dense_metric_regularization,
+                warmup.dense_symmetrize_precision,
+            );
         let step_before = active_step;
         let mass_dense_before = active_mass.matrix.clone();
         let mut step_after_search = None;
@@ -13487,7 +13530,7 @@ mod tests {
         }
         let n = covariance.count as f64;
         let (outcome, candidate, shrinkage, ridge, _, failures) =
-            covariance.precision_candidate(DenseMetricRegularization::Stan);
+            covariance.precision_candidate(DenseMetricRegularization::Stan, false);
         assert_eq!(outcome, MetricUpdateOutcome::Installed);
         assert_eq!(failures, 0);
         assert_eq!(ridge, 0.0);
@@ -13513,9 +13556,39 @@ mod tests {
         }
         // The shipped rule floors the small coordinate near s * mean variance.
         let (_, shipped, _, _, _, _) =
-            covariance.precision_candidate(DenseMetricRegularization::MeanVarianceShrinkage);
+            covariance.precision_candidate(DenseMetricRegularization::MeanVarianceShrinkage, false);
         let shipped = shipped.unwrap().matrix;
         assert!(shipped[4] < 0.1 * precision[4]);
+    }
+
+    #[test]
+    fn symmetrized_dense_precision_avoids_spurious_ridge_on_collinear_draws() {
+        // Collinear, scale-heterogeneous 8-D draws (condition number ~1e8).
+        let mut covariance = DenseCovariance::new(8);
+        let mut state = 11_u64;
+        let mut uniform = || {
+            state = splitmix64(state);
+            (state >> 11) as f64 / (1_u64 << 53) as f64 - 0.5
+        };
+        for _ in 0..500 {
+            let z = uniform();
+            let draw: Vec<f64> = (0..8)
+                .map(|i| (i as f64 + 1.0).powi(3) * z + 1.0e-3 * uniform() * (i as f64 + 1.0))
+                .collect();
+            covariance.update(&draw);
+        }
+        let (plain_outcome, _, _, plain_ridge, _, plain_failures) =
+            covariance.precision_candidate(DenseMetricRegularization::Stan, false);
+        let (outcome, candidate, _, ridge, _, failures) =
+            covariance.precision_candidate(DenseMetricRegularization::Stan, true);
+        assert_eq!(outcome, MetricUpdateOutcome::Installed);
+        assert_eq!((failures, ridge), (0, 0.0));
+        assert!(candidate.is_some());
+        assert!(
+            plain_failures > 0 && plain_ridge > 0.0,
+            "{plain_outcome:?} {plain_failures} {plain_ridge}"
+        );
+        assert!(!WarmupConfig::default().dense_symmetrized_precision());
     }
 
     #[test]
