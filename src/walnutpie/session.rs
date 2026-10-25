@@ -279,6 +279,7 @@ pub(crate) fn spawn<T: Target + 'static>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serve<T: Target>(
     target: &T,
     starts: &[Vec<f64>],
@@ -445,6 +446,7 @@ fn fail(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn advance<T: Target>(
     runs: &mut [ChainRun<'_, T>],
     end: usize,
