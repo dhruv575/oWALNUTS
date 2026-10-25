@@ -1,0 +1,17 @@
+[package]
+name = "bridgestan-windows-root-cause-v5"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP50E deterministic replay child: seed 50801734, owned vs unserialised dispatch, proposal/transition tracing"
+
+# Built against this worktree's HEAD sampler and BridgeStan integration. The
+# research feature is needed only for the observer entry point
+# (Sampler::run_with_comparison_observers) and NonfinitePositionPolicy.
+[dependencies]
+owalnuts = { path = "../../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../../integrations/bridgestan" }
+libloading = "0.8"
+serde_json = "1"
+
+[workspace]
