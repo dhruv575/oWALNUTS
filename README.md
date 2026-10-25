@@ -199,11 +199,16 @@ and 0/3 on GLMM_Poisson, `seeds_centered` and radon. Those three fail on a
 slow `sigma` or `beta[1]`, the same parameters that defeat the competitors
 (CmdStan passes one radon cell; nutpie none). [E26]
 
-ESS per gradient is **about 0.7x CmdStan's**: 0.708 over the 15 complete
-fixed-16 models, against v6's 0.848. The losses concentrate on `accel_gp`
-(0.35x), `one_comp` (0.50x) and `hmm_drive_0` (0.66x). Wall per gradient is
-1.85x CmdStan's, because the Windows owned worker serialises BridgeStan and
-the machine was contended. ESS per second is 1.23x nutpie's.
+ESS per gradient is **about 0.76x CmdStan's**. v7's own three seeds gave
+0.708 over the 15 complete fixed-16 models, against v6's 0.848; a
+preregistered three-seed extension (WP62) gave 0.810 on the new seeds and
+**0.761 pooled over six**, with a leave-one-seed-out interval of
+[0.740, 0.822] [E28]. Pooled over 96 cells oWALNUTS passes 80 against
+CmdStan's 62. The one loss that survives both seed sets is `accel_gp`
+(0.35x); `one_comp` (0.50x -> 1.63x) and `hmm_drive_0` (0.66x -> 0.98x) swung
+with the seeds. Wall per gradient is 1.85x CmdStan's, because the Windows
+owned worker serialises BridgeStan and the machine was contended. ESS per
+second is 1.23x nutpie's.
 
 v7 did **not** pass the v6 release rule. Its per-gradient clause (>= 0.75
 CmdStan) failed: the value was 0.708, and the clause was formally
@@ -689,3 +694,12 @@ provenance.
   (`WP60-START-RULE-PAIRED-V1`),
   [`STUDIES/rescue_removal_paired_v1`](STUDIES/rescue_removal_paired_v1/README.md)
   (`WP61-RESCUE-REMOVAL-PAIRED-V1`).
+- [E28] v7 seed extension: three further fresh seeds on the fixed-16 set,
+  oWALNUTS and CmdStan only. Per-gradient geomean 0.810 on the new seeds,
+  0.761 pooled over six, leave-one-seed-out interval [0.740, 0.822]; gates
+  40/48 new and 80/96 pooled against CmdStan 30/48 and 62/96; no passing
+  cell above |z| 3.19. Recommends reporting the per-gradient figure with a
+  seed interval over at least six seeds instead of gating a release on a
+  three-seed value:
+  [`STUDIES/posteriordb_bench_v7_seed_extension`](STUDIES/posteriordb_bench_v7_seed_extension/README.md)
+  (`WP62-POSTERIORDB-V7-SEED-EXTENSION`).
