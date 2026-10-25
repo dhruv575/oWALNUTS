@@ -11,10 +11,10 @@ NUTS shows there. The kernel is derived from, and tested leaf-for-leaf
 against, the Flatiron reference implementation
 [`walnutpie`](https://github.com/flatironinstitute/walnutpie) (MIT); the
 public API is a small builder, `owalnuts::sampler`, over a complete
-facade, `owalnuts::walnutpie`. Version `0.2.0`; kernel revision
+facade, `owalnuts::walnutpie`. Version `0.3.0`; kernel revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`.
 
-> **Defaults changed since 0.2.0** (unreleased on `main`; see
+> **Defaults changed since 0.2.0** (released in 0.3.0; see
 > [`CHANGELOG.md`](CHANGELOG.md)). The kernel, `ALGORITHM_REVISION` and the
 > kernel fingerprints are unchanged; each old behaviour is one builder call
 > away.
@@ -39,7 +39,7 @@ facade, `owalnuts::walnutpie`. Version `0.2.0`; kernel revision
 
 ```toml
 [dependencies]
-owalnuts = "0.2.0"
+owalnuts = "0.3.0"
 ```
 
 Implement `Target` (log density and gradient in one call, unconstrained

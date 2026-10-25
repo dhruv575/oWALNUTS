@@ -25,7 +25,7 @@ try:  # the installed distribution's version; the source tree has none
 
     __version__ = _dist_version("owalnuts")
 except Exception:  # pragma: no cover - source checkout without metadata
-    __version__ = "0.2.0"
+    __version__ = "0.3.0"
 
 ALGORITHM_REVISION: str = _owalnuts.ALGORITHM_REVISION
 PAPER_ADAPTATION_REVISION: str = _owalnuts.PAPER_ADAPTATION_REVISION

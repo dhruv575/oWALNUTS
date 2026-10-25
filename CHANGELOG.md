@@ -7,6 +7,10 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-10-25
+
 Three sampler-facade defaults change in this release: best-of-16 starts
 (WP52), `NonfinitePositionPolicy::RejectLeaf` (WP54) and the fixed dense
 warmup (WP48/WP51). Each is listed under Changed with the study that decided
