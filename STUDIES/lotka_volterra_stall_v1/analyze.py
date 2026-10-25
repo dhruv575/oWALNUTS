@@ -57,6 +57,27 @@ def init_max_depth(cid):
     return out
 
 
+def whole_chain(cid, ch):
+    """Whole-chain stop-reason, zero-density and density figures from the telemetry (post hoc descriptive)."""
+    t = telemetry(cid)
+    if t is None:
+        return None
+    F = t["telemetry_fields"]
+    r = np.asarray(t["telemetry"][ch], dtype=float).reshape(-1, len(F))
+    if not len(r):
+        return None
+    st = r[:, F.index("stop")]
+    g = r[:, F.index("target_evaluations")].sum()
+    late = r[r[:, 0] >= 150]
+    return {"refinement_exhausted_stop_fraction": float((st == t["stop_reasons"].index("RefinementExhausted")).mean()),
+            "depth_cap_stop_fraction": float((st == t["stop_reasons"].index("MaximumDepth")).mean()),
+            "zero_density_fraction_of_gradients": float(r[:, F.index("zero_density")].sum() / g) if g else None,
+            "gradients_per_transition": float(g / len(r)),
+            "depth_median": float(np.median(r[:, F.index("depth")])),
+            "step_median": float(np.median(r[:, F.index("step")])),
+            "log_density_median_from_t150": float(np.median(late[:, F.index("log_density")])) if len(late) else None}
+
+
 def chain_grads(c):
     return [ch["gradients_total"] for ch in c["profile"]["chains"]]
 
@@ -200,6 +221,16 @@ def main():
                 d["chain_warnings_named"] = i in c.get("chain_warning_chains", [])
                 slow_desc.append(d)
 
+    for d in stalled_desc + slow_desc:
+        d["whole_chain"] = whole_chain(d["cell"], d["chain"])
+    healthy_whole = []
+    for c in arm_cells("defaults"):
+        if c["status"] == "ok" and not c["stalled"]:
+            slow = slow_chains(c)
+            healthy_whole += [whole_chain(c["id"], i) for i in range(4) if i not in slow]
+    healthy_whole = [h for h in healthy_whole if h]
+    healthy_whole_median = {k: med([h[k] for h in healthy_whole]) for k in healthy_whole[0]} if healthy_whole else None
+
     # decision rule
     defaults_init_depth = {s: init_max_depth(by[("defaults", s)]["id"]) for s in SEEDS if ("defaults", s) in by}
     decision = {}
@@ -271,7 +302,8 @@ def main():
                        "earliest_fraction_of_wall": d["early"]["earliest_fraction_of_wall"]} for d in all_st],
     }
     summary = {"schema": "lotka-volterra-stall-v1-summary", "missing_cells": missing, "n_cells": len(rec),
-               "healthy_eval_us_per_gradient_median_contended": healthy_wall, "per_arm": per_arm,
+               "healthy_eval_us_per_gradient_median_contended": healthy_wall,
+               "healthy_whole_chain_median": healthy_whole_median, "per_arm": per_arm,
                "stalled_chains": stalled_desc, "slow_chains_in_completed_cells": slow_desc,
                "defaults_initial_phase_max_depth": {str(k): v for k, v in defaults_init_depth.items()},
                "decision": decision, "predictions": preds,
@@ -292,7 +324,7 @@ def main():
         ok = c["status"] == "ok"
         fg = ("all" if c.get("passed") else ",".join(k for k, v in c["gates"].items() if not v)) if ok else "-"
         L.append(f"| {c['id']} | {c['status']} | {c['wall_seconds_contended']:.0f} | {c['stalled']} | {g} | "
-                 f"{min(c['start_log_densities']):.4g} | {c['max_rank_rhat'] if not ok else round(c['max_rank_rhat'], 4) if ok else ''} | "
+                 f"{min(c['start_log_densities']):.4g} | {round(c['max_rank_rhat'], 4) if ok else ''} | "
                  f"{round(c['min_bulk_ess']) if ok else ''} | {round(c['min_tail_ess']) if ok else ''} | "
                  f"{c.get('divergences', '') if ok else ''} | {round(c['max_abs_z'], 2) if ok else ''} | {fg} | "
                  f"{c.get('chain_warning_chains', '') if ok else ''} | {ident} |")
@@ -307,6 +339,15 @@ def main():
                  f"{t['selected_level_mean'] if t['selected_level_mean'] is None else round(t['selected_level_mean'], 2)} | "
                  f"{d['eval_us_per_gradient']:.0f} | {d['ratio_to_healthy_pool'] or 0:.2f} | {d['ratio_to_same_cell_others'] or 0:.2f} | "
                  f"{d['early']['earliest_fraction_of_wall'] if d['early']['earliest_fraction_of_wall'] is None else round(d['early']['earliest_fraction_of_wall'], 3)} |")
+    L += ["", "Whole-chain figures (post hoc descriptive): refinement-exhausted stop fraction, depth-cap stop fraction, "
+          "zero-density share of gradients, gradients per transition, median depth, median step, median log density from t=150.", "",
+          "| cell | chain | refexh stops | cap stops | zero-density | grads/trans | depth | step | log dens |",
+          "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for d in stalled_desc + slow_desc + [{"cell": "healthy defaults chains (median)", "chain": "-", "whole_chain": healthy_whole_median}]:
+        w = d["whole_chain"]
+        L.append(f"| {d['cell']} | {d['chain']} | {w['refinement_exhausted_stop_fraction']:.3f} | {w['depth_cap_stop_fraction']:.3f} | "
+                 f"{w['zero_density_fraction_of_gradients']:.3f} | {w['gradients_per_transition']:.0f} | {w['depth_median']:.0f} | "
+                 f"{w['step_median']:.3g} | {w['log_density_median_from_t150']:.4g} |")
     L += ["", f"Healthy-chain median per-gradient wall (contended): {healthy_wall} us", "",
           "## Per arm", "", "```", json.dumps(per_arm, indent=1), "```", "",
           "## Decision", "", "```", json.dumps({k: (v if not isinstance(v, dict) else {kk: vv for kk, vv in v.items() if kk != 'seeds'})
