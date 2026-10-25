@@ -12,8 +12,17 @@
 //! agree) and Linux glibc pin different values. Where a platform/profile
 //! pair has no pinned value the test checks the call count and prints the
 //! hash so it can be pinned.
+//!
+//! `default_start_rule_is_best_of_16` pins the sampler's default start rule
+//! (`Init::default()`, `Init::best_of(16)` since WP52,
+//! `STUDIES/init_rule_confirmation_v1`): the bit patterns of the four chosen
+//! Eight Schools starts, the chosen candidate indices and the init call count.
+//! The kernel fingerprints above use explicit starts and did not change.
 
 use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use owalnuts::sampler::{DEFAULT_INIT_CANDIDATES, Init, StartSelection, candidate_starts};
 
 use owalnuts::walnutpie::{
     DiagonalMass, KernelTuning, MultiChainOutput, RunConfig, Target, TargetError,
@@ -211,6 +220,70 @@ const EIGHT_SCHOOLS_FINGERPRINT: Option<u64> = if cfg!(debug_assertions) {
 #[cfg(not(any(windows, target_os = "linux")))]
 const EIGHT_SCHOOLS_FINGERPRINT: Option<u64> = None;
 const EIGHT_SCHOOLS_CALLS: usize = 38_464;
+
+struct CountingEightSchools(AtomicUsize);
+
+impl Target for CountingEightSchools {
+    fn dimension(&self) -> usize {
+        EightSchools.dimension()
+    }
+
+    fn log_density_gradient(&self, q: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
+        self.0.fetch_add(1, Ordering::Relaxed);
+        EightSchools.log_density_gradient(q, gradient)
+    }
+}
+
+#[test]
+fn default_start_rule_is_best_of_16() {
+    assert_eq!(Init::default(), Init::best_of(DEFAULT_INIT_CANDIDATES));
+    assert_eq!(DEFAULT_INIT_CANDIDATES, 16);
+    let Init::Candidates {
+        radius,
+        candidates,
+        max_attempts,
+        selection,
+    } = Init::default()
+    else {
+        panic!("the default start rule is Init::Candidates");
+    };
+    assert_eq!((radius, candidates, max_attempts), (2.0, 16, 100));
+    assert_eq!(selection, StartSelection::HighestDensity);
+    let target = CountingEightSchools(AtomicUsize::new(0));
+    let chosen = candidate_starts(
+        &target,
+        4,
+        0x5eed_0052,
+        radius,
+        candidates,
+        max_attempts,
+        selection,
+    )
+    .unwrap();
+    let mut hash = 0xcbf2_9ce4_8422_2325;
+    for (start, index) in chosen.starts.iter().zip(&chosen.chosen) {
+        for value in start {
+            fnv(&mut hash, value.to_bits());
+        }
+        fnv(&mut hash, *index as u64);
+    }
+    let calls = target.0.load(Ordering::Relaxed);
+    check(
+        "default start rule",
+        hash,
+        calls,
+        DEFAULT_START_FINGERPRINT,
+        DEFAULT_START_CALLS,
+    );
+}
+
+// The starts are uniform draws chosen by log density; pinned on Windows (GNU),
+// printed elsewhere until pinned.
+#[cfg(windows)]
+const DEFAULT_START_FINGERPRINT: Option<u64> = Some(0x1e96_c9f3_3a87_2b29);
+#[cfg(not(windows))]
+const DEFAULT_START_FINGERPRINT: Option<u64> = None;
+const DEFAULT_START_CALLS: usize = 64;
 
 /// Assert the pinned fingerprint where one exists; otherwise print it.
 fn check(label: &str, hash: u64, calls: usize, expected: Option<u64>, expected_calls: usize) {

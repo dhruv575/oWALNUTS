@@ -7,6 +7,33 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
+### Changed
+
+- **Default start rule is now `Init::best_of(16)`** (`STUDIES/init_rule_confirmation_v1`,
+  WP52, the preregistered default-flip confirmation of WP43's
+  `STUDIES/init_rule_v1`). `Init::default()` and `Sampler::run_from_random_starts`
+  now draw 16 evaluable uniform(-2, 2) starts per chain from the same start
+  stream and keep the highest log density. The new constant
+  `sampler::DEFAULT_INIT_CANDIDATES` is 16. `Init::uniform()` (the CmdStan
+  rule and the previous default) remains available through `run_with_init`.
+  The frozen rule passed on fresh seeds 952201-952203:
+  - 1.254x geomean min-bulk-ESS per gradient over 17 posteriordb models,
+    and 42 vs 42 gate passes of 51;
+  - funnel |z| <= 1.11;
+  - no hide event on a 0.7/0.3 two-Gaussian mixture, where R-hat detected
+    both modes on every seed in both arms.
+
+  The gain comes from `arma11` (59.8x) and `lotka_volterra` (17.1x). On the
+  other 14 models best-of-16 was 0.862x, and it lost an `earnings` cell
+  (warmup step collapse) and an `hmm_drive_0` cell. In that cell one chain
+  spent its first 46 retained draws in a second mode. Rank R-hat was 1.0087,
+  but `chain_warnings` named the chain. Starts, and therefore draws for a given
+  seed, differ from 0.2.0 for `run_from_random_starts` and `Init::default()`
+  callers. `Sampler::run`, `RunConfig`, the kernel, its fingerprints and
+  `ALGORITHM_REVISION` are unchanged, and so is the Python package's `init`
+  handling (`init=None` jitter, `init="uniform"`); `DEFAULTS` adds
+  `init_candidates`.
+
 ### Added
 
 - Observe-only chain-disagreement checks (`STUDIES/chain_disagreement_warning_v1`,

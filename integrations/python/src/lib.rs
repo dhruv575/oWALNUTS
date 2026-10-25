@@ -1537,6 +1537,9 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         "adapt_mass",
         matches!(Metric::default(), Metric::Diagonal { adapt: true, .. }),
     )?;
+    // The Rust default is `Init::best_of(16)` since WP52; the package's
+    // `init="uniform"` path keeps the CmdStan rule and reads its radius and
+    // attempts from here, and `init_candidates` reports the Rust default.
     match Init::default() {
         Init::Uniform {
             radius,
@@ -1544,6 +1547,17 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         } => {
             d.set_item("init_radius", radius)?;
             d.set_item("init_max_attempts", max_attempts)?;
+            d.set_item("init_candidates", 1)?;
+        }
+        Init::Candidates {
+            radius,
+            candidates,
+            max_attempts,
+            ..
+        } => {
+            d.set_item("init_radius", radius)?;
+            d.set_item("init_max_attempts", max_attempts)?;
+            d.set_item("init_candidates", candidates)?;
         }
         other => {
             return Err(PyRuntimeError::new_err(format!(

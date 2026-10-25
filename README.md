@@ -44,7 +44,7 @@ let posterior = Sampler::new()
     .draws(1_000)
     .chains(4)
     .seed(0x5eed)
-    .run_from_random_starts(&Gaussian)?;   // uniform(-2, 2) starts, retried until finite
+    .run_from_random_starts(&Gaussian)?;   // best of 16 uniform(-2, 2) starts per chain
 
 let summary = Summary::from_output(posterior.inner(), None)?;
 println!("{summary}");                     // mean, sd, MCSE, quantiles, ESS, R-hat, health
@@ -258,9 +258,17 @@ Opt-ins, each one builder call:
   CmdStan per gradient on the healthy models (1.07x over 17 with `arma11`),
   0.80x wall per gradient, 1.40x / 3.09x ESS per second; funnel exact at
   the defaults on every seed [E15].
-- `Init::uniform()` (`run_from_random_starts`, `run_with_init`): Stan's
-  uniform(-2, 2) starts redrawn until the log density and gradient are
-  finite; `.run(&target, &starts)` uses your own.
+- `Init::best_of(16)`, the default (`run_from_random_starts`, `Init::default()`):
+  per chain, 16 Stan-style uniform(-2, 2) starts, each redrawn until the log
+  density and gradient are finite, keeping the highest log density (about 64
+  extra gradient calls per run; WP43, confirmed as the default by WP52,
+  `STUDIES/init_rule_confirmation_v1`). It removes most of the start lottery
+  on `arma11` and `lotka_volterra`, but a highest-density start is not a mode
+  oracle. It makes it less likely that the four chains visit a second mode
+  (single-mode four-chain starts rose from 13 % to 23 % of seeds on a
+  two-mode test target), so check `Summary::chain_warnings` as well as R-hat.
+  `Init::uniform()` (`run_with_init`) is the CmdStan rule;
+  `.run(&target, &starts)` uses your own.
 - `Limits::new().max_target_evaluations(n)`, `.deadline(..)`, `.timeout(..)`,
   `.cancellation(..)`: an exact runtime evaluation ceiling and cooperative
   stopping; `.admit_conservative()` restores the 0.1 admission check.

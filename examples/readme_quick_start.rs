@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .draws(1_000)
         .chains(4)
         .seed(0x5eed)
-        .run_from_random_starts(&Gaussian)?; // uniform(-2, 2) starts, retried until finite
+        .run_from_random_starts(&Gaussian)?; // best of 16 uniform(-2, 2) starts per chain
 
     let summary = Summary::from_output(posterior.inner(), None)?;
     println!("{summary}"); // mean, sd, MCSE, quantiles, ESS, R-hat, then sampler health
