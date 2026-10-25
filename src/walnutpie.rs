@@ -1305,6 +1305,7 @@ pub struct WarmupConfig {
     dense_symmetrize_precision: bool,
     stan_restart_reference: bool,
     initial_phase_max_error: Option<f64>,
+    initial_phase_max_depth: Option<usize>,
     minimum_step: Option<f64>,
     warmup_exhaustion: Option<ExhaustionRule>,
     warmup_reverse_coarser_policy: Option<ReverseCoarserPolicy>,
@@ -1334,6 +1335,7 @@ impl Default for WarmupConfig {
             dense_symmetrize_precision: true,
             stan_restart_reference: false,
             initial_phase_max_error: None,
+            initial_phase_max_depth: None,
             minimum_step: None,
             warmup_exhaustion: None,
             warmup_reverse_coarser_policy: None,
@@ -1512,6 +1514,24 @@ impl WarmupConfig {
     }
     pub fn initial_phase_max_error(&self) -> Option<f64> {
         self.initial_phase_max_error
+    }
+    /// Cap the tree depth at `max_depth` (or the kernel's own maximum, if
+    /// smaller) during the initial fast phase of warmup only, restoring the
+    /// kernel's maximum from the first slow window on. Research-only opt-in
+    /// (`STUDIES/lotka_volterra_stall_v1`, WP57); a run in which no
+    /// initial-phase transition would have exceeded the cap is bit-identical
+    /// to one without it. Diagonal and identity facades only (ignored by the
+    /// dense and structured warmups and under the paper rules).
+    #[cfg(feature = "research")]
+    pub fn with_initial_phase_max_depth(mut self, max_depth: usize) -> Result<Self, Error> {
+        if max_depth == 0 {
+            return Err(Error::configuration("initial-phase max_depth must be nonzero"));
+        }
+        self.initial_phase_max_depth = Some(max_depth);
+        Ok(self)
+    }
+    pub fn initial_phase_max_depth(&self) -> Option<usize> {
+        self.initial_phase_max_depth
     }
     /// Use `rule` as the exhaustion rule for the discarded (warmup)
     /// transitions only; retained transitions keep the tuning's own
@@ -7713,6 +7733,17 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         initial_max_error
                     } else {
                         config.tuning.max_error
+                    };
+            }
+            if let (Some(warmup), Some(schedule)) = (config.warmup.as_ref(), schedule.as_ref())
+                && let Some(initial_max_depth) = warmup.initial_phase_max_depth
+                && warmup.paper_adaptation.is_none()
+            {
+                active_tuning.max_depth =
+                    if transition_index < schedule.initial_fast_end.min(config.discarded) {
+                        initial_max_depth.min(config.tuning.max_depth)
+                    } else {
+                        config.tuning.max_depth
                     };
             }
             if let Some(warmup) = config.warmup.as_ref()
@@ -13981,6 +14012,44 @@ mod tests {
             exhausted(&b)
         );
         assert_ne!(a.samples(), b.samples());
+    }
+
+    #[cfg(feature = "research")]
+    #[test]
+    fn initial_phase_max_depth_caps_only_the_initial_fast_phase() {
+        let target = Gaussian(2);
+        let mass = DiagonalMass::identity(NonZeroUsize::new(2).unwrap());
+        assert!(
+            WarmupConfig::new(0.8)
+                .unwrap()
+                .with_initial_phase_max_depth(0)
+                .is_err()
+        );
+        // A tiny step forces deep trees, so a depth-1 cap binds.
+        let tuning = KernelTuning::new(0.01, nz(6), nz(1), nz(3), 1.0).unwrap();
+        let config = |warmup: WarmupConfig| {
+            RunConfig::new(200, NonZeroUsize::new(20).unwrap(), 99)
+                .with_tuning(tuning)
+                .with_warmup(warmup)
+        };
+        let capped = WarmupConfig::new(0.8)
+            .unwrap()
+            .with_initial_phase_max_depth(1)
+            .unwrap();
+        assert_eq!(capped.initial_phase_max_depth(), Some(1));
+        let a = sample(&target, &[0.3, -0.2], &mass, &config(capped)).unwrap();
+        let b = sample(&target, &[0.3, -0.2], &mass, &config(WarmupConfig::new(0.8).unwrap())).unwrap();
+        assert!(a.diagnostics()[..75].iter().all(|d| d.depth() <= 1));
+        assert!(b.diagnostics()[..75].iter().any(|d| d.depth() > 1));
+        assert_eq!(a.metadata().tuning().max_depth(), 6);
+        assert_ne!(a.samples(), b.samples());
+        // A cap at or above the kernel's maximum never binds: bit-identical.
+        let loose = WarmupConfig::new(0.8)
+            .unwrap()
+            .with_initial_phase_max_depth(6)
+            .unwrap();
+        let c = sample(&target, &[0.3, -0.2], &mass, &config(loose)).unwrap();
+        assert_eq!(c.samples(), b.samples());
     }
 
     #[test]
