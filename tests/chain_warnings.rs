@@ -161,7 +161,10 @@ fn a_trapped_chain_is_named_at_warmup_end_and_on_the_draws() {
         &target,
         &starts,
         &mass,
-        &config(500, 300, None),
+        // 600 retained draws keep the three healthy chains' R-hat well below
+        // 1.01 on every platform (the check is a strict threshold, and libm
+        // rounding differs between Windows and Linux at 300 draws).
+        &config(500, 600, None),
         NonZeroUsize::new(4).unwrap(),
     )
     .unwrap();
@@ -251,19 +254,26 @@ fn detect_applies_the_step_and_density_rules_and_their_guards() {
 #[test]
 fn posterior_exposes_the_checks_and_the_default_draws_are_unchanged() {
     let target = Gaussian(4);
+    // 600 warmup / 600 draws on a 4-D Gaussian put every chain-agreement
+    // statistic far from its threshold on every platform; at 300 / 200 the
+    // R-hat check sat close enough to 1.01 to flip with libm rounding.
     let sampler = Sampler::new()
-        .warmup(300)
-        .draws(200)
+        .warmup(600)
+        .draws(600)
         .chains(4)
         .seed(44)
         .metric(Metric::diagonal());
     let posterior = sampler.run_from_random_starts(&target).unwrap();
-    assert!(posterior.chain_warnings().is_empty());
+    assert!(
+        posterior.chain_warnings().is_empty(),
+        "{:?}",
+        posterior.chain_warnings()
+    );
     for telemetry in posterior.telemetry() {
         let warmup = telemetry.warmup_end().expect("warmup window");
-        assert!(warmup.end() <= 300);
+        assert!(warmup.end() <= 600);
         let sampled = telemetry.sampling_end().expect("retained window");
-        assert_eq!((sampled.start(), sampled.end()), (300, 500));
+        assert_eq!((sampled.start(), sampled.end()), (600, 1200));
     }
     // A run without warmup has no warmup window.
     let no_warmup = Sampler::new()

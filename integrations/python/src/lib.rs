@@ -22,9 +22,9 @@ use numpy::{
 };
 use owalnuts::diagnostics::{ChainDisagreement, ChainWarning, ParameterSummary};
 use owalnuts::sampler::{
-    Adaptation, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION,
-    CandidateStarts, DEFAULT_INIT_CANDIDATES, Init, Limits, Metric, Posterior, Sampler,
-    StartSelection, Tuning, candidate_starts, uniform_starts,
+    Adaptation, CandidateStarts, DEFAULT_CHAIN_RESCUE, DEFAULT_INIT_CANDIDATES,
+    DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric, Posterior,
+    Sampler, StartSelection, Tuning, candidate_starts, uniform_starts,
 };
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput, ChainWindowSummary,

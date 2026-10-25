@@ -3598,15 +3598,13 @@ where
                             if integration.endpoint_error <= tuning.max_error {
                                 increment(&mut work.reverse_coarsening_accepted)?;
                                 increment(&mut work.rejections.reverse_coarser_accepted)?;
-                                if continue_beyond {
-                                    if let Some(forward) = last_integration {
-                                        observe_energy_range(
-                                            work,
-                                            forward.minimum,
-                                            forward.maximum,
-                                            initial_h,
-                                        );
-                                    }
+                                if continue_beyond && let Some(forward) = last_integration {
+                                    observe_energy_range(
+                                        work,
+                                        forward.minimum,
+                                        forward.maximum,
+                                        initial_h,
+                                    );
                                 }
                                 return Ok(MacroLeafOutcome {
                                     end_state: if continue_beyond {
@@ -3723,15 +3721,13 @@ where
                             if integration.endpoint_error <= tuning.max_error {
                                 increment(&mut work.reverse_coarsening_accepted)?;
                                 increment(&mut work.rejections.reverse_coarser_accepted)?;
-                                if continue_beyond {
-                                    if let Some(forward) = last_integration {
-                                        observe_energy_range(
-                                            work,
-                                            forward.minimum,
-                                            forward.maximum,
-                                            initial_h,
-                                        );
-                                    }
+                                if continue_beyond && let Some(forward) = last_integration {
+                                    observe_energy_range(
+                                        work,
+                                        forward.minimum,
+                                        forward.maximum,
+                                        initial_h,
+                                    );
                                 }
                                 return Ok(MacroLeafOutcome {
                                     end_state: if continue_beyond {

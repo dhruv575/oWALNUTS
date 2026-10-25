@@ -3077,6 +3077,8 @@ impl TargetEvaluationBudget {
             budget: self,
         }
     }
+    // `fetch_update` is renamed `try_update` on newer toolchains; the MSRV is 1.88.
+    #[allow(deprecated)]
     fn reserve(&self) -> bool {
         self.started
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
@@ -3408,6 +3410,8 @@ impl<'a> ProposalObservationControl<'a> {
     pub fn started(&self) -> usize {
         self.started.load(Ordering::Acquire)
     }
+    // `fetch_update` is renamed `try_update` on newer toolchains; the MSRV is 1.88.
+    #[allow(deprecated)]
     fn reserve(&self) -> bool {
         self.started
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |x| {
