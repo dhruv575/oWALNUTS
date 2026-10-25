@@ -1,0 +1,97 @@
+{
+  "schema": "delta2-default-confirmation-v1",
+  "ledger_id": "WP63",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "question": "Should delta = 2 (Tuning::max_error, the per-leaf Hamiltonian-error tolerance; default 1) become the sampler default?",
+  "task_type": "default-flip confirmation: the flip is implemented in this worktree iff the frozen decision rule passes",
+  "source_commit_under_test": "33a8e39d",
+  "commit_note": "main 33a8e39d (worktree fast-forwarded). Its sampler, kernel and defaults are those of f097391c (the v7 commit): Init::default() = best_of(16) (WP52), Tuning::default() with NonfinitePositionPolicy::RejectLeaf (WP54), DEFAULT_CHAIN_RESCUE = None (WP36). The driver checks src/, integrations/, tests/ and Cargo.toml against 33a8e39d and refuses to run evidence cells if they differ or are dirty.",
+  "arms": {
+    "default": "Sampler::new() with only warmup, draws, chains 4, seed, threads 4 and Limits::new().admit_worst_case(); Tuning::default() (delta 1), Metric::default(), Adaptation::default(), Init::default()",
+    "delta2": "identical, plus .tuning(Tuning::default().max_error(2.0)) (the WP34/WP49/WP53 d2 arm)"
+  },
+  "arms_order": ["default", "delta2"],
+  "blocks": {
+    "A": {
+      "role": "decision: efficiency, gates, |z|",
+      "models": [
+        "eight_schools-eight_schools_noncentered",
+        "eight_schools-eight_schools_centered",
+        "diamonds-diamonds",
+        "earnings-logearn_interaction",
+        "mesquite-logmesquite_logvash",
+        "kidiq-kidscore_momhsiq",
+        "sblrc-blr",
+        "nes2000-nes",
+        "arK-arK",
+        "arma-arma11",
+        "garch-garch11",
+        "gp_pois_regr-gp_pois_regr",
+        "hmm_example-hmm_example",
+        "bball_drive_event_0-hmm_drive_0",
+        "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+        "hudson_lynx_hare-lotka_volterra",
+        "mcycle_gp-accel_gp"
+      ],
+      "model_note": "the 17 house models of WP34/WP49 (STUDIES/adaptive_delta_v1/protocol.json models)",
+      "seeds": [630601, 630602, 630603, 630604],
+      "warmup": 1000, "draws": 1000
+    },
+    "B": {
+      "role": "decision (gates and |z| only): 4 extra seeds on the two hardest models",
+      "models": ["mcycle_gp-accel_gp", "bball_drive_event_0-hmm_drive_0"],
+      "seeds": [630611, 630612, 630613, 630614],
+      "warmup": 1000, "draws": 1000
+    },
+    "C": {
+      "role": "decision: Neal's 10-D funnel tail mass and divergences",
+      "target": "Neal's 10-D funnel, omega ~ N(0, 3^2), x_i | omega ~ N(0, exp(omega)); starts omega in {-3,-1,1,3}, x = 0; four chains, four threads; binary copied from STUDIES/funnel_defaults_30seed_v1 (WP53)",
+      "seeds": [630621, 630622, 630623, 630624, 630625, 630626, 630627, 630628, 630629, 630630, 630631, 630632],
+      "seed_note": "the same 12 seeds for both arms",
+      "warmup": 2000, "draws": 20000
+    }
+  },
+  "seeds_verified_unused": "git grep -w over every tracked file of the worktree at 33a8e39d found none of 630601-630604, 630611-630614, 630621-630632 (0 matches each). Smoke seeds 630691-630693 likewise unused and are not evidence.",
+  "chains": 4, "threads": 4,
+  "run_order": "Block A: models in listed order; within a model seeds ascending; within a seed default then delta2. Then block B in the same order. Then block C: seeds ascending; within a seed default then delta2. Strictly sequential: one sampling process at a time (the harness does not run two cells concurrently). A failed or errored cell is a result and is never rerun.",
+  "cell_timeout_seconds": 2700,
+  "posteriordb": {"commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "../posteriordb_bench_v7/posteriordb/posterior_database"},
+  "models_source": "BridgeStan 2.9.0 libraries, data and Stan files copied from STUDIES/posteriordb_bench_v7/models (gitignored)",
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "parameter_set": "posteriordb reference-draw columns; ArviZ 0.23.4 rank R-hat, bulk and tail (5 %/95 %) ESS; reference z = (mean - ref mean) / sqrt(mcse^2 + mcse_ref^2); max |z| over parameters per cell",
+  "statistic": {
+    "cell": "min over reference parameters of bulk ESS / gradients_total (start search, warmup and sampling)",
+    "pair": "delta2 / default at the same model and seed; a pair counts if both cells have status ok (gates not required)",
+    "model_ratio": "geomean over that model's paired block-A seeds",
+    "primary": "paired geomean over A = geomean of the 17 model ratios",
+    "loso": "the primary recomputed with each of the 4 block-A seeds left out; minimum of the 4",
+    "gates": "count of passing cells per arm over A+B (68 + 8 = 76 cells per arm); an errored cell fails",
+    "z": "passing delta2 cells in A+B with max |z| > 4",
+    "funnel_tail": "per arm, pooled P(omega < -5) = mean of the 12 per-seed estimates (each pooled over 4 chains x 20,000 draws); between-seed SE = sample sd / sqrt(12). The '1 SE' of the rule and of P4 is the SE of the difference, sqrt(SE_default^2 + SE_delta2^2) (arms independent given the seed; the default's own SE is also reported)",
+    "funnel_divergences": "sum over the 12 seeds and 4 chains of retained divergences, per arm"
+  },
+  "predictions": {
+    "P1": "paired geomean over A in [1.05, 1.15]",
+    "P2": "leave-one-seed-out minimum >= 1.0",
+    "P3": "delta2 gate passes (A+B) within 1 of the default's (|difference| <= 1)",
+    "P4": "pooled funnel tail mass of delta2 within 1 SE (of the difference) of the default's",
+    "P5": "funnel divergences of delta2 within 1.5x of the default's (ratio in [1/1.5, 1.5]; both zero counts as held)"
+  },
+  "decision_rule": {
+    "flip_iff_all": [
+      "R1: paired geomean over A >= 1.08",
+      "R2: leave-one-seed-out minimum >= 1.00",
+      "R3: delta2 gate passes (A+B) >= default's minus 1",
+      "R4: no passing delta2 cell (A+B) has max |z| > 4",
+      "R5: delta2 pooled funnel tail mass is not lower than the default's by more than 1 SE of the difference (and all 12 delta2 funnel cells completed)",
+      "R6: delta2 funnel divergences <= 1.5x the default's (if the default has 0, delta2 must have 0; all 12 delta2 funnel cells completed)"
+    ],
+    "also_required": "all cells of A, B and C present (an errored cell is present and counts as a failure as above)",
+    "if_pass": "implement Tuning::default() max_error = 2.0 in src/sampler.rs, update tests/kernel_fingerprint.rs to pin the new default, bump ALGORITHM_REVISION per the walnutpie docs if retained draws under defaults change, add a CHANGELOG entry naming WP63 stating that posteriordb v7 was measured at delta = 1 and a v8 is required, run cargo test (GNU toolchain). Commit on wt/posteriordb-v7; no merge, push or tag.",
+    "if_fail": "document; change nothing in the library"
+  },
+  "prior_evidence": "WP34 delta2 / default 1.070x; WP49 d2 / da 1.141x over these 17 models on 3 seeds (d2 43 gates); WP53 (30 funnel seeds) delta2 pooled P(<-5) 0.0455 +- 0.0010 vs default 0.0458 +- 0.0014, divergences 37 vs 43.",
+  "smoke_tests": "Before the freeze commit, the harness and funnel were smoke-tested on eight_schools_noncentered (seeds 630691, 630692) and the funnel (seed 630693) into a scratch directory outside artifacts/; not evidence.",
+  "rules": "No reruns, no tuning after results; walls contended and not evidence; at most 4 threads per sampling process."
+}
