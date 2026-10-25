@@ -1,0 +1,82 @@
+{
+ "schema": "lotka-volterra-stall-v1-protocol",
+ "ledger_id": "WP57",
+ "status": "FROZEN_BEFORE_EVIDENCE",
+ "question": [
+  "Q1: at the f097391c defaults (Init::best_of(16), RejectLeaf, fixed dense warmup), what fraction of 12 fresh seeds of hudson_lynx_hare-lotka_volterra stall (wall > 900 s for 4 x 1,000/1,000 at 4 threads), and do the WP44 chain_warnings or the per-window telemetry identify the stalled chain early?",
+  "Q2: in a stalled chain, where do the gradients go: warmup window, step, depth caps, refinement, per-gradient (ODE) cost?",
+  "Q3: does an opt-in mitigation remove the stalls without changing retained draws on non-stalled seeds?"
+ ],
+ "baseline_commit": "f097391c",
+ "library_commit": "89c6fdf9 (adds research-only WarmupConfig::with_initial_phase_max_depth; default None; no default changed)",
+ "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+ "model": "hudson_lynx_hare-lotka_volterra",
+ "model_assets": "models/ copied from C:/dev/owalnuts-wt/dense-metric/STUDIES/dense_metric_posteriordb_v1/models (sha256 .so b47815a0779b0a9e9b05b67fd14b69a355fc477f94c9bca688579a265cfb52f6, .data.json 91063df0501165af6962c8fe21c855d9b6c38296b98d471284c703abf1355e9f, .stan eb66c700d4ed13972be1f91fdabe745ad49b003565d10cdb452ccd5fb6d5c7d0)",
+ "posteriordb": {
+  "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+  "path": "C:/dev/owalnuts-wt/posteriordb-breadth/STUDIES/posteriordb_breadth_v1/posteriordb/posterior_database"
+ },
+ "sampler": "Metric::diagonal(), Adaptation::default() (or Custom equivalent for depth6_initial), Tuning::default() (RejectLeaf), Limits::admit_worst_case().timeout(1200 s), 4 chains x 1,000 warmup / 1,000 draws, 4 threads, ReplicatedStanTarget construct seed 1, default preload; run through Sampler::run_with_comparison_observers (observe-only per-transition telemetry) with a per-call timing wrapper",
+ "arms": {
+  "defaults": "Init::default() = Init::best_of(16) (candidate_starts(radius 2, 16, 100, HighestDensity))",
+  "best_of_64": "Init::best_of(64); everything else defaults",
+  "depth6_initial": "defaults plus WarmupConfig::with_initial_phase_max_depth(6): tree depth capped at 6 during the initial fast phase (transitions 0-74) only; given as Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION).with_initial_phase_max_depth(6))",
+  "uniform": "Init::uniform() (candidate_starts with 1 candidate == uniform_starts), everything else defaults; targeted replication block only"
+ },
+ "mitigations_not_tested": {
+  "initial_phase_max_error_tighter": "not chosen; see PREREGISTRATION.md"
+ },
+ "wall_cap_seconds": 1200,
+ "stall_threshold_seconds": 900,
+ "process_backstop_seconds": 1500,
+ "blocks": [
+  {"name": "A", "arm": "defaults", "seeds": [5701101, 5701102, 5701103, 5701104, 5701105, 5701106, 5701107, 5701108, 5701109, 5701110, 5701111, 5701112]},
+  {"name": "B", "arm": "best_of_64", "seeds": [5701101, 5701102, 5701103, 5701104, 5701105, 5701106, 5701107, 5701108, 5701109, 5701110, 5701111, 5701112]},
+  {"name": "C", "arm": "depth6_initial", "seeds": [5701101, 5701102, 5701103, 5701104, 5701105, 5701106, 5701107, 5701108, 5701109, 5701110, 5701111, 5701112]},
+  {"name": "T", "arm": "uniform", "targeted": true, "seeds": [5403104, 5403107, 5403110, 148101],
+   "note": "declared targeted replications (NOT fresh): the four WP54 seeds that exceeded 900 s under Init::uniform()"}
+ ],
+ "cell_order": "A (12 seeds ascending), then B, then C, then T in the listed order; strictly sequential, one cell at a time; no cell rerun",
+ "smoke_seed": 5709901,
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "max_abs_z": 4.0,
+  "note": "on every posteriordb reference parameter (8), ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05/0.95), z = (mean - ref mean) / sqrt(mcse^2 + ref mcse^2); plus finite draws; a cell that did not complete within the cap fails every gate"
+ },
+ "definitions": {
+  "stalled_cell": "the run did not finish within the 1,200 s cap, or finished with wall > 900 s (contended wall)",
+  "stalled_chain": "in a stalled cell: a chain that had not finished its 2,000 transitions at the cap; if the cell finished (900-1,200 s), the chain(s) whose gradients exceed 3x the median chain's",
+  "slow_chain": "in any completed cell, a chain whose gradients exceed 3x the median chain's (descriptive)",
+  "windows": "Stan schedule for 1,000 warmup: init 0-74, S1 75-99, S2 100-149, S3 150-249, S4 250-449, S5 450-949, term 950-999, sampling 1000-1999; unfinished-transition work is counted in the window of the next transition",
+  "healthy_chain": "a chain of a non-stalled defaults cell that is not a slow chain",
+  "per_gradient_wall": "wall time inside the target per target call, measured per thread by the wrapper (contended)",
+  "early_identification": "the WP44 step rule (end-of-window step < 0.1 x median over chains) or log-density rule (window median log density below the chains' median by > 3 x the median within-chain IQR), evaluated at the end of window S1 or S2 on the chains that reached it, flags the stalled chain; or the stalled chain has not reached the end of S2 when the other chains have (lag). Both are reported with the wall time at which they become known. The real Summary::chain_warnings exists only for completed runs and is reported for those."
+ },
+ "predictions": {
+  "P1": "at defaults, <= 2 of 12 seeds stall",
+  "P2": "stalled chains spend > 70 % of their gradients in the first two slow windows (S1 + S2), where > 50 % of transitions stop at the depth cap 10 and the median step is < 1e-3",
+  "P3": "the per-gradient wall of a stalled chain is > 2x the median per-gradient wall of healthy chains (ODE stiffness)",
+  "P4": "one mitigation arm has 0/12 stalls and is bit-identical to defaults on every seed where defaults did not stall and identity is possible by construction",
+  "P5": "the four targeted uniform cells reproduce the WP54 stall (>= 3 of 4 stalled)",
+  "P6": "in every stalled cell, the stalled chain is identified early (definition above) before 25 % of the cell's wall"
+ },
+ "decision_rule": {
+  "frozen": true,
+  "for_each_mitigation_arm": {
+   "R1": "0 of 12 stalled cells",
+   "R2": "cells passing every gate >= the defaults arm's count (12 seeds)",
+   "R3": "on every seed where defaults did not stall: retained draws bit-identical to defaults (draw hash), where identity is possible by construction; where it is not, max |z| <= 3 on that seed (and R2 still applies)",
+   "identity_by_construction": {
+    "best_of_64": "possible only when the four chosen starts equal the defaults' starts (starts hash); otherwise not possible by construction",
+    "depth6_initial": "possible only when no initial-phase transition of the defaults run on that seed had depth > 6 (the cap never binds); otherwise not possible by construction"
+   },
+   "recommend": "recommend the arm for a default-flip confirmation iff R1 and R2 and R3"
+  },
+  "if_both_pass": "recommend the one with more bit-identical seeds; tie: lower total gradients over the 12 seeds",
+  "if_defaults_never_stall": "R1 is then trivially satisfiable; an arm is still recommended only if R1-R3 hold, and the README must say the stall rate at defaults gives no evidence of benefit",
+  "no_default_flip_in_this_study": true
+ }
+}

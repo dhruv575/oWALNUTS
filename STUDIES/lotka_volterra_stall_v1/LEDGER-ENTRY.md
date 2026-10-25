@@ -1,0 +1,24 @@
+### WP57-LOTKA-VOLTERRA-STALL-V1 — no stalls at the new defaults (0/12; uniform starts 4/4); the remaining failure is a secondary-mode trap (2/12, R-hat 1.59) driven by refinement exhaustion and rk45 failures, not depth caps or ODE cost; neither best_of(64) nor an initial-phase depth cap fixes it
+
+- **When.** 2026-10-25. Preregistration and harness at `e60e4f45`, frozen before evidence. The research-only opt-in `WarmupConfig::with_initial_phase_max_depth` is at `89c6fdf9` (default `None`). 40 one-shot cells ran in manifest order, 06:23–08:29, contended. None was rerun.
+- **Protocol.** `STUDIES/lotka_volterra_stall_v1/{PREREGISTRATION.md,protocol.json}`.
+  - Model and run: `hudson_lynx_hare-lotka_volterra` at the `f097391c` defaults, 4 x 1,000/1,000 on 4 threads, with a 1,200 s cooperative cap. Telemetry is streamed per transition by the observe-only comparison observer, plus a per-call timing wrapper.
+  - Arms on fresh seeds 5701101–5701112: `defaults` (best-of-16), `best_of_64`, and `depth6_initial` (depth at most 6 in transitions 0–74).
+  - Targeted replications: `uniform` on the WP54 stall seeds 5403104, 5403107, 5403110 and 148101.
+- **Outcome.**
+  - Stalls: 0/12 at defaults, in both mitigation arms, and 4/4 under `uniform` (all at the cap).
+  - Gates passed: 10/12 in each of the three arms.
+  - Trapped chains: defaults 2/12 (5701103, 5701106); `depth6_initial` the same 2 chains on the same seeds; `best_of_64` 1/12 (5701104), plus R-hat 1.039 on 5701106.
+  - Two mechanisms:
+    - (I) Secondary-mode trap, at log density -300 to -960 against -137. 95–99.5 % of transitions end refinement-exhausted, 6–43 % of gradients are zero-density `rk45` failures, and transitions cost 300–1,000 gradients.
+    - (II) Deep-tail crawl, seen only under uniform starts, at -1e4 to -8e4. The step is 1e-5 to 1e-3, refinement is near maximal, and transitions cost 3,000–8,500 gradients at depth 6–9.
+  - Depth-cap stops are at most 6.4 %. Stalled chains spend 8–38 % of their gradients in S1 + S2.
+  - Per-call wall against the same cell's other chains is 0.52–1.08x, so the cost is not ODE stiffness per call.
+  - Detection:
+    - `chain_warnings` named the trapped chain in 5/5 completed trapped cells.
+    - The WP44 step rule at the end of S1 flags 10/10 trapped or stalled chains, and 0 of 139 healthy chains in A–C. The density rule there has 26 false positives.
+    - Lag identifies 3 of 5 stalled chains before 25 % of wall.
+  - Predictions: P1 and P5 held. P2, P3 and P6 failed. P4 was vacuous.
+- **Decision.** The frozen rule passes for both arms. The tie-break picks `best_of_64`. But defaults never stalled, so there is no evidence of benefit, and both arms were non-identical by construction on every seed.
+- **Change.** None to defaults. The opt-in depth cap stays research-only.
+- **Next.** Target the type I trap rate with many seeds. Test a restart of the chain flagged by the S1 step rule, at the first slow-window boundary.

@@ -1,0 +1,366 @@
+   Compiling crossbeam-utils v0.8.22
+   Compiling zerocopy v0.8.56
+   Compiling getrandom v0.3.4
+   Compiling cfg-if v1.0.4
+   Compiling crossbeam-epoch v0.9.20
+   Compiling autocfg v1.5.1
+   Compiling libm v0.2.16
+   Compiling crossbeam-deque v0.8.7
+   Compiling num-traits v0.2.19
+   Compiling rand_core v0.9.5
+   Compiling rayon-core v1.13.0
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling either v1.18.0
+   Compiling serde_json v1.0.151
+   Compiling ppv-lite86 v0.2.21
+   Compiling rayon v1.12.0
+   Compiling rand_chacha v0.9.0
+   Compiling rand v0.9.5
+   Compiling memchr v2.8.3
+   Compiling rand_distr v0.5.1
+   Compiling itoa v1.0.18
+   Compiling owalnuts v0.2.0 (C:\dev\owalnuts-wt\lotka-stall)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 30s
+     Running unittests src\lib.rs (target\debug\deps\owalnuts-eebf5ef4e61b4e51.exe)
+
+running 149 tests
+test kernel::tests::benchmark_untraced_against_traced_fixed_gaussian_tape ... ignored, wall-clock benchmark
+test diagnostics::tests::normal_quantile_matches_known_values ... ok
+test diagnostics::tests::invalid_shapes_yield_nan ... ok
+test diagnostics::tests::average_ranks_handle_ties ... ok
+test diagnostics::tests::quantile_is_type_seven ... ok
+test diagnostics::tests::autocovariance_matches_direct_sum ... ok
+test export::tests::float_formatting_round_trips ... ok
+test export::tests::columns_follow_cmdstan_layout ... ok
+test kernel::tests::context_kinetic_scope_restores_the_previous_setting ... ok
+test kernel::tests::barker_selection_uses_a_strict_boundary ... ok
+test kernel::tests::accepts_non_power_of_two_minimum_steps ... ok
+test kernel::tests::build_leaf_uses_the_directional_physical_endpoint ... ok
+test kernel::tests::default_kernel_options_are_the_frozen_rules ... ok
+test kernel::tests::complete_transition_uses_one_coupled_metric_generation_with_exact_rng_and_work ... ok
+test kernel::tests::accept_unless_divergent_is_one_sided_and_relative_to_the_transition ... ok
+test kernel::tests::cached_transition_is_numerically_identical_without_initial_target_work ... ok
+test kernel::tests::exhaustion_accept_keeps_the_finest_leaf_below_the_divergence_threshold ... ok
+test kernel::tests::exhaustion_accept_with_one_level_is_nuts ... ok
+test kernel::tests::first_leaf_exhaustion_propagates_without_rng ... ok
+test kernel::tests::gaussian_macro_leaf_is_reversible_under_momentum_flip ... ok
+test kernel::tests::inclusive_endpoint_boundary_is_accepted ... ok
+test kernel::tests::interior_energy_spike_is_accepted_when_endpoint_returns_close ... ok
+test kernel::tests::interior_zero_density_with_finite_endpoint_follows_upstream_rule ... ok
+test kernel::tests::invalid_intermediate_evaluation_rejects_immediately ... ok
+test kernel::tests::log_add_exp_is_stable_and_validates_weights ... ok
+test kernel::tests::invalid_reverse_replay_stops_on_the_failed_call_with_exact_work ... ok
+test kernel::tests::invalid_reverse_replay_consumes_only_its_direction_draw ... ok
+test kernel::tests::metric_boundary_install_does_not_remap_q_or_cached_target_state ... ok
+test kernel::tests::metropolis_uses_old_weight_strict_boundary_and_always_draws ... ok
+test kernel::tests::minimum_level_accepts_forward_and_backward_with_exact_counts ... ok
+test kernel::tests::mixed_accepted_and_fatal_reverse_levels_demonstrate_ineligible_order_dependence ... ok
+test kernel::tests::momentum_sum_cross_check_can_turn_when_the_full_check_does_not ... ok
+test kernel::tests::momentum_sum_spans_accumulate_leaf_momenta ... ok
+test kernel::tests::negative_infinity_with_nonfinite_gradient_is_invalid ... ok
+test kernel::tests::one_state_span_initializes_endpoints_candidate_and_weight ... ok
+test kernel::tests::original_q_mass_operator_leapfrog_is_reversible_and_generation_is_fixed ... ok
+test kernel::tests::outer_uturn_combines_with_metropolis_before_stopping ... ok
+test kernel::tests::parent_uturn_preserves_completed_child_rng_consumption ... ok
+test kernel::tests::recursive_failure_stops_before_outer_uturn_or_metropolis ... ok
+test kernel::tests::rejects_invalid_diagonal_mass ... ok
+test kernel::tests::rejects_micro_step_count_overflow ... ok
+test kernel::tests::reports_refinement_exhaustion_and_exact_counts ... ok
+test kernel::tests::reverse_coarser_acceptance_rejects_leaf ... ok
+test kernel::tests::reverse_schedule_uses_exact_repeated_arithmetic_for_all_lengths_and_subnormals ... ok
+test kernel::tests::scripted_uniform_validates_values_and_exhaustion ... ok
+test kernel::tests::scripted_transition_rng_is_typed_order_sensitive_and_validated ... ok
+test kernel::tests::exhaustion_and_minimum_microsteps_are_order_independent ... ok
+test kernel::tests::transition_depth_two_accounts_for_recursive_barker_draws ... ok
+test kernel::tests::telemetry_transition_api_preserves_legacy_and_traced_rng_behavior ... ok
+test kernel::tests::transition_direction_changes_the_selected_physical_endpoint ... ok
+test kernel::tests::traced_and_untraced_transition_results_diagnostics_and_work_are_identical ... ok
+test kernel::tests::telemetry_partitions_refinement_reverse_and_rejection_work_exactly ... ok
+test kernel::tests::span_validation_rejects_bad_cache_and_depth_overflow ... ok
+test kernel::tests::state_ring_hands_out_shared_copies_for_any_dimension ... ok
+test kernel::tests::transition_validates_before_evaluation_or_rng_and_rejects_bad_evaluation ... ok
+test kernel::tests::u_turn_rules_agree_with_their_closed_forms ... ok
+test kernel::tests::second_leaf_exhaustion_keeps_evaluation_count_and_consumes_no_rng ... ok
+test kernel::tests::zero_density_at_every_level_is_refinement_exhaustion ... ok
+test kernel::tests::transition_evaluates_initial_position_once_and_reports_exact_work ... ok
+test kernel::tests::zero_density_reverse_coarser_check_keeps_forward_leaf ... ok
+test kernel::tests::zero_density_forward_with_valid_coarse_reverse_is_not_reversible ... ok
+test kernel::tests::zero_density_endpoint_refines_instead_of_stopping ... ok
+test oracle_tests::macro_leaf::exhaustion ... ok
+test oracle_tests::macro_leaf::backward_minimum_acceptance ... ok
+test oracle_tests::macro_leaf::backward_refinement ... ok
+test diagnostics::tests::chain_disagreement_names_the_odd_chain_out ... ok
+test oracle_tests::macro_leaf::forward_minimum_acceptance ... ok
+test oracle_tests::macro_leaf::forward_refinement ... ok
+test oracle_tests::macro_leaf::non_power_of_two_minimum ... ok
+test oracle_tests::macro_leaf::multi_level_reverse_coarsening ... ok
+test oracle_tests::macro_leaf::forward_reverse_coarser_rejection ... ok
+test walnutpie::tests::adopted_position_is_the_exact_selected_source_window_draw ... ok
+test oracle_tests::macro_leaf::inclusive_boundary ... ok
+test oracle_tests::macro_leaf::backward_reverse_coarser_rejection ... ok
+test oracle_tests::macro_leaf::nonidentity_diagonal_mass ... ok
+test oracle_tests::transition::matches_every_validated_upstream_transition_trace ... ok
+test walnutpie::tests::block_mass_matches_equivalent_full_dense_operations ... ok
+test walnutpie::tests::block_metric_enforces_block_and_adaptation_limits ... ok
+test walnutpie::tests::block_metric_sampling_matches_full_dense_at_small_dimension ... ok
+test kernel::tests::reverse_orders_visit_the_same_complete_schedule_when_all_levels_fail ... ok
+test oracle_tests::span::matches_every_validated_upstream_span_trace ... ok
+test kernel::tests::acceptance_at_each_reverse_level_has_identical_cause_and_legal_prefixes ... ok
+test kernel::tests::recoverable_zero_density_at_each_reverse_level_preserves_outcome ... ok
+test oracle_tests::sequence::matches_both_validated_upstream_transition_sequences ... ok
+test kernel::tests::outer_selection_probabilities_match_closed_form_and_empirical_grid ... ok
+test kernel::tests::randomized_barker_flux_satisfies_discrete_balance ... ok
+test walnutpie::tests::chain_limit_rejects_before_shared_initial_position_cloning ... ok
+test walnutpie::tests::cancellation_set_inside_target_is_observed_after_callback ... ok
+test walnutpie::tests::complete_result_memory_bound_has_an_exact_boundary ... ok
+test walnutpie::tests::dense_stan_regularization_matches_stans_formula_and_is_the_default ... ok
+test walnutpie::tests::dimension_is_panic_contained_and_cached_once ... ok
+test walnutpie::tests::cancellation_and_deadline_fail_without_partial_success ... ok
+test walnutpie::tests::low_rank_arrowhead_fails_closed_on_spd_rank_and_resource_errors ... ok
+test walnutpie::tests::malformed_and_nonfinite_targets_are_fatal ... ok
+test walnutpie::tests::expanding_warmup_schedule_table_is_exact ... ok
+test walnutpie::tests::extreme_mass_is_rejected_before_sampling ... ok
+test walnutpie::tests::maximum_depth_health_limit_is_enforced ... ok
+test walnutpie::tests::generated_randomness_matches_supplied_transition_seam ... ok
+test walnutpie::tests::initial_step_search_brackets_widely_scaled_starts_and_accounts_work ... ok
+test walnutpie::tests::direct_original_q_builds_one_scoped_pool_per_run ... ok
+test walnutpie::tests::initial_step_search_configuration_and_resource_limits_fail_cleanly ... ok
+test walnutpie::tests::nonfinite_rescue_scores_are_ineligible_and_have_no_source ... ok
+test walnutpie::tests::original_q_driver_identity_dense_is_bit_identical_to_diagonal_facade ... ok
+test walnutpie::tests::metric_windows_reset_report_updates_and_skip_one_sample_install ... ok
+test walnutpie::tests::diagonal_warmup_tracks_gaussian_scales ... ok
+test walnutpie::tests::panicking_cancellation_is_structured ... ok
+test walnutpie::tests::paper_adaptation_configuration_fails_closed ... ok
+test walnutpie::tests::initial_step_search_requires_coarsest_acceptance_and_uses_bracket_endpoint ... ok
+test walnutpie::tests::paper_robustness_guards_floor_trim_and_exclude ... ok
+test walnutpie::tests::paper_step_is_bounded_relative_to_the_initial_step ... ok
+test walnutpie::tests::paper_step_rule_moves_with_the_unrefined_fraction ... ok
+test walnutpie::tests::paper_quantile_and_delta_rule_are_closed_form ... ok
+test walnutpie::tests::paper_step_statistic_pools_cumulatively_and_resets_once ... ok
+test walnutpie::tests::rescue_source_exact_ties_keep_parent_higher_index_behavior ... ok
+test walnutpie::tests::rejects_nonrepresentable_inverse_mass_and_checked_count_overflow ... ok
+test walnutpie::tests::scale_free_metric_regularisations_match_the_formula_and_are_scale_free ... ok
+test walnutpie::tests::sample_indices_never_overflow_or_panic ... ok
+test walnutpie::tests::same_seed_is_identical_and_metadata_is_present ... ok
+test walnutpie::tests::stan_initial_step_search_doubles_and_halves_toward_the_target ... ok
+test walnutpie::tests::selected_subspace_arrowhead_matches_exact_dense_factor ... ok
+test walnutpie::tests::stan_metric_regularisation_matches_the_formula ... ok
+test walnutpie::tests::opt_in_warmup_is_deterministic_and_preserves_provenance ... ok
+test walnutpie::tests::static_validation_precedes_target_and_resource_limits_are_checked ... ok
+test walnutpie::tests::structured_blocks_match_equivalent_dense_operators ... ok
+test walnutpie::tests::sequential_and_parallel_chains_are_identical_without_jitter ... ok
+test walnutpie::tests::single_chain_matches_multi_chain_zero_and_metadata_is_complete ... ok
+test walnutpie::tests::structured_bidiagonal_spd_and_resource_limits_fail_closed ... ok
+test walnutpie::tests::structured_preflight_is_exact_and_starts_zero_callbacks ... ok
+test walnutpie::tests::structured_validation_and_sampling_are_deterministic ... ok
+test walnutpie::tests::initial_phase_max_error_applies_only_before_the_first_slow_window ... ok
+test walnutpie::tests::relative_step_floors_validate_and_bound_the_adapted_step ... ok
+test walnutpie::tests::target_budget_is_an_exact_shared_runtime_callback_cap ... ok
+test walnutpie::tests::target_panics_at_initial_and_mid_transition_are_contained ... ok
+test walnutpie::tests::symmetrized_dense_precision_avoids_spurious_ridge_on_collinear_draws ... ok
+test walnutpie::tests::stan_style_preset_restarts_with_ten_times_the_step_and_runs_searches ... ok
+test walnutpie::tests::trajectory_acceptance_statistic_is_a_leafwise_metropolis_mean ... ok
+test walnutpie::tests::unrefined_fraction_counts_built_leaves_only ... ok
+test walnutpie::tests::two_hit_state_resets_on_clean_skip_change_and_restart ... ok
+test walnutpie::tests::scoped_pool_completes_worker_tls_destructors_before_return ... ok
+test walnutpie::tests::initial_step_search_is_parallel_deterministic_for_anisotropic_gaussian ... ok
+test walnutpie::tests::warmup_validation_and_fixed_mode_compatibility_are_explicit ... ok
+test walnutpie::tests::windowed_adaptation_is_sequential_parallel_deterministic ... ok
+test walnutpie::tests::rotated_gaussian_windowed_metric_is_finite_and_symmetric_in_scale ... ok
+test walnutpie::tests::mean_trajectory_acceptance_is_opt_in_and_the_default_is_unchanged ... ok
+test walnutpie::tests::parallel_errors_choose_lowest_chain_after_all_workers_finish ... ok
+test walnutpie::tests::projected_arrowhead_builds_one_pool_for_all_transitions ... ok
+test walnutpie::tests::low_rank_arrowhead_matches_dense_sampling_velocity_energy_and_reversibility ... ok
+test oracle_tests::funnel_leaf::funnel_macro_leaves_match_upstream_reference ... ok
+test oracle_tests::invalid_leaf::zero_density_macro_leaves_match_upstream_reference ... ok
+
+test result: ok. 148 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.40s
+
+     Running tests\chain_rescue.rs (target\debug\deps\chain_rescue-95c21d103ae641a6.exe)
+
+running 9 tests
+test rescue_result_and_working_memory_are_preflight_accounted ... ok
+test rescue_with_skipped_boundaries_or_one_chain_is_the_plain_run ... ok
+test rescue_telemetry_obeys_score_and_state_invariants ... ok
+test two_hit_waits_for_the_second_same_hit_and_then_resets ... ok
+test observe_only_is_execution_identical_to_disabled_on_gaussian_and_trap ... ok
+test restart_rescues_a_chain_started_in_a_trap_by_the_density_rule ... ok
+test sampler_default_is_silent_and_custom_supports_every_rescue_policy ... ok
+test observe_and_two_hit_are_parallel_deterministic ... ok
+test rescue_is_deterministic_and_never_fires_on_a_gaussian ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+
+     Running tests\chain_warnings.rs (target\debug\deps\chain_warnings-c4710c5ebf7807b7.exe)
+
+running 4 tests
+test detect_applies_the_step_and_density_rules_and_their_guards ... ok
+test posterior_exposes_the_checks_and_the_default_draws_are_unchanged ... ok
+test a_trapped_chain_is_named_at_warmup_end_and_on_the_draws ... ok
+test window_telemetry_matches_the_observe_only_last_boundary_and_the_draws ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests\continuation_session.rs (target\debug\deps\continuation_session-76d680b15addf102.exe)
+
+running 11 tests
+test unsupported_configuration_and_admission_make_zero_target_calls ... ok
+test callback_close_cancels_without_joining_itself_and_external_close_reaps ... ok
+test callback_panic_is_terminal_and_reports_started_work ... ok
+test parallel_callback_close_does_not_join_coordinator ... ok
+test conservative_admission_has_no_hidden_constructor_callbacks ... ok
+test failed_execution_is_terminal_but_invalid_request_is_not ... ok
+test cancellation_and_reentrancy_do_not_release_a_live_target ... ok
+test parallel_callbacks_overlap_cancel_joins_and_global_budget_is_bounded ... ok
+test parallel_callback_error_is_terminal_and_target_drops_after_join ... ok
+test uneven_chunks_match_uninterrupted_rng_adaptation_diagnostics_and_calls ... ok
+test parallel_four_chains_match_sequential_chunks_and_ordinary_run ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests\diagnostics_arviz.rs (target\debug\deps\diagnostics_arviz-918fe6f3eb687c2a.exe)
+
+running 1 test
+test estimators_match_arviz_fixture ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests\export_cmdstan.rs (target\debug\deps\export_cmdstan-13f990a977bbbe16.exe)
+
+running 3 tests
+test arviz_from_cmdstan_agrees_with_rust_summary ... ok
+test csv_round_trips_draws_and_sampler_stats ... ok
+test summary_reports_gaussian_moments_and_health ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests\freeze_mode.rs (target\debug\deps\freeze_mode-56943a1c6d4d1aa1.exe)
+
+running 5 tests
+test accept_unless_divergent_is_bit_identical_where_nothing_exhausts ... ok
+test frozen_kernel_pins_at_a_wall_start ... ok
+test warmup_only_rule_escapes_and_keeps_the_frozen_rule_for_retained_draws ... ok
+test accept_unless_divergent_escapes_the_wall_start ... ok
+test sampler_default_adaptation_escapes_the_wall_start ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests\kernel_fingerprint.rs (target\debug\deps\kernel_fingerprint-891808251a12b333.exe)
+
+running 3 tests
+test default_start_rule_is_best_of_16 ... ok
+test eight_schools_adapted_four_chains_are_bit_exact ... ok
+test funnel_paper_tuning_four_chains_are_bit_exact ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests\nonfinite_position_policy.rs (target\debug\deps\nonfinite_position_policy-39be8d1ad6f8fa69.exe)
+
+running 5 tests
+test sampler_default_is_reject_leaf_and_kernel_default_is_abort ... ok
+test abort_ends_the_run_with_a_numerical_error ... ok
+test sampler_default_completes_the_overflowing_run ... ok
+test reject_leaf_completes_and_counts_the_event ... ok
+test policies_are_bit_identical_when_the_event_never_occurs ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\public_facade.rs (target\debug\deps\public_facade-bc6305f98e6d07bb.exe)
+
+running 42 tests
+test conservative_bound_overflow_fails_before_target_callbacks ... ok
+test budgeted_admission_rejects_short_ceiling_oversized_cap_and_reused_budget ... ok
+test budgeted_admission_accepts_exact_legacy_multichain_bound_without_callbacks ... ok
+test budget_exhaustion_covers_initial_search_and_is_fatal ... ok
+test divergence_threshold_validation_is_public ... ok
+test default_tuning_preserves_the_qualified_public_behavior ... ok
+test fatal_target_error_consumes_one_budget_reservation ... ok
+test fatal_target_messages_reach_the_error_display ... ok
+test dense_precision_metric_is_deterministic_and_exactly_accounted ... ok
+test configured_tuning_is_public_and_metadata_records_actual_values ... ok
+test fixed_metric_architecture_goldens_cover_all_existing_paths ... ok
+test budgeted_dense_control_is_bit_identical_when_inactive ... ok
+test inactive_budget_preserves_samples_diagnostics_and_telemetry_bit_for_bit ... ok
+test parameter_names_default_to_none_and_validate_on_raw_targets ... ok
+test proposal_observation_classifies_recoverable_nonfinite ... ok
+test proposal_observation_is_bounded_ordered_and_behavior_identical ... ok
+test raw_target_nan_return_fails_the_run_fatally ... ok
+test dense_multichain_errors_choose_lowest_failing_chain ... ok
+test recoverable_target_failures_are_deterministic_rejections_with_exact_partitions ... ok
+test raw_target_negative_infinity_is_a_recoverable_zero_density_point ... ok
+test retained_execution_exhaustion_and_target_panic_do_not_overshoot ... ok
+test paper_adaptation_is_opt_in_frozen_before_retention_and_reported ... ok
+test paper_exhausted_transitions_as_zero_lets_h_shrink_out_of_a_bad_start ... ok
+test proposal_observer_panic_is_contained_without_partial_output ... ok
+test paper_adaptation_is_parallel_sequential_identical_and_preflights_without_callbacks ... ok
+test dense_multichain_is_sequential_parallel_identical_in_physical_coordinates ... ok
+test dense_window_adaptation_learns_rotated_geometry_with_fallback_telemetry ... ok
+test proposal_observer_reentrancy_is_rejected_without_outer_corruption ... ok
+test public_health_accessors_threshold_and_phase_totals_are_exact ... ok
+test stochastic_public_facade_returns_samples_diagnostics_and_run_identity ... ok
+test telemetry_checkpoint_validation_fails_closed ... ok
+test tuning_rejects_nonfinite_nonpositive_and_overflowing_values ... ok
+test proposal_observation_first_event_cap_and_parallel_chain_identity ... ok
+test references_boxes_and_arcs_of_targets_are_targets ... ok
+test target_budget_is_exact_under_contention_without_overshoot ... ok
+test warmup_is_opt_in_deterministic_and_fixed_before_retention ... ok
+test raw_target_is_bit_identical_to_the_native_implementation ... ok
+test checkpoint_telemetry_is_behavior_and_rng_identical ... ok
+test paper_step_relative_bound_is_configurable ... ok
+test paper_step_never_updates_from_transitions_without_built_leaves ... ok
+test paper_robustness_guards_defer_and_floor_without_changing_the_default ... ok
+test zero_density_boundary_keeps_truncated_target_stationary ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests\reverse_coarser_policy.rs (target\debug\deps\reverse_coarser_policy-751387784d5552a8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\sampler_api.rs (target\debug\deps\sampler_api-ae0c99b61740cd99.exe)
+
+running 20 tests
+test candidate_starts_with_one_candidate_are_the_uniform_starts ... ok
+test candidate_starts_select_by_log_density_and_count_every_evaluation ... ok
+test invalid_builders_fail_closed ... ok
+test identity_metric_matches_the_diagonal_facade_without_mass_adaptation ... ok
+test uniform_starts_are_deterministic_inside_the_box_and_evaluable ... ok
+test cancellation_and_timeout_match_run_control ... ok
+test adaptive_dense_metric_matches_the_dense_facade ... ok
+test adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade ... ok
+test default_multi_chain_warmup_is_explicit_no_rescue_bit_for_bit ... ok
+test structured_refresh_matches_the_refresh_facade ... ok
+test uniform_starts_fail_clearly_after_max_attempts ... ok
+test uniform_starts_propagate_fatal_target_errors ... ok
+test paper_adaptation_matches_the_paper_warmup_configuration ... ok
+test evaluation_budget_matches_the_budgeted_facade ... ok
+test fixed_structured_metric_matches_the_structured_facade ... ok
+test dense_per_transition_seeding_is_the_default_and_recovers_the_precision ... ok
+test parallel_and_sequential_runs_are_identical_and_chains_replicate_a_start ... ok
+test dense_metric_runs_default_length_under_worst_case_admission ... ok
+test run_with_candidate_init_matches_run_from_the_chosen_starts ... ok
+test run_with_init_matches_run_from_the_drawn_starts ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.30s
+
+     Running tests\structured_refresh.rs (target\debug\deps\structured_refresh-9a58f0722d2e7707.exe)
+
+running 4 tests
+test preflight_is_zero_callback_and_invalid_configurations_fail_closed ... ok
+test failed_skipped_and_mismatched_refreshes_keep_the_previous_mass ... ok
+test chains_are_sequential_parallel_identical_and_restart_policies_are_honoured ... ok
+test local_level_refresh_learns_precision_and_the_exact_block_mixes_faster ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
+
+   Doc-tests owalnuts
+
+running 1 test
+test src\sampler.rs - sampler (line 12) ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT 0
