@@ -1,0 +1,212 @@
+{
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "argmax_abs_z": "zgp_sigma_1[3]",
+ "argmin_bulk_ess": "sdgp_1",
+ "arm": "rescue_on",
+ "chain_warnings": [],
+ "defaults": {
+  "adaptation_default": "DualAveraging { target_accept: 0.8 }",
+  "default_chain_rescue": "None",
+  "default_metric_regularization": "Stan",
+  "default_u_turn_rule": "MomentumSum",
+  "default_warmup_exhaustion": "AcceptUnlessDivergent",
+  "init_default": "Candidates { radius: 2.0, candidates: 16, max_attempts: 100, selection: HighestDensity }",
+  "init_used": "Candidates { radius: 2.0, candidates: 16, max_attempts: 100, selection: HighestDensity }",
+  "init_used_equals_default": true,
+  "kernel_options": "KernelOptions { u_turn: MomentumSum, exhaustion: Stop }",
+  "metric_default": "Diagonal { adapt: true, initial: None }",
+  "sampler_debug": "Sampler { warmup: 1000, draws: 1000, chains: Some(4), seed: 610603, threads: Some(4), metric: Diagonal { adapt: true, initial: None }, adaptation: Custom(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: CurrentCoarseEndpoint, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: Some(ChainRescueConfig { mode: RestartFromBest, policy: Immediate, step_ratio: 0.1, log_density_iqr_factor: 3.0, minimum_window_transitions: 10 }) }), tuning: Tuning { step_size: 0.5, max_depth: 10, min_micro_steps: 1, max_refinement_levels: 8, max_error: 1.0, divergence_threshold: 1000.0, kernel_options: KernelOptions { u_turn: MomentumSum, exhaustion: Stop }, nonfinite_position: RejectLeaf }, limits: Limits { max_target_evaluations: None, admit_worst_case: true, deadline: None, timeout: None, cancellation: None, max_depth_stops: None }, cache_initial_evaluation: true }",
+  "tuning_default": "Tuning { step_size: 0.5, max_depth: 10, min_micro_steps: 1, max_refinement_levels: 8, max_error: 1.0, divergence_threshold: 1000.0, kernel_options: KernelOptions { u_turn: MomentumSum, exhaustion: Stop }, nonfinite_position: RejectLeaf }"
+ },
+ "divergences": 0,
+ "end_of_warmup_step": [
+  0.008563884282172274,
+  0.007437304343178875,
+  0.009529020122885487,
+  0.006259713346354255
+ ],
+ "end_of_warmup_step_min_over_median": 0.7824060440656027,
+ "execution": "OwnedSerialised",
+ "gates": {
+  "finite_draws": true,
+  "max_rank_rhat": false,
+  "min_bulk_ess": false,
+  "min_tail_ess": false,
+  "no_sampler_error": true,
+  "sampling_divergences": true
+ },
+ "gradients_sampling": 1571582,
+ "gradients_total": 2888403,
+ "gradients_warmup": 1316757,
+ "init": {
+  "chosen": [
+   1,
+   4,
+   3,
+   5
+  ],
+  "evaluations": [
+   16,
+   16,
+   16,
+   16
+  ],
+  "rule": "Candidates { radius: 2.0, candidates: 16, max_attempts: 100, selection: HighestDensity }",
+  "start_log_densities": [
+   -933.8118385701042,
+   -2484.096053422475,
+   -1417.3047072954876,
+   -883.9633475645641
+  ]
+ },
+ "max_abs_z": 2.700168653480607,
+ "max_depth_stops": 0,
+ "max_rank_rhat": 1.0178326644700566,
+ "min_bulk_ess": 246.6134671899804,
+ "min_bulk_ess_per_gradient": 8.538056053465545e-05,
+ "min_tail_ess": 194.33313435651365,
+ "model": "mcycle_gp-accel_gp",
+ "nonfinite_position_rejections": 0,
+ "passed": false,
+ "per_chain_bulk_ess_min": [
+  29.136654222791346,
+  91.69035323844908,
+  49.00031299892594,
+  124.0441389684184
+ ],
+ "refinement_exhaustions": 0,
+ "rescue_boundary_updates": 20,
+ "rescue_events": [
+  {
+   "chain": 1,
+   "log_density_iqr": 11.710553816774677,
+   "median_log_density": -797.4603312499329,
+   "outcome": {
+    "criterion": "LogDensity",
+    "kind": "restarted",
+    "source": 2,
+    "source_position": 8,
+    "step_after": 0.005015688625179893
+   },
+   "step_before": 0.03671793072654402,
+   "transition": 99,
+   "window_index": 0,
+   "window_transitions": 25
+  }
+ ],
+ "rescue_restarts": 1,
+ "retained_gradients_per_chain": [
+  268547,
+  358110,
+  216417,
+  728508
+ ],
+ "schema": "rescue-removal-paired-v1-cell-metrics",
+ "seed": 610603,
+ "start_log_densities": [
+  -933.8118385701042,
+  -2484.096053422475,
+  -1417.3047072954876,
+  -883.9633475645641
+ ],
+ "start_search_calls": 64,
+ "status": "ok",
+ "wall_seconds": 58.6827563,
+ "warmup_config_used": "Some(WarmupConfig { target_acceptance: 0.8, adapt_step_size: true, adapt_mass: true, initial_step_search: None, windows: WarmupWindowConfig { initial_buffer: 75, base_window: 25, terminal_buffer: 50 }, warmup_telemetry_checkpoints: [], research_restart_reference_multiplier: One, dual_averaging_acceptance: CurrentCoarseEndpoint, paper_adaptation: None, metric_regularization: Stan, dense_metric_regularization: Stan, dense_warmup_seeding: PerTransition, dense_symmetrize_precision: true, stan_restart_reference: false, initial_phase_max_error: None, minimum_step: None, warmup_exhaustion: Some(AcceptUnlessDivergent), warmup_reverse_coarser_policy: None, skip_single_leaf_reverse_coarser_statistic: false, single_leaf_reverse_coarser_statistic_floor: None, dual_averaging_max_descent: None, step_floor_relative_to_search: None, max_window_shrink: None, chain_rescue: Some(ChainRescueConfig { mode: RestartFromBest, policy: Immediate, step_ratio: 0.1, log_density_iqr_factor: 3.0, minimum_window_transitions: 10 }) })",
+ "warmup_gradients_per_chain": [
+  335604,
+  324301,
+  324080,
+  332772
+ ],
+ "warmup_step_trace_every_50": [
+  [
+   0.5,
+   0.011041029941305416,
+   0.003040382217881016,
+   0.026586568543655435,
+   0.013939467371471195,
+   0.02304948305443234,
+   0.019244539290998352,
+   0.0029583589395266396,
+   0.0064382732783574625,
+   0.007167042026638844,
+   0.008621797237984296,
+   0.010017349486233763,
+   0.008529317315945435,
+   0.01237041686264249,
+   0.012663571050364728,
+   0.013677376431268885,
+   0.00691784141625434,
+   0.009032024560652161,
+   0.012426214131347592,
+   0.012687520457616506
+  ],
+  [
+   0.5,
+   0.026592670571647308,
+   0.005015688625179893,
+   0.017165297608395854,
+   0.004386353015196263,
+   0.014185350385797824,
+   0.014432763634969982,
+   0.013643959578415065,
+   0.012097761498371674,
+   0.0193359854547866,
+   0.009742470233926851,
+   0.007088020787324226,
+   0.01029032797887865,
+   0.013001570522911524,
+   0.01008414530399653,
+   0.011930153475958574,
+   0.009634293431367779,
+   0.008691133291506472,
+   0.009727233669992522,
+   0.012527003881775254
+  ],
+  [
+   0.5,
+   0.006507621561688639,
+   0.005015688625179893,
+   0.021187685875733678,
+   0.010460305290285304,
+   0.010395013990981554,
+   0.01685152307689447,
+   0.0130680605006254,
+   0.012573380172259275,
+   0.009211649286714533,
+   0.009724036476889299,
+   0.014154483161238476,
+   0.0075650281580689135,
+   0.011070316591236622,
+   0.010143685691578995,
+   0.012085235443018358,
+   0.010615664219324951,
+   0.009026071734426565,
+   0.008394719016656041,
+   0.006920738738703382
+  ],
+  [
+   0.5,
+   0.009589082585609459,
+   0.004586883035558664,
+   0.019408342936367392,
+   0.004194631936385503,
+   0.01075301957250535,
+   0.0023639953398422605,
+   0.011507637140862535,
+   0.0072162305037861,
+   0.008726266367984216,
+   0.014716380906890387,
+   0.01124674418467348,
+   0.008392761093039356,
+   0.008166799581779726,
+   0.009680970255595034,
+   0.01083244925479445,
+   0.005624771895471082,
+   0.012616915249234592,
+   0.006737660052459637,
+   0.00753770495563141
+  ]
+ ]
+}
