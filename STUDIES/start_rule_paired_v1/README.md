@@ -69,7 +69,7 @@ Mechanism, from per-chain telemetry (`artifacts/results-table.md` and
 The prediction thresholds were H1 below 0.9 and H0 at or above 0.95. The
 observed 1.061 supports H0. The decision rule says KEEP. Most of the
 geomean's movement comes from `accel_gp` (3.0) against `hmm_drive_0` (0.32);
-without those two the geomean of the other four is 1.11.
+without those two the geomean of the other four is 1.10.
 
 ## Recommendation
 
