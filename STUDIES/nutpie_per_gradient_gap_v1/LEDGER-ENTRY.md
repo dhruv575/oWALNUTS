@@ -1,0 +1,23 @@
+### WP58-NUTPIE-PER-GRADIENT-GAP-V1 — nutpie's 1.6–2.4x ESS-per-gradient lead on the WP47 PyMC models is mass-matrix adaptation, not accounting or WALNUTS refinement; rule: documentation only
+
+- Ordered time: 2026-10-25 on `wt/nutpie-gap` (base `f097391c`). Preregistration, protocol and both harnesses were committed at `93201f95` before any evidence cell. Amendment A1 (`b0825557`) was committed after the seed-5858101 block and before the cells it adds: `init="uniform"` py-* arms on lotka_volterra, needed because `init=None` died at transition 0. Seeds 5858101–5858103 (unused on every branch). 225 + 12 cells, strictly sequential, none rerun.
+- Design: six models, three paths, 16 arms.
+  - Models: the WP47 PyMC models (gauss100, eight, hier), the bridge eight_nc, and gp_pois_regr and lotka_volterra (chosen by a frozen v6 rule).
+  - Paths: the Python package (counted callable, threads=1, init=None), a Rust `sampler` harness (Init::default, threads=4, native densities or BridgeStan), and nutpie 0.16.8 (compile_pymc_model, or from_pyfunc counted).
+  - Arms: default, delta2, levels1 and nutpie's transplanted metric on both oWALNUTS paths; mean-trajectory acceptance and NUTS-like in Rust; nutpie, nutpie-counted and nutpie with its draw-based metric.
+- Outcome:
+  - Gap: pooled PyMC gap 1.70x on Python (gauss 1.66, eight 1.42, hier 2.10) and 1.64x on Rust. This reproduces WP47.
+  - Accounting: 0.15 %. Reported = counted callbacks exactly for oWALNUTS; nutpie counts +0.06–0.10 %; best-of-16 costs 0.03–0.09 %.
+  - Refinement: levels1 5 % and delta2 7 % (Rust −12 % and 0 %). 0–6.5 % of leaves are refined; reverse checks are ≤ 3 % of gradients.
+  - Step statistic: Stan's accept_stat makes the gap larger (−63 %).
+  - Warmup: 44 % of the gap (hier 83 %: 72 % of oWALNUTS's gradients are warmup, nutpie 49 %).
+  - Mass matrix: the transplanted nutpie metric closes 44 % (Python) / 60 % (Rust); gauss100 62–68 %, hier 41–83 %. nutpie's own gradient→draw metric switch costs 34–37 %. Two nutpie variants differing only in starts and density implementation differ by 15 % (noise/init floor).
+  - Residual: eight is mostly unexplained. There nutpie diverges in every run (0/3 gates), and it also fails eight_nc and gp_pois_regr (0/9) where oWALNUTS-default passes 9/9.
+- Predictions:
+  - Held: P1 accounting < 15 %; P7 bridge gap 1.38 vs 1.42; P8 Rust/Python agree 1.01–1.07.
+  - Failed: P2 levels1 ≥ 50 % (5 %); P3 delta2 < levels1 (7 vs 5 %); P4 ≥ 0.9x nutpie on gp_pois_regr (0.87 / 0.83; lotka_volterra 9.6 / 11.2x through a stuck nutpie chain); P5 statistic as main factor (−0.63); P6 metric small on gauss100 (0.62–0.68).
+- Decision/next:
+  - Frozen rule: documentation only (no arm ≥ 50 %; each refinement arm also loses one posteriordb gate). No default or library code was changed.
+  - Docs: rewrite the README nutpie sentence with this decomposition.
+  - Python `init=None` failed 12/12 lotka_volterra cells. Document `init="uniform"` for Stan and ODE models. Aligning the Python default with Rust `Init::best_of(16)` needs its own study.
+  - Non-rule follow-up: an opt-in gradient-informed diagonal metric and faster early windows. The transplant lost gates on gp_pois_regr and lotka_volterra.

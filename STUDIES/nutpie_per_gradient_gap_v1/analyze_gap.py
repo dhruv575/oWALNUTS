@@ -84,7 +84,12 @@ def main() -> None:
     data = load()
     stats = {m: {a: arm_stats(cells) for a, cells in arms.items()} for m, arms in data.items()}
 
+    a1 = PROTOCOL.get("amendment_A1", {})
+
     def e(m, a, key="ess_per_gradient_gm"):
+        # Amendment A1: on lotka_volterra the init="uniform" py-* arms stand in for the init=None ones.
+        if m in a1.get("added_models", []) and f"{a}-uinit" in a1.get("added_arms", []):
+            a = f"{a}-uinit"
         return stats.get(m, {}).get(a, {}).get(key, float("nan"))
 
     paths = {"python": "py-default", "rust": "rs-default"}
@@ -202,7 +207,8 @@ def write_table(s: dict) -> None:
          "acc = acceptance statistic (nutpie: mean_tree_accept; rs-*: the arm's own warmup statistic, last 100).", "",
          "| model | arm | ESS/grad | samp | vs nutpie | gates | min bulk ESS | max R-hat | div | h | depth | grad/tr | warm | refined | rev | acc |",
          "|---|---|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|"]
-    order = (PROTOCOL["python_nutpie_arms"] + PROTOCOL["python_owalnuts_arms"] + PROTOCOL["rust_arms"])
+    order = (PROTOCOL["python_nutpie_arms"] + PROTOCOL["python_owalnuts_arms"]
+             + PROTOCOL.get("amendment_A1", {}).get("added_arms", []) + PROTOCOL["rust_arms"])
     for m in MODELS:
         ref = s["per_model"][m]["nutpie"]["ess_per_gradient_gm"]
         for a in order:
