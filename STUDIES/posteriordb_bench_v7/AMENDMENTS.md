@@ -29,3 +29,27 @@ Phase 1 competitor results were seen. Those results are CmdStan 34/51 + 7/15
 and nutpie 26/51 + 3/15; P7 failed. A0 depends only on the coordinator's
 schedule, not on those results, and it cannot touch the competitor cells,
 which have all been run.
+
+## A1: the commit under test is `f097391c` (2026-10-25 ~06:05 local, before any oWALNUTS or funnel cell)
+
+The coordinator named `f097391c`, the head of `main` and a descendant of
+`457119f4`, at about 06:03, which was before the A0 deadline. It was merged
+into `wt/posteriordb-v7`, so the worktree's `src/`, `integrations/`,
+`tests/` and `Cargo.toml` equal `f097391c`. The driver checks this before
+every oWALNUTS run. Relative to `457119f4`, the commit carries three default
+changes:
+
+1. **WP52.** `Init::default()` is `Init::best_of(16)`. The starts differ from
+   0.2.0; the kernel does not.
+2. **WP54.** `sampler::Tuning::default()` uses
+   `NonfinitePositionPolicy::RejectLeaf`. It is bit-identical whenever no
+   nonfinite position occurs, and an overflow no longer aborts the run. The
+   counter `WorkTotals::nonfinite_position_rejections` is now recorded per
+   cell (retained and warmup) and per funnel chain.
+3. **WP51 follow-up.** The `Metric::dense()` facade's warmup defaults are
+   PerTransition seeding, Stan regularisation and symmetrised precision. This
+   affects only the descriptive dense arm.
+
+The diagonal kernel, `ALGORITHM_REVISION` and the fingerprints are unchanged.
+The dense arm uses the same commit. The only harness change is the extra
+counter, which is recorded but feeds no gate, statistic or prediction.

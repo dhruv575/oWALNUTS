@@ -161,6 +161,7 @@ fn run(seed: u64, out: &Path) -> Result<(), Box<dyn Error>> {
             "depth_caps": retained.maximum_depth_stops(),
             "divergences": retained.divergences(),
             "refinement_exhaustions": retained.refinement_exhaustion_stops(),
+            "nonfinite_position_rejections": work.nonfinite_position_rejections(),
             "chain_rescues": rescues_json(chain.telemetry()),
         }));
         let mut in_batch = 0usize;

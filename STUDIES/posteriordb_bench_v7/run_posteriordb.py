@@ -340,6 +340,8 @@ def run_owalnuts(model: str, arm: str, seed: int, ref: dict | None, names: list[
         "warmup_divergences": sum(c["warmup_divergences"] for c in chains),
         "retained_reverse_coarser_stops": sum(c["retained_work"]["reverse_coarser_stops"] for c in chains),
         "retained_reverse_coarser_rejections": sum(c["retained_work"]["reverse_coarser_rejections"] for c in chains),
+        "retained_nonfinite_position_rejections": sum(c["retained_work"]["nonfinite_position_rejections"] for c in chains),
+        "warmup_nonfinite_position_rejections": sum(c["warmup_work"]["nonfinite_position_rejections"] for c in chains),
         "retained_leaves_built": sum(c["retained_work"]["leaves_built"] for c in chains),
         "retained_refined_leaves": sum(sum(c["retained_work"]["refinement_level_built"][1:]) for c in chains),
         "retained_depth_histogram": [sum(x) for x in zip(*(c["retained_depth_histogram"] for c in chains))],
@@ -557,6 +559,7 @@ def analyze_funnel() -> dict:
             "depth_caps": sum(ch["depth_caps"] for ch in c["chains_data"]),
             "divergences": sum(ch["divergences"] for ch in c["chains_data"]),
             "refinement_exhaustions": sum(ch["refinement_exhaustions"] for ch in c["chains_data"]),
+            "nonfinite_position_rejections": sum(ch.get("nonfinite_position_rejections", 0) for ch in c["chains_data"]),
             "final_step_size": [ch["final_step_size"] for ch in c["chains_data"]],
             "final_max_error": [ch["final_max_error"] for ch in c["chains_data"]],
             "chain_warnings": c.get("chain_warnings"),
@@ -585,7 +588,8 @@ def geomean(xs: list[float]) -> float:
 
 KEYS = ["min_bulk_ess_per_second", "min_tail_ess_per_second", "min_bulk_ess_per_gradient", "min_tail_ess_per_gradient",
         "wall_seconds", "gradients_total", "min_bulk_ess", "min_tail_ess", "max_rank_rhat", "max_abs_z",
-        "wall_per_gradient_us", "max_depth_stops", "chain_disagreement_max"]
+        "wall_per_gradient_us", "max_depth_stops", "chain_disagreement_max",
+        "retained_nonfinite_position_rejections", "warmup_nonfinite_position_rejections"]
 
 
 def model_arm_entry(seeds: dict) -> dict:
