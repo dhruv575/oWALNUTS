@@ -496,7 +496,7 @@ fn advance<T: Target>(
         .map(|(r, start)| SessionChainChunk {
             samples: r.samples[retained_start * dimension..retained_end * dimension].to_vec(),
             diagnostics: r.diagnostics[start..].to_vec(),
-            telemetry: r.telemetry.clone(),
+            telemetry: r.telemetry_snapshot(),
             mass_diagonal: r.active_mass.diagonal.clone(),
             tuning: r.active_tuning,
             effective_seed: r.seed,

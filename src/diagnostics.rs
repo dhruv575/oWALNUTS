@@ -28,7 +28,7 @@
 
 use std::fmt;
 
-use crate::walnutpie::{ChainOutput, MultiChainOutput};
+use crate::walnutpie::{ChainOutput, ChainWindowSummary, MultiChainOutput};
 
 /// Default quantile probabilities reported by [`ParameterSummary`].
 pub const SUMMARY_QUANTILES: [f64; 3] = [0.05, 0.5, 0.95];
@@ -715,6 +715,335 @@ impl ChainDisagreement {
     }
 }
 
+/// Step ratio below which [`ChainWarning::WarmupStep`] flags a chain (the
+/// WP33 rescue step rule).
+const CHECK_STEP_RATIO: f64 = 0.1;
+/// Typical within-chain IQRs a chain's median log density may sit below the
+/// chains' median before [`ChainWarning::WarmupLogDensity`] or
+/// [`ChainWarning::SampledLogDensity`] flags it (the WP33 density rule).
+const CHECK_LOG_DENSITY_IQRS: f64 = 3.0;
+/// Windows shorter than this are not scored (the WP33 rescue minimum).
+const CHECK_MIN_WINDOW: usize = 10;
+/// Chains a check needs before "disagrees with the others" is defined.
+const CHECK_MIN_CHAINS: usize = 3;
+
+/// One observe-only finding that a chain disagrees with the other chains
+/// (`STUDIES/chain_disagreement_warning_v1`, WP44).
+///
+/// The checks are the WP33 rescue criteria (`STUDIES/chain_rescue_v1`) and
+/// the leave-one-chain-out R-hat of [`ChainDisagreement`], evaluated once at
+/// the end of warmup and once on the retained draws. Nothing acts on them:
+/// computing them reads telemetry and draws only, so the draws are
+/// bit-identical to a run nobody checks. All checks need at least three
+/// chains; a window shorter than ten transitions, or a non-finite step or
+/// log density on any chain, skips that check.
+///
+/// * [`Self::WarmupStep`]: the chain's end-of-warmup step is below 0.1 times
+///   the median end-of-warmup step over chains (a frozen or crawling chain).
+/// * [`Self::WarmupLogDensity`] / [`Self::SampledLogDensity`]: over the last
+///   slow warmup window / the retained draws, the median over chains of the
+///   chains' median log density exceeds this chain's median by more than 3
+///   times the median over chains of the within-chain interquartile range
+///   (one-sided: a chain far below the others, e.g. a second mode or a chain
+///   still in transit). See `walnutpie::ChainWindowSummary`.
+/// * [`Self::RHat`]: [`ChainDisagreement`] names the chain (the maximum rank
+///   R-hat exceeds 1.01 and drops to at most 1.01 without this chain).
+///
+/// A warning is a reason to look at the chain, not a verdict: a genuinely
+/// multimodal target produces it legitimately, and a run without warnings
+/// still needs the R-hat and ESS gates. On the 17-model posteriordb screen
+/// at the defaults (WP44, 60 cells) the step and log-density checks never
+/// fired on a healthy run; the R-hat check named a chain twice on runs whose
+/// R-hat was barely above 1.01 and whose chains were all close to the
+/// reference. The warnings cover one-wrong-chain failures only (frozen,
+/// crawling or second-mode chains); runs that fail on ESS, divergences or
+/// all-chain R-hat produce none. Their sensitivity rests on one wrong-chain
+/// run and is not established.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum ChainWarning {
+    /// End-of-warmup step below 0.1x the median over chains.
+    WarmupStep {
+        chain: usize,
+        /// The chain's step at the end of warmup.
+        step: f64,
+        /// Median end-of-warmup step over chains.
+        median_step: f64,
+    },
+    /// Last-slow-window median log density far below the other chains'.
+    WarmupLogDensity {
+        chain: usize,
+        /// The chain's median selected-state log density over the window.
+        median_log_density: f64,
+        /// Median over chains of the chains' medians.
+        reference: f64,
+        /// Largest allowed shortfall: 3 x the median within-chain IQR.
+        threshold: f64,
+    },
+    /// Retained-draw median log density far below the other chains'.
+    SampledLogDensity {
+        chain: usize,
+        /// The chain's median log density over its retained draws.
+        median_log_density: f64,
+        /// Median over chains of the chains' medians.
+        reference: f64,
+        /// Largest allowed shortfall: 3 x the median within-chain IQR.
+        threshold: f64,
+    },
+    /// The chain alone explains a failed R-hat ([`ChainDisagreement`]).
+    RHat {
+        chain: usize,
+        /// Maximum rank R-hat over parameters with every chain.
+        max_rhat: f64,
+        /// Maximum rank R-hat over parameters without this chain.
+        max_rhat_without: f64,
+    },
+}
+
+impl ChainWarning {
+    /// The flagged chain.
+    pub fn chain(&self) -> usize {
+        match self {
+            Self::WarmupStep { chain, .. }
+            | Self::WarmupLogDensity { chain, .. }
+            | Self::SampledLogDensity { chain, .. }
+            | Self::RHat { chain, .. } => *chain,
+        }
+    }
+
+    /// Every check on chains from one run (or separate runs of one target):
+    /// the end-of-warmup and retained-draw telemetry of each chain plus
+    /// [`ChainDisagreement`] on the retained draws. Ordered by check
+    /// (warmup step, warmup log density, sampled log density, R-hat), then
+    /// chain. Empty when chains disagree on shape.
+    pub fn from_chains(chains: &[ChainOutput]) -> Vec<Self> {
+        let Some(first) = chains.first() else {
+            return Vec::new();
+        };
+        let (dimension, draws) = (first.dimension(), first.retained());
+        if chains
+            .iter()
+            .any(|chain| chain.dimension() != dimension || chain.retained() != draws)
+        {
+            return Vec::new();
+        }
+        let columns = chain_columns(chains);
+        let views: Vec<Vec<&[f64]>> = columns.iter().map(|c| as_views(c)).collect();
+        Self::from_parts(chains, ChainDisagreement::compute(&views).as_ref())
+    }
+
+    fn from_parts(chains: &[ChainOutput], disagreement: Option<&ChainDisagreement>) -> Vec<Self> {
+        let warmup: Vec<Option<&ChainWindowSummary>> = chains
+            .iter()
+            .map(|chain| chain.telemetry().warmup_end())
+            .collect();
+        let sampling: Vec<Option<&ChainWindowSummary>> = chains
+            .iter()
+            .map(|chain| chain.telemetry().sampling_end())
+            .collect();
+        Self::detect(&warmup, &sampling, disagreement)
+    }
+
+    /// The checks from their inputs: one end-of-warmup and one retained-draw
+    /// window summary per chain (`None` where a chain has none) and the
+    /// run's [`ChainDisagreement`].
+    pub fn detect(
+        warmup_end: &[Option<&ChainWindowSummary>],
+        sampling_end: &[Option<&ChainWindowSummary>],
+        disagreement: Option<&ChainDisagreement>,
+    ) -> Vec<Self> {
+        let mut warnings = Vec::new();
+        if let Some(windows) = scored_windows(warmup_end) {
+            let steps: Vec<f64> = windows.iter().map(|w| w.step_size()).collect();
+            if steps.iter().all(|s| s.is_finite()) {
+                let median_step = median_of(&steps);
+                for (chain, step) in steps.iter().enumerate() {
+                    if *step < CHECK_STEP_RATIO * median_step {
+                        warnings.push(Self::WarmupStep {
+                            chain,
+                            step: *step,
+                            median_step,
+                        });
+                    }
+                }
+            }
+            for (chain, median, reference, threshold) in density_outliers(&windows) {
+                warnings.push(Self::WarmupLogDensity {
+                    chain,
+                    median_log_density: median,
+                    reference,
+                    threshold,
+                });
+            }
+        }
+        if let Some(windows) = scored_windows(sampling_end) {
+            for (chain, median, reference, threshold) in density_outliers(&windows) {
+                warnings.push(Self::SampledLogDensity {
+                    chain,
+                    median_log_density: median,
+                    reference,
+                    threshold,
+                });
+            }
+        }
+        if let Some(d) = disagreement {
+            for &chain in &d.chains {
+                warnings.push(Self::RHat {
+                    chain,
+                    max_rhat: d.max_rhat,
+                    max_rhat_without: d.max_rhat_without[chain],
+                });
+            }
+        }
+        warnings
+    }
+}
+
+impl fmt::Display for ChainWarning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WarmupStep {
+                step, median_step, ..
+            } => write!(
+                f,
+                "end-of-warmup step {} < {CHECK_STEP_RATIO} x median step {}",
+                fmt_num(*step),
+                fmt_num(*median_step)
+            ),
+            Self::WarmupLogDensity {
+                median_log_density,
+                reference,
+                threshold,
+                ..
+            } => write!(
+                f,
+                "last-warmup-window median log density {} is {} below the chains' median {} \
+                 (limit {} = {CHECK_LOG_DENSITY_IQRS} x median IQR)",
+                fmt_num(*median_log_density),
+                fmt_num(reference - median_log_density),
+                fmt_num(*reference),
+                fmt_num(*threshold)
+            ),
+            Self::SampledLogDensity {
+                median_log_density,
+                reference,
+                threshold,
+                ..
+            } => write!(
+                f,
+                "retained-draw median log density {} is {} below the chains' median {} \
+                 (limit {} = {CHECK_LOG_DENSITY_IQRS} x median IQR)",
+                fmt_num(*median_log_density),
+                fmt_num(reference - median_log_density),
+                fmt_num(*reference),
+                fmt_num(*threshold)
+            ),
+            Self::RHat {
+                max_rhat,
+                max_rhat_without,
+                ..
+            } => write!(
+                f,
+                "max R-hat {} falls to {} without this chain",
+                fmt_num(*max_rhat),
+                fmt_num(*max_rhat_without)
+            ),
+        }
+    }
+}
+
+impl ChainWarning {
+    /// One line per flagged chain, naming every check that fired and its
+    /// numbers; what [`Summary`] and the Python `summary_table()` print.
+    pub fn lines(warnings: &[ChainWarning]) -> Vec<String> {
+        let mut chains: Vec<usize> = warnings.iter().map(ChainWarning::chain).collect();
+        chains.sort_unstable();
+        chains.dedup();
+        chains
+            .into_iter()
+            .map(|chain| {
+                let findings: Vec<String> = warnings
+                    .iter()
+                    .filter(|w| w.chain() == chain)
+                    .map(ToString::to_string)
+                    .collect();
+                format!(
+                    "warning: chain {chain} disagrees with the other chains: {}",
+                    findings.join("; ")
+                )
+            })
+            .collect()
+    }
+}
+
+fn scored_windows<'a>(
+    windows: &[Option<&'a ChainWindowSummary>],
+) -> Option<Vec<&'a ChainWindowSummary>> {
+    if windows.len() < CHECK_MIN_CHAINS {
+        return None;
+    }
+    let windows: Option<Vec<&ChainWindowSummary>> = windows.iter().copied().collect();
+    windows.filter(|windows| {
+        windows
+            .iter()
+            .all(|window| window.transitions() >= CHECK_MIN_WINDOW)
+    })
+}
+
+/// `(chain, median, reference, threshold)` of every chain whose median log
+/// density falls more than the threshold below the chains' median.
+fn density_outliers(windows: &[&ChainWindowSummary]) -> Vec<(usize, f64, f64, f64)> {
+    let medians: Vec<f64> = windows.iter().map(|w| w.median_log_density()).collect();
+    let iqrs: Vec<f64> = windows.iter().map(|w| w.log_density_iqr()).collect();
+    if !medians.iter().chain(&iqrs).all(|value| value.is_finite()) {
+        return Vec::new();
+    }
+    let reference = median_of(&medians);
+    let threshold = CHECK_LOG_DENSITY_IQRS * median_of(&iqrs);
+    if !reference.is_finite() || !threshold.is_finite() {
+        return Vec::new();
+    }
+    medians
+        .iter()
+        .enumerate()
+        .filter(|(_, median)| reference - **median > threshold)
+        .map(|(chain, median)| (chain, *median, reference, threshold))
+        .collect()
+}
+
+/// Type-7 median (the `walnutpie` rescue convention).
+fn median_of(values: &[f64]) -> f64 {
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let n = sorted.len();
+    if n == 0 {
+        return f64::NAN;
+    }
+    let rank = 0.5 * (n - 1) as f64;
+    let (low, high) = (rank.floor() as usize, rank.ceil() as usize);
+    sorted[low] + (rank - low as f64) * (sorted[high] - sorted[low])
+}
+
+fn chain_columns(chains: &[ChainOutput]) -> Vec<Vec<Vec<f64>>> {
+    let dimension = chains.first().map_or(0, ChainOutput::dimension);
+    (0..dimension)
+        .map(|index| {
+            chains
+                .iter()
+                .map(|chain| {
+                    chain
+                        .samples()
+                        .iter()
+                        .skip(index)
+                        .step_by(dimension)
+                        .copied()
+                        .collect()
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// A Stan/ArviZ-style run summary: one [`ParameterSummary`] row per
 /// parameter plus [`SamplerHealth`].
 #[derive(Clone, Debug, PartialEq)]
@@ -728,6 +1057,9 @@ pub struct Summary {
     /// [`RHAT_DISAGREEMENT_THRESHOLD`] and there are at least three chains;
     /// see [`ChainDisagreement`].
     pub chain_disagreement: Option<ChainDisagreement>,
+    /// Observe-only end-of-warmup and retained-draw chain checks; see
+    /// [`ChainWarning`]. Empty when no chain disagrees.
+    pub chain_warnings: Vec<ChainWarning>,
 }
 
 impl Summary {
@@ -764,22 +1096,7 @@ impl Summary {
             Some(names) => names.to_vec(),
             None => default_parameter_names(dimension),
         };
-        let columns_by_parameter: Vec<Vec<Vec<f64>>> = (0..dimension)
-            .map(|index| {
-                chains
-                    .iter()
-                    .map(|chain| {
-                        chain
-                            .samples()
-                            .iter()
-                            .skip(index)
-                            .step_by(dimension)
-                            .copied()
-                            .collect()
-                    })
-                    .collect()
-            })
-            .collect();
+        let columns_by_parameter = chain_columns(chains);
         let views: Vec<Vec<&[f64]>> = columns_by_parameter
             .iter()
             .map(|columns| as_views(columns))
@@ -789,12 +1106,15 @@ impl Summary {
             .zip(&views)
             .map(|(name, columns)| ParameterSummary::compute(name, columns))
             .collect();
+        let chain_disagreement = ChainDisagreement::compute(&views);
+        let chain_warnings = ChainWarning::from_parts(chains, chain_disagreement.as_ref());
         Ok(Self {
             chains: chains.len(),
             draws_per_chain: draws,
             parameters,
             health: SamplerHealth::from_chains(chains),
-            chain_disagreement: ChainDisagreement::compute(&views),
+            chain_disagreement,
+            chain_warnings,
         })
     }
 }
@@ -918,6 +1238,9 @@ impl fmt::Display for Summary {
                     without.join(", ")
                 )?;
             }
+        }
+        for line in ChainWarning::lines(&self.chain_warnings) {
+            writeln!(f, "{line}")?;
         }
         Ok(())
     }

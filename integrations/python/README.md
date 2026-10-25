@@ -49,8 +49,18 @@ print(result)                       # Stan-style table (mean, sd, MCSE, q5/q50/q
                                     # bulk/tail ESS, R-hat) plus one health line
 rows = result.summary()             # the same rows as a list of dicts
 result.health()                     # pooled divergences, depth-cap stops, target calls, ...
+result.chain_warnings()             # observe-only: a chain that disagrees with the others
+                                    # (also printed as `warning: chain k ...` lines)
 idata = result.to_inferencedata()   # arviz InferenceData with sample_stats
 ```
+
+`chain_warnings()` is `owalnuts::diagnostics::ChainWarning`: a collapsed
+end-of-warmup step, a median log density far below the other chains' at
+the end of warmup or over the draws, or a chain whose removal alone brings
+R-hat under 1.01 (`STUDIES/chain_disagreement_warning_v1`). The inputs are
+each chain dict's `warmup_end` / `sampling_end` and the draws; nothing acts
+on them, so the draws are unchanged. It catches one-wrong-chain failures
+only and does not replace the R-hat / ESS gates.
 
 `summary()` is the Rust `owalnuts::diagnostics` estimator set (rank-normalised
 folded split R-hat, bulk/tail ESS, MCSE; matches `az.rhat`/`az.ess`/`az.mcse`

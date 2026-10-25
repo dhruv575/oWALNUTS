@@ -29,9 +29,12 @@ Ordered by expected value. Each names the evidence that opened it.
    `rk45`-boundary starts decide gates by lottery (WP25, WP29, WP31). A
    cross-chain mode check at the end of warmup (the `ChainDisagreement`
    diagnostic) is the instrument; an init-time ODE check was never tried.
-7. **Rescue as an observe-only warning** (WP36): automatic cross-chain action
-   is out of the defaults; a warning or a narrowly scoped step-only policy is
-   the allowed next design.
+7. **Rescue as an observe-only warning** (WP36, WP44): the warning now
+   ships (`ChainWarning`, end-of-warmup and retained-draw telemetry; WP44:
+   zero step/density false positives in 60 screen cells, R-hat-check false
+   positives only at R-hat ~1.01). Its sensitivity rests on one wrong-chain
+   cell; a targeted bad-start study is needed. A narrowly scoped step-only
+   rescue remains unmeasured.
 8. **Windows native root cause** (WP35A, `bridgestan_lifetime_v1`,
    `bridgestan_owned_worker_v1`): mitigated at 3 to 5x sampling cost on
    Windows GNU; MSVC and multi-worker Windows unqualified; root cause not

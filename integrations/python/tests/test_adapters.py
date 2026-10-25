@@ -656,3 +656,30 @@ def test_from_pymc_gil_free_ordinary_model_still_supported(monkeypatch):
     value, gradient = _evaluate_raw_pymc_target(target, np.array([.8]))
     np.testing.assert_allclose(value, -.5*LOG_2PI-.5*.8**2, rtol=1e-12)
     np.testing.assert_allclose(gradient, [-.8], rtol=1e-12)
+
+
+def _trap(q: np.ndarray) -> tuple[float, np.ndarray]:
+    # Standard Gaussian plus a negligible narrow spike at (15, 15) that a chain
+    # started inside never leaves (the Rust tests/chain_warnings.rs trap).
+    main = -0.5 * float(q @ q)
+    sd, centre, weight = 0.3, 15.0, -14.0
+    spike = weight - 2.0 * math.log(sd) - 0.5 * float(((q - centre) / sd) @ ((q - centre) / sd))
+    top = max(main, spike)
+    value = top + math.log(math.exp(main - top) + math.exp(spike - top))
+    w_main, w_spike = math.exp(main - value), math.exp(spike - value)
+    return value, w_main * (-q) + w_spike * (-(q - centre) / sd**2)
+
+
+def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
+    quiet = owalnuts.sample(lambda q: (-0.5 * float(q @ q), -q), dim=2, warmup=500, draws=1000, seed=5, chains=4)
+    assert quiet.chain_warnings() == []
+    assert not any(line.startswith("warning: chain") for line in str(quiet).splitlines())
+    for chain in quiet.chains:
+        assert chain["warmup_end"]["end"] <= 500 and chain["sampling_end"]["start"] == 500
+    init = np.array([[-0.75, 0.75], [-0.25, 0.25], [0.25, -0.25], [15.0, 15.0]])
+    trapped = owalnuts.sample(_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init)
+    warnings = trapped.chain_warnings()
+    assert warnings and {w["chain"] for w in warnings} == {3}
+    assert {"warmup_log_density", "sampled_log_density", "rhat"} <= {w["check"] for w in warnings}
+    lines = [line for line in str(trapped).splitlines() if line.startswith("warning: chain")]
+    assert len(lines) == 1 and lines[0].startswith("warning: chain 3 disagrees with the other chains: ")

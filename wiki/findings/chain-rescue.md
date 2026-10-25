@@ -70,6 +70,22 @@ opt-ins. Evidence is in the [ledger](../research-ledger-2026-08-31.md).
   `current` hit its mapped-origin-overwrite red lines: mechanical decision
   `no_rescue`. Commit `87d8817` restored `DEFAULT_CHAIN_RESCUE = None`.
 
+- **WP44** (`STUDIES/chain_disagreement_warning_v1`). Observe-only
+  successor: `ChainWindowSummary` (last-slow-window and retained-draw step,
+  median and IQR of the selected log density) and `ChainWarning` (step rule,
+  density rule at warmup end and on the draws, leave-one-out R-hat), printed
+  by `Summary` and Python, with draws bit-identical. 17-model screen at the
+  defaults, seeds 97461–97463, plus `hmm_drive_0` / `lotka_volterra` at
+  97464–97468: 60/61 valid (one frozen-`lotka` cell timed out). Specificity
+  against "some chain's mean > 3 ref SD off" is 0.966: both false positives
+  come from the R-hat check at R-hat 1.013/1.014, and the step/density checks
+  had none. The single wrong chain (`lotka_volterra` 97467) was caught by the
+  warmup-end density rule (59 IQRs) and the R-hat check. The retained-draw
+  density rule missed it because the chain escaped during sampling.
+  Sensitivity against any gate failure is 0.30 (ESS/divergence failures have
+  no wrong chain). Shipped under the preregistered Rule B; sensitivity is
+  unmeasured beyond n = 1.
+
 ## What worked
 
 | change | study | result | why |
@@ -101,9 +117,10 @@ own rule; v6 (45/51 under the temporary rescue default) is reported beside it.
 
 ## Open questions
 
-- An observe-only warning at the end of warmup, built on the `observe`
-  scoring and `ChainDisagreement`, has not been preregistered; it would give
-  users the information without the mode-hiding risk.
+- The observe-only warning shipped in WP44. Its sensitivity needs targeted
+  positives (forced bad starts), and emitting the warmup-end check while the
+  run is still going would help the frozen-chain case, which otherwise runs
+  to a timeout.
 - A narrowly scoped step-only rescue (the step criterion alone fired on
   `arma11` and `lotka_volterra`, where every cell passed) was named by WP36 as
   the acceptable future study; the density criterion is the one that fires on

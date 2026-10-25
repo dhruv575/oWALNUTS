@@ -5071,9 +5071,107 @@ pub struct RunTelemetry {
     warmup_checkpoints: Vec<WarmupCheckpointTelemetry>,
     paper_adaptation_updates: Vec<PaperAdaptationUpdate>,
     chain_rescues: Vec<ChainRescueUpdate>,
+    warmup_end: Option<ChainWindowSummary>,
+    sampling_end: Option<ChainWindowSummary>,
+}
+
+/// One chain's step and selected-state log density over a window of
+/// transitions: the observe-only input of the end-of-warmup and
+/// end-of-sampling chain checks (`STUDIES/chain_disagreement_warning_v1`,
+/// WP44; `diagnostics::ChainWarning`).
+///
+/// Recording it reads values every transition already computes; it draws no
+/// randomness and changes no state, so the retained draws are bit-identical
+/// with or without anyone reading it.
+///
+/// * [`RunTelemetry::warmup_end`]: the last slow metric window of the warmup
+///   schedule (`450..950` at the default 1,000-transition schedule), or every
+///   warmup transition when the schedule has no slow window; `step_size` is
+///   the step in force at the end of warmup (the retained step).
+/// * [`RunTelemetry::sampling_end`]: every retained transition; `step_size`
+///   is the retained step.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct ChainWindowSummary {
+    start: usize,
+    end: usize,
+    step_size: f64,
+    median_log_density: f64,
+    log_density_iqr: f64,
+}
+
+impl ChainWindowSummary {
+    /// A summary from its parts (for chain checks over externally produced
+    /// chains). `end` is exclusive and not before `start`.
+    pub fn new(
+        start: usize,
+        end: usize,
+        step_size: f64,
+        median_log_density: f64,
+        log_density_iqr: f64,
+    ) -> Result<Self, Error> {
+        if end < start {
+            return Err(Error::configuration(
+                "window end must not precede its start",
+            ));
+        }
+        Ok(Self {
+            start,
+            end,
+            step_size,
+            median_log_density,
+            log_density_iqr,
+        })
+    }
+
+    fn from_log_densities(start: usize, step_size: f64, values: &[f64]) -> Option<Self> {
+        let (median, iqr) = median_and_iqr(values)?;
+        Some(Self {
+            start,
+            end: start + values.len(),
+            step_size,
+            median_log_density: median,
+            log_density_iqr: iqr,
+        })
+    }
+
+    /// First transition of the window (zero-based over warmup + retained).
+    pub fn start(&self) -> usize {
+        self.start
+    }
+    /// One past the last transition of the window.
+    pub fn end(&self) -> usize {
+        self.end
+    }
+    /// Transitions in the window.
+    pub fn transitions(&self) -> usize {
+        self.end - self.start
+    }
+    /// The chain's step at the end of the window.
+    pub fn step_size(&self) -> f64 {
+        self.step_size
+    }
+    /// Median selected-state log density over the window (type-7).
+    pub fn median_log_density(&self) -> f64 {
+        self.median_log_density
+    }
+    /// Interquartile range of the selected-state log density over the window.
+    pub fn log_density_iqr(&self) -> f64 {
+        self.log_density_iqr
+    }
 }
 
 impl RunTelemetry {
+    /// Step and log-density summary of the last warmup window; `None` without
+    /// warmup transitions. See [`ChainWindowSummary`].
+    pub fn warmup_end(&self) -> Option<&ChainWindowSummary> {
+        self.warmup_end.as_ref()
+    }
+    /// Step and log-density summary of the retained transitions; `None`
+    /// without retained transitions. See [`ChainWindowSummary`].
+    pub fn sampling_end(&self) -> Option<&ChainWindowSummary> {
+        self.sampling_end.as_ref()
+    }
     /// Chain-rescue boundary records, in transition order; empty unless
     /// [`WarmupConfig::with_chain_rescue`] was used on a multi-chain run.
     pub fn chain_rescues(&self) -> &[ChainRescueUpdate] {
@@ -6256,11 +6354,20 @@ where
     } else {
         0
     };
+    // Observe-only chain-check buffer: one log density per transition of the
+    // last slow warmup window, reused for the retained transitions.
+    let chain_check_bytes = chain_check_buffer_len(
+        chain_check_warmup_window(schedule.as_ref(), config.discarded),
+        config.retained,
+    )
+    .checked_mul(size_of::<f64>())
+    .ok_or_else(Error::overflow)?;
     let working_bytes = dimension
         .checked_mul(size_of::<f64>())
         .and_then(|value| value.checked_mul(128))
         .and_then(|value| value.checked_add(16 * 1024))
         .and_then(|value| value.checked_add(paper_buffer_bytes))
+        .and_then(|value| value.checked_add(chain_check_bytes))
         .and_then(|value| value.checked_mul(chain_count))
         .and_then(|value| value.checked_add(rescue_working_bytes))
         .ok_or_else(Error::overflow)?;
@@ -7133,6 +7240,12 @@ struct ChainRun<'a, T: Target> {
     telemetry: RunTelemetry,
     next_transition: usize,
     rescue_record: Option<RescueWindowRecord>,
+    /// Selected-state log densities of the current chain-check window
+    /// ([`ChainWindowSummary`]): the last slow warmup window, then every
+    /// retained transition. Read-only bookkeeping; never feeds the kernel.
+    check_log_densities: Vec<f64>,
+    /// `[start, end)` of the warmup chain-check window.
+    check_warmup_window: (usize, usize),
 }
 
 impl<'a, T: Target> ChainRun<'a, T> {
@@ -7262,6 +7375,11 @@ impl<'a, T: Target> ChainRun<'a, T> {
             .as_ref()
             .filter(|warmup| warmup.chain_rescue.is_some())
             .map(|_| RescueWindowRecord::default());
+        let check_warmup_window = chain_check_warmup_window(schedule.as_ref(), config.discarded);
+        let mut check_log_densities = Vec::new();
+        check_log_densities
+            .try_reserve_exact(chain_check_buffer_len(check_warmup_window, config.retained))
+            .map_err(|_| Error::resource("chain-check allocation failed"))?;
         Ok(Self {
             target,
             dimension,
@@ -7293,6 +7411,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
             telemetry,
             next_transition: 0,
             rescue_record,
+            check_log_densities,
+            check_warmup_window,
         })
     }
 
@@ -7325,6 +7445,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
             ref mut telemetry,
             ref mut next_transition,
             ref mut rescue_record,
+            ref mut check_log_densities,
+            check_warmup_window,
             ..
         } = *self;
         let (rng, cached_state) = rng_slot.parts();
@@ -8187,14 +8309,55 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         .at_transition(transition_index));
                 }
             }
+            // Observe-only chain-check bookkeeping (`ChainWindowSummary`):
+            // reads the selected log density and the step, mutates nothing
+            // the kernel or adaptation reads.
+            if transition_index < config.discarded {
+                if transition_index >= check_warmup_window.0
+                    && transition_index < check_warmup_window.1
+                {
+                    check_log_densities.push(selected_log_density);
+                }
+                if transition_index + 1 == config.discarded {
+                    telemetry.warmup_end = ChainWindowSummary::from_log_densities(
+                        check_warmup_window.0,
+                        active_tuning.step_size,
+                        check_log_densities,
+                    );
+                    check_log_densities.clear();
+                }
+            } else {
+                check_log_densities.push(selected_log_density);
+            }
             *next_transition += 1;
         }
         Ok(())
     }
 
-    fn finish(self) -> Result<ChainOutput, Error> {
+    /// The retained-draw chain-check window so far (`None` before the first
+    /// retained transition).
+    fn sampling_end_summary(&self) -> Option<ChainWindowSummary> {
+        if self.next_transition <= self.config.discarded {
+            return None;
+        }
+        ChainWindowSummary::from_log_densities(
+            self.config.discarded,
+            self.active_tuning.step_size,
+            &self.check_log_densities,
+        )
+    }
+
+    /// Cumulative telemetry including the retained-draw window so far.
+    pub(crate) fn telemetry_snapshot(&self) -> RunTelemetry {
+        let mut telemetry = self.telemetry.clone();
+        telemetry.sampling_end = self.sampling_end_summary();
+        telemetry
+    }
+
+    fn finish(mut self) -> Result<ChainOutput, Error> {
         self.control.check().map_err(control_error)?;
         let config = self.config;
+        self.telemetry.sampling_end = self.sampling_end_summary();
         Ok(ChainOutput {
             samples: self.samples,
             retained: config.retained,
@@ -10547,6 +10710,28 @@ fn sorted_quantile(sorted: &[f64], probability: f64) -> f64 {
     let high = rank.ceil() as usize;
     let weight = rank - low as f64;
     sorted[low] + weight * (sorted[high] - sorted[low])
+}
+
+/// `[start, end)` of the warmup window a [`ChainWindowSummary`] covers: the
+/// last non-empty slow window inside warmup, else every warmup transition.
+fn chain_check_warmup_window(
+    schedule: Option<&WarmupScheduleMetadata>,
+    discarded: usize,
+) -> (usize, usize) {
+    schedule
+        .and_then(|schedule| {
+            schedule
+                .windows
+                .iter()
+                .rev()
+                .find(|window| !window.is_empty() && window.end <= discarded)
+        })
+        .map_or((0, discarded), |window| (window.start, window.end))
+}
+
+/// Capacity of the per-chain chain-check log-density buffer.
+fn chain_check_buffer_len(warmup_window: (usize, usize), retained: usize) -> usize {
+    (warmup_window.1 - warmup_window.0).max(retained)
 }
 
 /// Median and interquartile range of `values` (`None` when empty).
