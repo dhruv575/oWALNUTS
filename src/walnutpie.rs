@@ -9424,8 +9424,8 @@ pub fn sample_dense_with_control<T: Target>(
             warmup.dynamic_floor(search_step, stream_step),
         )?
         .expect("nonempty metric window");
-        let (outcome, candidate, shrinkage, ridge, condition, failures) =
-            covariance.precision_candidate(
+        let (outcome, candidate, shrinkage, ridge, condition, failures) = covariance
+            .precision_candidate(
                 warmup.dense_metric_regularization,
                 warmup.dense_symmetrize_precision,
             );

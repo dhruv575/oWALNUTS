@@ -38,6 +38,13 @@ architecture and operating system (see the `walnutpie` module documentation).
   (per-call cost and thread scaling per path, nutpie comparison, numba
   `error_model="numpy"` for `from_cfunc`). [WP47]
 
+#### Fixed
+
+- `from_pymc(model, gil_free=True)` on models with `pm.Data` or dims raised
+  `NotImplementedError` on PyMC 5.28+, which exports `freeze_dims_and_data`
+  only from `pymc.model.transform.optimization`. The adapter now imports it
+  from there and falls back to `pymc.model.transform` for older PyMC.
+
 - `walnutpie::DiagonalMetricRegularization::{ScaleFreeMedian, ScaleFreeStanMedian}`
   (opt-in through `sampler::Adaptation::Custom` and the Python binding as
   `"scale_free_median"` / `"scale_free_stan_median"`): shrink each window
