@@ -41,8 +41,8 @@ still resolve; new items from the WP41–WP55 round start at 11.
    the inverse-tail rule is 1.016x and the refined-fraction controller
    0.885x (`STUDIES/adaptive_delta_v1`). The tail that hurts (`accel_gp`) is
    invisible in warmup (q0.99 1.25 in the window vs 3.9 on the retained
-   draws). `with_adaptive_delta` stays a research option. Fixed `delta = 2`
-   is item 14.
+   draws). The study's `with_adaptive_delta` option is not in the library
+   on `main`. Fixed `delta = 2` is item 14.
 5. **Global to path scale coupling on state-space and hierarchical targets**
    (WP4b, WP17, WP21, WP46, WP55): the arrowhead line is the best per-call
    mechanism in pilots and needs a six-global generalisation, Python

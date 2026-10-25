@@ -54,7 +54,8 @@ where one was established. Details are in the
   draws, so the rule raised its `delta` to 1.45. The visible tails mark the
   models where fixed `delta = 2` already helps, and the controller form
   raises `delta` with the tail by construction. Closed as a warmup-statistic
-  line; `with_adaptive_delta` stays a research option.
+  line; the study's `with_adaptive_delta` option is not in the library on
+  `main`.
 - **Appendix C as the default warmup** (WP22, WP23). From uniform starts the
   K-quantile rule installs delta near 0 at transition 74 and never recovers;
   after the v4 robust rule it is at parity with dual averaging (0.995x) and
