@@ -52,7 +52,7 @@ def worktree_paths() -> list[Path]:
     if artifacts.exists():
         paths.extend(
             path.relative_to(HERE)
-            for path in sorted(artifacts.rglob("*"))
+            for path in sorted(artifacts.rglob("*"), key=lambda q: q.as_posix())
             if path.is_file()
         )
     return paths
