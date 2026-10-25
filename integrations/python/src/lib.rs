@@ -85,6 +85,97 @@ struct PyTarget {
     attached_nanos: AtomicU64,
     /// First fatal target message; the facade's `Error` does not carry it.
     last_fatal: Mutex<Option<String>>,
+    /// Keep one Python thread state per sampler worker thread for the whole
+    /// run (`Some` only for `sample_callable`: the count of live pinned
+    /// states); see `pin_worker_thread_state`.
+    pinned: Option<std::sync::Arc<AtomicUsize>>,
+}
+
+/// A Python thread state created on a Rayon worker thread for the rest of
+/// that thread's life, released by the same thread when it exits.
+///
+/// Without it, every `Python::attach` from a worker thread that Python has
+/// never seen creates a fresh `PyThreadState` (`PyGILState_Ensure`) and
+/// destroys it on release, so per-thread Python state -- `threading.local`
+/// values such as `from_pymc(thread_safe=True)`'s per-thread compiled
+/// function, framework thread-local contexts -- is rebuilt on every callback
+/// (STUDIES/python_callpath_v1, amendment A1: one PyTensor compilation per
+/// callback). Pinning changes no arithmetic: draws are unchanged.
+///
+/// The state is released by the canonical `PyGILState_Release` on its own
+/// thread, from a TLS destructor when the run-local scoped Rayon worker
+/// exits. Those destructors can run after the pool's scope has returned, so
+/// `sample_callable` stays detached until every pinned state of its run is
+/// released (`wait_for_pinned_thread_states`); otherwise a destructor could
+/// block on the GIL into interpreter finalization. Threads that already have
+/// a Python thread state (the calling thread at `threads=1`) are left alone.
+struct PinnedThreadState {
+    gstate: pyo3::ffi::PyGILState_STATE,
+    tstate: *mut pyo3::ffi::PyThreadState,
+    live: std::sync::Arc<AtomicUsize>,
+}
+
+impl Drop for PinnedThreadState {
+    fn drop(&mut self) {
+        // SAFETY: created on this thread by `pin_worker_thread_state`; the
+        // interpreter is alive because the owning `sample_callable` call
+        // waits (detached) in `wait_for_pinned_thread_states` until `live`
+        // reaches zero. Re-take the GIL with the saved state, then undo the
+        // original `PyGILState_Ensure`, which deletes the state.
+        unsafe {
+            pyo3::ffi::PyEval_RestoreThread(self.tstate);
+            pyo3::ffi::PyGILState_Release(self.gstate);
+        }
+        self.live.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+thread_local! {
+    static PINNED_THREAD_STATE: std::cell::RefCell<Option<PinnedThreadState>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Give the current worker thread a Python thread state that outlives each
+/// callback, if it has none, counted in `live`. Called without the GIL.
+fn pin_worker_thread_state(live: &std::sync::Arc<AtomicUsize>) {
+    let _ = PINNED_THREAD_STATE.try_with(|slot| {
+        let Ok(mut slot) = slot.try_borrow_mut() else {
+            return;
+        };
+        if slot.is_some() {
+            return;
+        }
+        // SAFETY: reads this thread's GILState TLS slot only; the interpreter
+        // is initialised (we are inside a detached `sample_callable` call).
+        if !unsafe { pyo3::ffi::PyGILState_GetThisThreadState() }.is_null() {
+            return;
+        }
+        // SAFETY: this thread holds no GIL and has no thread state, so
+        // PyGILState_Ensure creates one and takes the GIL; PyEval_SaveThread
+        // releases the GIL but keeps the state (gilstate counter 1), so the
+        // per-callback PyGILState_Ensure/Release of `Python::attach` reuse it.
+        live.fetch_add(1, Ordering::AcqRel);
+        let pinned = unsafe {
+            let gstate = pyo3::ffi::PyGILState_Ensure();
+            let tstate = pyo3::ffi::PyEval_SaveThread();
+            PinnedThreadState {
+                gstate,
+                tstate,
+                live: std::sync::Arc::clone(live),
+            }
+        };
+        *slot = Some(pinned);
+    });
+}
+
+/// Block (without the GIL) until the worker threads of a finished run have
+/// released their pinned Python thread states. Bounded: a stuck destructor
+/// cannot hang the caller for more than `limit`.
+fn wait_for_pinned_thread_states(live: &AtomicUsize, limit: std::time::Duration) {
+    let started = Instant::now();
+    while live.load(Ordering::Acquire) > 0 && started.elapsed() < limit {
+        std::thread::sleep(std::time::Duration::from_micros(50));
+    }
 }
 
 /// Exception classes that describe a deterministic zero-density region.
@@ -151,6 +242,9 @@ impl Target for PyTarget {
     ) -> Result<f64, TargetError> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let started = Instant::now();
+        if let Some(live) = &self.pinned {
+            pin_worker_thread_state(live);
+        }
         let value = Python::attach(|py| -> Result<f64, TargetError> {
             let array = PyArray1::from_slice(py, position);
             let result = self
@@ -971,10 +1065,17 @@ fn sample_callable<'py>(
         recoverable: AtomicUsize::new(0),
         attached_nanos: AtomicU64::new(0),
         last_fatal: Mutex::new(None),
+        pinned: Some(std::sync::Arc::new(AtomicUsize::new(0))),
     };
     let started = Instant::now();
     let output = py
-        .detach(|| execute(&py_target, &starts, &run))
+        .detach(|| {
+            let output = execute(&py_target, &starts, &run);
+            if let Some(live) = &py_target.pinned {
+                wait_for_pinned_thread_states(live, std::time::Duration::from_secs(10));
+            }
+            output
+        })
         .map_err(|e| py_target.fatal_error(e))?;
     let wall = started.elapsed().as_secs_f64();
     let dict = output_dict(
@@ -1469,6 +1570,7 @@ fn uniform_starts_callable<'py>(
         recoverable: AtomicUsize::new(0),
         attached_nanos: AtomicU64::new(0),
         last_fatal: Mutex::new(None),
+        pinned: None,
     };
     let starts = py
         .detach(|| uniform_starts(&py_target, chains, seed, radius, max_attempts))

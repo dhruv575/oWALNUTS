@@ -894,6 +894,17 @@ def from_jax(logp_fn: Callable[[Any], Any], *, jit: bool = True) -> LogpGrad:
     if jit:
         vg = jax.jit(vg)
 
+        # A jitted function takes the float64 numpy position directly: its C++
+        # dispatch transfers it in the same call, so a separate
+        # ``jnp.asarray`` dispatch (15-170 us per call measured in
+        # STUDIES/python_callpath_v1) is pure overhead. Same executable, same
+        # arithmetic, same draws.
+        def target(q: np.ndarray) -> tuple[float, np.ndarray]:
+            value, grad = vg(q)
+            return float(value), np.asarray(grad, dtype=np.float64)
+
+        return target
+
     def target(q: np.ndarray) -> tuple[float, np.ndarray]:
         value, grad = vg(jnp.asarray(q))
         return float(value), np.asarray(grad, dtype=np.float64)

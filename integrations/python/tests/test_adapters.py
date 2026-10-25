@@ -359,6 +359,73 @@ def test_from_pymc_thread_safe_matches_single_thread():
     assert abs(m1 - m4) < 0.2, (m1, m4)
 
 
+def test_worker_threads_keep_python_thread_state_across_callbacks():
+    """threading.local survives between callbacks on a sampler worker thread
+    (STUDIES/python_callpath_v1): one initialisation per OS thread, not per
+    call, and the draws are those of threads=1."""
+    import threading
+
+    local = threading.local()
+    inits = []
+    lock = threading.Lock()
+
+    def target(q):
+        if not hasattr(local, "seen"):
+            local.seen = True
+            with lock:
+                inits.append(threading.get_ident())
+        return -0.5 * float(q @ q), -q
+
+    out4 = owalnuts.sample(target, 3, chains=4, warmup=100, draws=100, seed=31, threads=4)
+    out1 = owalnuts.sample(target, 3, chains=4, warmup=100, draws=100, seed=31, threads=1)
+    assert out4.target_calls > 1000
+    assert len(inits) <= 5, len(inits)  # <= 4 workers + the calling thread
+    assert np.array_equal(out1.samples, out4.samples)
+    # Repeated runs stay healthy after the pinned states are released.
+    again = owalnuts.sample(target, 3, chains=4, warmup=50, draws=50, seed=32, threads=4)
+    assert np.isfinite(again.samples).all()
+
+
+def test_interpreter_exits_cleanly_after_threaded_callable_run():
+    """The pinned worker thread states are released before `sample` returns,
+    so the interpreter can finalise right after a threads > 1 run."""
+    import subprocess
+    import sys
+
+    code = (
+        "import owalnuts; "
+        "f = lambda q: (-0.5 * float(q @ q), -q); "
+        "owalnuts.sample(f, 3, chains=4, warmup=20, draws=20, seed=1, threads=4)"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300)
+    assert done.returncode == 0, (done.returncode, done.stderr[-2000:])
+
+
+def test_from_pymc_thread_safe_compiles_once_per_worker_thread():
+    pymc = pytest.importorskip("pymc")
+
+    with pymc.Model() as model:
+        x = pymc.Normal("x", 0.0, 1.0, shape=2)
+        pymc.Normal("y", x.sum(), 1.0, observed=np.array([0.3, -0.2, 0.5]))
+    compiles = []
+    original = type(model).logp_dlogp_function
+
+    def counted(self, *args, **kwargs):
+        compiles.append(1)
+        return original(self, *args, **kwargs)
+
+    type(model).logp_dlogp_function = counted
+    try:
+        target, dim, _, _, _ = owalnuts.from_pymc(model, thread_safe=True)
+        serial, _, _, _, _ = owalnuts.from_pymc(model)
+        out4 = owalnuts.sample(target, dim, chains=4, warmup=100, draws=100, seed=33, threads=4)
+    finally:
+        type(model).logp_dlogp_function = original
+    out1 = owalnuts.sample(serial, dim, chains=4, warmup=100, draws=100, seed=33, threads=1)
+    assert len(compiles) <= 1 + 5, len(compiles)  # the serial wrapper + one per thread
+    assert np.array_equal(out1.samples, out4.samples)
+
+
 def test_uniform_init_retries_until_evaluable_and_is_deterministic():
     # Log density is only finite for x0 > 0.5, so about three quarters of
     # uniform(-2, 2) draws must be rejected and redrawn.
