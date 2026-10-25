@@ -76,10 +76,10 @@ pub use crate::walnutpie::ReverseCoarseningOrder;
 #[cfg(feature = "research")]
 pub use crate::walnutpie::ReverseCoarserPolicy;
 pub use crate::walnutpie::{
-    Cancellation, ChainOutput, Error, ErrorKind, PaperAdaptationConfig, RunMetadata, RunTelemetry,
-    StructuredBlockMass, StructuredCovarianceBlock, StructuredMetricRefresh,
-    StructuredRefreshConfig, StructuredRefreshUpdate, Target, TargetError, WarmupConfig,
-    WindowSummary,
+    Cancellation, ChainOutput, ChainWindowSummary, Error, ErrorKind, PaperAdaptationConfig,
+    RunMetadata, RunTelemetry, StructuredBlockMass, StructuredCovarianceBlock,
+    StructuredMetricRefresh, StructuredRefreshConfig, StructuredRefreshUpdate, Target, TargetError,
+    WarmupConfig, WindowSummary,
 };
 use crate::walnutpie::{
     ChainRescueConfig, DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass,
@@ -1305,6 +1305,17 @@ impl Posterior {
     /// only; empty otherwise).
     pub fn final_masses(&self) -> &[StructuredBlockMass] {
         &self.final_masses
+    }
+    /// Observe-only checks for a chain that disagrees with the others: a
+    /// collapsed end-of-warmup step, a median log density far below the
+    /// other chains' at the end of warmup or over the retained draws, and the
+    /// leave-one-chain-out R-hat (`STUDIES/chain_disagreement_warning_v1`).
+    /// Per-chain inputs are [`RunTelemetry::warmup_end`] and
+    /// [`RunTelemetry::sampling_end`]; nothing here changes the draws. See
+    /// [`crate::diagnostics::ChainWarning`]; [`crate::diagnostics::Summary`]
+    /// carries the same list and prints one line per flagged chain.
+    pub fn chain_warnings(&self) -> Vec<crate::diagnostics::ChainWarning> {
+        crate::diagnostics::ChainWarning::from_chains(self.chains())
     }
     /// The underlying `walnutpie` output.
     pub fn inner(&self) -> &MultiChainOutput {

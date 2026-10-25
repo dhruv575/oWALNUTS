@@ -184,8 +184,34 @@ class SampleResult:
 
     def summary_table(self, var_names: Sequence[str] | None = None) -> str:
         """``summary()`` rendered as a fixed-width, Stan-style text table
-        followed by one line of pooled health; what ``print(result)`` shows."""
-        return format_summary(self.summary(var_names), self.health(), self.wall_seconds)
+        followed by one line of pooled health and one ``warning: chain ...``
+        line per chain flagged by ``chain_warnings()``; what ``print(result)``
+        shows."""
+        table = format_summary(self.summary(var_names), self.health(), self.wall_seconds)
+        lines = self._chain_warnings()[1]
+        return "\n".join([table, *lines]) if lines else table
+
+    def chain_warnings(self) -> list[dict[str, Any]]:
+        """Observe-only checks for a chain that disagrees with the others
+        (``owalnuts::diagnostics::ChainWarning``; the draws are unchanged).
+
+        One dict per finding with ``chain``, ``check`` (``warmup_step``,
+        ``warmup_log_density``, ``sampled_log_density`` or ``rhat``), the
+        chain's ``value``, the ``reference`` it is compared with, the
+        ``threshold`` (density checks) and the printed ``text``. Inputs are
+        each chain's ``warmup_end`` / ``sampling_end`` window (step, median
+        and IQR of the selected-state log density) and the leave-one-chain-out
+        R-hat of the retained draws. Empty when no chain disagrees or with
+        fewer than three chains. A warning is a reason to inspect the chain,
+        not a verdict; the R-hat and ESS gates still apply."""
+        return [dict(w) for w in self._chain_warnings()[0]]
+
+    def _chain_warnings(self) -> tuple[list[dict[str, Any]], list[str]]:
+        warmup = [c.get("warmup_end") for c in self.chains]
+        sampling = [c.get("sampling_end") for c in self.chains]
+        samples = np.ascontiguousarray(self.samples, dtype=np.float64)
+        warnings, lines = _owalnuts.chain_warnings(samples, warmup, sampling)
+        return list(warnings), list(lines)
 
     def __str__(self) -> str:
         return self.summary_table()

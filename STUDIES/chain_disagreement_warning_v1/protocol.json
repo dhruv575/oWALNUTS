@@ -1,0 +1,96 @@
+{
+  "schema": "chain-disagreement-warning-v1",
+  "ledger_id": "WP44",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-24",
+  "question": "wiki/open-questions.md item 7: is an observe-only chain-disagreement warning (WP33 step and density rules at the end of warmup and on the retained draws, plus the leave-one-chain-out R-hat of ChainDisagreement) diagnostically accurate on the 17-model posteriordb screen at the sampler defaults: does it fire on the cells where a chain is actually wrong and stay silent elsewhere?",
+  "change_under_test": "Observe-only telemetry and checks: walnutpie::ChainWindowSummary via RunTelemetry::warmup_end() (last slow warmup window: median and IQR of the selected-state log density, end-of-warmup step) and RunTelemetry::sampling_end() (the same over the retained transitions); diagnostics::ChainWarning (Summary::chain_warnings, Posterior::chain_warnings(), one Summary line per flagged chain; Python SampleResult.chain_warnings() and summary_table()). No sampler state changes; draws bit-identical (tests/kernel_fingerprint.rs and every existing test pass; tests/chain_warnings.rs checks the telemetry against observe-only rescue scoring).",
+  "baseline_commit": "3583d130",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "sampler": "owalnuts::sampler defaults exactly (Tuning::default(), Metric::diagonal(), Adaptation::default(), Init::uniform() starts, Limits::admit_worst_case(); DEFAULT_CHAIN_RESCUE = None); BridgeStan 2.9.0 ReplicatedStanTarget without STAN_THREADS; one arm only (the sampler is unchanged)",
+  "algorithm_revision_required": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "screen_seeds": [97461, 97462, 97463],
+  "extra_models": ["bball_drive_event_0-hmm_drive_0", "hudson_lynx_hare-lotka_volterra"],
+  "extra_seeds": [97464, 97465, 97466, 97467, 97468],
+  "seeds_verified_unused": "rg -w over this worktree (STUDIES, wiki, src, tests, examples, integrations; target/, posteriordb/, .venv excluded), the main checkout's STUDIES/wiki/src/tests and the nine sibling agents' new study directories found no use of 97461-97468 (97471, 97482, 97492, 97443, 97447 appear in options_flow seed inventories and were avoided).",
+  "run_order": "the 51 screen cells: models in listed order, seeds ascending; then the 10 extra cells: hmm_drive_0 seeds ascending, then lotka_volterra seeds ascending; strictly sequential, each launched exactly once (create-new launch marker)",
+  "cell_timeout_seconds": 2700,
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "estimators": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05/0.95), mean MCSE on the posteriordb reference parameters (BridgeStan constrained, transformed parameters included)",
+  "detectors": {
+    "step_ratio": 0.1,
+    "log_density_iqrs": 3.0,
+    "min_window_transitions": 10,
+    "min_chains": 3,
+    "D1_warmup_step": "end-of-warmup step < 0.1 x median end-of-warmup step over chains",
+    "D2_warmup_density": "median over chains of the last-slow-window median log density minus the chain's median > 3 x median over chains of the within-chain IQR (window 450..950)",
+    "D3_sampled_density": "the same rule over the 1,000 retained draws",
+    "D4_rhat_loo": "diagnostics::ChainDisagreement on the unconstrained retained draws names the chain (max rank R-hat > 1.01 and <= 1.01 without the chain)",
+    "evaluation": "detectors are recomputed in Python from the exported window summaries and compared with the Rust ChainWarning list on every cell"
+  },
+  "truth": {
+    "reference_sd_threshold": 3.0,
+    "T_gate": "task-literal ground truth: any house gate fails OR some reference parameter's pooled mean is more than 3 reference SD from the posteriordb reference mean",
+    "T_wrong": "a chain is actually wrong: some chain's mean of some reference parameter is more than 3 reference SD from the reference mean (chain-level truth = the set of such chains)",
+    "T_rhat": "reported only: R-hat gate fails OR T_wrong",
+    "process_errors": "cells without draws (sampler error, timeout, crash) are reported and excluded from every confusion matrix"
+  },
+  "decision": {
+    "thresholds": {"specificity": 0.9, "sensitivity": 0.8},
+    "population": "all process-valid cells (screen + extra); screen-only reported",
+    "rule_A_truth": "T_gate",
+    "rule_B_truth": "T_wrong",
+    "candidates": {
+      "C1": ["D1_warmup_step", "D2_warmup_density", "D3_sampled_density", "D4_rhat_loo"],
+      "C2": ["D1_warmup_step", "D3_sampled_density", "D4_rhat_loo"],
+      "C3": ["D3_sampled_density", "D4_rhat_loo"],
+      "C4": ["D1_warmup_step", "D2_warmup_density"],
+      "C5": ["D4_rhat_loo"]
+    },
+    "rule": "Rule A: the first candidate in order C1..C5 with specificity >= 0.9 on T_gate-negative cells and sensitivity >= 0.8 on T_gate-positive cells ships as a validated gate-failure detector. Otherwise Rule B: the first candidate in order meeting both thresholds against T_wrong ships as the chain-disagreement warning (documented as covering one-wrong-chain failures only, not a substitute for the R-hat/ESS gates). Otherwise no warning line ships in Summary/Python output: the ChainWindowSummary telemetry and the ChainWarning type remain as draw-neutral data and the existing ChainDisagreement line is unchanged. The shipped candidate's detectors are exactly those ChainWarning emits; detectors outside it are removed from ChainWarning::detect."
+  },
+  "exploratory_sweep": {
+    "note": "reported only; cannot ship or change the decision",
+    "step_ratio": [0.05, 0.1, 0.2],
+    "log_density_iqrs": [2.0, 3.0, 5.0, 10.0]
+  },
+  "predictions": {
+    "P1": {"text": "C1 sensitivity against T_gate (fails rule A: ESS- and divergence-only failures have no wrong chain)", "key": "all|T_gate|C1", "stat": "sensitivity", "point": 0.35, "interval": [0.15, 0.6]},
+    "P2": {"text": "C1 specificity against T_gate", "key": "all|T_gate|C1", "stat": "specificity", "point": 0.96, "interval": [0.9, 1.0]},
+    "P3": {"text": "C1 sensitivity against T_wrong", "key": "all|T_wrong|C1", "stat": "sensitivity", "point": 0.95, "interval": [0.75, 1.0]},
+    "P4": {"text": "C1 specificity against T_wrong", "key": "all|T_wrong|C1", "stat": "specificity", "point": 0.94, "interval": [0.88, 1.0]},
+    "P5": {"text": "D3 (retained-draw density) specificity against T_wrong", "key": "all|T_wrong|D3_sampled_density", "stat": "specificity", "point": 0.99, "interval": [0.97, 1.0]},
+    "P6": {"text": "D4 (leave-one-out R-hat) specificity against T_gate", "key": "all|T_gate|D4_rhat_loo", "stat": "specificity", "point": 1.0, "interval": [0.98, 1.0]},
+    "P7": {"text": "decision: no candidate meets rule A; C1 meets rule B and ships as the chain-disagreement warning"},
+    "P8": {"text": "the Rust ChainWarning list equals the Python recomputation on every process-valid cell"},
+    "P9": {"text": "draws bit-identical: tests/kernel_fingerprint.rs and the full cargo test suite pass with the telemetry in place"}
+  },
+  "rules": "Report all cells; failures are results; no reruns, no tuning after seeing results; a cell is launched once (a crash or timeout is a result). Walls are measured on a 16-core machine shared with nine other agents and are labelled contended; gradient counts, ESS, R-hat and reference distances are the evidence."
+}

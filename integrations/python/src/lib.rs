@@ -20,13 +20,13 @@ use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
     PyReadonlyArray3,
 };
-use owalnuts::diagnostics::ParameterSummary;
+use owalnuts::diagnostics::{ChainDisagreement, ChainWarning, ParameterSummary};
 use owalnuts::sampler::{
     Adaptation, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION,
     Init, Limits, Metric, Posterior, Sampler, Tuning, uniform_starts,
 };
 use owalnuts::walnutpie::{
-    ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput,
+    ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput, ChainWindowSummary,
     DiagonalMetricRegularization, Error, ExhaustionRule, KernelOptions, MultiChainOutput,
     PAPER_ADAPTATION_REVISION, PaperAdaptationConfig, PaperRestartPolicy, PaperStepStatistic,
     RESEARCH_MAX_TARGET_EVALUATIONS, RawTarget, RawTargetFn, StopReason, StructuredBlockMass,
@@ -828,6 +828,38 @@ fn work_totals<'py>(py: Python<'py>, totals: &WorkTotals) -> PyResult<Bound<'py,
     Ok(d)
 }
 
+/// `RunTelemetry::warmup_end` / `sampling_end` as a dict (`None` when absent).
+fn window_dict<'py>(
+    py: Python<'py>,
+    window: Option<&ChainWindowSummary>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let Some(w) = window else {
+        return Ok(None);
+    };
+    let d = PyDict::new(py);
+    d.set_item("start", w.start())?;
+    d.set_item("end", w.end())?;
+    d.set_item("step_size", w.step_size())?;
+    d.set_item("median_log_density", w.median_log_density())?;
+    d.set_item("log_density_iqr", w.log_density_iqr())?;
+    Ok(Some(d))
+}
+
+fn window_from_dict(window: Option<Bound<'_, PyDict>>) -> PyResult<Option<ChainWindowSummary>> {
+    let Some(d) = window else {
+        return Ok(None);
+    };
+    ChainWindowSummary::new(
+        required(&d, "start")?,
+        required(&d, "end")?,
+        required(&d, "step_size")?,
+        required(&d, "median_log_density")?,
+        required(&d, "log_density_iqr")?,
+    )
+    .map(Some)
+    .map_err(facade_error)
+}
+
 fn chain_dict<'py>(py: Python<'py>, chain: &ChainOutput) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     let diagnostics = chain.diagnostics();
@@ -887,6 +919,8 @@ fn chain_dict<'py>(py: Python<'py>, chain: &ChainOutput) -> PyResult<Bound<'py, 
         paper.append(u)?;
     }
     d.set_item("paper_adaptation_updates", paper)?;
+    d.set_item("warmup_end", window_dict(py, telemetry.warmup_end())?)?;
+    d.set_item("sampling_end", window_dict(py, telemetry.sampling_end())?)?;
 
     let meta = chain.metadata();
     let m = PyDict::new(py);
@@ -1576,6 +1610,102 @@ fn summary<'py>(
     Ok(out)
 }
 
+/// Observe-only chain checks (`owalnuts::diagnostics::ChainWarning`) for a
+/// `(chains, draws, dim)` array of retained draws and the per-chain
+/// `warmup_end` / `sampling_end` window dicts (or `None`). Returns
+/// `(warnings, lines)`: one dict per finding and one text line per flagged
+/// chain, exactly as the Rust `Summary` prints them.
+#[pyfunction]
+#[pyo3(signature = (samples, warmup_end, sampling_end))]
+fn chain_warnings<'py>(
+    py: Python<'py>,
+    samples: PyReadonlyArray3<'py, f64>,
+    warmup_end: Vec<Option<Bound<'py, PyDict>>>,
+    sampling_end: Vec<Option<Bound<'py, PyDict>>>,
+) -> PyResult<(Bound<'py, PyList>, Vec<String>)> {
+    let view = samples.as_array();
+    let (chains, draws, dimension) = view.dim();
+    if warmup_end.len() != chains || sampling_end.len() != chains {
+        return Err(value_error("one warmup and one sampling window per chain"));
+    }
+    let warmup = warmup_end
+        .into_iter()
+        .map(window_from_dict)
+        .collect::<PyResult<Vec<_>>>()?;
+    let sampling = sampling_end
+        .into_iter()
+        .map(window_from_dict)
+        .collect::<PyResult<Vec<_>>>()?;
+    let warnings = py.detach(|| {
+        let columns: Vec<Vec<Vec<f64>>> = (0..dimension)
+            .map(|index| {
+                (0..chains)
+                    .map(|chain| (0..draws).map(|draw| view[[chain, draw, index]]).collect())
+                    .collect()
+            })
+            .collect();
+        let views: Vec<Vec<&[f64]>> = columns
+            .iter()
+            .map(|c| c.iter().map(Vec::as_slice).collect())
+            .collect();
+        let disagreement = ChainDisagreement::compute(&views);
+        ChainWarning::detect(
+            &warmup.iter().map(Option::as_ref).collect::<Vec<_>>(),
+            &sampling.iter().map(Option::as_ref).collect::<Vec<_>>(),
+            disagreement.as_ref(),
+        )
+    });
+    let out = PyList::empty(py);
+    for warning in &warnings {
+        let d = PyDict::new(py);
+        d.set_item("chain", warning.chain())?;
+        d.set_item("text", warning.to_string())?;
+        match warning {
+            ChainWarning::WarmupStep {
+                step, median_step, ..
+            } => {
+                d.set_item("check", "warmup_step")?;
+                d.set_item("value", *step)?;
+                d.set_item("reference", *median_step)?;
+            }
+            ChainWarning::WarmupLogDensity {
+                median_log_density,
+                reference,
+                threshold,
+                ..
+            } => {
+                d.set_item("check", "warmup_log_density")?;
+                d.set_item("value", *median_log_density)?;
+                d.set_item("reference", *reference)?;
+                d.set_item("threshold", *threshold)?;
+            }
+            ChainWarning::SampledLogDensity {
+                median_log_density,
+                reference,
+                threshold,
+                ..
+            } => {
+                d.set_item("check", "sampled_log_density")?;
+                d.set_item("value", *median_log_density)?;
+                d.set_item("reference", *reference)?;
+                d.set_item("threshold", *threshold)?;
+            }
+            ChainWarning::RHat {
+                max_rhat,
+                max_rhat_without,
+                ..
+            } => {
+                d.set_item("check", "rhat")?;
+                d.set_item("value", *max_rhat_without)?;
+                d.set_item("reference", *max_rhat)?;
+            }
+            _ => d.set_item("check", "other")?,
+        }
+        out.append(d)?;
+    }
+    Ok((out, ChainWarning::lines(&warnings)))
+}
+
 #[pymodule]
 fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("ALGORITHM_REVISION", ALGORITHM_REVISION)?;
@@ -1607,6 +1737,7 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uniform_starts_callable, m)?)?;
     m.add_function(wrap_pyfunction!(uniform_starts_cfunc, m)?)?;
     m.add_function(wrap_pyfunction!(summary, m)?)?;
+    m.add_function(wrap_pyfunction!(chain_warnings, m)?)?;
     m.add_function(wrap_pyfunction!(reference_gaussian_sampler_run, m)?)?;
     m.add("HAS_STAN", cfg!(feature = "stan"))?;
     #[cfg(feature = "stan")]
