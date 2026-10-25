@@ -1,7 +1,7 @@
 {
   "schema": "bridgestan-windows-root-cause-v3",
   "ledger_id": "WP50C",
-  "status": "PHASE_A_DONE_PHASE_B_FROZEN_BEFORE_EXECUTION",
+  "status": "PHASE_B_RUNNING_PHASE_C_DRAFT",
   "frozen_utc": "2026-10-24",
   "toolchain": "1.88.0-x86_64-pc-windows-gnu",
   "forbidden_seeds": [
@@ -177,5 +177,69 @@
       "phase_c": "runs only if verdict == fix_supported"
     }
   },
-  "phase_c": "preregistered separately and committed before any Phase C run, only if Phase B supports the fix"
+  "phase_c": {
+    "condition": "run only if phase_b gate verdict == fix_supported",
+    "code": "payoff/ crate built against this worktree's HEAD sampler and BridgeStan integration (run_phase_c.py build)",
+    "arms": {
+      "serialised": "HEAD ReplicatedStanTarget::load(model, [private tbb], data, seed, 4): on Windows one owned worker + process-global native-call lock (current default)",
+      "unserialised": "study-local target: 4 independently loaded copies of the same static model DLL, each with its own mutex, free-replica dispatch (9edcbac / off-Windows dispatch); libraries resident"
+    },
+    "arm_order": [
+      "serialised",
+      "unserialised"
+    ],
+    "ordering": "models in listed order; for seed index i the arms run in arm_order, reversed when i is odd; strictly sequential",
+    "sampler": {
+      "chains": 4,
+      "threads": 4,
+      "requested_replicas": 4,
+      "warmup": 1000,
+      "draws": 1000,
+      "metric": "diagonal",
+      "adaptation": "default",
+      "tuning": "default",
+      "limits": "admit_worst_case",
+      "init": "uniform"
+    },
+    "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+    "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+    "models": {
+      "sblrc": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+        "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+        "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+        "seeds": [
+          50700701,
+          50700702,
+          50700703
+        ]
+      },
+      "arK": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\arK__arK_model.so",
+        "model_sha256": "86af0ec872a11ff3d5df9e96c3621df524fb04518a808c4933a3837945b46be7",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK.data.json",
+        "data_sha256": "8c561dcceb3e74654097f25f07277cd5448fc175f4a2589962bb817a54e4e742",
+        "seeds": [
+          50700711,
+          50700712,
+          50700713
+        ]
+      }
+    },
+    "total_children": 12,
+    "timeout_seconds_per_child": 900,
+    "event_settle_seconds": 20,
+    "assertions": "per (model, seed): start-gradient hash (lp + gradient bits at the 4 starts), draws fingerprint (FNV-1a over all retained draw bits), target_calls and draws_observed are identical across arms; any mismatch is reported as a failed assertion",
+    "measures": {
+      "payoff": "per (model, seed): serialised sampling wall / unserialised sampling wall (contended, labelled); per-model median of 3",
+      "cpu": "per-process kernel+user CPU seconds over sampling and whole process (GetProcessTimes); cpu ratio reported",
+      "fault": "nonzero rc, timeout, missing/non-ok output, or an Event 1000 for the payoff exe"
+    },
+    "recommendation_rule": {
+      "min_median_wall_ratio_each_model": 1.5,
+      "change_default": "recommend changing the Windows default from the owned worker to unserialised multi-replica dispatch ONLY IF phase B is fix_supported AND static_short has 0 faults AND Phase C has 0 faults AND every assertion holds AND the median wall ratio is >= 1.5 on BOTH models; and then only for static-runtime DLLs (dynamic-runtime DLLs keep the owned worker). Otherwise recommend keeping the owned worker.",
+      "note": "the rule is frozen before Phase C evidence; wall times are contended by other agents' processes"
+    }
+  }
 }

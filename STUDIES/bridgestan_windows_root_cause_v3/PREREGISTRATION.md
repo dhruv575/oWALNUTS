@@ -148,3 +148,87 @@ Phase C runs only if the fix is supported.
 - Durations are contended wall times, because other agents share the
   machine.
 - There are no reruns, and failures are results.
+
+## Phase C — payoff (frozen before any Phase C child)
+
+This phase runs only because Phase B returned `fix_supported` under the
+disclosed time-window event correlation; the literal PID-only correlation
+gave `fix_not_supported` via a reused PID (see
+`artifacts/phase-b-result.md`). It is frozen in `protocol.json` `phase_c` and
+run by `run_phase_c.py run` exactly once.
+
+**The question.** With static-runtime DLLs, how much wall time does the
+current Windows owned-worker serialisation cost against unserialised
+multi-replica dispatch?
+
+### C.1 Setup
+
+- **The child.** `payoff/` is built against this worktree's HEAD sampler and
+  BridgeStan integration by `run_phase_c.py build`, which writes
+  `artifacts/phase-c-build-manifest.json`. One process runs one
+  (arm, model, seed) cell.
+- **Sampler settings.** 4 chains, 4 threads, 1000/1000, diagonal metric,
+  default adaptation and tuning, uniform init.
+- **DLLs.** The Phase A static model DLLs (sblrc and arK) and the private
+  `tbb.dll`.
+
+### C.2 Arms
+
+The two arms differ only in the `Target`:
+
+- **`serialised`.** HEAD `ReplicatedStanTarget::load(.., 4)`. On Windows this
+  is one owned worker behind the process-global native-call lock, which is
+  the current default.
+- **`unserialised`.** A study-local target with 4 independently loaded copies
+  of the same static DLL. Each copy has its own mutex, calls go to whichever
+  replica is free, and the libraries stay resident. This is the dispatch used
+  at 9edcbac and off Windows. Its evaluation and error mapping copy HEAD's:
+  `propto=false`, `jacobian=true`, an rc ≠ 0 is recoverable, and
+  `map_evaluation`.
+
+### C.3 Matrix and ordering
+
+- **Seeds.** sblrc 50700701–50700703 and arK 50700711–50700713. They are
+  fresh and checked by exact-word search.
+- **Ordering.** For seed index i the arms run serialised then unserialised,
+  reversed when i is odd. Children run strictly sequentially, 12 in total.
+  The PowerShell launcher is the same as in Phase B.
+
+### C.4 Assertions
+
+For each (model, seed), these must be identical across arms:
+
+- the hash of the log density and gradient bits at the 4 starts;
+- the FNV-1a fingerprint of all retained draws;
+- `target_calls`;
+- `draws_observed`.
+
+A mismatch is reported as a failed assertion, and the payoff is then flagged.
+
+### C.5 Measures
+
+- **Payoff.** The serialised sampling wall time divided by the unserialised
+  one, for each pair. It is summarised as the per-model median of the 3
+  seeds. These are contended wall times, labelled as such.
+- **CPU.** Per-process kernel + user CPU seconds, over sampling and over the
+  whole process (`GetProcessTimes`).
+- **Fault.** A Phase C fault is a nonzero rc, a timeout (900 s), missing or
+  non-ok output, or an Event 1000 for the payoff exe.
+
+### C.6 Recommendation rule (frozen)
+
+Recommend changing the Windows default from the owned worker to unserialised
+multi-replica dispatch only if all of the following hold:
+
+- Phase B is `fix_supported`;
+- `static_short` has 0 faults;
+- Phase C has 0 faults;
+- every assertion holds;
+- the median wall ratio is at least 1.5 on both models.
+
+Even then the change would apply only to static-runtime DLLs; dynamic-runtime
+DLLs keep the owned worker. Otherwise the recommendation is to keep the owned
+worker.
+
+**Pre-evidence disclosure.** The payoff child was compiled, and its unit
+tests run, before this commit. No sampling cell was run.
