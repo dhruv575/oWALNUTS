@@ -46,6 +46,18 @@ class Tests(unittest.TestCase):
         got = R.correlate([rec], {"events": [{"id": 1000, "properties": props, "record_id": 1}]})
         self.assertEqual(got["static_long-50700001"]["exception_code"], "c0000374")
 
+    def test_correlate_rejects_reused_pid_outside_lifetime(self):
+        props = [""] * 11
+        props[3], props[6], props[7], props[8], props[10] = "ntdll.dll", "c0000374", "0x1", "26612", str(R.EXE)
+        event = {"id": 1000, "properties": props, "record_id": 30065,
+                 "time_utc": "2026-10-25T01:56:27.5528917Z"}
+        early = {"case_id": "a", "child_pid": 26612, "started_unix_ms": 1792893384757,
+                 "duration_seconds": 45.2}
+        late = {"case_id": "b", "child_pid": 26612, "started_unix_ms": 1792894305646,
+                "duration_seconds": 2.2}
+        got = R.correlate([early, late], {"events": [event]})
+        self.assertEqual(sorted(got), ["a"])
+
     def test_rc_forms(self):
         self.assertEqual(R.rc_forms(3221226356)["hex_32"], "0xC0000374")
 

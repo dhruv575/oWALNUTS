@@ -211,12 +211,34 @@ def capture_events(start_ms: int, end_ms: int) -> dict:
             "returncode": proc.returncode, "stderr": proc.stderr, "events": rows}
 
 
+def event_unix_seconds(text: str | None) -> float | None:
+    if not text:
+        return None
+    from datetime import datetime, timezone
+    return datetime.fromisoformat(text[:26]).replace(tzinfo=timezone.utc).timestamp()
+
+
+def in_lifetime(rec: dict, when: float) -> bool:
+    """Event time inside the child's launch window (1 s before launch to 5 s
+    after the launcher returned)."""
+    start = rec.get("started_unix_ms", 0) / 1000
+    return start - 1 <= when <= start + (rec.get("duration_seconds") or 0) + 5
+
+
 def correlate(records: list[dict], events: dict) -> dict:
     """Event 1000: properties[6]=exception code, [3]=module, [8]=pid, [10]=app path.
 
     Analysis correction (post-run, records unchanged): Get-WinEvent renders the
     PID property in decimal on this host; the original implementation parsed it
     as hex and therefore matched nothing. Decimal is tried first, then hex.
+
+    WP50C Phase B analysis correction (post-run, records unchanged): all
+    Phase B arms share one exe path and Windows reused PID 26612 within the
+    run, so PID + path attributed one event (record 30065) to two children,
+    one launched 15 minutes after the event. An event is now attributed only
+    to a child whose launch window contains the event time. The
+    as-preregistered summary is preserved as
+    artifacts/phase-b/summary-as-preregistered-pid-only-correlation.json.
     """
     by_case = {}
     for event in events.get("events", []):
@@ -231,8 +253,10 @@ def correlate(records: list[dict], events: dict) -> dict:
         except ValueError:
             continue
         app = props[10].lower()
+        when = event_unix_seconds(event.get("time_utc"))
         for rec in records:
-            if rec.get("child_pid") == pid and str(EXE).lower() == app:
+            if rec.get("child_pid") == pid and str(EXE).lower() == app and (
+                    when is None or in_lifetime(rec, when)):
                 by_case[rec["case_id"]] = {"exception_code": props[6], "module": props[3],
                                            "module_path": props[11] if len(props) > 11 else None,
                                            "offset": props[7], "record_id": event.get("record_id")}
