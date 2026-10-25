@@ -182,16 +182,66 @@ cells where v3 froze (`STUDIES/paper_adaptation_robust_v1`).
 The extension builds the crate with the `research` Cargo feature (needed
 for the raised evaluation ceiling behind `max_target_evaluations`).
 
-## What Python costs (measured; see BENCH.md and bench/artifacts)
+## What Python costs (measured; `STUDIES/python_callpath_v1`)
 
-The kernel calls the target from Rust worker threads; each call re-attaches
-the interpreter, so Python targets are serialised by the GIL — use
-`threads=1` for Python targets (`threads=4` on the native targets gives ~3×;
-on a numpy target it is *slower*). Per-call overhead on this machine:
-native Rust ≈ 0.8 µs, PyMC compiled ≈ 7 µs, numpy ≈ 10–13 µs, JAX jit
-dispatch ≈ 30–84 µs, PyTorch autograd ≈ 190–290 µs. ESS per target call is
-backend-independent to within Monte-Carlo noise (the kernel is the same);
-ESS per second is what the callback overhead taxes.
+Every path runs the same kernel, so ESS per target call is the same to
+Monte-Carlo noise (paths that call the same compiled function give
+bit-identical draws); what differs is the cost of one call. Measured on a
+contended 16-core Windows machine (walls are relative, not absolute; the
+`threads=4` column is the build with the fixes below) on a 100-D Gaussian,
+noncentered Eight Schools and a 157-D hierarchical regression, 4 chains x
+1,000/1,000 at the defaults:
+
+| path | µs per call in the sampler (gauss / eight / hier) | `threads=4` vs `threads=1` |
+|---|---|---|
+| `from_cfunc` (numba `cfunc`) | 1.4 / 0.6 / 2.9 | 2.7–3.3x faster |
+| `from_pymc(model, gil_free=True)` | 4 / 6 / 24 | 2.5–3x faster (one contended outlier) |
+| plain callable calling a numba `njit` kernel | 3.0 / 1.8 / 4.2 | 1.8–3.2x **slower** |
+| plain numpy callable | 3.8 / 9.2 / 36 | 1.4–2.3x **slower** |
+| `from_pymc(model)` (default: compiled PyTensor C function, a Python callable) | 7 / 12 / 31 | 1.4–3x **slower** (`thread_safe=True`) |
+| `from_jax(logp)` | 22 / 19 / 32 | 2.3–3.3x **slower** |
+| `from_torch(logp)` | 66 / 290 / 500 | 1.1–2.8x **slower** |
+
+Against nutpie 0.16.8 on the same PyMC models (same chains and draws):
+`from_pymc(model)` reaches 0.17–0.24x nutpie's ESS/s at one core;
+`from_pymc(model, gil_free=True)` reaches 0.5–1.0x at one core and
+0.5–0.9x at four; a hand-written numba `cfunc` (below) is 2–9x nutpie's ESS/s
+even though nutpie gets 1.6–2.4x more ESS per gradient on these three models.
+
+Guidance:
+
+* **Python callables (numpy, JAX, PyTorch, the default `from_pymc`): use
+  `threads=1`.** A callable holds the GIL, so chains on worker threads queue
+  for it, and `threads=4` is slower than `threads=1` for every cheap
+  callable. Only a callable that spends most of its time outside the GIL
+  (large XLA or PyTorch kernels) can gain.
+* **For speed, use a compiled C-ABI target**: `from_pymc(model,
+  gil_free=True)` for PyMC models (numba required), or `from_cfunc` for a
+  hand-written numba kernel; both run `threads` chains in parallel.
+* **Compile numba kernels for `from_cfunc` with `error_model="numpy"`** on
+  both the `njit` helpers and the `cfunc`, and return `-inf` (gradient
+  zeroed) when the value or any gradient element is nonfinite. Numba's
+  default `error_model="python"` raises `ZeroDivisionError` on a float
+  division by zero, which cannot cross the C ABI: the call returns garbage
+  and the run fails with "raw target wrote a nonfinite gradient element".
+  The callable transport hides this (it treats `ZeroDivisionError` and any
+  nonfinite output as a zero-density point by default); the raw ABI
+  treats a finite value with a nonfinite gradient as fatal.
+* `from_jax` calls the jitted `value_and_grad` on the numpy position directly
+  (after 0.2.0; 2.0–2.6x ESS/s over 0.2.0's extra `jnp.asarray` dispatch).
+  JAX's per-call dispatch (15–30 µs) still dominates small models.
+* `from_pymc(model)` is a Python callable around PyMC's compiled
+  `logp_dlogp_function` (PyTensor C backend by default), not a compiled
+  transport. `thread_safe=True` (one compiled function per worker thread) is
+  needed for `threads > 1`; in 0.2.0 it recompiled the PyTensor function
+  on every callback at `threads > 1` (a run did not finish), because worker
+  threads got a fresh Python thread state per call. After 0.2.0 each worker
+  thread keeps one Python thread state for the whole run, so
+  `threading.local` state persists and Python callables at `threads=4` are
+  1.1–1.9x faster than in 0.2.0 (PyTorch unchanged; all still slower than
+  `threads=1`).
+* PyTorch's per-call cost is mostly the autograd/dispatcher overhead of
+  many small ops; it is the slowest path for small models.
 
 ## Tests
 
@@ -201,19 +251,22 @@ ESS per second is what the callback overhead taxes.
 
 ## GIL-free chains
 
-Every `sample` call releases the GIL for the whole run; the kernel calls
-the target from Rust worker threads. A Python callable re-attaches the
-interpreter on each call, so those chains are serialised (use `threads=1`).
+Every `sample` call releases the GIL for the whole run; at `threads=1` the
+chains run on the calling thread, at `threads > 1` on Rust worker threads.
+A Python callable re-attaches the interpreter on each call, so those chains
+are serialised by the GIL (use `threads=1`; see the table above).
 The built-in native targets and compiled C-ABI callbacks (`from_cfunc`,
 `from_pymc(gil_free=True)`) never touch the interpreter and run `threads`
 chains in parallel. Off Windows, `from_stan` (BridgeStan, above) does too:
 
 ```python
-import numba, owalnuts
+import numba, numpy as np, owalnuts
 
 sig = owalnuts.numba_raw_signature()  # float64(intp, double*, double*, void*)
 
-@numba.cfunc(sig, nopython=True)
+# error_model="numpy": a division by zero gives inf/nan instead of a Python
+# exception, which cannot cross the C ABI (use it on njit helpers too).
+@numba.cfunc(sig, nopython=True, error_model="numpy")
 def logp_grad(dim, q_ptr, grad_ptr, user_data):
     q = numba.carray(q_ptr, (3,))
     g = numba.carray(grad_ptr, (3,))
@@ -221,7 +274,11 @@ def logp_grad(dim, q_ptr, grad_ptr, user_data):
     for i in range(3):
         g[i] = -q[i]
         total += q[i] * q[i]
-    return -0.5 * total   # return -inf for zero-density points
+    value = -0.5 * total
+    if not np.isfinite(value) or not np.all(np.isfinite(g)):
+        g[:] = 0.0
+        return -np.inf   # zero-density point: refined, then rejected
+    return value
 
 target = owalnuts.from_cfunc(logp_grad, 3)
 result = owalnuts.sample(target, 3, threads=4)   # real parallel chains
@@ -245,7 +302,8 @@ default; an invalid initial point still fails verification.
 Measured on Eight Schools: ~31,000 min-bulk
 ESS/s at 4 threads — parity with nutpie — vs ~2,300 through the GIL path.
 The callback must be thread-safe, deterministic, write every gradient
-element on finite returns, and never raise across the ABI.
+element on finite returns, and never raise across the ABI (hence
+`error_model="numpy"` for numba).
 
 ## Example: stochastic volatility on the top-5 cryptocurrencies
 
