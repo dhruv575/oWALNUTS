@@ -11,8 +11,10 @@ The rescue acted on only 7 of 25 seeds: two on `accel_gp` and three on
 `hmm_drive_0`, all by the log-density criterion. The other 18 pairs are
 bit-identical. With WP60 (start rule: 1.061), neither default change since
 v6 accounts for the drop from 0.848 to 0.708x CmdStan. Seed variation does.
-Under one fixed configuration, the five rescue_off seeds here span the v6 and
-v7 values on four of the five models.
+Under one fixed configuration, the five rescue_off seeds here span both the v6
+and v7 seed medians on three of the five models. On the other two they come
+within 7%: `accel_gp` misses v6 at the top, `hmm_drive_0` misses v7 at the
+bottom.
 
 As preregistered, this is attribution only. Nothing is flipped, and restoring
 rescue is not recommended. WP36's mode-hiding objection stands, and here
