@@ -1,0 +1,137 @@
+# WP51 dense-default confirmation — results
+
+Seed medians over ok cells (3 seeds per arm). `gates` = cells passing rank R-hat <= 1.01, bulk/tail ESS >= 400, zero retained divergences, no sampler error (timeouts and errors count as failures). `kappa` = condition number of the pooled retained unconstrained covariance in the installed metric's whitened coordinates (median over chains). Walls are CONTENDED (up to seven agents on 16 cores) and decide nothing.
+
+| model | d | arm | gates | grads | min bulk ESS | bulk ESS/grad x1e3 | ratio vs diag | step | cap frac | kappa | last ridge max | max R-hat | div | max abs z | wall s (contended) |
+|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| eight_schools-eight_schools_noncentered | 10 | owalnuts-diag | 3/3 | 70,941 | 2,102 | 29.627 | 1.00 | 0.454 | 0.000 | 2.23 | 0 | 1.0023 | 0,0,0 | 1.80 | 0.2 |
+| eight_schools-eight_schools_noncentered | 10 | owalnuts-dense-legacy | 1/3 | 231,547 | 374 | 1.937 | 0.07 | 0.19 | 0.000 | 165 | 1e-07 | 1.0173 | 0,0,0 | 1.46 | 0.9 |
+| eight_schools-eight_schools_noncentered | 10 | owalnuts-dense-candidate | 3/3 | 80,176 | 2,307 | 27.261 | 0.92 | 0.476 | 0.000 | 2.03 | 0 | 1.0037 | 0,0,0 | 1.49 | 0.2 |
+| eight_schools-eight_schools_centered | 10 | owalnuts-diag | 0/3 | 274,501 | 59 | 0.215 | 1.00 | 0.193 | 0.000 | 23.1 | 0 | 1.0600 | 0,0,4 | 1.73 | 1.7 |
+| eight_schools-eight_schools_centered | 10 | owalnuts-dense-legacy | 0/3 | 2,252,877 | 6 | 0.003 | 0.01 | 0.0153 | 0.281 | 1.52e+03 | 4e-08 | 1.7595 | 0,4,0 | 2.13 | 4.0 |
+| eight_schools-eight_schools_centered | 10 | owalnuts-dense-candidate | 0/3 | 233,115 | 76 | 0.326 | 1.52 | 0.213 | 0.000 | 3.55 | 0 | 1.0737 | 0,0,0 | 1.55 | 1.1 |
+| diamonds-diamonds | 26 | owalnuts-diag | 3/3 | 6,687,501 | 947 | 0.141 | 1.00 | 0.00356 | 0.100 | 2.68e+05 | 0 | 1.0027 | 0,0,0 | 1.62 | 492.4 |
+| diamonds-diamonds | 26 | owalnuts-dense-legacy | 0/3 | 1,781,500 | 150 | 0.056 | 0.40 | 0.013 | 0.026 | 6.32e+05 | 0.01 | 1.0215 | 0,0,0 | 2.02 | 68.7 |
+| diamonds-diamonds | 26 | owalnuts-dense-candidate | 3/3 | 302,686 | 4,223 | 13.953 | 98.67 | 0.278 | 0.000 | 17.6 | 0 | 1.0041 | 0,0,0 | 2.00 | 21.8 |
+| earnings-logearn_interaction | 5 | owalnuts-diag | 3/3 | 1,595,275 | 968 | 0.593 | 1.00 | 0.0158 | 0.000 | 1.26e+04 | 0 | 1.0057 | 0,0,0 | 1.32 | 97.6 |
+| earnings-logearn_interaction | 5 | owalnuts-dense-legacy | 0/3 | 2,146,821 | 7 | 0.005 | 0.01 | 0.00358 | 0.209 | 9.42e+07 | 1.2e-09 | 1.6295 | 0,0,0 | 1.62 | 80.1 |
+| earnings-logearn_interaction | 5 | owalnuts-dense-candidate | 3/3 | 617,853 | 1,633 | 2.643 | 4.46 | 0.106 | 0.000 | 107 | 0 | 1.0031 | 0,0,0 | 1.31 | 38.0 |
+| mesquite-logmesquite_logvash | 7 | owalnuts-diag | 3/3 | 383,020 | 1,334 | 3.484 | 1.00 | 0.0765 | 0.000 | 489 | 0 | 1.0038 | 0,0,0 | 1.10 | 2.7 |
+| mesquite-logmesquite_logvash | 7 | owalnuts-dense-legacy | 1/3 | 810,807 | 41 | 0.046 | 0.01 | 0.793 | 0.005 | 1.14e+07 | 0.00098 | 1.0735 | 0,0,0 | 0.85 | 8.0 |
+| mesquite-logmesquite_logvash | 7 | owalnuts-dense-candidate | 3/3 | 82,046 | 4,539 | 53.331 | 15.31 | 0.641 | 0.000 | 1.72 | 0 | 1.0020 | 0,0,0 | 1.66 | 0.6 |
+| kidiq-kidscore_momhsiq | 4 | owalnuts-diag | 3/3 | 355,578 | 1,471 | 4.147 | 1.00 | 0.0985 | 0.000 | 186 | 0 | 1.0018 | 0,0,0 | 1.47 | 7.1 |
+| kidiq-kidscore_momhsiq | 4 | owalnuts-dense-legacy | 0/3 | 718,518 | 8 | 0.011 | 0.00 | 0.0373 | 0.000 | 1.61e+06 | 6.3e-06 | 1.4190 | 0,0,0 | 0.83 | 11.0 |
+| kidiq-kidscore_momhsiq | 4 | owalnuts-dense-candidate | 3/3 | 180,949 | 3,781 | 22.530 | 5.43 | 0.782 | 0.000 | 1.39 | 0 | 1.0010 | 0,0,0 | 1.94 | 4.1 |
+| sblrc-blr | 6 | owalnuts-diag | 3/3 | 147,280 | 793 | 5.434 | 1.00 | 0.102 | 0.000 | 69.9 | 0 | 1.0036 | 0,0,0 | 1.58 | 0.7 |
+| sblrc-blr | 6 | owalnuts-dense-legacy | 0/3 | 831,989 | 127 | 0.152 | 0.03 | 0.166 | 0.000 | 2.2e+03 | 1e-10 | 1.0312 | 0,0,0 | 1.08 | 8.6 |
+| sblrc-blr | 6 | owalnuts-dense-candidate | 3/3 | 151,515 | 768 | 5.054 | 0.93 | 0.11 | 0.000 | 53.4 | 0 | 1.0045 | 0,0,0 | 1.08 | 0.7 |
+| nes2000-nes | 10 | owalnuts-diag | 3/3 | 420,835 | 1,896 | 4.412 | 1.00 | 0.0751 | 0.000 | 425 | 0 | 1.0018 | 0,0,0 | 1.48 | 22.1 |
+| nes2000-nes | 10 | owalnuts-dense-legacy | 2/3 | 283,659 | 822 | 2.389 | 0.54 | 0.199 | 0.000 | 1.03e+03 | 1e-06 | 1.0063 | 0,0,0 | 2.10 | 10.6 |
+| nes2000-nes | 10 | owalnuts-dense-candidate | 3/3 | 111,257 | 7,620 | 68.443 | 15.51 | 0.654 | 0.000 | 2.04 | 0 | 1.0032 | 0,0,0 | 1.82 | 6.1 |
+| arK-arK | 7 | owalnuts-diag | 3/3 | 270,059 | 2,332 | 8.668 | 1.00 | 0.119 | 0.000 | 125 | 0 | 1.0020 | 0,0,0 | 1.93 | 8.0 |
+| arK-arK | 7 | owalnuts-dense-legacy | 2/3 | 145,135 | 1,252 | 9.952 | 1.15 | 0.946 | 0.000 | 113 | 0.0001 | 1.0032 | 0,0,0 | 2.30 | 2.7 |
+| arK-arK | 7 | owalnuts-dense-candidate | 3/3 | 79,799 | 5,767 | 65.675 | 7.58 | 0.687 | 0.000 | 1.8 | 0 | 1.0026 | 0,0,0 | 1.83 | 2.6 |
+| arma-arma11 | 4 | owalnuts-diag | 3/3 | 542,841 | 3,303 | 6.847 | 1.00 | 0.671 | 0.000 | 1.83 | 0 | 1.0020 | 0,0,0 | 1.65 | 8.6 |
+| arma-arma11 | 4 | owalnuts-dense-legacy | 1/3 | 605,694 | 28 | 0.022 | 0.00 | 1.2 | 0.000 | 288 | 1e-05 | 1.0964 | 0,0,0 | 1.16 | 6.8 |
+| arma-arma11 | 4 | owalnuts-dense-candidate | 3/3 | 586,653 | 3,915 | 6.898 | 1.01 | 0.73 | 0.000 | 1.48 | 0 | 1.0021 | 0,0,0 | 1.67 | 9.6 |
+| garch-garch11 | 4 | owalnuts-diag | 3/3 | 94,093 | 1,672 | 17.766 | 1.00 | 0.317 | 0.000 | 7.98 | 0 | 1.0019 | 0,0,0 | 1.35 | 3.1 |
+| garch-garch11 | 4 | owalnuts-dense-legacy | 1/3 | 131,436 | 490 | 5.347 | 0.30 | 1.51 | 0.000 | 1.59e+03 | 2.5e-07 | 1.0080 | 0,0,0 | 1.06 | 2.7 |
+| garch-garch11 | 4 | owalnuts-dense-candidate | 3/3 | 70,687 | 2,220 | 31.405 | 1.77 | 0.491 | 0.000 | 1.75 | 0 | 1.0017 | 0,0,0 | 1.27 | 2.4 |
+| gp_pois_regr-gp_pois_regr | 13 | owalnuts-diag | 3/3 | 1,201,495 | 737 | 0.654 | 1.00 | 0.028 | 0.000 | 564 | 0 | 1.0056 | 0,0,0 | 2.34 | 16.0 |
+| gp_pois_regr-gp_pois_regr | 13 | owalnuts-dense-legacy | 2/3 | 1,409,217 | 793 | 0.352 | 0.54 | 0.0693 | 0.000 | 1.77e+03 | 1e-07 | 1.0053 | 0,0,0 | 2.17 | 11.6 |
+| gp_pois_regr-gp_pois_regr | 13 | owalnuts-dense-candidate | 0/3 | 329,878 | 357 | 1.130 | 1.73 | 0.157 | 0.000 | 3.5 | 0 | 1.0127 | 0,0,0 | 2.91 | 4.4 |
+| hmm_example-hmm_example | 4 | owalnuts-diag | 3/3 | 125,886 | 2,193 | 16.159 | 1.00 | 0.317 | 0.000 | 17.4 | 0 | 1.0020 | 0,0,0 | 1.68 | 7.9 |
+| hmm_example-hmm_example | 4 | owalnuts-dense-legacy | 2/3 | 118,845 | 844 | 5.290 | 0.33 | 0.855 | 0.000 | 238 | 8.8e-07 | 1.0063 | 0,0,0 | 1.62 | 4.2 |
+| hmm_example-hmm_example | 4 | owalnuts-dense-candidate | 3/3 | 91,567 | 3,418 | 36.850 | 2.28 | 0.769 | 0.000 | 1.41 | 0 | 1.0025 | 0,0,0 | 1.07 | 5.5 |
+| bball_drive_event_0-hmm_drive_0 | 6 | owalnuts-diag | 3/3 | 111,659 | 3,590 | 28.647 | 1.00 | 0.626 | 0.000 | 1.84 | 0 | 1.0027 | 0,0,0 | 1.73 | 33.2 |
+| bball_drive_event_0-hmm_drive_0 | 6 | owalnuts-dense-legacy | 0/3 (1 error) | 676,062 | 19 | 0.110 | 0.00 | 1.13 | 0.107 | 6.99e+05 | 3.2e-07 | 1.4783 | 0,0 | 1.41 | 118.3 |
+| bball_drive_event_0-hmm_drive_0 | 6 | owalnuts-dense-candidate | 3/3 | 117,677 | 3,462 | 30.563 | 1.07 | 0.638 | 0.000 | 1.82 | 0 | 1.0017 | 0,0,0 | 1.28 | 29.4 |
+| one_comp_mm_elim_abs-one_comp_mm_elim_abs | 4 | owalnuts-diag | 1/3 | 80,762 | 719 | 9.612 | 1.00 | 0.378 | 0.000 | 5.41 | 0 | 1.0039 | 0,0,0 | 1.27 | 68.6 |
+| one_comp_mm_elim_abs-one_comp_mm_elim_abs | 4 | owalnuts-dense-legacy | 0/3 | 100,480 | 302 | 2.502 | 0.26 | 1.21 | 0.000 | 70.1 | 2.6e-09 | 1.0163 | 0,0,0 | 1.62 | 51.5 |
+| one_comp_mm_elim_abs-one_comp_mm_elim_abs | 4 | owalnuts-dense-candidate | 2/3 | 68,103 | 1,232 | 18.099 | 1.88 | 0.521 | 0.000 | 1.76 | 0 | 1.0037 | 0,0,0 | 3.53 | 56.2 |
+| hudson_lynx_hare-lotka_volterra | 8 | owalnuts-diag | 2/3 (1 timeout) | 1,116,206 | 1,040 | 1.894 | 1.00 | 0.105 | 0.000 | 283 | 0 | 1.0050 | 0,0 | 1.24 | 324.6 |
+| hudson_lynx_hare-lotka_volterra | 8 | owalnuts-dense-legacy | 0/3 | 381,523 | 10 | 0.072 | 0.04 | 0.46 | 0.000 | 3.12e+03 | 1e-07 | 1.3174 | 0,0,0 | 0.85 | 57.2 |
+| hudson_lynx_hare-lotka_volterra | 8 | owalnuts-dense-candidate | 2/3 | 124,628 | 3,293 | 26.419 | 13.95 | 0.574 | 0.000 | 1.93 | 0 | 1.0013 | 0,0,0 | 1.53 | 13.6 |
+| mcycle_gp-accel_gp | 66 | owalnuts-diag | 1/3 | 2,642,658 | 431 | 0.167 | 1.00 | 0.00774 | 0.000 | 1.03e+03 | 0 | 1.0122 | 0,0,0 | 2.64 | 46.5 |
+| mcycle_gp-accel_gp | 66 | owalnuts-dense-legacy | 0/3 | 774,135 | 5 | 0.006 | 0.04 | 0.0114 | 0.001 | 1.81e+05 | 0.0001 | 2.3288 | 0,0,0 | 2.79 | 17.7 |
+| mcycle_gp-accel_gp | 66 | owalnuts-dense-candidate | 0/3 | 902,021 | 58 | 0.063 | 0.38 | 0.0692 | 0.000 | 30.1 | 0 | 1.0613 | 0,0,0 | 2.36 | 16.0 |
+
+## owalnuts-dense-candidate versus owalnuts-diag
+
+- geomean min-bulk-ESS/gradient ratio over 17 models: 3.212 (excluded: none); contended ESS/s geomean 3.579
+- gates 40/51 versus diag 43/51; models 3/3 -> 0/3: ['gp_pois_regr-gp_pois_regr']
+
+| model | ESS/grad ratio | contended ESS/s ratio | gates | diag gates |
+|---|---:|---:|---|---|
+| eight_schools-eight_schools_noncentered | 0.92 | 0.94 | 3/3 | 3/3 |
+| eight_schools-eight_schools_centered | 1.52 | 1.92 | 0/3 | 0/3 |
+| diamonds-diamonds | 98.67 | 100.73 | 3/3 | 3/3 |
+| earnings-logearn_interaction | 4.46 | 4.33 | 3/3 | 3/3 |
+| mesquite-logmesquite_logvash | 15.31 | 16.26 | 3/3 | 3/3 |
+| kidiq-kidscore_momhsiq | 5.43 | 4.39 | 3/3 | 3/3 |
+| sblrc-blr | 0.93 | 0.86 | 3/3 | 3/3 |
+| nes2000-nes | 15.51 | 14.63 | 3/3 | 3/3 |
+| arK-arK | 7.58 | 7.64 | 3/3 | 3/3 |
+| arma-arma11 | 1.01 | 1.06 | 3/3 | 3/3 |
+| garch-garch11 | 1.77 | 1.70 | 3/3 | 3/3 |
+| gp_pois_regr-gp_pois_regr | 1.73 | 1.76 | 0/3 | 3/3 |
+| hmm_example-hmm_example | 2.28 | 2.25 | 3/3 | 3/3 |
+| bball_drive_event_0-hmm_drive_0 | 1.07 | 1.09 | 3/3 | 3/3 |
+| one_comp_mm_elim_abs-one_comp_mm_elim_abs | 1.88 | 2.09 | 2/3 | 1/3 |
+| hudson_lynx_hare-lotka_volterra | 13.95 | 75.32 | 2/3 | 2/3 |
+| mcycle_gp-accel_gp | 0.38 | 0.39 | 0/3 | 1/3 |
+
+## owalnuts-dense-legacy versus owalnuts-diag
+
+- geomean min-bulk-ESS/gradient ratio over 17 models: 0.055 (excluded: none); contended ESS/s geomean 0.073
+- gates 12/51 versus diag 43/51; models 3/3 -> 0/3: ['diamonds-diamonds', 'earnings-logearn_interaction', 'kidiq-kidscore_momhsiq', 'sblrc-blr', 'bball_drive_event_0-hmm_drive_0']
+
+| model | ESS/grad ratio | contended ESS/s ratio | gates | diag gates |
+|---|---:|---:|---|---|
+| eight_schools-eight_schools_noncentered | 0.07 | 0.04 | 1/3 | 3/3 |
+| eight_schools-eight_schools_centered | 0.01 | 0.04 | 0/3 | 0/3 |
+| diamonds-diamonds | 0.40 | 1.13 | 0/3 | 3/3 |
+| earnings-logearn_interaction | 0.01 | 0.01 | 0/3 | 3/3 |
+| mesquite-logmesquite_logvash | 0.01 | 0.01 | 1/3 | 3/3 |
+| kidiq-kidscore_momhsiq | 0.00 | 0.00 | 0/3 | 3/3 |
+| sblrc-blr | 0.03 | 0.01 | 0/3 | 3/3 |
+| nes2000-nes | 0.54 | 0.91 | 2/3 | 3/3 |
+| arK-arK | 1.15 | 1.56 | 2/3 | 3/3 |
+| arma-arma11 | 0.00 | 0.01 | 1/3 | 3/3 |
+| garch-garch11 | 0.30 | 0.35 | 1/3 | 3/3 |
+| gp_pois_regr-gp_pois_regr | 0.54 | 1.48 | 2/3 | 3/3 |
+| hmm_example-hmm_example | 0.33 | 0.72 | 2/3 | 3/3 |
+| bball_drive_event_0-hmm_drive_0 | 0.00 | 0.00 | 0/3 | 3/3 |
+| one_comp_mm_elim_abs-one_comp_mm_elim_abs | 0.26 | 0.56 | 0/3 | 1/3 |
+| hudson_lynx_hare-lotka_volterra | 0.04 | 0.05 | 0/3 | 2/3 |
+| mcycle_gp-accel_gp | 0.04 | 0.03 | 0/3 | 1/3 |
+
+## Funnel side check (P(omega < -5), exact 0.0478; gate |z| <= 2 per seed)
+
+| cell | status | estimate | MCSE z | batch-means z | omega bulk ESS | omega R-hat | divergences | final steps |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| diag-151301 | ok | 0.0457 | -0.30 | -0.34 | 612 | 1.0094 | 0 | 0.157, 0.0956, 0.157, 0.0552 |
+| diag-151302 | ok | 0.0377 | -1.38 | -1.49 | 558 | 1.0161 | 0 | 0.0819, 0.0708, 0.104, 0.104 |
+| diag-151303 | ok | 0.0455 | -0.35 | -0.36 | 703 | 1.0027 | 0 | 0.141, 0.0862, 0.137, 0.17 |
+| dense-candidate-151301 | ok | 0.0418 | -1.03 | -1.11 | 601 | 1.0043 | 0 | 0.163, 0.0191, 0.133, 0.0831 |
+| dense-candidate-151302 | ok | 0.0386 | -1.36 | -1.45 | 639 | 1.0124 | 1 | 0.0187, 0.0449, 0.118, 0.0385 |
+| dense-candidate-151303 | ok | 0.0553 | +0.96 | +1.06 | 618 | 1.0121 | 1 | 0.0432, 0.0531, 0.16, 0.187 |
+
+## Frozen decision rule
+
+- geomean_ge_1_5: True
+- gates_ge_diag_minus_1: False
+- funnel_abs_z_le_2_every_seed: True
+- no_model_3_of_3_to_0_of_3: False
+- **flip: False**
+
+## Preregistered predictions
+
+| prediction | held | value |
+|---|---|---|
+| P1_candidate_geomean_ge_2 | True | `3.2118378462320996` |
+| P2_diamonds_ratio_ge_20 | True | `98.67476670763371` |
+| P3_accel_gp_0_of_3_every_arm | False | `{"owalnuts-diag": 1, "owalnuts-dense-legacy": 0, "owalnuts-dense-candidate": 0}` |
+| P4_candidate_gates_ge_diag | False | `[40, 43]` |
+| P5_funnel_candidate_abs_z_le_2_and_div_le_2x_diag | False | `{"z": {"dense-candidate-151301": -1.0305330942932558, "dense-candidate-151302": -1.3596163178121956, "dense-candidate-151303": 0.9576010835573694}, "divergences_candidate": 2, "divergences_diag": 0}` |
+| P6_legacy_geomean_le_0_5_and_gates_lt_diag | True | `[0.05515834975558373, 12, 43]` |
