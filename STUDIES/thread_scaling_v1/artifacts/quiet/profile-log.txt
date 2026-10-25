@@ -1,0 +1,100 @@
+[2026-10-25 01:56:20] $ C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\bin\baseline\profile.exe allocs gauss100 --out C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\artifacts\quiet\profile\allocs-gauss100.json --cells 1:1,16:16
+allocs gauss100 c1 t1 r0 "system+count": wall 0.224s allocs/grad 2.290 fp da185362c866b8f8
+allocs gauss100 c16 t16 r0 "system+count": wall 0.325s allocs/grad 2.832 fp 2097897a78c52d8f
+[2026-10-25 01:56:22] exit 0
+[2026-10-25 01:56:22] $ C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\bin\baseline\profile.exe allocs ll1000 --out C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\artifacts\quiet\profile\allocs-ll1000.json --cells 1:1,16:16
+allocs ll1000 c1 t1 r0 "system+count": wall 2.661s allocs/grad 0.056 fp fabdccc7b324ed7a
+allocs ll1000 c16 t16 r0 "system+count": wall 8.194s allocs/grad 0.077 fp c02259b622fb6533
+[2026-10-25 01:56:33] exit 0
+[2026-10-25 01:56:33] $ C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\bin\baseline\profile.exe timeline gauss100 --out C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\artifacts\quiet\profile\timeline-gauss100.json --cells 1:1,4:4,8:8,16:16
+timeline gauss100 c1 t1 r0 "system+count": wall 0.223s allocs/grad 2.290 fp da185362c866b8f8
+timeline gauss100 c4 t4 r0 "system+count": wall 0.229s allocs/grad 2.782 fp 98f15f89c1908f78
+timeline gauss100 c8 t8 r0 "system+count": wall 0.277s allocs/grad 2.735 fp e5ab497709acc814
+timeline gauss100 c16 t16 r0 "system+count": wall 0.433s allocs/grad 2.832 fp 2097897a78c52d8f
+[2026-10-25 01:56:36] exit 0
+[2026-10-25 01:56:36] $ C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\bin\baseline\profile.exe timeline ll1000 --out C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\artifacts\quiet\profile\timeline-ll1000.json --cells 1:1,16:16
+timeline ll1000 c1 t1 r0 "system+count": wall 2.736s allocs/grad 0.056 fp fabdccc7b324ed7a
+timeline ll1000 c16 t16 r0 "system+count": wall 8.173s allocs/grad 0.077 fp c02259b622fb6533
+[2026-10-25 01:56:47] exit 0
+[2026-10-25 01:56:47] $ C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\bin\baseline\profile.exe alloc-ablation gauss100 --out C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\artifacts\quiet\profile\alloc-ablation-gauss100.json --cells 1:1,4:4,16:16 --reps 3
+alloc-ablation gauss100 c1 t1 r0 "system": wall 0.218s allocs/grad 0.000 fp da185362c866b8f8
+alloc-ablation gauss100 c1 t1 r0 "thread-cache": wall 0.200s allocs/grad 2.290 fp da185362c866b8f8
+alloc-ablation gauss100 c4 t4 r0 "system": wall 0.215s allocs/grad 0.000 fp 98f15f89c1908f78
+alloc-ablation gauss100 c4 t4 r0 "thread-cache": wall 0.214s allocs/grad 2.782 fp 98f15f89c1908f78
+alloc-ablation gauss100 c16 t16 r0 "system": wall 0.433s allocs/grad 0.000 fp 2097897a78c52d8f
+alloc-ablation gauss100 c16 t16 r0 "thread-cache": wall 0.368s allocs/grad 2.832 fp 2097897a78c52d8f
+alloc-ablation gauss100 c1 t1 r1 "thread-cache": wall 0.209s allocs/grad 2.290 fp da185362c866b8f8
+alloc-ablation gauss100 c1 t1 r1 "system": wall 0.221s allocs/grad 0.000 fp da185362c866b8f8
+alloc-ablation gauss100 c4 t4 r1 "thread-cache": wall 0.216s allocs/grad 2.782 fp 98f15f89c1908f78
+alloc-ablation gauss100 c4 t4 r1 "system": wall 0.246s allocs/grad 0.000 fp 98f15f89c1908f78
+alloc-ablation gauss100 c16 t16 r1 "thread-cache": wall 0.371s allocs/grad 2.832 fp 2097897a78c52d8f
+alloc-ablation gauss100 c16 t16 r1 "system": wall 0.398s allocs/grad 0.000 fp 2097897a78c52d8f
+alloc-ablation gauss100 c1 t1 r2 "system": wall 0.223s allocs/grad 0.000 fp da185362c866b8f8
+alloc-ablation gauss100 c1 t1 r2 "thread-cache": wall 0.203s allocs/grad 2.290 fp da185362c866b8f8
+alloc-ablation gauss100 c4 t4 r2 "system": wall 0.245s allocs/grad 0.000 fp 98f15f89c1908f78
+alloc-ablation gauss100 c4 t4 r2 "thread-cache": wall 0.245s allocs/grad 2.782 fp 98f15f89c1908f78
+alloc-ablation gauss100 c16 t16 r2 "system": wall 0.380s allocs/grad 0.000 fp 2097897a78c52d8f
+alloc-ablation gauss100 c16 t16 r2 "thread-cache": wall 0.335s allocs/grad 2.832 fp 2097897a78c52d8f
+[2026-10-25 01:56:58] exit 0
+[2026-10-25 01:56:58] $ C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\bin\baseline\profile.exe cas-bench --out C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1\artifacts\quiet\profile\cas-bench.json
+cas-bench work    0           none n 1:      0.1 ns/op/thread
+cas-bench work    0           none n 2:      0.2 ns/op/thread
+cas-bench work    0           none n 4:      0.6 ns/op/thread
+cas-bench work    0           none n 8:      1.4 ns/op/thread
+cas-bench work    0           none n16:      4.8 ns/op/thread
+cas-bench work    0     shared-cas n 1:      7.6 ns/op/thread
+cas-bench work    0     shared-cas n 2:     56.5 ns/op/thread
+cas-bench work    0     shared-cas n 4:    139.2 ns/op/thread
+cas-bench work    0     shared-cas n 8:    358.9 ns/op/thread
+cas-bench work    0     shared-cas n16:    850.7 ns/op/thread
+cas-bench work    0 per-thread-add n 1:      4.3 ns/op/thread
+cas-bench work    0 per-thread-add n 2:      4.6 ns/op/thread
+cas-bench work    0 per-thread-add n 4:      5.2 ns/op/thread
+cas-bench work    0 per-thread-add n 8:      6.9 ns/op/thread
+cas-bench work    0 per-thread-add n16:     12.6 ns/op/thread
+cas-bench work   64           none n 1:     82.8 ns/op/thread
+cas-bench work   64           none n 2:     81.5 ns/op/thread
+cas-bench work   64           none n 4:     88.4 ns/op/thread
+cas-bench work   64           none n 8:     87.3 ns/op/thread
+cas-bench work   64           none n16:    161.3 ns/op/thread
+cas-bench work   64     shared-cas n 1:     81.5 ns/op/thread
+cas-bench work   64     shared-cas n 2:     87.1 ns/op/thread
+cas-bench work   64     shared-cas n 4:    178.0 ns/op/thread
+cas-bench work   64     shared-cas n 8:    347.7 ns/op/thread
+cas-bench work   64     shared-cas n16:    959.0 ns/op/thread
+cas-bench work   64 per-thread-add n 1:     81.6 ns/op/thread
+cas-bench work   64 per-thread-add n 2:     83.7 ns/op/thread
+cas-bench work   64 per-thread-add n 4:     87.4 ns/op/thread
+cas-bench work   64 per-thread-add n 8:    130.1 ns/op/thread
+cas-bench work   64 per-thread-add n16:    180.6 ns/op/thread
+cas-bench work  256           none n 1:    329.9 ns/op/thread
+cas-bench work  256           none n 2:    327.9 ns/op/thread
+cas-bench work  256           none n 4:    328.5 ns/op/thread
+cas-bench work  256           none n 8:    334.0 ns/op/thread
+cas-bench work  256           none n16:    507.0 ns/op/thread
+cas-bench work  256     shared-cas n 1:    330.3 ns/op/thread
+cas-bench work  256     shared-cas n 2:    324.3 ns/op/thread
+cas-bench work  256     shared-cas n 4:    356.7 ns/op/thread
+cas-bench work  256     shared-cas n 8:    730.1 ns/op/thread
+cas-bench work  256     shared-cas n16:   1538.9 ns/op/thread
+cas-bench work  256 per-thread-add n 1:    319.6 ns/op/thread
+cas-bench work  256 per-thread-add n 2:    332.5 ns/op/thread
+cas-bench work  256 per-thread-add n 4:    334.6 ns/op/thread
+cas-bench work  256 per-thread-add n 8:    342.1 ns/op/thread
+cas-bench work  256 per-thread-add n16:    534.1 ns/op/thread
+cas-bench work 1024           none n 1:   1336.2 ns/op/thread
+cas-bench work 1024           none n 2:   1327.5 ns/op/thread
+cas-bench work 1024           none n 4:   1316.3 ns/op/thread
+cas-bench work 1024           none n 8:   1361.4 ns/op/thread
+cas-bench work 1024           none n16:   1993.5 ns/op/thread
+cas-bench work 1024     shared-cas n 1:   1315.2 ns/op/thread
+cas-bench work 1024     shared-cas n 2:   1304.1 ns/op/thread
+cas-bench work 1024     shared-cas n 4:   1325.6 ns/op/thread
+cas-bench work 1024     shared-cas n 8:   1386.3 ns/op/thread
+cas-bench work 1024     shared-cas n16:   1900.1 ns/op/thread
+cas-bench work 1024 per-thread-add n 1:   1341.6 ns/op/thread
+cas-bench work 1024 per-thread-add n 2:   1327.9 ns/op/thread
+cas-bench work 1024 per-thread-add n 4:   1320.9 ns/op/thread
+cas-bench work 1024 per-thread-add n 8:   1352.1 ns/op/thread
+cas-bench work 1024 per-thread-add n16:   2067.2 ns/op/thread
+[2026-10-25 01:57:20] exit 0

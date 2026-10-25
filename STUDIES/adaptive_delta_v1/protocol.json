@@ -1,0 +1,109 @@
+{
+  "schema": "adaptive-delta-v1",
+  "ledger_id": "WP49",
+  "status": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+  "frozen_utc": "2026-10-24",
+  "question": "wiki/open-questions.md item 4: can a warmup-time rule that adapts delta (max_error) from the OBSERVED level-0 leaf-error distribution keep the fixed-delta-2 gain (WP34 1.070x) where it exists and fall back to delta <= 1 where the leaf-error tail is heavy (accel_gp 0.68x under fixed 2; funnel gross safety 6/12 seeds under fixed 2, WP37A)?",
+  "change_under_test": "WarmupConfig::with_adaptive_delta(AdaptiveDeltaConfig) (opt-in, off in every default). Every macro leaf attempted during a slow metric window contributes its level-0 endpoint energy error |H_end - H_start| (new kernel telemetry field MacroLeafOutcome::level_zero_energy_error, carried on the warmup trace events; infinite for an invalid level-0 evaluation) to a fixed 16-bins-per-decade log histogram over [1e-8, 1e8]. At each slow-window end the empirical p-quantile q (geometric interpolation in the bin) is mapped by the rule and clamped; installed for the following transitions. Guards copied from the v4 robust paper rule: finite clamp (no collapse toward 0), nothing installed in the initial fast phase, nothing installed before the metric has been installed at an EARLIER boundary (so the first window, ending at the first metric installation, is Deferred), a window with < 100 leaves is skipped. Installs only during discarded transitions: delta is frozen for every retained transition. Dual averaging of h continues through installs (no restart). Rejected with the paper rules, with an initial-phase max_error, and by the dense/structured-refresh/arrowhead facades.",
+  "arms": {
+    "da": {"delta": "1 (Adaptation::default() + Tuning::default(), literally the shipped default)", "role": "baseline"},
+    "d2": {"delta": "fixed 2 (Adaptation::default() + Tuning::default().max_error(2.0)); WP34 da-d2 rerun on these seeds", "role": "control; cannot be recommended"},
+    "r1": {"delta": "AdaptiveDeltaRule::InverseQuantile { probability: 0.99, scale: 1.8 }, bounds [1, 2], start 1", "role": "candidate"},
+    "r2": {"delta": "AdaptiveDeltaRule::QuantileScaled { probability: 0.985, scale: 1.0 }, bounds [0.5, 2], start 1 (the closed-form fixed point of a controller holding the refined-leaf fraction at 1.5 %)", "role": "candidate"}
+  },
+  "arms_order": ["da", "d2", "r1", "r2"],
+  "candidate_arms": ["r1", "r2"],
+  "baseline": "da",
+  "r1_scale_calibration": "pre-freeze, non-evidence: arm r1 at scale 1.6 and r2 on standard Gaussians D = 10 and 100, Init::uniform, 4 x 1,000/1,000, seeds 1 and 2 (artifacts/calibration.log). The final-window q0.99 was 0.93-1.12 (median ~0.99) on all 16 chains, so scale 1.8 puts an ordinary Gaussian at delta 1.6-1.95 (median ~1.8), inside the task's 1.5-2 band. r2 put the same Gaussians at delta 0.84-0.92.",
+  "pre_freeze_smoke_tests": "pipeline checks on non-evidence seed 5 only: funnel r1 and r2 (r1 final delta per chain 1.39/1.32/1.20/1.04, final-window q0.99 1.30-1.36, retained divergences 0/2/1/0, z -0.87; r2 2.00/1.31/1.76/1.19, z -0.57) and the posteriordb cell harness on the noncentered eight schools r1 (final-window q0.99 5.6, delta 1.0). The funnel prediction P1 was set after this smoke test; no rule constant was changed after it. Raw outputs in scratch/ (uncommitted).",
+  "common": "Tuning::default() (h0 0.5, depth 10, min_micro_steps 1, eight refinement levels, MomentumSum, divergence threshold 1000); Metric::diagonal() with the Stan regularisation; DEFAULT_WARMUP_EXHAUSTION (AcceptUnlessDivergent during warmup, Stop retained); dual averaging 0.8 on CurrentCoarseEndpoint; no chain rescue; Init::uniform(); Limits::admit_worst_case(); four threads; cached initial evaluation; the WP34 level-0 leaf-error trace after the run (excluded from wall and gradients_total). r1/r2 enter through Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT).with_metric_regularization(DEFAULT).with_adaptive_delta(..)), which is bit-identical to Adaptation::default() with the option off (tests/adaptive_delta.rs).",
+  "cmdstan_reference": "posteriordb_bench_v5 artifacts (CmdStan 2.39.0, seeds 87101-87103), cited not rerun",
+  "run_order": "(1) posteriordb: models in listed order; arms in arms_order; seeds ascending; one child process per (model, arm); strictly sequential. (2) funnel: arms in arms_order, funnel_seeds ascending. (3) Eight Schools strict track: arms in arms_order, seeds ascending.",
+  "side_checks": {
+    "funnel": "Neal's 10-D funnel at the sampler defaults plus the arm's delta rule: 4 x 2,000 / 20,000, starts omega in {-3,-1,1,3}, four threads. Per seed: P(omega < -5) with the ArviZ-style indicator MCSE z (exact 0.0477903522728147), P(omega < -6) (exact 0.0227501319481792), omega variance (exact 9), rank R-hat, bulk/tail ESS, divergences, invalid stops, exhaustions, final delta per chain, delta trajectory. Gross safety per seed = WP37A F3: no sampler error and finite draws (a result file exists), zero retained divergences, rank R-hat <= 1.05, |P5 - exact| <= 0.025, |P6 - exact| <= 0.015, omega variance in [5, 13]. Decisive seeds: the three study seeds 94901-94903. Seeds 94904-94912 are a descriptive extension so the 12-seed WP37A comparison can be reported (counts of |z|<=2, gross-safe, divergence-free and WP37A-F4-healthy seeds).",
+    "eight_schools": "WP37A amended strict track: noncentered Eight Schools, starts log_tau in {-2,-1,0,1}, h0 0.3, depth 8, eight levels, divergence threshold 1000, WarmupConfig::new(0.95) + mass adaptation + AcceptUnlessDivergent warmup exhaustion + Stan regularisation + no rescue, plus the arm's delta rule (d2: KernelTuning delta 2), 4 x 1,000/1,000 sequential, threads 1, walnutpie facade, three repetitions that must be bit-identical. Statistic: min over the six functionals (mu, tau, mean_theta, sd_theta, theta_1, theta_8) of ArviZ bulk ESS / callbacks, geomean over seeds, ratio to da. SECONDARY: reported, not part of the rule."
+  },
+  "decision_rule": {
+    "text": "Recommend a candidate arm (r1 or r2) as the default iff ALL of: C1 geomean over the 17 models of the per-model ratio (seed-median min bulk ESS per gradient, warmup included, arm / da) >= 1.10; C2 no model's ratio < 0.85 (accel_gp included; a model without a ratio counts as failing C1 and C2); C3 cells passing all gates >= da's; C4 funnel |z| <= 2 on every study seed; C5 funnel gross safety (WP37A F3) passed on every study seed. If both qualify, the higher C1. d2 is a control and is never recommended. A qualifying arm is a recommendation only: per the shared brief no default changes on this branch. Report all cells; no reruns; failures are results; nothing tuned after seeing results.",
+    "geomean_min": 1.10,
+    "per_model_min": 0.85,
+    "eight_schools_reference_ratio": 0.9
+  },
+  "model_classes": {
+    "light": ["diamonds-diamonds", "earnings-logearn_interaction", "mesquite-logmesquite_logvash", "kidiq-kidscore_momhsiq", "sblrc-blr", "nes2000-nes", "arK-arK", "arma-arma11", "hmm_example-hmm_example", "bball_drive_event_0-hmm_drive_0", "hudson_lynx_hare-lotka_volterra"],
+    "moderate": ["eight_schools-eight_schools_noncentered", "garch-garch11", "gp_pois_regr-gp_pois_regr", "one_comp_mm_elim_abs-one_comp_mm_elim_abs"],
+    "heavy": ["eight_schools-eight_schools_centered", "mcycle_gp-accel_gp"],
+    "source": "WP34 level-0 trace q0.99 of |dH| at the adapted h (refinement_role_v1 results-table): light <= 1.01, moderate 1.1-2.1, heavy >= 4"
+  },
+  "predictions_numeric": {
+    "delta_landing": {
+      "r1": {"light": [1.45, 2.0], "moderate": [1.0, 1.5], "heavy": [1.0, 1.1]},
+      "r2": {"light": [0.65, 1.0], "moderate": [1.0, 2.0], "heavy": [1.8, 2.0]}
+    },
+    "geomean_vs_da": {"d2": [1.0, 1.10], "r1": [1.0, 1.08], "r2": [0.85, 1.0]},
+    "accel_gp_ratio": {"d2": [0.55, 0.90], "r1": [0.85, 1.15], "r2": [0.55, 0.90]},
+    "meets_rule": {"r1": false, "r2": false},
+    "funnel_final_delta": {"r1": [1.0, 1.5], "r2": [1.2, 2.0]}
+  },
+  "purpose": "WP49. Long shot; a clean negative is a fine outcome.",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "cmdstan_healthy_models": [
+    "eight_schools-eight_schools_noncentered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra"
+  ],
+  "seeds": [94901, 94902, 94903],
+  "funnel_seeds": [94901, 94902, 94903, 94904, 94905, 94906, 94907, 94908, 94909, 94910, 94911, 94912],
+  "seed_check": "git grep -P '(?<![0-9A-Za-z_.])(9490[1-9]|9491[0-2])(?![0-9A-Za-z_.])' at 3583d130 outside this study: matches only as work counters inside chain_rescue_v2 artifacts (leaves_built 94910, target_calls_forward 94902), never as a seed; sibling WP41-WP50 worktrees checked for the same tokens.",
+  "v5_seeds": [87101, 87102, 87103],
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "cell_timeout_seconds": 2700,
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "eight_schools": {
+    "repetitions": 3
+  }
+}

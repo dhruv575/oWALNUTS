@@ -1,0 +1,1 @@
+On an otherwise idle machine, from PowerShell: `cd C:\dev\owalnuts-wt\thread-scaling\STUDIES\thread_scaling_v1; python build_bins.py both 6a569881; python run_grid.py quiet` (rebuilds both arms from git, then runs the frozen grid, profile and A/B into `artifacts/quiet/` and writes `artifacts/quiet/{summary.json,results-table.md}`; about 1.5 h on a quiet box).

@@ -1,0 +1,52 @@
+
+--- Translating Stan model to C++ code ---
+./bin/stanc.exe  --o=C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.stan
+
+--- Compiling C++ code ---
+g++ -std=c++17 -m64 -D_UCRT -D_REENTRANT -Wall -Wno-template-id-cdtor -Wno-unused-function -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare -Wno-unused-local-typedefs -Wno-int-in-bool-context -Wno-attributes -Wno-ignored-attributes -Wno-class-memaccess      -I ./stan/lib/stan_math/lib/tbb_2020.3/include    -O3 -I ./stan/src -I ./stan/lib/rapidjson_1.1.0/ -I ./stan/lib/stan_math/ -I ./stan/lib/stan_math/lib/eigen_3.4.0 -I ./stan/lib/stan_math/lib/boost_1.87.0 -I ./stan/lib/stan_math/lib/sundials_6.1.1/include -I ./stan/lib/stan_math/lib/sundials_6.1.1/src/sundials -fPIC -fvisibility=hidden -fvisibility-inlines-hidden  -D_USE_MATH_DEFINES -D_GLIBCXX11_USE_C99_COMPLEX  -DBOOST_DISABLE_ASSERTS         -DBRIDGESTAN_EXPORT -DSTAN_OVERRIDE_EIGEN_ASSERT  -c  -x c++ -o C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.o C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp
+In file included from ./stan/src/stan/model/model_header.hpp:5,
+                 from C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:2:
+./stan/src/stan/model/model_base_crtp.hpp:136:8: warning: 'void stan::model::model_base_crtp<M>::write_array(stan::rng_t&, Eigen::VectorXd&, Eigen::VectorXd&, bool, bool, std::ostream*) const [with M = arK__arK_model_namespace::arK__arK_model; stan::rng_t = boost::random::mixmax_engine<17, 36, 0>; Eigen::VectorXd = Eigen::Matrix<double, -1, 1>; std::ostream = std::basic_ostream<char>]' was hidden [-Woverloaded-virtual=]
+  136 |   void write_array(stan::rng_t& rng, Eigen::VectorXd& theta,
+      |        ^~~~~~~~~~~
+C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:406:3: note:   by 'void arK__arK_model_namespace::arK__arK_model::write_array(RNG&, Eigen::Matrix<double, -1, 1>&, Eigen::Matrix<double, -1, 1>&, bool, bool, std::ostream*) const'
+  406 |   write_array(RNG& base_rng, Eigen::Matrix<double,-1,1>& params_r,
+      |   ^~~~~~~~~~~
+./stan/src/stan/model/model_base_crtp.hpp:205:8: warning: 'void stan::model::model_base_crtp<M>::write_array(stan::rng_t&, std::vector<double>&, std::vector<int>&, std::vector<double>&, bool, bool, std::ostream*) const [with M = arK__arK_model_namespace::arK__arK_model; stan::rng_t = boost::random::mixmax_engine<17, 36, 0>; std::ostream = std::basic_ostream<char>]' was hidden [-Woverloaded-virtual=]
+  205 |   void write_array(stan::rng_t& rng, std::vector<double>& theta,
+      |        ^~~~~~~~~~~
+C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:406:3: note:   by 'void arK__arK_model_namespace::arK__arK_model::write_array(RNG&, Eigen::Matrix<double, -1, 1>&, Eigen::Matrix<double, -1, 1>&, bool, bool, std::ostream*) const'
+  406 |   write_array(RNG& base_rng, Eigen::Matrix<double,-1,1>& params_r,
+      |   ^~~~~~~~~~~
+./stan/src/stan/model/model_base_crtp.hpp:91:17: warning: 'double stan::model::model_base_crtp<M>::log_prob(Eigen::VectorXd&, std::ostream*) const [with M = arK__arK_model_namespace::arK__arK_model; Eigen::VectorXd = Eigen::Matrix<double, -1, 1>; std::ostream = std::basic_ostream<char>]' was hidden [-Woverloaded-virtual=]
+   91 |   inline double log_prob(Eigen::VectorXd& theta,
+      |                 ^~~~~~~~
+C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:439:3: note:   by 'T_ arK__arK_model_namespace::arK__arK_model::log_prob(Eigen::Matrix<T_a, -1, 1>&, std::ostream*) const'
+  439 |   log_prob(Eigen::Matrix<T_,-1,1>& params_r, std::ostream* pstream = nullptr) const {
+      |   ^~~~~~~~
+./stan/src/stan/model/model_base_crtp.hpp:159:20: warning: 'stan::math::var stan::model::model_base_crtp<M>::log_prob(std::vector<stan::math::var_value<double>, std::allocator<stan::math::var_value<double> > >&, std::vector<int>&, std::ostream*) const [with M = arK__arK_model_namespace::arK__arK_model; stan::math::var = stan::math::var_value<double>; std::ostream = std::basic_ostream<char>]' was hidden [-Woverloaded-virtual=]
+  159 |   inline math::var log_prob(std::vector<math::var>& theta,
+      |                    ^~~~~~~~
+C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:439:3: note:   by 'T_ arK__arK_model_namespace::arK__arK_model::log_prob(Eigen::Matrix<T_a, -1, 1>&, std::ostream*) const'
+  439 |   log_prob(Eigen::Matrix<T_,-1,1>& params_r, std::ostream* pstream = nullptr) const {
+      |   ^~~~~~~~
+./stan/src/stan/model/model_base_crtp.hpp:96:20: warning: 'stan::math::var stan::model::model_base_crtp<M>::log_prob(Eigen::Matrix<stan::math::var_value<double>, -1, 1>&, std::ostream*) const [with M = arK__arK_model_namespace::arK__arK_model; stan::math::var = stan::math::var_value<double>; std::ostream = std::basic_ostream<char>]' was hidden [-Woverloaded-virtual=]
+   96 |   inline math::var log_prob(Eigen::Matrix<math::var, -1, 1>& theta,
+      |                    ^~~~~~~~
+C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:439:3: note:   by 'T_ arK__arK_model_namespace::arK__arK_model::log_prob(Eigen::Matrix<T_a, -1, 1>&, std::ostream*) const'
+  439 |   log_prob(Eigen::Matrix<T_,-1,1>& params_r, std::ostream* pstream = nullptr) const {
+      |   ^~~~~~~~
+./stan/src/stan/model/model_base_crtp.hpp:154:17: warning: 'double stan::model::model_base_crtp<M>::log_prob(std::vector<double>&, std::vector<int>&, std::ostream*) const [with M = arK__arK_model_namespace::arK__arK_model; std::ostream = std::basic_ostream<char>]' was hidden [-Woverloaded-virtual=]
+  154 |   inline double log_prob(std::vector<double>& theta, std::vector<int>& theta_i,
+      |                 ^~~~~~~~
+C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp:439:3: note:   by 'T_ arK__arK_model_namespace::arK__arK_model::log_prob(Eigen::Matrix<T_a, -1, 1>&, std::ostream*) const'
+  439 |   log_prob(Eigen::Matrix<T_,-1,1>& params_r, std::ostream* pstream = nullptr) const {
+      |   ^~~~~~~~
+
+--- Linking C++ code ---
+g++ -std=c++17 -m64 -D_UCRT -D_REENTRANT -Wall -Wno-template-id-cdtor -Wno-unused-function -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare -Wno-unused-local-typedefs -Wno-int-in-bool-context -Wno-attributes -Wno-ignored-attributes -Wno-class-memaccess      -I ./stan/lib/stan_math/lib/tbb_2020.3/include    -O3 -I ./stan/src -I ./stan/lib/rapidjson_1.1.0/ -I ./stan/lib/stan_math/ -I ./stan/lib/stan_math/lib/eigen_3.4.0 -I ./stan/lib/stan_math/lib/boost_1.87.0 -I ./stan/lib/stan_math/lib/sundials_6.1.1/include -I ./stan/lib/stan_math/lib/sundials_6.1.1/src/sundials -fPIC -fvisibility=hidden -fvisibility-inlines-hidden  -D_USE_MATH_DEFINES -D_GLIBCXX11_USE_C99_COMPLEX  -DBOOST_DISABLE_ASSERTS         -DBRIDGESTAN_EXPORT -DSTAN_OVERRIDE_EIGEN_ASSERT       -Wl,-L,"C:/Users/dhruv/.bridgestan/bridgestan-2.9.0/stan/lib/stan_math/lib/tbb"        -shared -lm -o  C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK_model.so C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.o ./src/bridgestan.o  -static-libgcc -static-libstdc++     -ltbb   ./stan/lib/stan_math/lib/sundials_6.1.1/lib/libsundials_nvecserial.a ./stan/lib/stan_math/lib/sundials_6.1.1/lib/libsundials_cvodes.a ./stan/lib/stan_math/lib/sundials_6.1.1/lib/libsundials_idas.a ./stan/lib/stan_math/lib/sundials_6.1.1/lib/libsundials_kinsol.a  ./stan/lib/stan_math/lib/tbb/tbb.dll
+rm C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.o C:/dev/owalnuts-wt/thread-scaling/STUDIES/thread_scaling_v1/models/arK__arK.hpp
+
+real	0m57.479s
+user	0m0.000s
+sys	0m0.031s

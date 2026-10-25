@@ -1,0 +1,25 @@
+[package]
+name = "thread-scaling-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP45 thread-scaling study: oWALNUTS wall time over chains x threads on a hand-written, an autodiff and a BridgeStan target; driver contention profile"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-autodiff = { path = "../../integrations/autodiff" }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "grid"
+path = "src/bin/grid.rs"
+
+[[bin]]
+name = "profile"
+path = "src/bin/profile.rs"
+
+[profile.release]
+debug = false
+
+[workspace]

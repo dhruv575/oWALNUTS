@@ -1,0 +1,82 @@
+{
+  "schema": "thread-scaling-v1",
+  "ledger_id": "WP45-THREAD-SCALING-V1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "base_commit": "3583d130",
+  "question": "How does oWALNUTS Sampler::run wall time scale with chains in {1,2,4,8,16} and threads in {1,2,4,8,16} on (a) a cheap hand-written target, (b) a medium Rust autodiff target and (c) a BridgeStan target on this 16-core Windows machine, and where scaling is sub-linear, why (allocator, shared counters / false sharing, RNG, thread spawn, per-transition result collection, BridgeStan serialisation, hybrid cores, load imbalance, machine contention)?",
+  "api_under_test": "owalnuts::sampler::Sampler::new().warmup(W).draws(D).chains(C).seed(S).threads(T).run(&target, &uniform_starts(target, C, S, 2.0, 100)); every other setting at the 0.2.0 defaults (Tuning::default, Metric::diagonal, Adaptation::default, Limits::default = admit_worst_case, cached initial evaluation). Wall = Instant around Sampler::run only (start search excluded).",
+  "driver_facts_from_code_reading": [
+    "sample_chains_validated clamps threads to min(threads, chains) and runs one Rayon par_iter item per chain in a run-local scoped pool built per run; threads > chains cells are therefore duplicates of threads = chains",
+    "Limits::default() has admit_worst_case = true, so the default Sampler::run creates a TargetEvaluationBudget of exactly the worst case and wraps the target in BudgetedTarget, whose reserve() is a fetch_update compare-and-swap on ONE shared AtomicUsize per target call across all chain threads",
+    "per-chain RNG is a private SmallRng; per-chain samples/diagnostics are reserved up front; kernel workspaces are thread-local caches",
+    "on Windows ReplicatedStanTarget always has one effective owned worker and a process-global native-call mutex (BRIDGESTAN-OWNED-WORKER-V1), so BridgeStan calls are serialised by construction"
+  ],
+  "targets": {
+    "gauss100": {"label": "(a) cheap hand-written", "what": "100-D standard Gaussian, hand gradient (kernel_efficiency_v1 target)", "seed": 945101, "warmup": 1000, "draws": 20000},
+    "ll1000": {"label": "(b) medium Rust autodiff", "what": "owalnuts-autodiff AutodiffTarget<LocalLevel{T=1000, normalised=false}> on LocalLevelData::simulate(1000, 2026083101) (the autodiff benchmark's T=1000 path)", "seed": 945102, "warmup": 200, "draws": 200},
+    "ark": {"label": "(c) BridgeStan", "what": "posteriordb 28f8d3d arK-arK compiled with BridgeStan 2.9.0 (no STAN_THREADS, mingw32-make), ReplicatedStanTarget::load(.., replicas = 16) -> one effective owned worker on Windows", "seed": 945103, "warmup": 500, "draws": 500}
+  },
+  "seeds_note": "945101-945103 verified absent from every tracked file as a standalone number (git grep with digit/decimal guards); calibration used 945199 (non-evidence)",
+  "calibration_before_freeze": "Non-evidence seed 945199, used only to size the workloads and to check the instruments: gauss100 1000/4000 took 0.066 s at C=T=1 (raised to 20,000 draws, 0.26-0.28 s); ll1000 300/300 took 9.2 s at C=T=1 and one C=T=4 run took 161.7 s wall with 41 s CPU while the machine was 87 % busy (a starvation episode; reduced to 200/200); ark 1000/1000 2.5 s at C=T=1 and 7.8 s at C=T=4 (reduced to 500/500). The calibration timeline probe on gauss100 measured ~1.7-2.0 us per gradient outside the user target (kernel + driver + wrappers) against ~0.09 us inside it, and ~3 heap allocations per gradient (22 per transition); on ll1000 ~10 us per gradient, 0.024 allocations per gradient, and max/mean chain gradient count 1.44 at C=4. A two-repetition allocator ablation at C=T=16 was within noise. These numbers informed the predictions below.",
+  "grid": {
+    "reps": 3,
+    "order": "gauss100 then ll1000 then ark; within a target rep-major, chains ascending, threads ascending; strictly sequential, one process per target",
+    "targets": [
+      {"target": "gauss100", "cells": "full"},
+      {"target": "ll1000", "cells": "lower"},
+      {"target": "ark", "cells": "lower"}
+    ],
+    "cells_note": "full = all 25 (C,T); lower = the 15 cells with T <= C (T > C is clamped by the driver; the gauss100 full grid verifies that)",
+    "binary": "bin/baseline/grid.exe (library at 3583d130, system allocator, no instrumentation)",
+    "recorded_per_cell": "wall, process user/kernel CPU (GetProcessTimes), system busy core-seconds (GetSystemTimes; other load = system busy - own CPU), page faults, peak working set, gradients per chain, retained divergences, metadata thread_count, draw/work/metadata fingerprints per chain, min bulk ESS (owalnuts::diagnostics::ess_bulk over all chains, min over coordinates), ESS/s, ESS/gradient"
+  },
+  "bit_identity_check": "At fixed (target, chains, seed) the FNV-1a fingerprint of every chain's draws (f64 bits) plus its transition diagnostics and telemetry (Debug text) must be identical across all thread counts and repetitions; the harness records and exits nonzero on any mismatch. Metadata fingerprints are expected to differ across thread counts only through thread_count.",
+  "profile": {
+    "binary": "bin/baseline/profile.exe (same library; instrumented global allocator with per-thread padded counters keyed by OS thread id; optional probing target wrapper)",
+    "steps": [
+      {"mode": "allocs", "target": "gauss100", "cells": "1:1,16:16", "file": "allocs-gauss100.json"},
+      {"mode": "allocs", "target": "ll1000", "cells": "1:1,16:16", "file": "allocs-ll1000.json"},
+      {"mode": "timeline", "target": "gauss100", "cells": "1:1,4:4,8:8,16:16", "file": "timeline-gauss100.json"},
+      {"mode": "timeline", "target": "ll1000", "cells": "1:1,16:16", "file": "timeline-ll1000.json"},
+      {"mode": "alloc-ablation", "target": "gauss100", "cells": "1:1,4:4,16:16", "reps": 3, "file": "alloc-ablation-gauss100.json"},
+      {"mode": "cas-bench", "file": "cas-bench.json"}
+    ],
+    "timeline_instrument": "per OS thread: calls, TSC cycles inside the user target, thread CPU time and wall span sampled every 256 calls, logical processor sampled every 256 calls and classed P / E / LPE from GetSystemCpuSetInformation (EfficiencyClass, last-level cache). 'Outside' time contains the kernel, driver and the sampler's BudgetedTarget wrapper (the probe sits inside it).",
+    "alloc_ablation": "system allocator vs a thread-local size-class free-list cache (<= 4 KiB, depth 256) in front of it, ABBA order",
+    "cas_bench": "n in {1,2,4,8,16} std threads each doing 1/n of 2,000,000 ops of {0,64,256,1024} dependent FP steps followed by: nothing / the BudgetedTarget::reserve fetch_update on one shared counter / a fetch_add on a private padded counter"
+  },
+  "fix_under_test": {
+    "id": "F1-unmetered-covered-budget",
+    "mechanism": "The default Sampler path reserves every gradient on one shared atomic (TargetEvaluationBudget::reserve), a cache line written by all chain threads per gradient.",
+    "change": "walnutpie::sample_chains_with_target_budget_metered(.., BudgetMetering) (crate-private). The public sample_chains_with_target_budget_and_control keeps BudgetMetering::Always (exact started() contract). Sampler::run on the identity/diagonal path passes UnobservedWhenCovered: its budget is private and never read after the run, so when the preflight's exact worst case <= budget maximum (always true under the default admit_worst_case) the target is called unwrapped. An explicit tighter max_target_evaluations still meters and enforces the cap. Dense, structured and continuation-session paths unchanged.",
+    "bit_identity": "draws, transition diagnostics, telemetry and metadata (effective_max_target_evaluations, provenance) unchanged; unit test unmetered_covered_budget_is_bit_identical_to_the_metered_run; kernel fingerprint tests must pass"
+  },
+  "ab": {
+    "binaries": "bin/baseline/grid.exe vs bin/fixed/grid.exe (identical harness; library at 3583d130 vs the fix commit)",
+    "blocks": [
+      {"target": "gauss100", "cells": ["1:1", "4:4", "8:8", "16:16"], "reps": 3},
+      {"target": "ll1000", "cells": ["1:1", "16:16"], "reps": 3}
+    ],
+    "order": "after the pilot grid and the profile; for rep r and cell index i the arm order is baseline,fixed when (r+i) is even, else fixed,baseline; one process per cell"
+  },
+  "decision_rule": {
+    "text": "Merge F1 iff (1) every A/B cell has identical draw+work and metadata fingerprints between baseline and fixed and cargo test passes, (2) on gauss100 the ratio median(baseline wall)/median(fixed wall) over the 3 reps is >= 1.15 at chains=threads=8 or at chains=threads=16, and (3) that ratio is >= 1/1.05 at chains=threads=1 and at chains=threads=4 (no regression beyond 5 %). Otherwise do not merge. Contended-pilot walls decide; the quiet rerun (RUN-QUIET.md) is reported beside them and does not overturn the decision.",
+    "min_speedup": 1.15,
+    "max_slowdown_ratio": 1.05
+  },
+  "predictions": {
+    "P1_gauss100_strong_efficiency_C16": {"T2": 0.90, "T4": 0.75, "T8": 0.50, "T16": 0.30},
+    "P2_gauss100_weak_scaling_wall11_over_wallkk": {"k8": 0.45, "k16": 0.45},
+    "P3_ll1000_strong_efficiency_C16": {"T2": 0.85, "T4": 0.70, "T8": 0.50, "T16": 0.30},
+    "P4_ark_speedup_any_T": "between 0.8 and 1.1 at every (C, T); efficiency = speedup/T, so 0.05-0.07 at T=16",
+    "P5_bit_identity": "100 % of cells: fingerprints identical across T and reps at fixed (target, C); A/B identical",
+    "P6_allocations": "gauss100 2-4 heap allocations per gradient, ll1000 < 0.05; allocator ablation changes C=T=16 wall by less than 5 % (median of 3)",
+    "P7_hybrid_cores": "E-core threads spend 1.2-1.6x the CPU time per gradient of P-core threads; no thread is observed on the two LPE cores for most of a run",
+    "P8_cas_bench": "with work comparable to a gauss100 gradient (256-1024 FP steps) the shared CAS costs < 1.5x the no-counter control at n=16; with 0-64 steps it costs >= 3x",
+    "P9_fix_F1": "baseline/fixed wall ratio on gauss100: 1.00 at C=T=1 and 4 (+-0.03), 1.03 at C=T=8, 1.08 at C=T=16; decision rule NOT met; ll1000 within +-0.03",
+    "P10_why": "sub-linear scaling at 8-16 threads is dominated by machine contention (process CPU/wall well below T), chain-length imbalance (wall tracks the longest chain: max/mean chain gradients 1.2-1.6) and hybrid E-cores; thread spawn, RNG and result collection are negligible (< 2 % of wall); the BridgeStan Windows owned worker removes all parallelism"
+  },
+  "contention_note": "CONTENDED PILOT: ten agents share the 16 cores; walls are upper bounds and are labelled as such. Gradient counts, ESS and fingerprints are machine-independent. The shared brief asks for <= 4 threads per process; this study's task requires 8- and 16-thread cells, which are run once (pilot) and kept short.",
+  "failure_policy": "failures are results; no cell is rerun or tuned after seeing results; every cell reported"
+}
