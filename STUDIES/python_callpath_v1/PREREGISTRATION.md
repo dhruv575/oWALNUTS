@@ -234,3 +234,52 @@ policy). Predictions: `cfunc-guarded` ≡ `py-njit` (bit-identical) on every
 target, seed and thread count, and ≡ `cfunc` wherever `cfunc` completes;
 `cfunc-guarded` replaces `cfunc` as the compiled reference in P1/P5 and as
 the untouched control arm of phase 2.
+
+## Amendment A3 and the phase-2 addendum (frozen after phase 1, before phase 1b and phase 2)
+
+**A3 (harness).** Phase-1 sampling walls include first-call lazy compilation
+for the arms whose compiled code is built on first use (the numba dispatcher
+behind `py-njit`, `jax.jit`, PyTorch's first call, PyTensor NUMBA): the
+harness did not prime the target before the timed `sample` call, contrary to
+the protocol's own metric. A diagnostic outside the evidence cells (4 x
+300/300, gauss100, threads=1) puts the steady in-sampler cost at 4.0 µs/call
+for `py-njit` and 50 µs/call for `jax`, versus the phase-1 16 and 100
+µs/call. Phase-1 numbers are reported as measured, labelled "includes
+first-call compilation". Phase 1b and phase 2 prime every target with one
+evaluation at the zero vector before timing (counted as construction; a pure
+function, so draws are unaffected).
+
+**Phase-1 facts that drive the selection** (`artifacts/results-table.md`):
+all six baseline `pymc` / `pymc-numba` threads=4 cells hit the 600 s cap (P7
+held); a probe confirmed the A1 mechanism directly — at threads=1 the
+callbacks run on the calling thread (one `threading.local` initialisation per
+run), at threads=4 every one of 2,105 callbacks saw a fresh thread state
+(2,105 initialisations). Micro decomposition of `from_jax`: the jitted
+function costs 14.5 / 16.3 / 49.7 µs on a numpy argument but 33.3 / 35.9 /
+218 µs through the adapter's `jnp.asarray` (gauss100 / eight / hier); the
+PyMC `ValueGradFunction` → raw `trust_input` saving is 1.1–4.2 µs (F2:
+predicted gain < 1.3x); `wrap_callable` costs 0.0–0.3 µs (F1: negligible).
+
+**Selection (by the frozen rule).** F6 has the largest predicted gain
+(baseline `pymc` / `pymc-numba` threads=4 ESS/s is 0: unbounded). F3 is the
+largest candidate on an arm/thread F6 does not touch (`jax` threads=1:
+predicted 1.4–3x). The fix build bundles **F6 + F3**; they act on disjoint
+cells except `jax` threads=4 (reported as the joint effect, judged for
+neither). F1, F2, F4, F5 are not implemented.
+
+**Phase-2 arms.** `py-numpy`, `py-njit`, `jax`, `torch`, `pymc`, `pymc-numba`
+(touched) and `cfunc-guarded` (untouched control), threads 1 and 4, three
+seeds, `baseline` and `fix` builds alternating inside each arm/threads pair;
+baseline `pymc` / `pymc-numba` threads=4 under the A1 rule (seed `4747001`
+only, 600 s cap); every fix cell runs normally.
+
+**Phase-2 predictions.** Q1: every fix cell is bit-identical to its baseline
+cell (all arms, threads, seeds; baseline timeouts excepted). Q2 (F6): every
+fix `pymc` / `pymc-numba` threads=4 cell completes, with ESS/s within
+[0.3, 1.5]x the same arm at threads=1 (GIL-serialised but no longer
+pathological). Q3 (F6, = P8): fix/baseline geomean ESS/s at threads=4 in
+[1.0, 1.6] for `py-numpy`, `py-njit`, `torch`. Q4 (F3): `jax` threads=1
+fix/baseline geomean ESS/s >= 1.3 on all three targets, largest on `hier`.
+Q5: threads=1 cells of the F6-only arms and both thread counts of
+`cfunc-guarded` have fix/baseline geomean in [0.9, 1.1]. Decision rule
+unchanged.

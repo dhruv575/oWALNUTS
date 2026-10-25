@@ -4,14 +4,48 @@
  "frozen": "2026-10-24, before the first evidence cell",
  "base_commit": "3583d130",
  "question": "Per-target-evaluation cost and end-to-end min-bulk-ESS per second of every Python call path of the owalnuts 0.2.0 wheel, and the ratio to nutpie 0.16.8 on the same PyMC models; then fix the worst actionable problem.",
- "seeds": [4747001, 4747002, 4747003],
+ "seeds": [
+  4747001,
+  4747002,
+  4747003
+ ],
  "micro_point_seed": 4747501,
  "hier_data_seed": 4747900,
- "targets": ["gauss100", "eight", "hier"],
- "target_dims": {"gauss100": 100, "eight": 10, "hier": 157},
- "owalnuts_arms": ["py-numpy", "py-njit", "cfunc", "jax", "torch", "pymc", "pymc-numba", "pymc-gilfree"],
- "nutpie_arms": ["nutpie"],
- "micro_paths": ["py-numpy", "py-njit", "cfunc", "jax", "torch", "pymc", "pymc-numba", "pymc-gilfree"],
+ "targets": [
+  "gauss100",
+  "eight",
+  "hier"
+ ],
+ "target_dims": {
+  "gauss100": 100,
+  "eight": 10,
+  "hier": 157
+ },
+ "owalnuts_arms": [
+  "py-numpy",
+  "py-njit",
+  "cfunc",
+  "jax",
+  "torch",
+  "pymc",
+  "pymc-numba",
+  "pymc-gilfree",
+  "cfunc-guarded"
+ ],
+ "nutpie_arms": [
+  "nutpie"
+ ],
+ "micro_paths": [
+  "py-numpy",
+  "py-njit",
+  "cfunc",
+  "jax",
+  "torch",
+  "pymc",
+  "pymc-numba",
+  "pymc-gilfree",
+  "cfunc-guarded"
+ ],
  "arm_definitions": {
   "py-numpy": "plain Python callable written in idiomatic numpy (callpath_targets.numpy_target)",
   "py-njit": "plain Python callable that calls the numba njit kernel shared with the cfunc arm (transport control)",
@@ -21,23 +55,95 @@
   "pymc": "owalnuts.from_pymc(model) (default PyTensor C backend; thread_safe=True when threads > 1, the documented rule)",
   "pymc-numba": "owalnuts.from_pymc(model, mode='NUMBA') (same numba-compiled function as gil_free; thread_safe=True when threads > 1)",
   "pymc-gilfree": "owalnuts.from_pymc(model, gil_free=True)",
-  "nutpie": "nutpie.compile_pymc_model(model) (numba backend), nutpie.sample(draws, tune, chains, cores=threads, seed)"
+  "nutpie": "nutpie.compile_pymc_model(model) (numba backend), nutpie.sample(draws, tune, chains, cores=threads, seed)",
+  "cfunc-guarded": "amendment A2: the cfunc arm's njit kernel with the callable path's default nonfinite policy (zero gradient, return -inf)"
  },
- "threads": [1, 4],
- "sampler": {"chains": 4, "warmup": 1000, "draws": 1000, "settings": "owalnuts.sample defaults (DEFAULTS); init=None (numpy uniform(-2,2) starts from seed); nutpie defaults"},
+ "threads": [
+  1,
+  4
+ ],
+ "sampler": {
+  "chains": 4,
+  "warmup": 1000,
+  "draws": 1000,
+  "settings": "owalnuts.sample defaults (DEFAULTS); init=None (numpy uniform(-2,2) starts from seed); nutpie defaults"
+ },
  "micro_calls": 10000,
  "pytensor_compiledir": "C:/Users/dhruv/AppData/Local/Temp/claude/C--dev-owalnuts/1f373de9-31a5-456c-a915-e435ff4ab78a/scratchpad/pytensor-wp47",
  "pytensor_compiledir_note": "private compile cache: the shared per-user PyTensor compiledir lock is contended by sibling agents (a setup check blocked ~50 min on it)",
  "cell_timeout_seconds": 3600,
  "builds": {
-  "baseline": {"python": "C:\\Users\\dhruv\\AppData\\Local\\Temp\\claude\\C--dev-owalnuts\\1f373de9-31a5-456c-a915-e435ff4ab78a\\scratchpad\\venv-wp47\\Scripts\\python.exe",
-               "source": "wheel built by `maturin build --release` (GNU 1.88 toolchain) from 3583d130, installed non-editable"},
-  "fix": {"python": "C:\\Users\\dhruv\\AppData\\Local\\Temp\\claude\\C--dev-owalnuts\\1f373de9-31a5-456c-a915-e435ff4ab78a\\scratchpad\\venv-wp47-fix\\Scripts\\python.exe",
-          "source": "wheel of the fix commit on wt/python-callpath, installed non-editable; same shared site-packages for numpy/numba/jax/torch/pymc/nutpie"}
+  "baseline": {
+   "python": "C:\\Users\\dhruv\\AppData\\Local\\Temp\\claude\\C--dev-owalnuts\\1f373de9-31a5-456c-a915-e435ff4ab78a\\scratchpad\\venv-wp47\\Scripts\\python.exe",
+   "source": "wheel built by `maturin build --release` (GNU 1.88 toolchain) from 3583d130, installed non-editable"
+  },
+  "fix": {
+   "python": "C:\\Users\\dhruv\\AppData\\Local\\Temp\\claude\\C--dev-owalnuts\\1f373de9-31a5-456c-a915-e435ff4ab78a\\scratchpad\\venv-wp47-fix\\Scripts\\python.exe",
+   "source": "wheel of the fix commit on wt/python-callpath, installed non-editable; same shared site-packages for numpy/numba/jax/torch/pymc/nutpie"
+  }
  },
  "phases": {
-  "phase1": {"builds": ["baseline"], "arms": ["py-numpy", "py-njit", "cfunc", "jax", "torch", "pymc", "pymc-numba", "pymc-gilfree"], "nutpie_arms": ["nutpie"]},
-  "phase2": {"builds": ["baseline", "fix"], "arms": "frozen in the phase-2 addendum before phase 2 runs: every arm the fix touches plus cfunc as an untouched control", "nutpie_arms": []}
+  "phase1": {
+   "builds": [
+    "baseline"
+   ],
+   "arms": [
+    "py-numpy",
+    "py-njit",
+    "cfunc",
+    "jax",
+    "torch",
+    "pymc",
+    "pymc-numba",
+    "pymc-gilfree"
+   ],
+   "nutpie_arms": [
+    "nutpie"
+   ]
+  },
+  "phase2": {
+   "builds": [
+    "baseline",
+    "fix"
+   ],
+   "arms": [
+    "py-numpy",
+    "py-njit",
+    "jax",
+    "torch",
+    "pymc",
+    "pymc-numba",
+    "cfunc-guarded"
+   ],
+   "touched_arms": [
+    "py-numpy",
+    "py-njit",
+    "jax",
+    "torch",
+    "pymc",
+    "pymc-numba"
+   ],
+   "control_arms": [
+    "cfunc-guarded"
+   ],
+   "nutpie_arms": [],
+   "prime": true,
+   "fix": "F6 (pin one Python thread state per Rayon worker thread for a callable run; integrations/python/src/lib.rs ThreadStatePins) + F3 (from_jax passes the numpy position straight to the jitted function)",
+   "attribution": "F6 acts only at threads=4 (threads=1 runs on the calling thread, which already has a Python thread state); F3 acts only on the jax arm. Judged: F3 on jax threads=1; F6 on py-numpy, py-njit, torch, pymc, pymc-numba at threads=4; jax threads=4 reported as the joint effect; every threads=1 cell is a no-regression check."
+  },
+  "phase1b": {
+   "builds": [
+    "baseline"
+   ],
+   "arms": [
+    "cfunc-guarded",
+    "py-njit",
+    "cfunc"
+   ],
+   "nutpie_arms": [],
+   "note": "amendment A2 supplementary phase",
+   "prime": true
+  }
  },
  "order": "strictly sequential child processes; micro cells first (targets outer, paths rotated per target); then seeds outer, targets, (arm x threads) list rotated by (3*seed_index + target_index); in phase 2 builds alternate inside each arm/threads pair",
  "metrics": {
@@ -52,9 +158,27 @@
  "amendment_A1": {
   "frozen": "2026-10-24, after the harness smoke test and before the first phase-1 cell",
   "finding": "from_pymc(thread_safe=True) at threads=4 recompiles the PyTensor function on (nearly) every callback: 349 compilations on 4 OS threads in ~8 min of a 4 x 30/30 probe",
-  "short_cells": {"arms": ["pymc", "pymc-numba"], "threads": 4, "builds": ["baseline"], "run_seeds": [4747001], "timeout_seconds": 600,
-                  "other_seeds": "recorded as status not_run_amendment_A1 (not run: a full cell would take days)"},
+  "short_cells": {
+   "arms": [
+    "pymc",
+    "pymc-numba"
+   ],
+   "threads": 4,
+   "builds": [
+    "baseline"
+   ],
+   "run_seeds": [
+    4747001
+   ],
+   "timeout_seconds": 600,
+   "other_seeds": "recorded as status not_run_amendment_A1 (not run: a full cell would take days)"
+  },
   "new_candidate": "F6: pin one Python thread state per Rayon worker thread for the duration of a callable run"
  },
- "decision_rule": "A fix is worth merging iff (i) its retained draws are bit-identical (sha256) to the baseline build for every cell of every arm it touches, (ii) on at least one target the geometric mean over the three seeds of the paired fix/baseline ESS/s ratio (same arm, threads, seed, interleaved) is >= 1.3 for at least one touched arm/threads, and (iii) no touched arm/threads/target has that geometric mean below 0.9."
+ "decision_rule": "A fix is worth merging iff (i) its retained draws are bit-identical (sha256) to the baseline build for every cell of every arm it touches, (ii) on at least one target the geometric mean over the three seeds of the paired fix/baseline ESS/s ratio (same arm, threads, seed, interleaved) is >= 1.3 for at least one touched arm/threads, and (iii) no touched arm/threads/target has that geometric mean below 0.9.",
+ "amendment_A3": {
+  "frozen": "2026-10-24, after phase 1 and before phase 1b / phase 2",
+  "change": "phases phase1b and phase2 prime every oWALNUTS target with one evaluation at the zero vector before the timed sample call (lazy JIT compilation counted as construction)",
+  "reason": "phase-1 sampling walls of py-njit, jax, torch and pymc-numba include first-call JIT/lazy initialisation inside owalnuts.sample (the harness did not prime), contrary to the protocol's stated metric; phase-1 walls are reported as measured, labelled 'includes first-call compilation'"
+ }
 }

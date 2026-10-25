@@ -204,6 +204,34 @@ def cfunc_target(name: str):
     return owalnuts.from_cfunc(raw, dim), raw, core
 
 
+def cfunc_guarded_target(name: str):
+    """Amendment A2: the same njit kernel in a cfunc that applies the callable
+    transport's default policy -- any nonfinite value or gradient element
+    becomes a zero-density point (gradient zeroed, return -inf)."""
+    import numba
+    import owalnuts
+
+    core = njit_core(name)
+    dim = DIM[name]
+
+    @numba.cfunc(owalnuts.numba_raw_signature(), nopython=True)
+    def raw(n, q_ptr, g_ptr, _user):
+        q = numba.carray(q_ptr, (dim,))
+        g = numba.carray(g_ptr, (dim,))
+        value = core(q, g)
+        finite = np.isfinite(value)
+        for i in range(dim):
+            if not np.isfinite(g[i]):
+                finite = False
+        if not finite:
+            for i in range(dim):
+                g[i] = 0.0
+            return -np.inf
+        return value
+
+    return owalnuts.from_cfunc(raw, dim), raw, core
+
+
 # ── JAX / PyTorch ────────────────────────────────────────────────────────
 
 

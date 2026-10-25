@@ -68,6 +68,9 @@ def build_target(target: str, arm: str, threads: int):
     if arm == "cfunc":
         cft, raw, core = T.cfunc_target(target)
         return cft, dim, (raw, core)
+    if arm == "cfunc-guarded":
+        cft, raw, core = T.cfunc_guarded_target(target)
+        return cft, dim, (raw, core)
     if arm == "jax":
         return owalnuts.from_jax(T.jax_logp(target)), dim, None
     if arm == "torch":
@@ -153,7 +156,7 @@ def run_micro(phase: str, build: str, target: str, path: str) -> dict:
         wrapped = owalnuts.wrap_callable(tgt)
         rec["components"]["wrap_callable(adapter)"] = time_calls(wrapped, qs, N_MICRO)
     # Decomposition: the raw compiled function without adapter glue.
-    if path in ("py-njit", "cfunc"):
+    if path in ("py-njit", "cfunc", "cfunc-guarded"):
         core = keep if path == "py-njit" else keep[1]
         g = np.empty(dim)
         rec["components"]["njit_core_from_python"] = time_calls(lambda q: core(q, g), qs, N_MICRO)
@@ -226,6 +229,12 @@ def run_owalnuts_cell(phase: str, build: str, target: str, arm: str, threads: in
 
     t0 = time.perf_counter()
     tgt, dim, keep = build_target(target, arm, threads)
+    primed = bool(PROTOCOL["phases"].get(phase, {}).get("prime", False))
+    if primed:
+        # Amendment A3: one evaluation before timing so a lazy JIT compile
+        # (numba dispatcher, jax.jit, torch first call) is construction, not
+        # sampling. A pure function: draws are unaffected.
+        call_once(tgt, np.zeros(dim))
     construct = time.perf_counter() - t0
     s = PROTOCOL["sampler"]
     t1 = time.perf_counter()
@@ -236,7 +245,7 @@ def run_owalnuts_cell(phase: str, build: str, target: str, arm: str, threads: in
     summ = summarize(target, res.samples)
     rec = {
         "phase": phase, "build": build, "target": target, "arm": arm, "threads": threads, "seed": seed,
-        "status": "ok", "construct_seconds": construct, "wall_seconds": wall,
+        "status": "ok", "construct_seconds": construct, "primed": primed, "wall_seconds": wall,
         "wall_seconds_rust": res.wall_seconds, "target_calls": res.target_calls,
         "retained_target_calls": res.retained_target_calls,
         "attached_seconds": res.target_attached_seconds,
