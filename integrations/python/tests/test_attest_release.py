@@ -1,5 +1,11 @@
 """Stdlib provenance tests; no compiler or sampler execution."""
 import importlib.util
+import sys
+
+import pytest
+
+if sys.version_info < (3, 11):
+    pytest.skip("attest_release.py needs tomllib (Python 3.11+)", allow_module_level=True)
 from pathlib import Path
 
 spec=importlib.util.spec_from_file_location('attest_release',Path(__file__).parents[1]/'attest_release.py')
