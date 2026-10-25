@@ -1,0 +1,136 @@
+{
+  "schema": "bridgestan-windows-root-cause-v2-summary",
+  "planned_children": 240,
+  "recorded_children": 240,
+  "missing_records": [],
+  "cells": {
+    "bash/git": {
+      "children": 60,
+      "faults": 0,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "silent_faults": 0,
+      "last_heartbeat_on_fault": {},
+      "fault_cases": [],
+      "runtime_modules_seen": {
+        "libgcc_s_seh-1.dll=C:\\Program Files\\Git\\mingw64\\bin\\libgcc_s_seh-1.dll (150998 B)": 60,
+        "libstdc++-6.dll=C:\\Program Files\\Git\\mingw64\\bin\\libstdc++-6.dll (2661299 B)": 60,
+        "libwinpthread-1.dll=C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v2\\build\\arms\\git\\libwinpthread-1.dll (63875 B)": 60,
+        "tbb.dll=C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll (385562 B)": 60
+      }
+    },
+    "bash/winlibs": {
+      "children": 60,
+      "faults": 0,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "silent_faults": 0,
+      "last_heartbeat_on_fault": {},
+      "fault_cases": [],
+      "runtime_modules_seen": {
+        "libgcc_s_seh-1.dll=C:\\Program Files\\Git\\mingw64\\bin\\libgcc_s_seh-1.dll (150998 B)": 60,
+        "libstdc++-6.dll=C:\\Program Files\\Git\\mingw64\\bin\\libstdc++-6.dll (2661299 B)": 60,
+        "libwinpthread-1.dll=C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v2\\build\\arms\\winlibs\\libwinpthread-1.dll (72171 B)": 60,
+        "tbb.dll=C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll (385562 B)": 60
+      }
+    },
+    "powershell/git": {
+      "children": 60,
+      "faults": 0,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "silent_faults": 0,
+      "last_heartbeat_on_fault": {},
+      "fault_cases": [],
+      "runtime_modules_seen": {
+        "libgcc_s_seh-1.dll=C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libgcc_s_seh-1.dll (936625 B)": 60,
+        "libstdc++-6.dll=C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libstdc++-6.dll (2608670 B)": 60,
+        "libwinpthread-1.dll=C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v2\\build\\arms\\git\\libwinpthread-1.dll (63875 B)": 60,
+        "tbb.dll=C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll (385562 B)": 60
+      }
+    },
+    "powershell/winlibs": {
+      "children": 60,
+      "faults": 3,
+      "heap_corruption": 2,
+      "event_1000": 3,
+      "silent_faults": 3,
+      "last_heartbeat_on_fault": {
+        "process/complete": 2,
+        "sampling/before": 1
+      },
+      "fault_cases": [
+        {
+          "case": "powershell-winlibs-50600001",
+          "launcher_rc": "0xC0000374",
+          "last_heartbeat": "process/complete",
+          "event": {
+            "exception_code": "c0000005",
+            "module": "libwinpthread-1.dll",
+            "module_path": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v2\\build\\arms\\winlibs\\libwinpthread-1.dll",
+            "offset": "0000000000008c89",
+            "record_id": 30006
+          }
+        },
+        {
+          "case": "powershell-winlibs-50600014",
+          "launcher_rc": "0x00000000",
+          "last_heartbeat": "process/complete",
+          "event": {
+            "exception_code": "c0000005",
+            "module": "libwinpthread-1.dll",
+            "module_path": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v2\\build\\arms\\winlibs\\libwinpthread-1.dll",
+            "offset": "0000000000008c89",
+            "record_id": 30031
+          }
+        },
+        {
+          "case": "powershell-winlibs-50600035",
+          "launcher_rc": "0xC0000374",
+          "last_heartbeat": "sampling/before",
+          "event": {
+            "exception_code": "c0000374",
+            "module": "ntdll.dll",
+            "module_path": "C:\\windows\\SYSTEM32\\ntdll.dll",
+            "offset": "0000000000118095",
+            "record_id": 30058
+          }
+        }
+      ],
+      "runtime_modules_seen": {
+        "libgcc_s_seh-1.dll=C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libgcc_s_seh-1.dll (936625 B)": 60,
+        "libstdc++-6.dll=C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libstdc++-6.dll (2608670 B)": 60,
+        "libwinpthread-1.dll=C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v2\\build\\arms\\winlibs\\libwinpthread-1.dll (72171 B)": 60,
+        "tbb.dll=C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll (385562 B)": 60
+      }
+    }
+  },
+  "margins": {
+    "launcher": {
+      "powershell": [
+        3,
+        120
+      ],
+      "bash": [
+        0,
+        120
+      ],
+      "fisher_one_sided_p_powershell_greater": 0.12343096234309624,
+      "fisher_one_sided_p_bash_greater": 1.0
+    },
+    "libwinpthread": {
+      "git": [
+        0,
+        120
+      ],
+      "winlibs": [
+        3,
+        120
+      ],
+      "fisher_one_sided_p_git_greater": 1.0,
+      "fisher_one_sided_p_winlibs_greater": 0.12343096234309624
+    }
+  },
+  "event_1000_correlated": 3,
+  "manipulation_failures": []
+}

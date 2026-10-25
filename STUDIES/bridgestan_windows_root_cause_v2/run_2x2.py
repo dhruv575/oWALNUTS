@@ -207,7 +207,12 @@ def capture_events(start_ms: int, end_ms: int) -> dict:
 
 
 def correlate(records: list[dict], events: dict) -> dict:
-    """Event 1000: properties[6]=exception code, [3]=module, [8]=pid (hex), [10]=app path."""
+    """Event 1000: properties[6]=exception code, [3]=module, [8]=pid, [10]=app path.
+
+    Analysis correction (post-run, records unchanged): Get-WinEvent renders the
+    PID property in decimal on this host; the original implementation parsed it
+    as hex and therefore matched nothing. Decimal is tried first, then hex.
+    """
     by_case = {}
     for event in events.get("events", []):
         if event.get("id") != 1000:
@@ -215,8 +220,9 @@ def correlate(records: list[dict], events: dict) -> dict:
         props = event.get("properties") or []
         if len(props) < 11:
             continue
+        text = props[8].strip().lower()
         try:
-            pid = int(props[8], 16)
+            pid = int(text, 16) if text.startswith("0x") else int(text)
         except ValueError:
             continue
         app = props[10].lower()
