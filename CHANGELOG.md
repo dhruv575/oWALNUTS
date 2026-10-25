@@ -30,9 +30,8 @@ architecture and operating system (see the `walnutpie` module documentation).
   but `chain_warnings` named the chain. Starts, and therefore draws for a given
   seed, differ from 0.2.0 for `run_from_random_starts` and `Init::default()`
   callers. `Sampler::run`, `RunConfig`, the kernel, its fingerprints and
-  `ALGORITHM_REVISION` are unchanged, and so is the Python package's `init`
-  handling (`init=None` jitter, `init="uniform"`); `DEFAULTS` adds
-  `init_candidates`.
+  `ALGORITHM_REVISION` are unchanged. `DEFAULTS` adds `init_candidates`.
+  The Python package followed in WP58 (below, under Python package).
 
 - **DEFAULT CHANGE (WP54): an integrator overflow no longer kills the run.**
   `sampler::Tuning::default()` now uses
@@ -103,6 +102,26 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Python package
 
+- **DEFAULT CHANGE: `sample(init=None)` now uses the Rust default start rule
+  `Init::best_of(16)`** for callables, `from_cfunc` and Stan targets. The
+  same rule is available by name as `init="best_of"`, with
+  `init_candidates=` and `owalnuts.best_of_starts(..., return_details=True)`.
+  Until now `init=None` drew unchecked numpy uniform(-2, 2) starts. In
+  `STUDIES/nutpie_per_gradient_gap_v1` (WP58) that failed all 12 Python
+  `lotka_volterra` runs at transition 0 ("current position is not
+  evaluable"). The old behaviour is `init="jitter"`, so old runs can be
+  reproduced bit for bit. `init="uniform"` and explicit arrays are
+  unchanged. `DEFAULTS` reports `init="best_of"` and `init_candidates`, and
+  `START_RULES` lists the named rules. A test checks that
+  `sample(init=None)` is bit-identical to the Rust
+  `Sampler::run_from_random_starts`. Draws for a given seed change for
+  `init=None` callers. The kernel and `ALGORITHM_REVISION` are unchanged.
+  [WP58 follow-up]
+- The integrations README nutpie comparison now carries the WP58
+  decomposition of nutpie's 1.4–2.1x ESS-per-gradient lead on the WP47 PyMC
+  models: mass-matrix adaptation (the transplanted nutpie metric closes
+  44–60 %), not gradient accounting (0.15 %) or WALNUTS refinement (≤ 7 %).
+  [WP58]
 - Callable targets at `threads > 1`: each sampler worker thread now keeps one
   Python thread state for the whole run (released on that thread at worker
   exit, before `sample` returns). Previously every callback created and

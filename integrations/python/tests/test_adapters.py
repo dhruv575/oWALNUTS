@@ -758,3 +758,97 @@ def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
     assert {"warmup_log_density", "sampled_log_density", "rhat"} <= {w["check"] for w in warnings}
     lines = [line for line in str(trapped).splitlines() if line.startswith("warning: chain")]
     assert len(lines) == 1 and lines[0].startswith("warning: chain 3 disagrees with the other chains: ")
+
+
+# ── start rules (WP58: init=None is the Rust Init::best_of(16) default) ──
+
+
+def _half_space(q):
+    # Finite only for x0 > 0.5 (about three quarters of uniform(-2, 2) draws fail).
+    if q[0] <= 0.5:
+        return -np.inf, np.zeros_like(q)
+    return -0.5 * float(q @ q), -q
+
+
+def test_defaults_report_best_of_start_rule():
+    assert owalnuts.DEFAULTS["init"] == "best_of"
+    assert owalnuts.DEFAULTS["init_candidates"] == 16
+    assert owalnuts.START_RULES == ("best_of", "uniform", "jitter")
+    with pytest.raises(ValueError, match="best_of"):
+        owalnuts.sample(_half_space, 3, init="best", warmup=10, draws=10)
+
+
+def test_best_of_callable_starts_are_evaluable_and_the_max_of_16_candidates():
+    d = owalnuts.best_of_starts(_half_space, 3, chains=4, seed=23, return_details=True)
+    starts = d["starts"]
+    assert starts.shape == (4, 3)
+    assert (starts[:, 0] > 0.5).all() and (np.abs(starts) <= 2.0).all()
+    for c in range(4):
+        cands = d["candidate_log_densities"][c]
+        assert len(cands) == 16
+        assert d["chosen"][c] == int(np.argmax(cands))
+        assert d["start_log_densities"][c] == max(cands)
+        assert d["start_log_densities"][c] == _half_space(starts[c])[0]
+        assert d["evaluations"][c] >= 16  # rejected redraws count too
+    np.testing.assert_array_equal(starts, owalnuts.best_of_starts(_half_space, 3, chains=4, seed=23))
+    # init=None, init="best_of" and the explicit starts give the same run.
+    r_none = owalnuts.sample(_half_space, 3, chains=4, warmup=100, draws=100, seed=23)
+    r_named = owalnuts.sample(_half_space, 3, init="best_of", chains=4, warmup=100, draws=100, seed=23)
+    r_given = owalnuts.sample(_half_space, 3, init=starts, chains=4, warmup=100, draws=100, seed=23)
+    np.testing.assert_array_equal(r_none.samples, r_named.samples)
+    np.testing.assert_array_equal(r_none.samples, r_given.samples)
+    assert (r_none.samples[..., 0] > 0.5).all()
+
+
+def test_default_init_is_bit_identical_to_rust_init_default():
+    dim, chains, warmup, draws, seed = 3, 4, 150, 200, 0x5EED
+    reference = np.asarray(owalnuts._owalnuts.reference_gaussian_default_init_run(dim, chains, warmup, draws, seed))
+    run = owalnuts.sample(_sequential_gaussian, dim, chains=chains, warmup=warmup, draws=draws, seed=seed)
+    np.testing.assert_array_equal(run.samples, reference)
+
+
+def test_jitter_init_reproduces_the_pre_wp58_unchecked_starts():
+    dim, chains, seed = 3, 4, 31
+    old = np.random.default_rng(seed).uniform(-2.0, 2.0, size=(chains, dim))
+    a = owalnuts.sample(_sequential_gaussian, dim, init="jitter", chains=chains, warmup=100, draws=100, seed=seed)
+    b = owalnuts.sample(_sequential_gaussian, dim, init=old, chains=chains, warmup=100, draws=100, seed=seed)
+    np.testing.assert_array_equal(a.samples, b.samples)
+    c = owalnuts.sample(_sequential_gaussian, dim, init="jitter", init_jitter=0.5, chains=chains, warmup=100,
+                        draws=100, seed=seed)
+    d = owalnuts.sample(_sequential_gaussian, dim, init=np.random.default_rng(seed).uniform(-0.5, 0.5, (chains, dim)),
+                        chains=chains, warmup=100, draws=100, seed=seed)
+    np.testing.assert_array_equal(c.samples, d.samples)
+    # The unchecked rule is what failed lotka_volterra: it can start outside the support.
+    with pytest.raises(RuntimeError, match="not evaluable"):
+        owalnuts.sample(_half_space, 3, init="jitter", chains=4, warmup=10, draws=10, seed=1)
+
+
+def test_best_of_cfunc_starts_are_evaluable_and_match_the_callable_rule():
+    numba = pytest.importorskip("numba")
+    sig = owalnuts.numba_raw_signature()
+
+    @numba.cfunc(sig, nopython=True)
+    def half_space(dim, x_ptr, g_ptr, _ud):
+        x = numba.carray(x_ptr, (3,))
+        g = numba.carray(g_ptr, (3,))
+        if x[0] <= 0.5:
+            for i in range(3):
+                g[i] = 0.0
+            return -np.inf
+        total = 0.0
+        for i in range(3):
+            g[i] = -x[i]
+            total += x[i] * x[i]
+        return -0.5 * total
+
+    target = owalnuts.from_cfunc(half_space, 3)
+    d = owalnuts.best_of_starts(target, chains=4, seed=23, return_details=True)
+    assert (d["starts"][:, 0] > 0.5).all()
+    for c in range(4):
+        assert len(d["candidate_log_densities"][c]) == 16
+        assert d["chosen"][c] == int(np.argmax(d["candidate_log_densities"][c]))
+    # Same RNG stream and rule as the callable path.
+    np.testing.assert_array_equal(d["starts"], owalnuts.best_of_starts(_half_space, 3, chains=4, seed=23))
+    r = owalnuts.sample(target, chains=4, warmup=100, draws=100, seed=23, threads=2)
+    g = owalnuts.sample(target, init=d["starts"], chains=4, warmup=100, draws=100, seed=23, threads=2)
+    np.testing.assert_array_equal(r.samples, g.samples)

@@ -177,7 +177,8 @@ def run_owalnuts_py(model: str, arm: str, seed: int) -> dict:
     uinit = arm.endswith("-uinit")
     res = owalnuts.sample(counter, dim, chains=CH, warmup=WU, draws=DR, seed=seed, threads=1,
                           tuning=tuning, adaptation=adaptation, mass=mass, init="uniform" if uinit else None)
-    start_calls = counter.n - int(res.target_calls) if uinit else 0
+    # Start-search evaluations (init="uniform"/"best_of") go through the counter but not target_calls.
+    start_calls = counter.n - int(res.target_calls)
     wall = time.perf_counter() - t
     chains = res.chains
     wt = lambda c, k: int(c[k]["target_calls_total"])  # noqa: E731
@@ -190,7 +191,7 @@ def run_owalnuts_py(model: str, arm: str, seed: int) -> dict:
     rec = {
         "model": model, "arm": arm, "seed": seed, "path": "python", "status": "ok", "wall_seconds": wall,
         "dimension": dim, "threads": 1,
-        "gradients_total": int(res.target_calls) + start_calls, "init": "uniform" if uinit else "None (numpy uniform(-2,2))",
+        "gradients_total": int(res.target_calls) + start_calls, "init": "uniform" if uinit else f"None (package default: {owalnuts.DEFAULTS.get('init', 'jitter')})",
         "gradients_sampling": g_samp, "gradients_warmup": g_warm, "gradients_start_selection": start_calls,
         "gradients_initial_evaluation": g_initial,
         "gradients_kernel_telemetry_total": g_kernel_total,

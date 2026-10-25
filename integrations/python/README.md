@@ -67,13 +67,29 @@ folded split R-hat, bulk/tail ESS, MCSE; matches `az.rhat`/`az.ess`/`az.mcse`
 to 1e-6 relative) with no pandas dependency; `owalnuts.summary(samples,
 names)` does the same for any `(chains, draws, dim)` array.
 
-Starts: `init=None` draws independent uniform(-2, 2) starts in numpy;
-`init=q0` jitters one point per chain; `init="uniform"` is Stan's rule as
-implemented by `owalnuts::sampler::Init::uniform` — uniform(-`init_radius`,
-`init_radius`) redrawn up to `init_max_attempts` times per chain until the
-log density and gradient are finite, deterministic given `seed`
-(`owalnuts.uniform_starts(target, dim, chains=4, seed=1)` returns the
-starts without sampling).
+Starts (`owalnuts.START_RULES`; every rule is deterministic given `seed`):
+
+* `init=None` (default) or `init="best_of"` is the Rust default
+  `owalnuts::sampler::Init::best_of(16)` (`DEFAULTS["init"]`,
+  `DEFAULTS["init_candidates"]`), for callables, `from_cfunc` and Stan
+  targets alike. Each chain draws `init_candidates` uniform(-`init_radius`,
+  `init_radius`) candidates, redraws each up to `init_max_attempts` times
+  until the log density and gradient are finite, and starts at the
+  candidate of highest log density. The starts are the Rust sampler's for
+  the same seed. The roughly 64 candidate evaluations are not in
+  `target_calls`. `owalnuts.best_of_starts(target, dim, chains=4, seed=1,
+  return_details=True)` returns the starts with every candidate's log
+  density.
+* `init="uniform"` is Stan's rule (`Init::uniform`): one evaluable
+  uniform(-`init_radius`, `init_radius`) start per chain
+  (`owalnuts.uniform_starts`).
+* `init="jitter"` draws unchecked numpy uniform(-`init_jitter`,
+  `init_jitter`) starts without evaluating the target. This was `init=None`
+  up to 0.2.0; use it to reproduce older runs. It can start outside the
+  support: in `STUDIES/nutpie_per_gradient_gap_v1` it failed all 12
+  `lotka_volterra` runs at transition 0.
+* `init=q0` (a `(dim,)` point) jitters it per chain by `init_jitter`, and a
+  `(chains, dim)` array is used as given.
 
 Defaults mirror `owalnuts::sampler`: every `sample` call builds a Rust
 `Sampler` (`Tuning`, `Adaptation`, `Metric`, `Limits`, `Init`) from its
@@ -202,11 +218,29 @@ noncentered Eight Schools and a 157-D hierarchical regression, 4 chains x
 | `from_jax(logp)` | 22 / 19 / 32 | 2.3–3.3x **slower** |
 | `from_torch(logp)` | 66 / 290 / 500 | 1.1–2.8x **slower** |
 
-Against nutpie 0.16.8 on the same PyMC models (same chains and draws):
-`from_pymc(model)` reaches 0.17–0.24x nutpie's ESS/s at one core;
+Against nutpie 0.16.8 on the same PyMC models (same chains and draws),
+`from_pymc(model)` reaches 0.17–0.24x nutpie's ESS/s at one core.
 `from_pymc(model, gil_free=True)` reaches 0.5–1.0x at one core and
-0.5–0.9x at four; a hand-written numba `cfunc` (below) is 2–9x nutpie's ESS/s
-even though nutpie gets 1.6–2.4x more ESS per gradient on these three models.
+0.5–0.9x at four. A hand-written numba `cfunc` (below) is 2–9x nutpie's
+ESS/s.
+
+nutpie gets 1.4–2.1x more ESS per gradient on these three models (1.70x
+pooled). `STUDIES/nutpie_per_gradient_gap_v1` (WP58) decomposed that gap:
+
+* **Gradient accounting: 0.15 %.** Our counts equal counted callbacks.
+* **WALNUTS refinement: ≤ 7 %.** Few leaves refine; turning refinement off
+  or raising `delta` to 2 recovers 5–7 %.
+* **Step-size statistic:** switching to Stan's `accept_stat__` widens the
+  gap.
+* **Diagonal mass-matrix adaptation: the main factor.** Running oWALNUTS
+  with nutpie's final metric closes 44–60 %. nutpie's gradient-based
+  estimate is less noisy on a 100-D Gaussian. On the hierarchical model it
+  converges in fewer warmup gradients: 72 % of oWALNUTS's gradients there
+  are warmup, against nutpie's 49 %.
+
+On Eight Schools (both parametrisations) and `gp_pois_regr`, nutpie's
+per-gradient lead comes with divergences in every run, and nutpie fails the
+gates (0/9). oWALNUTS's defaults pass them (9/9).
 
 Guidance:
 
