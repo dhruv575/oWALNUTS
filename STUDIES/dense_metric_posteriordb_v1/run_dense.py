@@ -42,7 +42,11 @@ HARNESS = HERE / "target" / "release" / "dense-cell.exe"
 FUNNEL = HERE / "target" / "release" / "funnel.exe"
 OVERHEAD = HERE / "target" / "release" / "overhead.exe"
 ARMS = list(PROTOCOL["arms"].keys())  # owalnuts-diag, -dense, -dense-seeded, -dense-stan
-MODE = {"owalnuts-diag": "diag", "owalnuts-dense": "dense", "owalnuts-dense-seeded": "dense-seeded", "owalnuts-dense-stan": "dense-stan"}
+MODE = {"owalnuts-diag": "diag", "owalnuts-dense": "dense", "owalnuts-dense-seeded": "dense-seeded", "owalnuts-dense-stan": "dense-stan",
+        "owalnuts-dense-stan-sym": "dense-stan-sym"}
+# Post-hoc diagnostic (after all preregistered cells): fresh seeds, three target models.
+POSTHOC_SEEDS = [148201, 148202, 148203]
+POSTHOC_ARMS = ["owalnuts-diag", "owalnuts-dense-stan-sym"]
 SEEDS = PROTOCOL["seeds"]
 TIMEOUT = PROTOCOL["cell_timeout_seconds"]
 TARGETS = PROTOCOL["target_models"]
@@ -475,7 +479,8 @@ def run_overhead() -> None:
     for model in PROTOCOL["models"]:
         so, data = prepare_bridgestan(model)
         out = odir / f"grad-{short(model)}.json"
-        npz = DRAWS / f"{short(model)}-owalnuts-diag-{SEEDS[0]}.npz"
+        npz = next((DRAWS / f"{short(model)}-owalnuts-diag-{s}.npz" for s in SEEDS
+                    if (DRAWS / f"{short(model)}-owalnuts-diag-{s}.npz").exists()), DRAWS / "missing.npz")
         sm = stan_model(model)
         dims.add(sm.param_unc_num())
         if out.exists() or not npz.exists():
@@ -571,12 +576,12 @@ def analyze() -> None:
             grad_cost[model] = json.loads(f.read_text())["seconds_per_gradient_min_of_7"]
     for f in odir.glob("kernel-d*.json"):
         k = json.loads(f.read_text())
-        kernel_cost[k["dimension"]] = {a: v["kernel_overhead_per_gradient"] for a, v in k["arms"].items()}
+        kernel_cost[k["dimension"]] = {a: v.get("kernel_overhead_per_gradient") for a, v in k["arms"].items()}
 
     def quiet_wall(c):
         model, arm = c["model"], c["arm"]
         d = c.get("unconstrained_dimension")
-        if model not in grad_cost or d not in kernel_cost or arm not in MODE:
+        if model not in grad_cost or d not in kernel_cost or arm not in MODE or kernel_cost[d].get(MODE[arm]) is None:
             return None
         per = grad_cost[model] + max(kernel_cost[d][MODE[arm]], 0.0)
         return max(c["per_chain_target_calls"]) * per
@@ -689,8 +694,13 @@ def analyze() -> None:
                      "max_depth_stops": [c.get("max_depth_stops") for c in vals],
                      "divergences": [c.get("divergences") for c in vals],
                      "step_size_median": med([x for c in vals for x in c.get("step_size", [])])}
+    try:
+        predictions = evaluate_predictions(per_model, comparisons, funnel, kernel_cost, v6)
+    except Exception as e:  # noqa: BLE001
+        predictions = {"error": f"{e} {traceback.format_exc()[-800:]}"}
     summary = {
         "schema": "dense-metric-posteriordb-v1-summary",
+        "predictions": predictions,
         "protocol_sha256": __import__("hashlib").sha256((HERE / "protocol.json").read_bytes()).hexdigest(),
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "per_model": per_model, "comparisons": comparisons, "funnel": funnel,
@@ -752,12 +762,176 @@ def analyze() -> None:
     L += ["", "## Cost decomposition (contended micro-benchmarks, minima over repetitions)", "",
           "| d | diag kernel us/grad | dense kernel us/grad | dense-seeded kernel us/grad | dense-stan kernel us/grad |", "|---:|---:|---:|---:|---:|"]
     for d, k in sorted(kernel_cost.items()):
-        L.append(f"| {d} | {k['diag'] * 1e6:.3f} | {k['dense'] * 1e6:.3f} | {k['dense-seeded'] * 1e6:.3f} | {k['dense-stan'] * 1e6:.3f} |")
+        us = lambda x: "failed" if x is None else f"{x * 1e6:.3f}"  # noqa: E731
+        L.append(f"| {d} | {us(k['diag'])} | {us(k['dense'])} | {us(k['dense-seeded'])} | {us(k['dense-stan'])} |")
     L += ["", "| model | gradient us |", "|---|---:|"]
     for m, g in grad_cost.items():
         L.append(f"| {m} | {g * 1e6:.2f} |")
+    L += ["", "## Preregistered predictions", "", "| prediction | held | value |", "|---|---|---|"]
+    for k, v in predictions.items():
+        if k == "per_model":
+            continue
+        if isinstance(v, dict):
+            L.append(f"| {k} | {v.get('held')} | `{json.dumps(v.get('value'), default=str)[:600]}` |")
+        else:
+            L.append(f"| {k} | — | {v} |")
+    if "per_model" in predictions:
+        L += ["", "| model | arm | predicted ratio | observed | within factor 2 |", "|---|---|---:|---:|---|"]
+        for m, row in predictions["per_model"].items():
+            for arm, e in row.items():
+                L.append(f"| {m} | {arm} | {e['predicted']} | {f(e['observed'], '.2f')} | {e['within_factor_2']} |")
     (ART / "results-table.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
+
+
+def evaluate_predictions(per_model, comparisons, funnel, kernel_cost, v6) -> dict:
+    """Score the frozen predictions P1-P9 and the per-model ratio predictions."""
+    pred = PROTOCOL["predictions"]["per_model_ess_per_gradient_ratio_vs_diag"]
+    models = PROTOCOL["models"]
+    out = {"per_model": {}}
+    for arm, key in (("owalnuts-dense-seeded", "dense"), ("owalnuts-dense-stan", "dense_stan")):
+        held = 0
+        for m in models:
+            r = comparisons[arm]["per_model"].get(m, {}).get("ratio_bulk_ess_per_gradient")
+            p = pred[m][key]
+            ok = bool(r is not None and p / 2 <= r <= p * 2)
+            out["per_model"].setdefault(m, {})[arm] = {"predicted": p, "observed": r, "within_factor_2": ok}
+            held += ok
+        out[f"ratio_predictions_held_{arm}"] = f"{held}/{len(models)}"
+    lit = comparisons["owalnuts-dense"]["per_model"]
+    below = sum(1 for m in models if (lit.get(m, {}).get("ratio_bulk_ess_per_gradient") or 0) < 1.0)
+    gates_le = all(lit[m]["gates"] <= lit[m]["gates_diag"] for m in lit)
+    out["literal_dense_ratio_below_1"] = {"value": {"below_1": f"{below}/17", "gates_le_diag_every_model": gates_le},
+                                          "held": bool(below >= 12 and gates_le)}
+    g = {a: comparisons[a]["geomean_ratio_bulk_ess_per_gradient_all"] for a in comparisons}
+    out["P1"] = {"value": g, "held": bool(g["owalnuts-dense-stan"] >= 2.0 and 0.6 <= g["owalnuts-dense-seeded"] <= 1.5
+                                         and g["owalnuts-dense"] <= 0.7)}
+    p2 = {}
+    for m in ["earnings-logearn_interaction", "kidiq-kidscore_momhsiq", "sblrc-blr"]:
+        row = comparisons["owalnuts-dense-seeded"]["per_model"].get(m, {})
+        kd = per_model[m].get("owalnuts-dense-seeded", {}).get("preconditioned_condition_median", {}).get("median")
+        kg = per_model[m].get("owalnuts-diag", {}).get("preconditioned_condition_median", {}).get("median")
+        p2[m] = {"gates": row.get("gates"), "gates_diag": row.get("gates_diag"), "kappa_dense_seeded": kd, "kappa_diag": kg,
+                 "held": bool(row and row["gates"] < row["gates_diag"] and kd and kg and kd > kg)}
+    out["P2"] = {"value": p2, "held": all(v["held"] for v in p2.values())}
+    dm = "diamonds-diamonds"
+    dg, ds, dse = per_model[dm]["owalnuts-diag"], per_model[dm]["owalnuts-dense-stan"], per_model[dm]["owalnuts-dense-seeded"]
+    p3 = {"diag_cap_fraction": dg["depth_cap_fraction"]["median"], "diag_step": dg["step_median"],
+          "stan_zero_cap_seeds": sum(1 for v in ds["depth_cap_fraction"]["values"] if v == 0),
+          "stan_step": ds["step_median"], "seeded_step": dse["step_median"]}
+    lo, hi = sorted([p3["diag_step"], p3["stan_step"]])
+    p3_held = bool(p3["diag_cap_fraction"] >= 0.05 and p3["diag_step"] <= 0.006 and p3["stan_zero_cap_seeds"] >= 2
+                   and p3["stan_step"] >= 0.05 and lo <= p3["seeded_step"] <= hi)
+    out["P3"] = {"value": p3, "held": p3_held}
+    d1 = {a: comparisons[a]["decision_document_dense"] for a in comparisons}
+    out["P4"] = {"value": d1, "held": bool(d1["owalnuts-dense"]["verdict"] == "not supported"
+                                          and d1["owalnuts-dense-seeded"]["advised_models"] == ["diamonds-diamonds"]
+                                          and sorted(d1["owalnuts-dense-stan"]["advised_models"]) == ["diamonds-diamonds", "mcycle_gp-accel_gp"])}
+    d2 = {a: comparisons[a]["auto_rule"] for a in comparisons}
+    out["P5"] = {"value": {a: {"recommend_auto": v["recommend_auto"], "false_positives": v["false_positives"],
+                               "missed": v["missed_winners"]} for a, v in d2.items()},
+                 "held": bool(not any(v["recommend_auto"] for v in d2.values())
+                              and "sblrc-blr" in d2["owalnuts-dense-stan"]["false_positives"])}
+    fz = {k: v["z"] for k, v in funnel.items()}
+    fixed = [abs(v) <= 2 for k, v in fz.items() if k.startswith("dense-seeded-") or k.startswith("dense-stan-")]
+    out["P6"] = {"value": fz, "held": bool(len(fixed) == 6 and all(fixed))}
+    p7 = {}
+    for d, k in sorted(kernel_cost.items()):
+        p7[d] = {"dense_seeded_minus_diag_us": (k["dense-seeded"] - k["diag"]) * 1e6,
+                 "dense_stan_minus_diag_us": (k["dense-stan"] - k["diag"]) * 1e6}
+
+    def p7ok(d, v):
+        lim = 0.5 if d <= 10 else (3.0 if d >= 66 else None)
+        return True if lim is None else max(v.values()) <= lim
+
+    out["P7"] = {"value": p7, "held": bool(p7) and all(p7ok(d, v) for d, v in p7.items())}
+    p8 = {}
+    for m in TARGETS:
+        cd = per_model[m].get("cmdstan-dense")
+        if not cd:
+            continue
+        cde = cd["min_bulk_ess_per_gradient"]["median"]
+        ours = per_model[m]["owalnuts-dense-stan"]
+        base = v6[m]["min_bulk_ess_per_gradient_median"]
+        p8[m] = {"cmdstan_dense_over_v6_diag_e": (cde / base) if (cde and base) else None,
+                 "dense_stan_over_cmdstan_dense": (ours["min_bulk_ess_per_gradient"]["median"] / cde) if cde else None,
+                 "dense_seeded_over_cmdstan_dense": (per_model[m]["owalnuts-dense-seeded"]["min_bulk_ess_per_gradient"]["median"] / cde) if cde else None,
+                 "both_pass_all": bool(cd["n_passed"] == 3 and ours["n_passed"] == 3), "cmdstan_dense_gates": cd["n_passed"]}
+    ok8 = bool(p8) and (p8.get(dm, {}).get("cmdstan_dense_over_v6_diag_e") or 0) >= 20 and all(
+        0.6 <= (v["dense_stan_over_cmdstan_dense"] or 0) <= 1.2 for v in p8.values() if v["both_pass_all"])
+    out["P8"] = {"value": p8, "held": bool(ok8)}
+    geo = json.loads((ART / "reference-geometry.json").read_text())
+    p9 = {}
+    for m in models:
+        get = lambda a: per_model[m][a]["preconditioned_condition_median"]["median"]  # noqa: E731
+        p9[m] = {"diag": get("owalnuts-diag"), "dense_stan": get("owalnuts-dense-stan"), "dense": get("owalnuts-dense"),
+                 "dense_seeded": get("owalnuts-dense-seeded"), "ref_kdiag": geo[m].get("kappa_stan_diag_oracle")}
+    need = [m for m, v in p9.items() if (v["ref_kdiag"] or 0) >= 50 and m != "sblrc-blr"]
+    lit_above = sum(1 for v in p9.values() if v["dense"] and v["diag"] and v["dense"] > v["diag"])
+    out["P9"] = {"value": {"stan_below_diag": {m: bool(p9[m]["dense_stan"] < p9[m]["diag"]) for m in need},
+                           "literal_above_diag": lit_above, "kappa": p9},
+                 "held": bool(all(p9[m]["dense_stan"] < p9[m]["diag"] for m in need) and lit_above >= 12)}
+    return out
+
+
+def run_posthoc() -> None:
+    """Post-hoc diagnostic: diag versus dense-stan with symmetrized precision on the target models."""
+    global CELLS, DRAWS
+    CELLS, DRAWS = ART / "posthoc" / "cells", ART / "posthoc" / "draws"
+    for model in TARGETS:
+        ref = reference(model)
+        log(f"== posthoc {model}")
+        for arm in POSTHOC_ARMS:
+            for seed in POSTHOC_SEEDS:
+                if cell_path(model, arm, seed).exists():
+                    continue
+                try:
+                    cell = run_owalnuts(model, arm, seed, ref)
+                except Exception as e:  # noqa: BLE001
+                    cell = failure(model, arm, seed, "error", f"{e}
+{traceback.format_exc()[-1500:]}")
+                write_cell(cell)
+
+
+def analyze_posthoc() -> None:
+    rows = {}
+    for path in sorted((ART / "posthoc" / "cells").glob("*.json")):
+        c = json.loads(path.read_text(encoding="utf-8"))
+        rows.setdefault(c["model"], {}).setdefault(c["arm"], []).append(c)
+    L = ["# Post-hoc diagnostic: dense-stan with symmetrized precision (NOT preregistered evidence)", "",
+         "Seeds 148201-148203, the three target models, arms owalnuts-diag and owalnuts-dense-stan-sym "
+         "(PerTransition seeding + Stan regularisation + `with_dense_symmetrized_precision(true)`). Run after every "
+         "preregistered cell, to test the mechanism found in the analysis; walls contended.", "",
+         "| model | arm | gates | median grads | median min bulk ESS | bulk ESS/grad x1e3 | ratio vs diag | median step | kappa | max ridge (last window) | max R-hat | divergences |",
+         "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
+    out = {}
+    for model, arms in rows.items():
+        base = None
+        for arm in POSTHOC_ARMS:
+            cs = [c for c in arms.get(arm, []) if c.get("status") == "ok"]
+            if not cs:
+                continue
+            e = {k: statistics.median([c[k] for c in cs]) for k in ["gradients_total", "min_bulk_ess", "min_bulk_ess_per_gradient",
+                                                                       "preconditioned_condition_median", "max_rank_rhat"]}
+            e["passed"] = sum(c["passed"] for c in cs)
+            e["n"] = len(arms.get(arm, []))
+            e["step"] = statistics.median([x for c in cs for x in c["final_step_size"]])
+            e["max_last_ridge"] = max((ch[-1]["ridge"] for c in cs for ch in c["metric_updates"]), default=0.0)
+            e["divergences"] = [c["divergences"] for c in cs]
+            if arm == "owalnuts-diag":
+                base = e["min_bulk_ess_per_gradient"]
+            e["ratio"] = e["min_bulk_ess_per_gradient"] / base if base else None
+            out.setdefault(model, {})[arm] = e
+            L.append(f"| {model} | {arm} | {e['passed']}/{e['n']} | {e['gradients_total']:,.0f} | {e['min_bulk_ess']:,.0f} | "
+                     f"{e['min_bulk_ess_per_gradient'] * 1e3:.3f} | {e['ratio']:.2f} | {e['step']:.3g} | {e['preconditioned_condition_median']:.3g} | "
+                     f"{e['max_last_ridge']:.2g} | {e['max_rank_rhat']:.4f} | {e['divergences']} |")
+    (ART / "posthoc" / "posthoc-summary.json").write_text(json.dumps(out, indent=1, sort_keys=True) + "
+", encoding="utf-8")
+    (ART / "posthoc" / "posthoc-table.md").write_text("
+".join(L) + "
+", encoding="utf-8")
+    print("
+".join(L))
 
 
 def main() -> None:
@@ -782,6 +956,10 @@ def main() -> None:
         run_overhead()
     elif args[0] == "analyze":
         analyze()
+    elif args[0] == "posthoc":
+        run_posthoc()
+    elif args[0] == "posthoc-analyze":
+        analyze_posthoc()
     else:
         raise SystemExit(__doc__)
 

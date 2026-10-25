@@ -131,11 +131,12 @@ fn kernel(dimension: usize, out: &Path) -> Result<(), Box<dyn Error>> {
     for arm in ["diag", "dense", "dense-seeded", "dense-stan"] {
         let mut best = f64::INFINITY;
         let mut calls_seen = 0;
+        let mut failure = None;
         for rep in 0..5u64 {
             let (metric, adaptation) = arm_config(arm)?;
             let before = target.calls.load(Ordering::Relaxed);
             let begin = Instant::now();
-            let posterior = Sampler::new()
+            let posterior = match Sampler::new()
                 .warmup(1000)
                 .draws(1000)
                 .chains(1)
@@ -144,17 +145,26 @@ fn kernel(dimension: usize, out: &Path) -> Result<(), Box<dyn Error>> {
                 .metric(metric)
                 .adaptation(adaptation)
                 .limits(Limits::new().admit_worst_case())
-                .run(&target, &[vec![0.5; dimension]])?;
+                .run(&target, &[vec![0.5; dimension]])
+            {
+                Ok(posterior) => posterior,
+                Err(error) => {
+                    failure = Some(format!("repetition {rep}: {error}"));
+                    continue;
+                }
+            };
             let wall = begin.elapsed().as_secs_f64();
             black_box(posterior.total_target_calls());
             let calls = target.calls.load(Ordering::Relaxed) - before;
             calls_seen = calls;
             best = best.min(wall / calls as f64);
         }
+        let ok = best.is_finite();
         arms.insert(arm.to_string(), json!({
-            "wall_per_target_call_min_of_5": best,
-            "kernel_overhead_per_gradient": best - gaussian_gradient,
+            "wall_per_target_call_min_of_5": if ok { Some(best) } else { None },
+            "kernel_overhead_per_gradient": if ok { Some(best - gaussian_gradient) } else { None },
             "target_calls_last_rep": calls_seen,
+            "failure": failure,
         }));
         eprintln!("kernel d={dimension} {arm}: {:.3} us per call", best * 1e6);
     }

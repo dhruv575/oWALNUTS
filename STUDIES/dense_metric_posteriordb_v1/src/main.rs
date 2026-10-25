@@ -35,12 +35,20 @@ const RETAINED: usize = 1000;
 const TARGET_ACCEPT: f64 = 0.8;
 
 fn custom(regularization: DenseMetricRegularization) -> Result<Adaptation, Box<dyn Error>> {
+    custom_sym(regularization, false)
+}
+
+fn custom_sym(
+    regularization: DenseMetricRegularization,
+    symmetrize: bool,
+) -> Result<Adaptation, Box<dyn Error>> {
     Ok(Adaptation::Custom(
         WarmupConfig::new(TARGET_ACCEPT)?
             .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
             .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
             .with_dense_metric_regularization(regularization)
-            .with_dense_warmup_seeding(DenseWarmupSeeding::PerTransition),
+            .with_dense_warmup_seeding(DenseWarmupSeeding::PerTransition)
+            .with_dense_symmetrized_precision(symmetrize),
     ))
 }
 
@@ -61,6 +69,12 @@ fn arm_config(arm: &str) -> Result<(Metric, Adaptation, &'static str), Box<dyn E
             Metric::dense(),
             custom(DenseMetricRegularization::Stan)?,
             "Stan, PerTransition seeding",
+        )),
+        // Post-hoc diagnostic arm (not preregistered evidence; see README).
+        "dense-stan-sym" => Ok((
+            Metric::dense(),
+            custom_sym(DenseMetricRegularization::Stan, true)?,
+            "Stan, PerTransition seeding, symmetrized precision (post hoc)",
         )),
         other => Err(format!(
             "unknown arm {other:?} (expected diag, dense, dense-seeded, dense-stan)"
