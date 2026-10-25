@@ -1,7 +1,7 @@
 {
   "schema": "bridgestan-windows-root-cause-v3",
   "ledger_id": "WP50C",
-  "status": "PHASE_B_RUNNING_PHASE_C_DRAFT",
+  "status": "PHASE_B_DONE_PHASE_C_FROZEN_BEFORE_EXECUTION",
   "frozen_utc": "2026-10-24",
   "toolchain": "1.88.0-x86_64-pc-windows-gnu",
   "forbidden_seeds": [
@@ -178,7 +178,7 @@
     }
   },
   "phase_c": {
-    "condition": "run only if phase_b gate verdict == fix_supported",
+    "condition": "run only if phase_b gate verdict == fix_supported; satisfied under the disclosed time-window event correlation (as-preregistered PID-only correlation gave fix_not_supported via a reused PID)",
     "code": "payoff/ crate built against this worktree's HEAD sampler and BridgeStan integration (run_phase_c.py build)",
     "arms": {
       "serialised": "HEAD ReplicatedStanTarget::load(model, [private tbb], data, seed, 4): on Windows one owned worker + process-global native-call lock (current default)",
@@ -240,6 +240,7 @@
       "min_median_wall_ratio_each_model": 1.5,
       "change_default": "recommend changing the Windows default from the owned worker to unserialised multi-replica dispatch ONLY IF phase B is fix_supported AND static_short has 0 faults AND Phase C has 0 faults AND every assertion holds AND the median wall ratio is >= 1.5 on BOTH models; and then only for static-runtime DLLs (dynamic-runtime DLLs keep the owned worker). Otherwise recommend keeping the owned worker.",
       "note": "the rule is frozen before Phase C evidence; wall times are contended by other agents' processes"
-    }
+    },
+    "seed_check": "git grep -w on worktree and main checkout: 0 hits for each seed"
   }
 }
