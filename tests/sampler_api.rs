@@ -14,10 +14,11 @@ use owalnuts::sampler::{
     uniform_starts,
 };
 use owalnuts::walnutpie::{
-    DenseMass, DiagonalMass, KernelOptions, KernelTuning, PaperAdaptationConfig, RunConfig,
-    RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, WarmupConfig,
-    sample_chains, sample_chains_dense, sample_chains_structured, sample_chains_structured_refresh,
-    sample_chains_with_control, sample_chains_with_target_budget,
+    DenseMass, DiagonalMass, KernelOptions, KernelTuning, NonfinitePositionPolicy,
+    PaperAdaptationConfig, RunConfig, RunControl, TargetEvaluationAdmissionLimit,
+    TargetEvaluationBudget, WarmupConfig, sample_chains, sample_chains_dense,
+    sample_chains_structured, sample_chains_structured_refresh, sample_chains_with_control,
+    sample_chains_with_target_budget,
 };
 
 struct Gaussian(usize);
@@ -89,7 +90,8 @@ fn starts(dimension: usize) -> Vec<Vec<f64>> {
 /// The same numbers and kernel options as `Tuning::default()`: `h = 0.5`,
 /// depth 10, one micro-step, eight levels, `delta = 1`, and the momentum-sum
 /// U-turn rule (the post-WP31 default; `KernelOptions::default()` is the
-/// frozen endpoint rule).
+/// frozen endpoint rule), and the `RejectLeaf` nonfinite-position policy
+/// (the sampler default since WP54; `KernelTuning::default()` keeps `Abort`).
 fn kernel_tuning() -> KernelTuning {
     KernelTuning::new(0.5, nz(10), nz(1), nz(8), 1.0)
         .unwrap()
@@ -97,6 +99,7 @@ fn kernel_tuning() -> KernelTuning {
             u_turn: DEFAULT_U_TURN_RULE,
             ..KernelOptions::default()
         })
+        .with_nonfinite_position(NonfinitePositionPolicy::RejectLeaf)
 }
 
 fn config(warmup: Option<WarmupConfig>) -> RunConfig {

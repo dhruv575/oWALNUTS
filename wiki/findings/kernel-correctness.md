@@ -17,6 +17,10 @@ The kernel is held correct by differential oracles against the upstream `walnutp
 - **WP30-KERNEL-GAP-V1** and **WP33-CHAIN-RESCUE-V1**: the initial-evaluation cache and the `ChainRun` driver refactor were accepted because draws were bit-identical to the previous driver; optimisations that would have changed floating-point operation order were rejected.
 - **SSPD-TARGET-FATAL-DIAG-V1** (`STUDIES/sspd_target_fatal_diag_v1`): the WP37B stop at the state-space target was the frozen target's fatal classification of reachable non-finite results (12/13 diagnostic seeds fatal at step 0.5), plus a second gap: the kernel aborts the run with `ErrorKind::Numerical` on a non-finite proposed position, which Stan would treat as a divergent leaf.
 - **WP38-NONFINITE-POSITION-POLICY-V1** (`STUDIES/nonfinite_position_policy_v1`): research-only `NonfinitePositionPolicy::RejectLeaf` completes all 24 runs on the repaired state-space target where `Abort` fails 2/24, with one or two warmup-only rejected leaves, and is bit-identical to `Abort` on every cell without the event (22/22). The registered health gate failed 0/24 because it measured the target's own mixing (identical draws on both arms), so the policy is not qualified and `Abort` stays the default.
+- **WP54-NONFINITE-POLICY-REQUALIFICATION-V1** (`STUDIES/nonfinite_policy_requalification_v1`): this is the default-flip confirmation, run on the house screen with a rule that tests what the policy can change.
+  - Draws were bit-identical on 73/73 cells that `Abort` completed: 17 models x 3 seeds, sblrc and lotka_volterra stress seeds, and the funnel.
+  - The WP50 sblrc fatal case (seed 50801734) completes with one warmup rejection and passes every gate (max |z| 1.63).
+  - Completed runs: 75 vs 73. The rule passed, and `RejectLeaf` is now the `sampler::Tuning` default; `KernelTuning::default()` keeps `Abort`.
 
 ## What worked
 
@@ -42,7 +46,7 @@ The kernel is held correct by differential oracles against the upstream `walnutp
 
 ## Current state
 
-The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10` and has not changed since 0.1.0-beta.2; every pinned fingerprint and oracle still holds. The funnel marginal is reproduced at the paper's tuning and at the sampler defaults with eight levels. Recoverable target failures refine through as upstream does; NaN, +inf and non-finite gradients remain fatal. `ExhaustionRule::AcceptUnlessDivergent` applies to warmup transitions only; the retained rule is `Stop`. `NonfinitePositionPolicy::Abort` is the default and `RejectLeaf` is research-only. The `StopReason::InvalidEvaluation` variant is unreachable for successful runs and may be removed at the next breaking release.
+The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10` and has not changed since 0.1.0-beta.2; every pinned fingerprint and oracle still holds. The funnel marginal is reproduced at the paper's tuning and at the sampler defaults with eight levels. Recoverable target failures refine through as upstream does; NaN, +inf and non-finite gradients remain fatal. `ExhaustionRule::AcceptUnlessDivergent` applies to warmup transitions only; the retained rule is `Stop`. `NonfinitePositionPolicy::RejectLeaf` is the `sampler::Tuning` default since WP54; the frozen `KernelTuning::default()` keeps `Abort`, so the revision and fingerprints are unchanged. The `StopReason::InvalidEvaluation` variant is unreachable for successful runs and may be removed at the next breaking release.
 
 ## Open questions
 

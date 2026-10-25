@@ -34,6 +34,35 @@ architecture and operating system (see the `walnutpie` module documentation).
   handling (`init=None` jitter, `init="uniform"`); `DEFAULTS` adds
   `init_candidates`.
 
+- **DEFAULT CHANGE (WP54): an integrator overflow no longer kills the run.**
+  `sampler::Tuning::default()` now uses
+  `NonfinitePositionPolicy::RejectLeaf`. When the momentum or drift
+  overflows, the nonfinite position is treated as a zero-density leaf: it is
+  refined and then rejected, like a recoverable target failure. The event is
+  counted in `WorkTotals::nonfinite_position_rejections` and the transition
+  continues. Stan treats the same event as a divergent leaf. Previously
+  (`Abort`) one chain's overflow ended the whole multi-chain run with
+  `ErrorKind::Numerical`. `Tuning::nonfinite_position`,
+  `KernelTuning::with_nonfinite_position` and `sampler::NonfinitePositionPolicy`
+  are no longer behind the `research` feature, so
+  `Tuning::default().nonfinite_position(NonfinitePositionPolicy::Abort)`
+  restores the old behaviour. `walnutpie::KernelTuning::default()`, the frozen
+  replay tuning, keeps `Abort`. `ALGORITHM_REVISION` and the kernel
+  fingerprints are unchanged: every run that produced draws before produces
+  the same draws. Chosen by the preregistered default-flip confirmation
+  `STUDIES/nonfinite_policy_requalification_v1` (WP54), whose frozen rule
+  passed:
+  - draws were bit-identical on 73/73 cells that `Abort` completed (17
+    posteriordb models x 3 seeds, sblrc and lotka_volterra stress seeds,
+    funnel);
+  - 75 vs 73 runs completed;
+  - the WP50D/E fatal case (sblrc seed 50801734, one rejected leaf in chain
+    2's warmup) now completes and passes every gate (max |z| 1.63);
+  - the funnel check passes.
+
+  The rejection happens in warmup and adds no retained divergence, so check
+  `nonfinite_position_rejections` to see whether it occurred.
+
 ### Added
 
 - Observe-only chain-disagreement checks (`STUDIES/chain_disagreement_warning_v1`,

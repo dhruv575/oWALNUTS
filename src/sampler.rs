@@ -72,7 +72,6 @@ use std::time::{Duration, Instant};
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 
-#[cfg(feature = "research")]
 pub use crate::walnutpie::NonfinitePositionPolicy;
 #[cfg(feature = "research")]
 pub use crate::walnutpie::ReverseCoarseningOrder;
@@ -769,7 +768,6 @@ pub struct Tuning {
     kernel_options: KernelOptions,
     #[cfg(feature = "research")]
     reverse_coarsening_order: ReverseCoarseningOrder,
-    #[cfg(feature = "research")]
     nonfinite_position: NonfinitePositionPolicy,
     #[cfg(feature = "research")]
     reverse_coarser_policy: ReverseCoarserPolicy,
@@ -790,8 +788,7 @@ impl Default for Tuning {
             },
             #[cfg(feature = "research")]
             reverse_coarsening_order: ReverseCoarseningOrder::FinestToCoarsest,
-            #[cfg(feature = "research")]
-            nonfinite_position: NonfinitePositionPolicy::Abort,
+            nonfinite_position: NonfinitePositionPolicy::RejectLeaf,
             #[cfg(feature = "research")]
             reverse_coarser_policy: ReverseCoarserPolicy::StopOrbit,
         }
@@ -853,10 +850,17 @@ impl Tuning {
         self.reverse_coarsening_order = order;
         self
     }
-    /// Select how a transition treats a nonfinite integrator position.
-    /// Research-only; the default remains `Abort`, which ends the run with
-    /// `ErrorKind::Numerical`. See `STUDIES/nonfinite_position_policy_v1`.
-    #[cfg(feature = "research")]
+    /// Select how a transition treats a nonfinite integrator position (the
+    /// momentum or drift overflowed). The default is
+    /// [`NonfinitePositionPolicy::RejectLeaf`]: the point is a zero-density
+    /// leaf (refined, then rejected, like a recoverable target failure), the
+    /// run continues and the event is counted in
+    /// `WorkTotals::nonfinite_position_rejections`; Stan treats the same event
+    /// as a divergent leaf. [`NonfinitePositionPolicy::Abort`] (the frozen
+    /// `v10` behaviour and the default through 0.2) ends the run with
+    /// `ErrorKind::Numerical`. Runs in which the event never occurs are
+    /// bit-identical under either policy. Default chosen by
+    /// `STUDIES/nonfinite_policy_requalification_v1` (WP54).
     pub fn nonfinite_position(mut self, policy: NonfinitePositionPolicy) -> Self {
         self.nonfinite_position = policy;
         self
@@ -891,7 +895,6 @@ impl Tuning {
         .map(|tuning| tuning.with_options(self.kernel_options))?;
         #[cfg(feature = "research")]
         let tuning = tuning.with_reverse_coarsening_order(self.reverse_coarsening_order);
-        #[cfg(feature = "research")]
         let tuning = tuning.with_nonfinite_position(self.nonfinite_position);
         #[cfg(feature = "research")]
         let tuning = tuning.with_reverse_coarser_policy(self.reverse_coarser_policy);

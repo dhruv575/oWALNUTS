@@ -238,9 +238,16 @@ pub use crate::kernel::ReverseCoarserPolicy;
 /// a zero-density evaluation with a zero gradient, exactly like a recoverable
 /// target failure, so the leaf is rejected and the transition continues; the
 /// event is counted in [`WorkTotals::nonfinite_position_rejections`]. Stan
-/// treats the same event as a divergent leaf. The non-default variant is
-/// exposed only by the crate's `research` facade and is measured in
-/// `STUDIES/nonfinite_position_policy_v1`; no default changes.
+/// treats the same event as a divergent leaf. Runs in which the event never
+/// occurs are bit-identical under either policy.
+///
+/// Defaults: [`KernelTuning::default`] (the frozen replay tuning of
+/// [`ALGORITHM_REVISION`]) keeps [`Self::Abort`]; `sampler::Tuning::default()`
+/// uses [`Self::RejectLeaf`] since `STUDIES/nonfinite_policy_requalification_v1`
+/// (WP54): draws were bit-identical on every run `Abort` completed, and the
+/// 4-chain run that `Abort` killed over one chain's warmup overflow completed
+/// and passed every gate. First measured in
+/// `STUDIES/nonfinite_position_policy_v1` (WP38).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NonfinitePositionPolicy {
     #[default]
@@ -456,10 +463,10 @@ impl KernelTuning {
         self.reverse_coarser_policy = policy;
         self
     }
-    /// Select the treatment of a nonfinite integrator position. Research-only;
-    /// the default remains [`NonfinitePositionPolicy::Abort`], and any run in
+    /// Select the treatment of a nonfinite integrator position. This frozen
+    /// replay tuning defaults to [`NonfinitePositionPolicy::Abort`] (the `v10`
+    /// behaviour); `sampler::Tuning` defaults to `RejectLeaf`. Any run in
     /// which the event never occurs is bit-identical under either policy.
-    #[cfg(feature = "research")]
     pub fn with_nonfinite_position(mut self, policy: NonfinitePositionPolicy) -> Self {
         self.nonfinite_position = policy;
         self

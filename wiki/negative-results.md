@@ -96,7 +96,8 @@ where one was established. Details are in the
   The WP34 truncation hypothesis is closed.
 - **`RejectLeaf` for a non-finite proposed position** (WP38): exact and
   bit-identical elsewhere, but the registered health gate failed on the
-  target itself for both arms.
+  target itself for both arms. Superseded: WP54 adopted it as the
+  `sampler::Tuning` default.
 - **Fixing the step from the first warmup transition** (WP39B fixed arms):
   2 to 8x warmup gradients and `arma11` never builds a leaf. Any fixed-step
   design must fix the step after the step search and first mass window.
