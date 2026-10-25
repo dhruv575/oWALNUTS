@@ -1,0 +1,179 @@
+{
+  "schema": "posteriordb-breadth-v1",
+  "ledger_id": "WP46",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-24",
+  "purpose": "Out-of-sample breadth check of the shipped oWALNUTS 0.2.0 defaults on posteriordb posteriors that none of posteriordb_bench_v1-v6 used. Output: a failure taxonomy, a prioritised list of new problems and a recommended 5-model candidate set for a future v7 breadth benchmark. No default changes are decided here.",
+  "source_commit_under_test": "3583d130",
+  "kernel_under_test": {
+    "api": "owalnuts::sampler::Sampler with Tuning::default(), Metric::diagonal(), Adaptation::default(), Init::uniform() and Limits::admit_worst_case(); nothing overridden",
+    "sampler_defaults_under_test": {
+      "u_turn": "sampler::DEFAULT_U_TURN_RULE = UTurnRule::MomentumSum",
+      "metric_regularization": "sampler::DEFAULT_METRIC_REGULARIZATION = DiagonalMetricRegularization::Stan",
+      "warmup_exhaustion_rule": "sampler::DEFAULT_WARMUP_EXHAUSTION = ExhaustionRule::AcceptUnlessDivergent",
+      "chain_rescue": "sampler::DEFAULT_CHAIN_RESCUE = None (post-WP36); v6 ran with restart_from_best, so v6 is not the same default",
+      "unchanged": "h0 0.5, depth 10, min_micro_steps 1, eight refinement levels, delta 1, divergence threshold 1000, retained exhaustion rule Stop, dual-averaging target 0.8, adapted diagonal metric from identity"
+    },
+    "target": "owalnuts-bridgestan ReplicatedStanTarget, four requested replicas; on Windows one owned worker serialises all native calls (bridgestan_owned_worker_v1); BridgeStan 2.9.0 / Stan 2.39.0 built without STAN_THREADS"
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "excluded_used_posteriors": {
+    "source": "STUDIES/posteriordb_bench_v6/protocol.json models (identical to v5)",
+    "models": [
+      "eight_schools-eight_schools_noncentered", "eight_schools-eight_schools_centered", "diamonds-diamonds",
+      "earnings-logearn_interaction", "mesquite-logmesquite_logvash", "kidiq-kidscore_momhsiq", "sblrc-blr",
+      "nes2000-nes", "arK-arK", "arma-arma11", "garch-garch11", "gp_pois_regr-gp_pois_regr", "hmm_example-hmm_example",
+      "bball_drive_event_0-hmm_drive_0", "one_comp_mm_elim_abs-one_comp_mm_elim_abs", "hudson_lynx_hare-lotka_volterra",
+      "mcycle_gp-accel_gp"
+    ]
+  },
+  "availability_finding": "At 28f8d3d only 47 of 147 posteriors carry a reference_posterior_name (46 draw files). After removing the 17, 30 are eligible; 22 of them are ARM-book linear regressions in five dataset families (earnings, kidiq, kidiq_with_mom_work, mesquite, nes). No reference-draw posterior exists for survival/censoring, ordinal regression, GLMMs or hierarchical logistic models, hierarchical models with hundreds of parameters, or ARMA/GARCH variants beyond the three already used. The only new reference-draw families are a two-component ordered mixture, an ill-conditioned regression (kilpisjarvi), a Gaussian-likelihood GP, a normal-emission HMM with simplex and ordered parameters, and an independent-beta BLR.",
+  "selection": {
+    "script": "select_posteriors.py (run before any sampling; output artifacts/selection.json)",
+    "eligible": "posteriors at 28f8d3d with reference draws, minus the 17 used posteriors: 30",
+    "difficulty_proxy": "condition number of the correlation matrix of the posteriordb reference draws (constant columns removed), computed from reference information only",
+    "rule": "(a) every eligible posterior that is the only eligible member of its dataset family (family = data name with a trailing four-digit year stripped); (b) from each multi-member family the 2 members with the largest condition number if the family has >= 4 eligible members, else the 1 largest; ties by name",
+    "gates_only_rule": "Because the requested absent families have no reference draws, a supplementary gates-only tier adds one posteriordb posterior per absent family that compiles here, chosen by family before any sampling: hierarchical logistic / binomial GLMM (seeds_centered, centered, 21 groups), Poisson GLMM with box-bounded parameters (GLMM_Poisson, 40 random effects, uniform priors on bounded intervals), hierarchical with hundreds of parameters (radon_all hierarchical_intercept_centered, 391 parameters, 386 groups), hierarchical IRT with a Cholesky-correlation constraint (sat hier_2pl, ~670 parameters), ordinal rating-scale IRT (science_irt grsm_latent_reg_irt, ~400 parameters). Survival/censoring and new ARMA/GARCH variants do not exist in posteriordb at this commit. The gates-only tier has no z statistic and no reference-draw disagreement class; it is run after the complete reference tier.",
+    "compile_check": "every selected model was compiled with BridgeStan before freezing (artifacts/compile-status.json); compilation is not an evidence cell"
+  },
+  "tiers": {
+    "reference": {
+      "models": [
+        "low_dim_gauss_mix-low_dim_gauss_mix",
+        "kilpisjarvi_mod-kilpisjarvi",
+        "gp_pois_regr-gp_regr",
+        "bball_drive_event_1-hmm_drive_1",
+        "sblri-blr",
+        "earnings-logearn_logheight_male",
+        "earnings-logearn_height_male",
+        "kidiq-kidscore_interaction",
+        "kidiq_with_mom_work-kidscore_mom_work",
+        "kidiq_with_mom_work-kidscore_interaction_c2",
+        "mesquite-logmesquite_logvas",
+        "mesquite-mesquite",
+        "nes1996-nes",
+        "nes1980-nes"
+      ],
+      "parameter_set": "columns of the posteriordb reference draws; oWALNUTS draws constrained through BridgeStan with transformed parameters included (v6 rule)"
+    },
+    "gates_only": {
+      "models": [
+        "seeds_data-seeds_centered_model",
+        "GLMM_Poisson_data-GLMM_Poisson_model",
+        "radon_all-radon_hierarchical_intercept_centered",
+        "sat-hier_2pl",
+        "science_irt-grsm_latent_reg_irt"
+      ],
+      "parameter_set": "every constrained parameter-block coordinate (transformed parameters and generated quantities excluded); coordinates whose ArviZ statistics are undefined (constant columns such as Cholesky diagonal 1s) are listed and ignored as in v6's nan-ignoring minima"
+    }
+  },
+  "families": {
+    "low_dim_gauss_mix-low_dim_gauss_mix": "mixture (two-component, ordered means, (0,1) weight)",
+    "kilpisjarvi_mod-kilpisjarvi": "ill-conditioned linear regression (uncentred year covariate, reference |corr| 1.0000, condition 1.7e5)",
+    "gp_pois_regr-gp_regr": "Gaussian process regression, Gaussian likelihood (third GP posterior)",
+    "bball_drive_event_1-hmm_drive_1": "HMM, normal emissions, simplex transition rows and ordered emission means; posteriordb keyword multimodal",
+    "sblri-blr": "Bayesian linear regression, independent betas (sibling data of sblrc)",
+    "earnings-logearn_logheight_male": "ARM regression, condition 5.4e4",
+    "earnings-logearn_height_male": "ARM regression, condition 3.0e3",
+    "kidiq-kidscore_interaction": "ARM regression with interaction, condition 3.9e3",
+    "kidiq_with_mom_work-kidscore_mom_work": "ARM regression, categorical predictor",
+    "kidiq_with_mom_work-kidscore_interaction_c2": "ARM regression, centred interaction",
+    "mesquite-logmesquite_logvas": "ARM regression, 8 parameters, condition 5.3e2",
+    "mesquite-mesquite": "ARM regression, raw scale, 8 parameters",
+    "nes1996-nes": "ARM regression, 10 parameters (new year of the used nes program)",
+    "nes1980-nes": "ARM regression, 10 parameters, smallest N of the nes years",
+    "seeds_data-seeds_centered_model": "hierarchical logistic / binomial GLMM, centred, 21 groups (gates only)",
+    "GLMM_Poisson_data-GLMM_Poisson_model": "Poisson GLMM, 40 random effects, box-bounded parameters (gates only)",
+    "radon_all-radon_hierarchical_intercept_centered": "hierarchical, 386 groups, 391 parameters, N 12573 (gates only)",
+    "sat-hier_2pl": "hierarchical 2PL IRT, cholesky_factor_corr, ~670 parameters (gates only)",
+    "science_irt-grsm_latent_reg_irt": "ordinal rating-scale IRT with latent regression, ~400 parameters (gates only)"
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "seeds": [461461, 461462, 461463],
+  "seeds_verified_unused": "git grep -w for 461461, 461462 and 461463 over every tracked file of the worktree (all STUDIES artifacts included) and over the protocol/README/preregistration files of the sibling worktrees found no occurrence before freezing.",
+  "run_order": "reference tier in listed order, then gates-only tier in listed order; seeds ascending; strictly sequential; one child process per model",
+  "cell_timeout_seconds": 2700,
+  "estimators": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS at probabilities 0.05 and 0.95, and mean MCSE (v6)",
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "agreement": "reference tier only: z = (mean - mean_ref) / sqrt(mcse^2 + mcse_ref^2) for every reference parameter; maximum |z| per cell; flag above 4 (v6 P2)",
+  "telemetry_per_cell": "per-chain final step, retained step quantiles and warmup step trace every 50 transitions; retained depth-10 cap fraction; retained refined-leaf fraction (leaves built above level 0 / leaves built); retained divergences; refinement exhaustions; invalid-evaluation stops plus recoverable / zero-density / non-finite evaluations; retained stop histogram; installed inverse-metric variance over retained per-chain empirical variance; cross-chain disagreement (max over chains and parameters of |chain mean - mean of other chains| / pooled sd); per-chain displacement from the reference mean (reference tier); per-chain retained initial-Hamiltonian quantiles; gradients; wall (contended, labelled, not evidence)",
+  "taxonomy": {
+    "classes": ["start_lottery", "depth_cap", "step_collapse", "metric_floor", "multimodality", "constraint_boundary", "process_error", "reference_draw_disagreement"],
+    "candidate_new_classes": ["divergence (energy-error divergences not explained by a boundary)", "unclassified_slow_mixing (ESS or R-hat failure with none of the telemetry rules firing)"],
+    "mechanical_classifier": {
+      "applies_to": "every failing cell and every borderline passing cell; all labels whose rule fires are recorded, primary = first in this order: process_error, start_lottery|multimodality, depth_cap, step_collapse, metric_floor, constraint_boundary, divergence, reference_draw_disagreement, unclassified_slow_mixing",
+      "borderline": {"rank_rhat_above": 1.005, "min_ess_below": 600, "abs_z_above": 3.0},
+      "thresholds": {
+        "chain_disagreement_sd": 0.5,
+        "start_lottery_h0_nats": 5.0,
+        "start_lottery_h0_iqr": 2.0,
+        "depth_cap_fraction": 0.05,
+        "step_collapse_ratio": 0.2,
+        "metric_floor_installed_over_empirical": 2.0,
+        "metric_floor_empirical_variance_below": 0.0001,
+        "invalid_fraction": 0.001,
+        "reference_z": 4.0
+      },
+      "rules": {
+        "process_error": "status != ok (sampler error, timeout, crash, compile error)",
+        "start_lottery": "cross-chain disagreement > 0.5 pooled sd with rank R-hat > 1.01, and the outlying chain's median retained initial Hamiltonian is worse than the other chains' median by more than max(5 nats, 2 x median within-chain IQR): one chain held in an inferior region",
+        "multimodality": "cross-chain disagreement > 0.5 pooled sd with rank R-hat > 1.01, without the inferior-energy condition: chains in comparable separated regions",
+        "depth_cap": "retained depth-10 cap fraction > 0.05",
+        "step_collapse": "some chain's final step < 0.2 x the median final step of the four chains",
+        "metric_floor": "some coordinate of some chain has installed inverse-metric variance > 2 x its retained empirical variance while that empirical variance < 1e-4 (the Stan regularisation term dominates)",
+        "constraint_boundary": "retained invalid / zero-density / non-finite evaluations > 0.1 % of retained gradients, or any invalid-evaluation stop",
+        "divergence": "any retained divergence",
+        "reference_draw_disagreement": "reference tier, max |z| > 4 with cross-chain disagreement <= 0.5 pooled sd (chains agree with each other but not with the reference)",
+        "unclassified_slow_mixing": "failing or borderline with none of the above"
+      },
+      "narrative": "The README writes one paragraph per failing or borderline cell that states the mechanical labels and the telemetry behind them; where the narrative reading differs from the mechanical primary label, both are reported."
+    }
+  },
+  "predictions": {
+    "P1_reference_pass_rate": {
+      "statement": "The reference tier passes 32 of 42 cells (76 %), about 12 percentage points below v6's 45/51 (88 %) on the tuned set; registered interval 28-36 inclusive. The pass rate is below 45/51.",
+      "predicted_passes": 32,
+      "interval": [28, 36]
+    },
+    "P2_failing_families": {
+      "statement": "At least one cell fails on each of these reference-tier models and on seeds_centered in the gates-only tier; every other model passes 3/3.",
+      "models": [
+        "kilpisjarvi_mod-kilpisjarvi",
+        "bball_drive_event_1-hmm_drive_1",
+        "earnings-logearn_logheight_male",
+        "kidiq-kidscore_interaction",
+        "seeds_data-seeds_centered_model"
+      ],
+      "mechanisms_expected": {
+        "kilpisjarvi_mod-kilpisjarvi": "depth_cap",
+        "bball_drive_event_1-hmm_drive_1": "start_lottery or multimodality",
+        "earnings-logearn_logheight_male": "depth_cap",
+        "kidiq-kidscore_interaction": "depth_cap or unclassified_slow_mixing",
+        "seeds_data-seeds_centered_model": "divergence"
+      }
+    },
+    "P3_gates_only_pass_count": {
+      "statement": "The gates-only tier passes 10 of 15 cells; interval 7-13 inclusive.",
+      "interval": [7, 13]
+    },
+    "P4_no_passing_reference_cell_abs_z_gt_4": "no passing reference-tier cell has max |z| > 4 (v6 P2 rule)",
+    "P5_no_process_errors": "every one of the 57 cells completes with status ok (owned-worker mitigation); timeouts count as process errors",
+    "P6_modal_mechanism": "the most frequent primary mechanism over failing reference-tier cells is depth_cap"
+  },
+  "decision": "No default change is made from this study. Outputs: (1) the failure taxonomy with each failing/borderline cell mapped to wiki/open-questions.md items or marked new; (2) a prioritised list of new problems; (3) a recommended candidate set of 5 posteriors for a future v7 breadth benchmark, chosen by the rule: posteriors with at least one failing or borderline cell, ranked by (new failure class first, then mapped open question rank, then fewest passing seeds), at most one per dataset family, ties by fewer gradients per cell; if fewer than 5 qualify, fill with the gates-only models in tier order that would gain reference draws.",
+  "rules": "Report all cells; no result-driven reruns; failures are results; no tuning after seeing results. A process crash may be relaunched and only an interrupted cell without a completed artifact may be rerun from scratch, with the deviation recorded. No CmdStan or nutpie reruns. Walls are contended on a shared machine and are labelled, never used as evidence."
+}
