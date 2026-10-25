@@ -27,6 +27,13 @@ No library code was changed. `Metric::dense()` still gives `Legacy` seeding,
 remain available through `Adaptation::Custom(WarmupConfig::new(0.8)? ...)`,
 as in WP48. This study makes no recommendation.
 
+**Coordinator decision, made after this result and outside the frozen rule:**
+the dense facade's `WarmupConfig` defaults were changed to the candidate
+pipeline as an engineering decision. The basis was candidate versus the old
+dense defaults (40/51 vs 12/51 gates, 3.21x vs 0.055x of the diagonal) and
+the fact that two of the old behaviours are defects. The record above is
+unchanged (see `CHANGELOG.md`, "Changed").
+
 ## What was tested
 
 Preregistration: `PREREGISTRATION.md` and `protocol.json`, frozen and committed
