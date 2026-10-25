@@ -1,0 +1,15 @@
+{
+  "amendment": "A1",
+  "written_local": "2026-10-25 06:05, after Phase 1 and before any oWALNUTS or funnel cell",
+  "source_commit_under_test": "f097391c",
+  "source_commit_full": "f097391c (head of main; descendant of 457119f4); merged into wt/posteriordb-v7 so that src/, integrations/, tests/ and Cargo.toml equal it",
+  "decided_by": "coordinator message at about 06:03 local naming f097391c (before the A0 deadline of 06:45); coordinator reports cargo test --release passes 255 tests there",
+  "default_changes_relative_to_457119f4": [
+    "WP52: Init::default() is Init::best_of(16) (16 uniform(-2,2) candidates per chain, highest log density); starts differ from 0.2.0; kernel unchanged",
+    "WP54: sampler::Tuning::default() uses NonfinitePositionPolicy::RejectLeaf; bit-identical whenever no nonfinite position occurs; an overflow no longer aborts the run; counted in WorkTotals::nonfinite_position_rejections, now recorded per cell (retained and warmup) and per funnel chain",
+    "WP51 follow-up: the Metric::dense() facade's internal warmup defaults are PerTransition seeding, Stan regularisation and symmetrised precision (affects only the descriptive owalnuts-dense arm)"
+  ],
+  "unchanged": "diagonal kernel, ALGORITHM_REVISION, kernel fingerprints, Metric::default() (adaptive diagonal), Adaptation::default(), chain rescue off",
+  "harness_change_with_this_amendment": "the driver and funnel binary additionally record nonfinite_position_rejections (the harness already wrote it inside retained_work / warmup_work); no gate, statistic or prediction changes",
+  "dense_arm_commit": "the same f097391c"
+}

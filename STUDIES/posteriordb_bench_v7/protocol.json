@@ -1,0 +1,193 @@
+{
+  "schema": "posteriordb-bench-v7",
+  "ledger_id": "WP56",
+  "status": "FROZEN_BEFORE_EXECUTION_EXCEPT_SOURCE_COMMIT",
+  "frozen_utc": "2026-10-25",
+  "purpose": "Breadth benchmark of the oWALNUTS sampler defaults after the WP51-WP54 confirmation wave: the posteriordb_bench_v6 protocol on the 17 house posteriors plus the five posteriors WP46 (posteriordb_breadth_v1) recommended for a v7 benchmark, against CmdStan 2.39.0 and nutpie 0.16.8 on fresh shared seeds, with the Neal-funnel tail-mass side check and a labelled, non-decision dense-metric descriptive arm.",
+  "source_commit_under_test": "NOT FIXED AT FREEZE. Four sibling studies (WP51 dense defaults, WP52 best-of-16 start default, WP54 RejectLeaf default, WP53 funnel delta) may change main's defaults during Phase 1. The commit is fixed by AMENDMENT-1.json, committed before the first oWALNUTS cell: the hash the coordinator sends, or 457119f4 if no message has arrived within 1 hour of Phase 1 completing. The worktree's library source (src/, integrations/, tests/, Cargo.toml) must equal that commit's; the driver refuses oWALNUTS cells otherwise. Everything else in this file is frozen now.",
+  "worktree_base_commit": "457119f4",
+  "phases": {
+    "phase_1": "CmdStan and nutpie arms on all 22 posteriors x 3 seeds (they do not depend on oWALNUTS code); competitor binaries built before the first cell (prepare_competitors.py).",
+    "phase_2": "Commit AMENDMENT-1.json; bring the commit's library source into the worktree; rebuild the harness; run the owalnuts arm on all 22 posteriors x 3 seeds; then the funnel row; then the descriptive owalnuts-dense arm on the six WP48 correlated-regression posteriors x 3 seeds."
+  },
+  "predecessor": {
+    "study": "STUDIES/posteriordb_bench_v6 (WP35), seeds 90101-90103",
+    "headline": "oWALNUTS 45/51, CmdStan 34/51, nutpie 29/51; fixed-16 ESS/gradient vs CmdStan 0.848 on 15/16 complete models; wall/gradient 0.825; funnel |z| <= 1.69; release rule not met (one passing max|z| 4.023 cell; one sblrc process error).",
+    "defaults_then": "restart_from_best chain rescue on (WP33); since WP36 the default has no chain rescue, so v6 is not the same default.",
+    "breadth": "STUDIES/posteriordb_breadth_v1 (WP46), seeds 461461-461463: 40/42 reference-tier and 8/15 gates-only cells at the post-WP36 defaults; GLMM_Poisson 0/3 (box-constraint corner traps), seeds_centered 0/3 (silent funnel, zero divergences), grsm 2/3, kilpisjarvi 2/3, radon_all 3/3 borderline."
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "house_models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "new_models": [
+    "GLMM_Poisson_data-GLMM_Poisson_model",
+    "seeds_data-seeds_centered_model",
+    "kilpisjarvi_mod-kilpisjarvi",
+    "science_irt-grsm_latent_reg_irt",
+    "radon_all-radon_hierarchical_intercept_centered"
+  ],
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp",
+    "GLMM_Poisson_data-GLMM_Poisson_model",
+    "seeds_data-seeds_centered_model",
+    "kilpisjarvi_mod-kilpisjarvi",
+    "science_irt-grsm_latent_reg_irt",
+    "radon_all-radon_hierarchical_intercept_centered"
+  ],
+  "gates_only_models": [
+    "GLMM_Poisson_data-GLMM_Poisson_model",
+    "seeds_data-seeds_centered_model",
+    "science_irt-grsm_latent_reg_irt",
+    "radon_all-radon_hierarchical_intercept_centered"
+  ],
+  "fixed_non_arma_models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "parameter_set": {
+    "reference_posteriors": "columns of the posteriordb reference draws (18 posteriors: the 17 house models and kilpisjarvi); oWALNUTS draws constrained through BridgeStan with transformed parameters included (v6 rule)",
+    "gates_only_posteriors": "the four posteriors without posteriordb reference draws (GLMM_Poisson, seeds_centered, grsm_latent_reg_irt, radon hierarchical_intercept_centered): every constrained parameter-block coordinate, transformed parameters and generated quantities excluded (WP46 rule); no z statistic; coordinates with undefined ArviZ statistics are listed and ignored by the nan-ignoring minima, as in v6/WP46"
+  },
+  "arms": {
+    "owalnuts": {
+      "role": "decision arm",
+      "target": "owalnuts-bridgestan ReplicatedStanTarget, four requested replicas (on Windows the owned worker serialises native calls, execution OwnedSerialised, unless the commit under test changes that); BridgeStan 2.9.0 / Stan 2.39.0 built without STAN_THREADS; libraries copied from the sibling WP48 (17 house) and WP46 (5 new) builds of the same posteriordb sources",
+      "settings": "owalnuts::sampler::Sampler::new() with only warmup 1000, draws 1000, chains 4, seed, threads 4 and Limits::new().admit_worst_case() set. Metric, Adaptation, Tuning and Init are the commit's defaults (Metric::default(), Adaptation::default(), Tuning::default(), Init::default()), nothing overridden; their Debug forms are recorded in every cell."
+    },
+    "cmdstan": {
+      "version": "2.39.0",
+      "driver": "cmdstanpy 1.3.0",
+      "settings": "defaults: adapt_delta 0.8, max_treedepth 10, diag_e, uniform(-2,2) initialisation, four chains and four parallel chains; executables built by prepare_competitors.py (three copied from the sibling WP48 build)"
+    },
+    "nutpie": {
+      "version": "0.16.8",
+      "backend": "bridgestan",
+      "settings": "defaults: target_accept 0.8, maxdepth 10, four chains, default initialisation. The library is built before the cells with exactly nutpie.compile_stan_model's call (bridgestan.compile_model, make_args STAN_THREADS=true) into models/nutpie/ and wrapped in the same CompiledStanModel object; compile time is excluded from wall in both cases."
+    }
+  },
+  "descriptive_dense_arm": {
+    "arm": "owalnuts-dense",
+    "role": "labelled descriptive, NOT a decision arm, NOT in any pass count, geomean, prediction or release rule",
+    "settings": "the owalnuts arm plus Metric::dense(), i.e. the adaptive dense metric at whatever dense defaults the commit under test has",
+    "models": [
+      "diamonds-diamonds",
+      "earnings-logearn_interaction",
+      "mesquite-logmesquite_logvash",
+      "kidiq-kidscore_momhsiq",
+      "nes2000-nes",
+      "arK-arK"
+    ],
+    "seeds": "the main seeds",
+    "run_order": "after the owalnuts arm and the funnel row; models in the listed (protocol model) order; seeds ascending",
+    "reported": "gates, min bulk ESS per gradient as a ratio to the owalnuts defaults arm and to CmdStan, max |z|"
+  },
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "seeds": [560561, 560562, 560563],
+  "seeds_verified_unused": "git grep -w for 560561, 560562 and 560563 over every tracked file of the worktree at 457119f4 (all STUDIES artifacts included) and grep -w over the sibling worktrees' STUDIES/*/protocol.json and PREREGISTRATION.md found no occurrence before freezing.",
+  "run_order": "Phase 1: models in the 'models' order; arms cmdstan then nutpie; seeds ascending. Phase 2: models in order with the owalnuts arm, seeds ascending; then the funnel seeds ascending; then the descriptive dense arm. Strictly sequential, one sampling process at a time.",
+  "cell_timeout_seconds": 2700,
+  "estimators": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS at probabilities 0.05 and 0.95, and mean MCSE",
+  "metrics": {
+    "gradients_total": "oWALNUTS target calls including start search, warmup and sampling; CmdStan sum n_leapfrog__ incl. warmup; nutpie sum n_steps incl. warmup",
+    "wall": "seconds around one sampler call, warmup included and compilation excluded; oWALNUTS start search excluded; contended",
+    "ess_per_gradient": "minimum over gate parameters of bulk ESS divided by gradients_total",
+    "agreement": "reference posteriors only: z = (mean - mean_ref) / sqrt(mcse^2 + mcse_ref^2); maximum |z| over reference parameters; flag above 4",
+    "geomeans": "geometric mean over models of seed-median ratios, over models with all three seeds status ok on both arms"
+  },
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "statistics": {
+    "pass_counts": "per arm: house /51, new five /15 (reported separately so they cannot be averaged away), all /66; the new-five counts also per model",
+    "geomean_fixed16": "owalnuts / CmdStan min bulk ESS per gradient over the fixed 16 non-arma11 house models (P3)",
+    "geomean_all22": "the same over all 22 models (reported, not a gate)",
+    "wall_per_gradient_fixed16": "owalnuts / CmdStan wall per gradient over the fixed 16 (P4, contended)",
+    "ess_per_second_vs_nutpie": "owalnuts / nutpie min bulk ESS per second over house models complete on both sides (reported, as v6 P5)"
+  },
+  "funnel": {
+    "target": "Neal's 10-D funnel; exact P(omega < -5) = 0.0478",
+    "starts": "omega in {-3,-1,1,3}, x=0 (given starts, as v6)",
+    "chains": 4,
+    "warmup": 2000,
+    "draws": 20000,
+    "seeds": [560571, 560572, 560573],
+    "seeds_note": "Pre-freeze deviation: a driver smoke test (non-evidence, scratch directory) accidentally ran the funnel at the main seeds 560561-560563 on 457119f4 and its tail-mass z values were seen (-0.17 and -0.66 on 560562/560563, and the 560561 value). The funnel therefore uses the separate fresh seeds 560571-560573, chosen before the freeze and verified unused by git grep -w. The posteriordb seeds 560561-560563 are unaffected: no posteriordb cell at those seeds was run.",
+    "tuning": "Sampler::new() with only the run shape and admit_worst_case set: the commit's default metric, adaptation and tuning",
+    "statistic": "per-seed MCSE z for P(omega < -5) against 0.0478 (gate |z| <= 2); omega bulk ESS, R-hat and divergences reported"
+  },
+  "predictions": {
+    "P1": "owalnuts passes at least 42 of the 51 house cells (v6: 45/51 with chain rescue on; WP46 found the post-WP36 defaults at 95 % on unseen reference posteriors)",
+    "P2": "no passing owalnuts cell on a reference posterior has max |z| > 4",
+    "P3": "over the fixed 16 non-arma11 models, owalnuts / CmdStan geomean min bulk ESS per gradient >= 0.75 (v6: 0.848 on 15/16); unevaluable unless all 16 are complete on both arms",
+    "P4": "over the fixed 16, owalnuts / CmdStan geomean wall per gradient <= 1.0 (v6 threshold; kept because the v6 release rule contains it). Authors' expectation, stated before running: this FAILS, because since WP50 the Windows BridgeStan path serialises all native calls through the owned worker (WP50C: 3.2x-4.0x wall with identical draws), which v6 did not have",
+    "P5": "on the five new posteriors owalnuts passes at least 6 of 15 cells",
+    "P6": "owalnuts fails seeds_centered on all three seeds (0/3) with zero retained divergences on every cell (the silent funnel)",
+    "P7": "CmdStan passes at least 8 of the 15 new-five cells",
+    "P8": "funnel tail mass |z| <= 2 on every seed"
+  },
+  "release_rule": {
+    "primary_v6_verbatim": "v7 may replace v5 as the breadth headline for the commit under test if all 153 house cells (17 x 3 arms x 3 seeds) are present, P1, P2 (every passing owalnuts reference cell), P3, P4 and P8 hold. This is the v6 rule unchanged; the five new posteriors are outside it.",
+    "secondary_machine_independent": "the same without P4. Preregistered here because P4 measures the Windows owned-worker serialisation rather than the sampler; reported beside the primary, never instead of it.",
+    "not_gates": "P5, P6, P7, the all-22 geomean, ESS/s vs nutpie and the dense arm are reported, not release gates. A failed prediction is printed beside the numbers. Nothing in this study changes a default."
+  },
+  "rules": "Report all cells; failures and timeouts are results; no result-driven reruns; no tuning after seeing results. A driver crash may be relaunched and only an interrupted cell without a completed artifact may be rerun from scratch with the same seed, with the deviation recorded. Amendments only for cells not yet run, committed before them; AMENDMENT-1 (commit under test) is the one amendment planned at freeze. Walls are contended (up to seven agents on 16 hybrid cores) and are labelled."
+}
