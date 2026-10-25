@@ -822,8 +822,9 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
     assert_eq!(posterior.chains(), direct.chains());
     assert_eq!(posterior.chain_count(), 3);
 
-    // `Init::Given` is `run`; `run_from_random_starts` is `Init::uniform()`
-    // with four chains when none were requested.
+    // `Init::Given` is `run`; `run_from_random_starts` is `Init::default()`
+    // (`Init::best_of(16)` since WP52) with four chains when none were
+    // requested.
     let given = sampler()
         .metric(Metric::Identity)
         .run_with_init(&target, &Init::Given(starts.clone()))
@@ -834,7 +835,22 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
         .run_from_random_starts(&target)
         .unwrap();
     assert_eq!(random.chain_count(), DEFAULT_RANDOM_START_CHAINS);
-    assert_eq!(Init::default(), Init::uniform());
+    assert_eq!(Init::default(), Init::best_of(16));
+    let chosen = candidate_starts(
+        &target,
+        DEFAULT_RANDOM_START_CHAINS,
+        SEED,
+        2.0,
+        16,
+        100,
+        StartSelection::HighestDensity,
+    )
+    .unwrap();
+    let from_default_starts = sampler()
+        .metric(Metric::Identity)
+        .run(&target, &chosen.starts)
+        .unwrap();
+    assert_eq!(random.chains(), from_default_starts.chains());
     let again = sampler()
         .metric(Metric::Identity)
         .run_from_random_starts(&target)
@@ -971,8 +987,8 @@ fn run_with_candidate_init_matches_run_from_the_chosen_starts() {
             .unwrap();
         assert_eq!(posterior.chains(), direct.chains());
     }
-    // The default is unchanged.
-    assert_eq!(Init::default(), Init::uniform());
+    // The default is best-of-16 since WP52 (`STUDIES/init_rule_confirmation_v1`).
+    assert_eq!(Init::default(), Init::best_of(16));
 }
 
 /// The structured paths have no budgeted admission variant; with the

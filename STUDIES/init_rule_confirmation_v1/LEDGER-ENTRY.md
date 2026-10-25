@@ -1,0 +1,19 @@
+### WP52-INIT-RULE-CONFIRMATION-V1: `Init::best_of(16)` passes the frozen default-flip rule (1.254x ESS/gradient, 42 vs 42 gates, funnel |z| <= 1.11, no two-mode hide event) and is made the default on `wt/init-confirm`, but the gain is two lottery cells, the other 14 models are 0.862x, and best-of-16 produced one hidden-mode `hmm_drive_0` cell
+- Ordered time: 2026-10-25 on `wt/init-confirm`. The preregistration, protocol and harness (WP43 harness with arms renamed and `chain_warnings` recorded, plus a new two-mode target) were frozen at `f8f1b0b4`, before the first cell. The cells ran once, 02:38-04:17 local, in protocol order: two-mode, start-only tally, funnel, then 102 posteriordb cells. There were no errors and no reruns.
+- Protocol: arms `Init::uniform()` and `Init::best_of(16)`, sampler defaults, 4 x 1,000/1,000, fresh seeds 952201-952203, house gates, and the WP43 geomean statistic. The funnel was 4 x 2,000/20,000. The two-mode target was 0.7 N(+4e1, I) + 0.3 N(-4e1, I), d = 10, symmetric about the start box. A hide event is a seed where uniform has R-hat > 1.01 with a minor-mode chain while best_of_16 has R-hat <= 1.01 with no minor-mode chain. Rule: F1 geomean >= 1.10, F2 gates >= uniform - 1, F3 best_of_16 funnel |z| <= 2 every seed, F4 no hide event.
+- Outcome:
+  - F1 1.254 (lottery 3: 7.20; other 14: 0.862).
+  - F2 42 vs 42.
+  - F3 max |z| 1.11 (uniform 1.13).
+  - F4: no hide event. Both arms had at least one minor-mode chain and R-hat 1.27-1.71 on all three seeds.
+  - Start-only tally over 1,000 seeds: minor-basin starts 47.5 % uniform vs 32.6 % best_of_16; seeds with every chain in one basin 12.8 % vs 22.7 %. Warmup moved chains across the 8-SD gap in 4 of 6 cells.
+- Decisive cells:
+  - uniform lost `arma11` 952203: start logp -2.4e115, frozen chain, 1,000 divergences.
+  - uniform lost `lotka_volterra` 952203: start -31,307, step collapse, 1,290 SD off.
+  - best_of_16 lost `earnings` 952201: warmup step collapse on one chain, R-hat 1.38.
+  - best_of_16 lost `hmm_drive_0` 952202, a hidden-mode cell. Chain 3 spent its first 46 retained draws in the second HMM mode, which put the cell mean of `lambda[2]` 3.14 SD off at rank R-hat 1.0087. `ChainDisagreement` was silent; `chain_warnings` (`WarmupLogDensity`) named the chain.
+  - `chain_warnings` flagged every lost cell in both arms.
+- Predictions: P1-P4 held. P5 (best_of_16 hides the mode on >= 2/3 seeds) failed, with 0/3; the pre-run design calculation gave it about 0.11.
+- Library: `Init::default()` = `Init::best_of(16)` (new `DEFAULT_INIT_CANDIDATES`), and `run_from_random_starts` uses it. The Python `DEFAULTS` reports `init_candidates`; Python `init` handling is unchanged. A pinned default-start fingerprint was added to `tests/kernel_fingerprint.rs`. The kernel fingerprints and `ALGORITHM_REVISION` are unchanged (explicit-start kernel, bit-identical, as in the earlier facade-default flips). README, docs and CHANGELOG are updated, and `cargo test` is green.
+- Artifacts: `STUDIES/init_rule_confirmation_v1/{PREREGISTRATION.md,protocol.json,README.md,LEDGER-ENTRY.md,Cargo.toml,Cargo.lock,src/,run_confirm.py,checksums.py,CHECKSUMS.sha256,artifacts/}`. Raw draws are ignored. The models were copied from the `dense_metric_posteriordb_v1` sibling build. Walls are contended and not reported.
+- Conclusion: the rule passes and the flip is implemented on the branch, not merged. Pooled over WP43 and WP52, gates tie (113 vs 114 of 136). Best-of-16 removes the gross start lottery (4/4 uniform freezes fixed) at a measurable cost on healthy models. It traded uniform's visible `hmm_drive_0` failure for one hidden-mode cell, which the WP52 rule did not gate on but WP43's D2 would have. The merge decision is the coordinator's.
