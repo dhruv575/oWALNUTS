@@ -1,0 +1,16 @@
+[package]
+name = "bridgestan-windows-root-cause-v3"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP50C phase B child: 9edcbac path, explicit preload, configurable shape, module logging"
+
+# Built only inside an exported tree of commit 9edcbac, at
+# STUDIES/bridgestan_windows_root_cause_v3/ (see build_child.py), so these
+# relative paths resolve to the 9edcbac sampler and BridgeStan integration.
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[workspace]

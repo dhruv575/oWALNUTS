@@ -1,0 +1,123 @@
+{
+  "schema": "bridgestan-windows-root-cause-v5",
+  "ledger_id": "WP50E",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "purpose": "Deterministic replay of the single WP50D static_unserialised fault (seed 50801734) under the owned worker and the unserialised dispatch, to classify it; plus a chain-2 trace for transitions 0..9 and a check of how the error reached the child.",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "forbidden_seeds": [
+    90101,
+    90102,
+    90103
+  ],
+  "seed": 50801734,
+  "seed_note": "deliberate reuse: the replay seed is the WP50D faulting child's seed",
+  "library_code": "unchanged; child/ is built against this worktree HEAD with owalnuts features=[research] (needed for Sampler::run_with_comparison_observers and NonfinitePositionPolicy)",
+  "shape": {
+    "model": "sblrc",
+    "requested_replicas": 4,
+    "chains": 4,
+    "threads": 4,
+    "warmup": 1000,
+    "draws": 1000,
+    "metric": "diagonal",
+    "adaptation": "default",
+    "tuning": "default",
+    "limits": "admit_worst_case",
+    "init": "uniform",
+    "construct_seed": 50801734,
+    "sampler_seed": 50801734
+  },
+  "assets": {
+    "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+    "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+    "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+    "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+    "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+    "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+    "wp50d_exe": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v4\\build\\arms\\static_unserialised\\bridgestan-windows-root-cause-v4.exe",
+    "wp50d_exe_sha256": "d3d7fe3496d27868244cde006c54cb8508b2c64b48ce602cc23b857267ded3f3"
+  },
+  "launcher": {
+    "executable": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "invocation": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& <arm exe> <args>; exit $LASTEXITCODE\"",
+    "environment": "registry Machine;User PATH, Git Bash variables removed (as WP50D)"
+  },
+  "arms": {
+    "A_owned_abort": {
+      "exe": "v5",
+      "dispatch": "owned",
+      "policy": "abort",
+      "reps": 3,
+      "gating": true
+    },
+    "B_unserialised_abort": {
+      "exe": "v5",
+      "dispatch": "unserialised",
+      "policy": "abort",
+      "reps": 3,
+      "gating": true
+    },
+    "C_wp50d_original": {
+      "exe": "wp50d",
+      "reps": 3,
+      "gating": false,
+      "role": "fidelity check: the byte-identical WP50D child exe, arm static_unserialised, seed 50801734, no observers"
+    },
+    "D_owned_reject": {
+      "exe": "v5",
+      "dispatch": "owned",
+      "policy": "reject",
+      "reps": 1,
+      "gating": false,
+      "role": "descriptive: does research RejectLeaf turn the abort into a completed run"
+    },
+    "E_unserialised_reject": {
+      "exe": "v5",
+      "dispatch": "unserialised",
+      "policy": "reject",
+      "reps": 1,
+      "gating": false,
+      "role": "descriptive; draws compared with D"
+    }
+  },
+  "order": [
+    "A_owned_abort#1",
+    "B_unserialised_abort#1",
+    "C_wp50d_original#1",
+    "B_unserialised_abort#2",
+    "A_owned_abort#2",
+    "C_wp50d_original#2",
+    "A_owned_abort#3",
+    "B_unserialised_abort#3",
+    "C_wp50d_original#3",
+    "D_owned_reject#1",
+    "E_unserialised_reject#1"
+  ],
+  "ordering_note": "strictly sequential, one process at a time, 4 threads; each process in its own run; exe-only launch dirs build/arms/<v5_owned|v5_unserialised|wp50d>/",
+  "timeout_seconds_per_child": 300,
+  "event_settle_seconds": 30,
+  "tracing": {
+    "proposal_observer": "every proposal observation of every chain is hashed (FNV-1a over transition, target_call, phase/direction/level/leaf/micro_steps/outcome, step, coordinates, gradient, mid-step momentum, kinetic, potential, H) into a per-chain stream hash and count; chain 2 observations for transitions 0..9 are stored in full (values and IEEE bits)",
+    "comparison_observer": "chain 2 completed transitions 0..9: selected theta (with bits), selected rho, log density, gradient, diagnostics, work, leaf outcomes, adaptation (step before/after)",
+    "target_wrapper": "pass-through target counting calls, nonfinite inputs, recoverable/fatal TargetErrors and nonfinite values returned",
+    "passivity": "observers and wrapper do not alter the sampler state; arm C (original WP50D exe, no observers, no research feature) checks that the replayed event is the WP50D event"
+  },
+  "classification": {
+    "reproduced_v5": "status == sampler_error AND error.kind == Numerical AND error.display contains 'kernel attempted a nonfinite target position' AND error.chain == 2 AND error.transition == 9",
+    "reproduced_wp50d_exe": "launcher rc == 1 AND stderr contains 'kernel attempted a nonfinite target position (chain 2, transition 9)'",
+    "stream_identity": "the chain-2 stream (observation count, stream hash, last target call, first KernelNonfinite observation) and the starts are identical across all six gating replays",
+    "crash": "any nonzero NTSTATUS-like rc, timeout, missing output, or Application Error Event 1000 for an arm exe within a child's launch window; reported, and any crash in a gating arm makes the verdict NOT_ESTABLISHED"
+  },
+  "verdict_rule": {
+    "DETERMINISTIC_DISPATCH_INDEPENDENT": "all 6 gating replays (A x3, B x3) reproduced_v5 AND stream_identity holds AND no crash: the fault is a deterministic sampler/target event independent of dispatch, and the WP50D static arm's native-fault count is 0/1000 by construction",
+    "NOT_ESTABLISHED_UNSERIALISED_ONLY": "B reproduces in all 3 and A in none",
+    "NOT_ESTABLISHED_NOT_REPRODUCED": "no gating replay reproduces",
+    "NOT_ESTABLISHED_NONDETERMINISTIC": "any other pattern (mixed reproduction, stream differences across replays, or a crash)",
+    "fidelity_note": "if arm C does not reproduce 3/3 the verdict is still computed as above, and the mismatch is reported as an anomaly that limits the transfer to WP50D"
+  },
+  "integration_question": {
+    "not_an_integration_bug": "error.kind == Numerical AND has_target_source == false AND target_layer.nonfinite_inputs == 0 in every reproducing replay: the kernel aborted under the shipped NonfinitePositionPolicy::Abort before calling the target, so no TargetError existed for the Replicated target to surface",
+    "possible_integration_bug": "error.kind == Target, a target_source present, or nonfinite inputs reached the target layer: reported as a candidate integration bug"
+  }
+}

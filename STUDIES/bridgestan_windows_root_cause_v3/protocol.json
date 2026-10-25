@@ -1,0 +1,246 @@
+{
+  "schema": "bridgestan-windows-root-cause-v3",
+  "ledger_id": "WP50C",
+  "status": "PHASE_B_DONE_PHASE_C_FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-24",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "forbidden_seeds": [
+    90101,
+    90102,
+    90103
+  ],
+  "phase_a": {
+    "tool": "integrations/bridgestan/tools/build_static_runtime.py",
+    "command": "python integrations/bridgestan/tools/build_static_runtime.py --out STUDIES/bridgestan_windows_root_cause_v3/build/static --tbb <V1>/sblrc__blr.stan <V1>/arK__arK.stan",
+    "sources": {
+      "sblrc": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.stan",
+      "arK": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK.stan",
+      "note": "posteriordb 28f8d3d programs copied by WP50; data copied alongside"
+    },
+    "model_ldlibs_os": "-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic",
+    "tbb_ldflags": "-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic -Wl,--exclude-libs,ALL",
+    "acceptance": {
+      "A1_imports": "neither model DLL (sblrc, arK) nor the private tbb.dll imports libwinpthread-1.dll, libgcc_s_seh-1.dll or libstdc++-6.dll (objdump -p); the tool hard-fails otherwise",
+      "A2_exports": "each static model DLL's export-name list equals its dynamic WP50 counterpart; the private tbb.dll exports every stock tbb.dll export (extras reported; target zero)",
+      "A3_parity": "log density and gradient at 64 deterministic positions (numpy default_rng(50700000), N(0,1)) are bit-identical between static and dynamic builds of each model, each evaluated in its own process with its own tbb.dll",
+      "A4_load": "in the static-build parity process no libwinpthread-1/libgcc_s_seh-1/libstdc++-6 module is mapped and tbb.dll is the private one",
+      "fallback": "if A1 cannot be met, fall back to pinning an explicit DLL search path (SetDefaultDllDirectories/AddDllDirectory) to one runtime set, say so, and re-preregister"
+    },
+    "parity_pairs": {
+      "sblrc": {
+        "dynamic_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+        "static_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json"
+      },
+      "arK": {
+        "dynamic_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK_model.so",
+        "static_model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\arK__arK_model.so",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK.data.json"
+      }
+    }
+  },
+  "phase_b": {
+    "code_path_commit": "9edcbac",
+    "code_path": "resident model/preload DLLs, scoped joined sampler pools, ReplicatedStanTarget with 4 truly concurrent replica modules on Windows (no owned worker; unserialised multi-worker)",
+    "child_shape": {
+      "shape": "sblrc",
+      "requested_replicas": 4,
+      "chains": 4,
+      "threads": 4
+    },
+    "launcher": {
+      "name": "powershell",
+      "executable": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "invocation": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& '<exe>' <args>; exit $LASTEXITCODE\"",
+      "environment": "registry Machine;User PATH (WinLibs bin resolves the mingw runtime), Git Bash variables removed"
+    },
+    "launch_dir": "build/child/arms/plain holds only the child exe; no runtime DLL beside it",
+    "arms": {
+      "static_long": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+        "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+        "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+        "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+        "expect_runtime": "static",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+        "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+        "warmup": 1000,
+        "retained": 1000,
+        "first_seed": 50700001,
+        "per_block": 5,
+        "role": "gate: static-runtime DLLs in the reproducing configuration"
+      },
+      "control_long": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+        "model_sha256": "29625697cfdef3e328601682ccd44cc9350791674dfc43f5ec5ddc503c90fccc",
+        "preload": "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll",
+        "preload_sha256": "6399cc34faf3a44f7b0215e53268640e3ea831195d94299e163ab7ea9a0ff708",
+        "expect_runtime": "dynamic",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+        "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+        "warmup": 1000,
+        "retained": 1000,
+        "first_seed": 50700401,
+        "per_block": 1,
+        "role": "concurrent positive control: old dynamic DLLs, same cell, same shape"
+      },
+      "static_short": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+        "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+        "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+        "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+        "expect_runtime": "static",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+        "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+        "warmup": 4,
+        "retained": 4,
+        "first_seed": 50700501,
+        "per_block": 1,
+        "role": "coordinator arm 'static without owned-worker serialisation' at the WP50B shape (see PREREGISTRATION B.3)"
+      },
+      "control_short": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+        "model_sha256": "29625697cfdef3e328601682ccd44cc9350791674dfc43f5ec5ddc503c90fccc",
+        "preload": "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll",
+        "preload_sha256": "6399cc34faf3a44f7b0215e53268640e3ea831195d94299e163ab7ea9a0ff708",
+        "expect_runtime": "dynamic",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+        "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+        "warmup": 4,
+        "retained": 4,
+        "first_seed": 50700601,
+        "per_block": 1,
+        "role": "supplementary dynamic control at the WP50B shape (WP50B powershell/winlibs-equivalent cell)"
+      }
+    },
+    "runtime_expectations": {
+      "static": {
+        "libwinpthread-1.dll": null,
+        "libgcc_s_seh-1.dll": null,
+        "libstdc++-6.dll": null,
+        "tbb.dll": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll"
+      },
+      "dynamic": {
+        "libwinpthread-1.dll": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+        "libgcc_s_seh-1.dll": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+        "libstdc++-6.dll": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+        "tbb.dll": "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll"
+      }
+    },
+    "runtime_expectation_semantics": "null = module not mapped in the child after load; a path = mapped module's full path starts with it (case-insensitive); checked per child from the load/after heartbeat",
+    "blocks": 60,
+    "ordering": "60 blocks; block b (0-based) = [static_long x5 (seeds first+5b..5b+4), control_long, static_short, control_short] rotated left by b mod 8; strictly sequential",
+    "total_children": 480,
+    "timeout_seconds_per_child": 300,
+    "event_settle_seconds": 20,
+    "expected_heartbeats": [
+      "process/start",
+      "load/before",
+      "load/after",
+      "initialization/before",
+      "initialization/after",
+      "sampling/before",
+      "sampling/after",
+      "result_write/before",
+      "result_write/after",
+      "drop/before",
+      "drop/after",
+      "process/complete"
+    ],
+    "classification": {
+      "fault": "launcher timeout, nonzero launcher return code, missing/non-ok raw output, heartbeat sequence != expected, or a correlated Application Error Event 1000 (child PID decimal + exe path) - so hidden exit-0 crash events count",
+      "heap_corruption": "launcher return code 0xC0000374 or correlated Event 1000 exception code c0000374",
+      "manipulation_failure": "loaded runtime modules at load/after do not match runtime_expectations for the arm"
+    },
+    "power": {
+      "control_rate_assumed": 0.05,
+      "control_rate_source": "WP50B powershell/winlibs 3/60 (4/4 shape)",
+      "P_control_reproduces_n60": {
+        "0.022": 0.737,
+        "0.05": 0.954,
+        "0.089": 0.996
+      },
+      "static_zero_of_300_upper95": 0.00994,
+      "secondary_fisher_one_sided_control_k_of_60_vs_static_0_of_300": {
+        "1": 0.167,
+        "2": 0.0274,
+        "3": 0.0044,
+        "5": 0.0001
+      }
+    },
+    "decision_rule": {
+      "fix_supported": "static_long 0/300 faults (event-inclusive) AND control_long >=1 fault",
+      "inconclusive_control_did_not_reproduce": "static_long 0/300 and control_long 0/60",
+      "fix_not_supported": "static_long >=1 fault",
+      "short_arms": "reported descriptively (faults, upper95); static_short 0/60 with control_short >=1 is supporting, not gating",
+      "manipulation": "any manipulation failure is reported; a child whose modules contradict its arm is still counted in its assigned arm (intention-to-treat) and listed",
+      "phase_c": "runs only if verdict == fix_supported"
+    }
+  },
+  "phase_c": {
+    "condition": "run only if phase_b gate verdict == fix_supported; satisfied under the disclosed time-window event correlation (as-preregistered PID-only correlation gave fix_not_supported via a reused PID)",
+    "code": "payoff/ crate built against this worktree's HEAD sampler and BridgeStan integration (run_phase_c.py build)",
+    "arms": {
+      "serialised": "HEAD ReplicatedStanTarget::load(model, [private tbb], data, seed, 4): on Windows one owned worker + process-global native-call lock (current default)",
+      "unserialised": "study-local target: 4 independently loaded copies of the same static model DLL, each with its own mutex, free-replica dispatch (9edcbac / off-Windows dispatch); libraries resident"
+    },
+    "arm_order": [
+      "serialised",
+      "unserialised"
+    ],
+    "ordering": "models in listed order; for seed index i the arms run in arm_order, reversed when i is odd; strictly sequential",
+    "sampler": {
+      "chains": 4,
+      "threads": 4,
+      "requested_replicas": 4,
+      "warmup": 1000,
+      "draws": 1000,
+      "metric": "diagonal",
+      "adaptation": "default",
+      "tuning": "default",
+      "limits": "admit_worst_case",
+      "init": "uniform"
+    },
+    "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+    "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+    "models": {
+      "sblrc": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+        "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+        "data_sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e",
+        "seeds": [
+          50700701,
+          50700702,
+          50700703
+        ]
+      },
+      "arK": {
+        "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\arK__arK_model.so",
+        "model_sha256": "86af0ec872a11ff3d5df9e96c3621df524fb04518a808c4933a3837945b46be7",
+        "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\arK__arK.data.json",
+        "data_sha256": "8c561dcceb3e74654097f25f07277cd5448fc175f4a2589962bb817a54e4e742",
+        "seeds": [
+          50700711,
+          50700712,
+          50700713
+        ]
+      }
+    },
+    "total_children": 12,
+    "timeout_seconds_per_child": 900,
+    "event_settle_seconds": 20,
+    "assertions": "per (model, seed): start-gradient hash (lp + gradient bits at the 4 starts), draws fingerprint (FNV-1a over all retained draw bits), target_calls and draws_observed are identical across arms; any mismatch is reported as a failed assertion",
+    "measures": {
+      "payoff": "per (model, seed): serialised sampling wall / unserialised sampling wall (contended, labelled); per-model median of 3",
+      "cpu": "per-process kernel+user CPU seconds over sampling and whole process (GetProcessTimes); cpu ratio reported",
+      "fault": "nonzero rc, timeout, missing/non-ok output, or an Event 1000 for the payoff exe"
+    },
+    "recommendation_rule": {
+      "min_median_wall_ratio_each_model": 1.5,
+      "change_default": "recommend changing the Windows default from the owned worker to unserialised multi-replica dispatch ONLY IF phase B is fix_supported AND static_short has 0 faults AND Phase C has 0 faults AND every assertion holds AND the median wall ratio is >= 1.5 on BOTH models; and then only for static-runtime DLLs (dynamic-runtime DLLs keep the owned worker). Otherwise recommend keeping the owned worker.",
+      "note": "the rule is frozen before Phase C evidence; wall times are contended by other agents' processes"
+    },
+    "seed_check": "git grep -w on worktree and main checkout: 0 hits for each seed"
+  }
+}

@@ -40,6 +40,49 @@ Measurements: `STUDIES/posteriordb_bench_v1/artifacts/wall-gap/README.md`.
 .\.venv-bs\Scripts\python -c "import bridgestan.compile as c; c.compile_model('bridgestan/models/eight_schools.stan')"
 ```
 
+### Windows GNU: static mingw runtime (recommended)
+
+A stock Windows build resolves the mingw runtime DLLs through the DLL search
+order, and therefore through whatever PATH the launching shell has:
+
+- the model DLL imports `libwinpthread-1.dll`;
+- the stock `tbb.dll` imports `libgcc_s_seh-1.dll` and `libstdc++-6.dll`.
+
+A PowerShell session binds the WinLibs copies; a Git Bash session binds Git's.
+The post-sampling `STATUS_HEAP_CORRUPTION` reproduced only with one of those
+sets (`STUDIES/bridgestan_windows_root_cause_v2`).
+
+`tools/build_static_runtime.py` removes that dependence. It works on copies
+and never modifies the shared `~/.bridgestan` tree.
+
+```powershell
+python tools\build_static_runtime.py --out <dir> --tbb path\to\model.stan [more.stan ...]
+```
+
+- **Model DLLs.** Compiled with the make override
+  `LDLIBS_OS=-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic`.
+  `LDLIBS_OS` is Stan Math's per-OS link-library slot. Plain `-static` does
+  not work, because it also forces a static `-ltbb`.
+- **`tbb.dll`.** A private `<dir>/tbb/tbb.dll` is built from a copy of Stan
+  Math's `tbb_2020.3`, using Stan Math's own `Makefile.tbb` invocation with
+  `LDFLAGS=-static-libgcc -static-libstdc++ <static winpthread> -Wl,--exclude-libs,ALL`.
+  Its export table equals the stock one. Pass it as the preload, e.g.
+  `StanTarget::load(so, &[private_tbb], ...)`, instead of
+  `default_preload()`. The model's `tbb.dll` import then binds to it.
+- **Verification.** The tool hard-fails if any product still imports one of
+  the three runtime DLLs, and writes `static-runtime-manifest.json`.
+- **Numerics are unchanged.** Static and stock builds give bit-identical log
+  densities and gradients (`STUDIES/bridgestan_windows_root_cause_v3`,
+  Phase A).
+- **Stress gate.** This was measured on the original concurrent 4-replica
+  code path, under PowerShell with the WinLibs PATH (Phase B):
+  - static DLLs: 0/360 faults;
+  - stock dynamic DLLs: 2/120 `STATUS_HEAP_CORRUPTION`.
+
+  The owned worker is still the Windows default. Phase C measured what
+  removing it would be worth: 3.2x (sblrc) and 4.0x (arK) contended sampling
+  wall, with bit-identical draws.
+
 A library built without `STAN_THREADS` has one global autodiff stack per
 *loaded module*, so a single `StanTarget` serialises its evaluations through
 a mutex (shared by every `StanTarget` loaded from the same file).
@@ -52,13 +95,61 @@ Off Windows,
 library only for replicas 1 through n-1 and dispatches calls to free replicas.
 Replica 0 (and every single-replica load) retains the original path so
 `$ORIGIN`/`@loader_path` dependencies resolve exactly as they did for
-`StanTarget`. On Windows
+`StanTarget`. On Windows, by default,
 it records the requested count but deliberately uses one effective owned
-worker; `requested_replicas()` and `effective_replicas()` expose both values
+worker (see the opt-in below); `requested_replicas()` and `effective_replicas()` expose both values
 (`replicas()` remains an alias for the effective count).
-More than one effective worker per Windows target remains out of scope.
 Multiple target instances may each own a worker, but the process-global
 native-call policy serializes those owners.
+
+#### Opt-in: concurrent replicas for static-runtime DLLs (Windows)
+
+```rust
+let target = ReplicatedStanTarget::load_with_options(
+    &so,
+    &[private_tbb],                       // from tools/build_static_runtime.py
+    Some(data),
+    seed,
+    threads,
+    &ReplicatedOptions::concurrent_if_static_runtime(),
+)?;
+// Passed:  effective_replicas() == threads, execution() == ReplicatedConcurrent
+// Failed:  the default owned worker; static_runtime_report().problems says why
+```
+
+With `WindowsDispatch::ConcurrentIfStaticRuntime`, the load first runs
+`check_static_runtime(model, preload)`. That check reads the PE import tables
+in Rust, with no external tool, and passes only if two things hold:
+
+- neither the model DLL nor any preload imports a mingw/GCC runtime DLL
+  (`libwinpthread`, `libgcc_s`, `libstdc++`, `libgomp`, …);
+- every non-system DLL they import is itself one of the preloads, so nothing
+  else can bind from PATH.
+
+**When the check passes** (and more than one replica is requested), the
+target loads that many content-addressed replica copies. The sampler threads
+call them directly, each under its own module lock, with neither the owned
+worker nor the process-global native-call lock.
+
+**When the check fails**, the target uses the default owned worker. There is
+no error, and `static_runtime_report()` records why.
+
+**Defaults are unchanged.** `ReplicatedStanTarget::load` and
+`ReplicatedOptions::default()` keep the owned worker. Off Windows the option
+has no effect.
+
+Evidence:
+
+- `STUDIES/bridgestan_windows_root_cause_v3`: Phase C payoff 3.2–4.0x with
+  bit-identical draws.
+- `STUDIES/bridgestan_windows_root_cause_v4`: the confirmatory WP50D gate,
+  **not supported**.
+  - Static DLLs on this dispatch: 1/1000. The fault was a sampler-reported
+    nonfinite-position error, not a crash.
+  - Dynamic DLLs: 4/300 crashes.
+  - The owned worker: 0/300.
+
+  Keep this option opt-in until that fault is classified.
 
 ## Native-library lifetime
 

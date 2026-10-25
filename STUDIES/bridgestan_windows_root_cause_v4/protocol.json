@@ -1,0 +1,142 @@
+{
+  "schema": "bridgestan-windows-root-cause-v4",
+  "ledger_id": "WP50D",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "purpose": "Confirmatory stress gate with no post-hoc analysis step: static-runtime BridgeStan DLLs under unserialised multi-replica dispatch (the configuration an opt-in would ship) vs dynamic-DLL positive controls, in the WP50B/WP50C reproducing configuration.",
+  "toolchain": "1.88.0-x86_64-pc-windows-gnu",
+  "forbidden_seeds": [
+    90101,
+    90102,
+    90103
+  ],
+  "code_path": "this worktree HEAD sampler and BridgeStan integration (child/ built by build_child.py). static_unserialised and dynamic_unserialised use the study-local Unserialised target (4 independently loaded model copies, per-replica mutex, free-replica dispatch, resident libraries, no owned worker, no process-global lock; identical to WP50C Phase C). dynamic_owned uses HEAD ReplicatedStanTarget (owned worker).",
+  "child_shape": {
+    "model": "sblrc",
+    "requested_replicas": 4,
+    "chains": 4,
+    "threads": 4,
+    "warmup": 1000,
+    "draws": 1000,
+    "metric": "diagonal",
+    "adaptation": "default",
+    "tuning": "default",
+    "limits": "admit_worst_case",
+    "init": "uniform"
+  },
+  "launcher": {
+    "name": "powershell",
+    "executable": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "invocation": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& <arm exe> <args>; exit $LASTEXITCODE\"",
+    "environment": "registry Machine;User PATH (WinLibs bin resolves the mingw runtime for dynamic DLLs), Git Bash variables removed"
+  },
+  "launch_dirs": "build/arms/<arm>/ each holds only a byte-identical copy of the child exe; the Event 1000 application path therefore identifies the arm",
+  "data": {
+    "path": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+    "sha256": "d78239c2ff72fb578461d3ed4494f8c5d46e9089c61b4275d7c2f530452e3e9e"
+  },
+  "arms": {
+    "static_unserialised": {
+      "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+      "model_sha256": "893c73bb0b139b7336fd48bbd8e4bd71c120d7f01089de691bbb1e51481e8f4e",
+      "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+      "preload_sha256": "fcb2f77f6233c0d17e41991fb561b414bdf15762e0e86b91932e469bb25e4463",
+      "expect_runtime": "static",
+      "children": 1000,
+      "first_seed": 50801001,
+      "last_seed": 50802000,
+      "role": "gate arm: static-runtime DLLs, unserialised multi-replica (what an opt-in would ship)"
+    },
+    "dynamic_unserialised": {
+      "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+      "model_sha256": "29625697cfdef3e328601682ccd44cc9350791674dfc43f5ec5ddc503c90fccc",
+      "preload": "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll",
+      "preload_sha256": "6399cc34faf3a44f7b0215e53268640e3ea831195d94299e163ab7ea9a0ff708",
+      "expect_runtime": "dynamic",
+      "children": 300,
+      "first_seed": 50803001,
+      "last_seed": 50803300,
+      "role": "PRIMARY positive control: old dynamic DLLs on the same unserialised target (WP50C Phase B 2/120)"
+    },
+    "dynamic_owned": {
+      "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr_model.so",
+      "model_sha256": "29625697cfdef3e328601682ccd44cc9350791674dfc43f5ec5ddc503c90fccc",
+      "preload": "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll",
+      "preload_sha256": "6399cc34faf3a44f7b0215e53268640e3ea831195d94299e163ab7ea9a0ff708",
+      "expect_runtime": "dynamic",
+      "children": 300,
+      "first_seed": 50804001,
+      "last_seed": 50804300,
+      "role": "coordinator literal control: old dynamic DLLs with the HEAD owned worker (bridgestan_owned_worker_v1: 0/540), so expected NOT to reproduce; reported under its own verdict reading"
+    }
+  },
+  "block_size": 10,
+  "ordering": "single-arm blocks of 10 (100 static, 30 + 30 control). The j-th of an arm's n blocks gets key (j+0.5)/n; blocks run by ascending key, ties in arm order (static, dynamic_unserialised, dynamic_owned); seeds ascending within an arm; strictly sequential, one child at a time.",
+  "total_children": 1600,
+  "timeout_seconds_per_child": 300,
+  "event_settle_seconds": 30,
+  "expected_heartbeats": [
+    "process/start",
+    "load/before",
+    "load/after",
+    "initialization/before",
+    "initialization/after",
+    "sampling/before",
+    "sampling/after",
+    "drop/before",
+    "drop/after",
+    "result_write/before",
+    "result_write/after",
+    "process/complete"
+  ],
+  "runtime_expectations": {
+    "static": {
+      "libwinpthread-1.dll": null,
+      "libgcc_s_seh-1.dll": null,
+      "libstdc++-6.dll": null,
+      "tbb.dll": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll"
+    },
+    "dynamic": {
+      "libwinpthread-1.dll": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+      "libgcc_s_seh-1.dll": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+      "libstdc++-6.dll": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin",
+      "tbb.dll": "C:\\Users\\dhruv\\.bridgestan\\bridgestan-2.9.0\\stan\\lib\\stan_math\\lib\\tbb\\tbb.dll"
+    }
+  },
+  "module_recording": "every child records the full path and size of libwinpthread-1/libgcc_s_seh-1/libstdc++-6/tbb mapped after load (load/after heartbeat and raw output) and after target drop (drop/after); null = not mapped. A static child is a manipulation failure if either snapshot contradicts the static expectation; a dynamic child if load/after contradicts the dynamic expectation.",
+  "event_correlation": {
+    "rule": "An Application Error Event 1000 (captured once after the run over the whole run window) is attributed to a child iff ALL hold: (a) properties[10] application path equals that child arm exe path (case-insensitive); (b) properties[8] PID (decimal; 0x-prefixed parsed as hex) equals the child PID from its heartbeats; (c) the event time is within [launcher start - before_seconds, launcher end + after_seconds]. An event is attributed to at most one child. Events on any arm exe path that match no child, or more than one, are unattributed and reported.",
+    "before_seconds": 1,
+    "after_seconds": 5,
+    "unattributed_static": "an unattributed event whose application path is the static arm exe counts as a static fault (conservative); unattributed control-path events are reported and never count toward control reproduction",
+    "frozen_in_code": "run_gate.py correlate(), unit-tested in test_run_gate.py before any evidence"
+  },
+  "classification": {
+    "fault": "launcher timeout, nonzero launcher return code, missing/non-ok raw output, heartbeat sequence != expected_heartbeats, or an attributed Event 1000 (hidden exit-0 crash events included)",
+    "heap_corruption": "launcher return code 0xC0000374 or attributed Event 1000 exception code c0000374"
+  },
+  "decision_rule": {
+    "primary_control": "dynamic_unserialised",
+    "supported": "static_unserialised 0/1000 faults (event-inclusive) AND primary control >= 1 fault AND 0 static manipulation failures AND all 1600 records present",
+    "inconclusive_control_did_not_reproduce": "static 0/1000 and primary control 0/300",
+    "not_supported": "static >= 1 fault",
+    "literal_reading": "the same rule with dynamic_owned as the control is also computed and reported (verdict_control_dynamic_owned); it is expected to be inconclusive because the owned worker suppressed the fault in 540/540 children in bridgestan_owned_worker_v1",
+    "reported_either_way": "exact one-sided (control > static) and two-sided Fisher p for each control vs static; one-sided 95% Clopper-Pearson upper bound on the static fault rate (= 1 - 0.05^(1/1000) = 0.00299 at 0/1000)"
+  },
+  "power": {
+    "control_rate_reference": "WP50C Phase B dynamic unserialised 2/120 = 0.0167",
+    "P_primary_control_reproduces_n300": {
+      "0.005": 0.7777,
+      "0.01": 0.951,
+      "0.0167": 0.9936
+    },
+    "fisher_one_sided_control_k_of_300_vs_static_0_of_1000": {
+      "1": 0.23077,
+      "2": 0.05312,
+      "3": 0.01219,
+      "5": 0.00064
+    },
+    "static_upper95_at_0_of_1000": 0.00299
+  },
+  "no_reruns": "single launch; failures are results; an interrupted child is recorded as interrupted_not_relaunched"
+}

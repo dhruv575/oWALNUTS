@@ -59,9 +59,14 @@
 //!   unload, and their replica copies are deleted, on target drop.
 #![deny(unsafe_op_in_unsafe_fn)]
 
+mod static_runtime;
+pub use static_runtime::{
+    ImportedDlls, ReplicatedOptions, StaticRuntimeReport, WindowsDispatch, check_static_runtime,
+    evaluate_imports, is_mingw_runtime, is_system_dll, pe_imported_dlls,
+};
+
 use libloading::{Library, Symbol};
 use owalnuts::walnutpie::{Target, TargetError, TargetErrorKind};
-#[cfg(not(windows))]
 use std::{cell::Cell, sync::TryLockError};
 #[cfg(windows)]
 use std::{
@@ -180,6 +185,18 @@ fn process_native_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(Default::default)
 }
 
+/// The process-global guard, taken only for targets that use it. Direct
+/// static-runtime replicas ([`WindowsDispatch::ConcurrentIfStaticRuntime`])
+/// carry their own copy of the mingw runtime and skip it.
+#[cfg(windows)]
+fn process_guard(enabled: bool) -> Option<std::sync::MutexGuard<'static, ()>> {
+    enabled.then(|| {
+        process_native_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    })
+}
+
 /// Effective concurrency exposed by a target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Threading {
@@ -285,7 +302,7 @@ pub struct StanTarget {
     #[cfg(not(windows))]
     native: NativeTarget,
     #[cfg(windows)]
-    worker: OwnedClient,
+    worker: WindowsBackend,
     dimension: usize,
     info: String,
     unc_names: Option<Vec<String>>,
@@ -306,6 +323,11 @@ struct NativeTarget {
     /// Shared by every target loaded from the same module. It serializes model
     /// setup/teardown and non-STAN_THREADS evaluations.
     serial: Arc<Mutex<()>>,
+    /// Windows: whether native operations also take the process-global lock.
+    /// True for every owned-worker target; false only for verified
+    /// static-runtime direct replicas.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    process_lock: bool,
 }
 
 /// Field order is the lifetime invariant: Rust drops `model` before
@@ -352,14 +374,22 @@ impl NativeTarget {
         data: Option<&str>,
         seed: u32,
     ) -> Result<Self, LoadError> {
+        Self::load_with_process_lock(model_so, preload, data, seed, true)
+    }
+
+    fn load_with_process_lock(
+        model_so: &Path,
+        preload: &[PathBuf],
+        data: Option<&str>,
+        seed: u32,
+        process_lock: bool,
+    ) -> Result<Self, LoadError> {
         let serial = module_lock(model_so);
         let setup_guard = serial
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         #[cfg(windows)]
-        let _process_guard = process_native_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _process_guard = process_guard(process_lock);
         let mut preloaded = Vec::with_capacity(preload.len());
         for dep in preload {
             preloaded.push(load_library(dep)?);
@@ -513,6 +543,7 @@ impl NativeTarget {
             constrained_names,
             compiled_threading,
             serial,
+            process_lock,
         })
     }
 
@@ -522,9 +553,15 @@ impl NativeTarget {
         gradient: &mut [f64],
     ) -> Result<f64, TargetError> {
         #[cfg(windows)]
-        let _process_guard = process_native_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _process_guard = process_guard(self.process_lock);
+        // Windows buffer contract: the owned worker evaluates into a fresh
+        // zeroed buffer and copies all of it back, so on a Stan exception
+        // (which leaves the buffer unwritten) the caller sees zeros, not its
+        // own prefill. Zeroing here gives direct static-runtime replicas
+        // byte-identical (logp, gradient) outputs on every outcome; for the
+        // owned worker the buffer is already zero, so nothing changes there.
+        #[cfg(windows)]
+        gradient.fill(0.0);
         let model = &self
             .loaded
             .as_ref()
@@ -574,9 +611,7 @@ impl NativeTarget {
 
     fn constrain_unlocked(&self, position: &[f64]) -> Result<Vec<f64>, TargetError> {
         #[cfg(windows)]
-        let _process_guard = process_native_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _process_guard = process_guard(self.process_lock);
         let model = &self
             .loaded
             .as_ref()
@@ -638,9 +673,7 @@ impl Drop for NativeTarget {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         #[cfg(windows)]
-        let _process_guard = process_native_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _process_guard = process_guard(self.process_lock);
         drop(self.loaded.take());
     }
 }
@@ -727,6 +760,33 @@ impl OwnedBackend for NativeTarget {
 
     fn constrain(&mut self, position: &[f64]) -> Result<Vec<f64>, String> {
         NativeTarget::constrain(self, position).map_err(|error| error.message().to_owned())
+    }
+}
+
+/// Windows execution of one [`StanTarget`]: the default owned worker, or (only
+/// inside a [`ReplicatedStanTarget`] loaded with
+/// [`WindowsDispatch::ConcurrentIfStaticRuntime`] whose DLLs passed
+/// [`check_static_runtime`]) direct calls under the module lock.
+#[cfg(windows)]
+enum WindowsBackend {
+    Owned(OwnedClient),
+    Direct(NativeTarget),
+}
+
+#[cfg(windows)]
+impl WindowsBackend {
+    fn evaluate(&self, position: &[f64], gradient: &mut [f64]) -> Result<f64, TargetError> {
+        match self {
+            Self::Owned(worker) => worker.evaluate(position, gradient),
+            Self::Direct(native) => native.evaluate(position, gradient),
+        }
+    }
+
+    fn constrain(&self, position: &[f64]) -> Result<Vec<f64>, TargetError> {
+        match self {
+            Self::Owned(worker) => worker.constrain(position),
+            Self::Direct(native) => native.constrain(position),
+        }
     }
 }
 
@@ -886,7 +946,7 @@ impl StanTarget {
                 NativeTarget::load(&cached_model, &preload, data.as_deref(), seed)
             })?;
             (
-                worker,
+                WindowsBackend::Owned(worker),
                 (
                     metadata.dimension,
                     metadata.info,
@@ -987,14 +1047,53 @@ impl StanTarget {
         }
     }
 
-    #[cfg(not(windows))]
+    /// Windows direct replica: load on the calling thread without an owned
+    /// worker and without the process-global lock. Only reachable after
+    /// [`check_static_runtime`] passed for `model_so` and `preload`.
+    #[cfg(windows)]
+    fn load_direct(
+        model_so: &Path,
+        preload: &[PathBuf],
+        data: Option<&str>,
+        seed: u32,
+    ) -> Result<Self, LoadError> {
+        let native = NativeTarget::load_with_process_lock(model_so, preload, data, seed, false)?;
+        Ok(Self {
+            dimension: native.dimension,
+            info: native.info.clone(),
+            unc_names: native.unc_names.clone(),
+            constrained_names: native.constrained_names.clone(),
+            compiled_threading: native.compiled_threading,
+            worker: WindowsBackend::Direct(native),
+            calls: AtomicUsize::new(0),
+            recoverable: AtomicUsize::new(0),
+        })
+    }
+
+    /// The native target when calls run directly (always off Windows; only
+    /// for verified static-runtime replicas on Windows).
+    fn direct_native(&self) -> Option<&NativeTarget> {
+        #[cfg(not(windows))]
+        {
+            Some(&self.native)
+        }
+        #[cfg(windows)]
+        {
+            match &self.worker {
+                WindowsBackend::Direct(native) => Some(native),
+                WindowsBackend::Owned(_) => None,
+            }
+        }
+    }
+
     fn evaluate_replica_unlocked(
         &self,
+        native: &NativeTarget,
         position: &[f64],
         gradient: &mut [f64],
     ) -> Result<f64, TargetError> {
         self.calls.fetch_add(1, Ordering::Relaxed);
-        let outcome = self.native.evaluate_unlocked(position, gradient);
+        let outcome = native.evaluate_unlocked(position, gradient);
         record_recoverable(&outcome, &self.recoverable);
         outcome
     }
@@ -1112,6 +1211,9 @@ impl Target for StanTarget {
 /// pointless; use [`StanTarget`] directly.
 pub struct ReplicatedStanTarget {
     replicas: Vec<StanTarget>,
+    /// The static-runtime check made for
+    /// [`WindowsDispatch::ConcurrentIfStaticRuntime`] (Windows only).
+    static_runtime: Option<StaticRuntimeReport>,
     // Dropped after the replicas (field order). Off Windows this removes
     // copies after their libraries unload; Windows cache copies are resident.
     _copies: ReplicaCopies,
@@ -1307,6 +1409,12 @@ impl ProcessReplicaCache {
     }
 
     fn model_copy(&self, source: &Path) -> Result<PathBuf, LoadError> {
+        self.model_copy_for(source, None)
+    }
+
+    /// A content-addressed copy per replica index, so each direct replica is a
+    /// distinct module with its own Stan autodiff stack.
+    fn model_copy_for(&self, source: &Path, replica: Option<usize>) -> Result<PathBuf, LoadError> {
         let digest = Self::digest(source)?;
         let extension = source
             .extension()
@@ -1316,7 +1424,12 @@ impl ProcessReplicaCache {
             .copy_lock
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let copy = self.dir.join(format!("{digest}-model.{extension}"));
+        let copy = match replica {
+            None => self.dir.join(format!("{digest}-model.{extension}")),
+            Some(index) => self
+                .dir
+                .join(format!("{digest}-replica{index}-model.{extension}")),
+        };
         if copy.exists() {
             if Self::digest(&copy)? != digest {
                 return Err(LoadError::Invalid(format!(
@@ -1397,7 +1510,6 @@ fn process_replica_cache() -> Result<&'static ProcessReplicaCache, LoadError> {
         .map_err(|error| LoadError::Invalid(error.clone()))
 }
 
-#[cfg(not(windows))]
 thread_local! {
     static PREFERRED_REPLICA: Cell<usize> = const { Cell::new(0) };
 }
@@ -1419,15 +1531,70 @@ impl ReplicatedStanTarget {
         seed: u32,
         replicas: usize,
     ) -> Result<Self, LoadError> {
+        Self::load_with_options(
+            model_so,
+            preload,
+            data,
+            seed,
+            replicas,
+            &ReplicatedOptions::default(),
+        )
+    }
+
+    /// [`Self::load`] with explicit [`ReplicatedOptions`].
+    ///
+    /// With [`WindowsDispatch::ConcurrentIfStaticRuntime`] on Windows the
+    /// model DLL and every preload are first checked with
+    /// [`check_static_runtime`]. Only if that check passes (and more than one
+    /// replica is requested) are the requested replicas loaded as distinct
+    /// content-addressed copies, called directly from the sampler threads
+    /// under per-replica locks, without the owned worker and without the
+    /// process-global lock ([`Execution::ReplicatedConcurrent`]). Otherwise
+    /// the default owned worker is used and
+    /// [`Self::static_runtime_report`] says why. Off Windows the option has
+    /// no effect.
+    pub fn load_with_options(
+        model_so: &Path,
+        preload: &[PathBuf],
+        data: Option<&str>,
+        seed: u32,
+        replicas: usize,
+        options: &ReplicatedOptions,
+    ) -> Result<Self, LoadError> {
         let requested_replicas = replicas;
+        #[cfg(windows)]
+        let static_runtime = match options.windows_dispatch {
+            WindowsDispatch::OwnedWorker => None,
+            WindowsDispatch::ConcurrentIfStaticRuntime => {
+                Some(check_static_runtime(model_so, preload)?)
+            }
+        };
+        #[cfg(not(windows))]
+        let static_runtime: Option<StaticRuntimeReport> = {
+            let _ = options;
+            None
+        };
+        #[cfg(windows)]
+        let direct = requested_replicas > 1
+            && static_runtime
+                .as_ref()
+                .is_some_and(StaticRuntimeReport::passed);
         #[cfg(not(windows))]
         let effective_replicas = requested_replicas.max(1);
         #[cfg(windows)]
-        let effective_replicas = 1;
+        let effective_replicas = if direct { requested_replicas } else { 1 };
         let copies = ReplicaCopies::prepare(model_so, effective_replicas)?;
         let mut loaded = Vec::with_capacity(effective_replicas);
         #[cfg(windows)]
-        loaded.push(StanTarget::load(model_so, preload, data, seed)?);
+        if direct {
+            let cache = process_replica_cache()?;
+            for index in 0..effective_replicas {
+                let copy = cache.model_copy_for(model_so, Some(index))?;
+                loaded.push(StanTarget::load_direct(&copy, preload, data, seed)?);
+            }
+        } else {
+            loaded.push(StanTarget::load(model_so, preload, data, seed)?);
+        }
         #[cfg(not(windows))]
         for (index, path) in copies.load_paths.iter().enumerate() {
             loaded.push(StanTarget::load(path, preload, data, seed)?);
@@ -1439,13 +1606,23 @@ impl ReplicatedStanTarget {
         let dimension = loaded[0].dimension();
         Ok(Self {
             replicas: loaded,
+            static_runtime,
             _copies: copies,
             dimension,
             requested_replicas,
         })
     }
 
-    /// Effective replicas. This is always one on Windows.
+    /// The static-runtime check made because of
+    /// [`WindowsDispatch::ConcurrentIfStaticRuntime`] (`None` for the default
+    /// dispatch and off Windows).
+    pub fn static_runtime_report(&self) -> Option<&StaticRuntimeReport> {
+        self.static_runtime.as_ref()
+    }
+
+    /// Effective replicas. On Windows this is one unless
+    /// [`WindowsDispatch::ConcurrentIfStaticRuntime`] was requested and the
+    /// static-runtime check passed.
     pub fn replicas(&self) -> usize {
         self.effective_replicas()
     }
@@ -1477,6 +1654,9 @@ impl ReplicatedStanTarget {
 
     /// Effective execution backend.
     pub fn execution(&self) -> Execution {
+        if self.effective_replicas() > 1 && self.replicas[0].direct_native().is_some() {
+            return Execution::ReplicatedConcurrent;
+        }
         replicated_execution(self.compiled_threading(), self.effective_replicas())
     }
 
@@ -1518,32 +1698,31 @@ impl Target for ReplicatedStanTarget {
         if position.len() != self.dimension || gradient.len() != self.dimension {
             return Err(TargetError::new("position/gradient dimension mismatch"));
         }
-        #[cfg(windows)]
-        {
-            self.replicas[0].log_density_gradient(position, gradient)
+        if self.replicas[0].direct_native().is_none() {
+            // Windows owned worker (one effective replica).
+            return self.replicas[0].log_density_gradient(position, gradient);
         }
-        #[cfg(not(windows))]
-        {
-            let n = self.replicas.len();
-            let start = PREFERRED_REPLICA.with(Cell::get) % n;
-            for k in 0..n {
-                let i = (start + k) % n;
-                let r = &self.replicas[i];
-                let guard = match r.native.serial.try_lock() {
-                    Ok(g) => g,
-                    Err(TryLockError::Poisoned(p)) => p.into_inner(),
-                    Err(TryLockError::WouldBlock) => continue,
-                };
-                PREFERRED_REPLICA.with(|p| p.set(i));
-                let out = r.evaluate_replica_unlocked(position, gradient);
-                drop(guard);
-                return out;
-            }
-            // Every replica is busy (more callers than replicas): wait for ours.
-            let r = &self.replicas[start];
-            let _guard = r.native.serial.lock().unwrap_or_else(|p| p.into_inner());
-            r.evaluate_replica_unlocked(position, gradient)
+        let n = self.replicas.len();
+        let start = PREFERRED_REPLICA.with(Cell::get) % n;
+        for k in 0..n {
+            let i = (start + k) % n;
+            let r = &self.replicas[i];
+            let native = r.direct_native().expect("all replicas share one backend");
+            let guard = match native.serial.try_lock() {
+                Ok(g) => g,
+                Err(TryLockError::Poisoned(p)) => p.into_inner(),
+                Err(TryLockError::WouldBlock) => continue,
+            };
+            PREFERRED_REPLICA.with(|p| p.set(i));
+            let out = r.evaluate_replica_unlocked(native, position, gradient);
+            drop(guard);
+            return out;
         }
+        // Every replica is busy (more callers than replicas): wait for ours.
+        let r = &self.replicas[start];
+        let native = r.direct_native().expect("all replicas share one backend");
+        let _guard = native.serial.lock().unwrap_or_else(|p| p.into_inner());
+        r.evaluate_replica_unlocked(native, position, gradient)
     }
 }
 

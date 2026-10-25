@@ -1,0 +1,153 @@
+{
+  "schema": "bridgestan-windows-root-cause-v4-summary",
+  "planned_children": 1600,
+  "recorded_children": 1600,
+  "missing_records": [],
+  "arms": {
+    "dynamic_owned": {
+      "children": 300,
+      "faults": 0,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "hidden_exit0_faults": 0,
+      "manipulation_failures": [],
+      "modules_unobserved": 0,
+      "effective_replicas": {
+        "1": 300
+      },
+      "last_heartbeat_on_fault": {},
+      "fault_cases": [],
+      "median_duration_seconds_contended": 2.632199764251709,
+      "upper95_fault_rate": 0.009936081944457666
+    },
+    "dynamic_unserialised": {
+      "children": 300,
+      "faults": 4,
+      "heap_corruption": 2,
+      "event_1000": 4,
+      "hidden_exit0_faults": 2,
+      "manipulation_failures": [],
+      "modules_unobserved": 0,
+      "effective_replicas": {
+        "4": 299,
+        "None": 1
+      },
+      "last_heartbeat_on_fault": {
+        "process/complete": 3,
+        "sampling/before": 1
+      },
+      "fault_cases": [
+        {
+          "case": "dynamic_unserialised-50803027",
+          "launcher_rc": "0x00000000",
+          "last_heartbeat": "process/complete",
+          "event": {
+            "exception_code": "c0000005",
+            "module": "libwinpthread-1.dll",
+            "module_path": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libwinpthread-1.dll",
+            "offset": "0000000000008c89",
+            "record_id": 30072,
+            "time_utc": "2026-10-25T03:03:30.1615115Z",
+            "pid": 7800,
+            "app_arm": "dynamic_unserialised"
+          }
+        },
+        {
+          "case": "dynamic_unserialised-50803048",
+          "launcher_rc": "0xC0000374",
+          "last_heartbeat": "sampling/before",
+          "event": {
+            "exception_code": "c0000374",
+            "module": "ntdll.dll",
+            "module_path": "C:\\windows\\SYSTEM32\\ntdll.dll",
+            "offset": "0000000000118095",
+            "record_id": 30097,
+            "time_utc": "2026-10-25T03:07:08.7403232Z",
+            "pid": 32788,
+            "app_arm": "dynamic_unserialised"
+          }
+        },
+        {
+          "case": "dynamic_unserialised-50803071",
+          "launcher_rc": "0x00000000",
+          "last_heartbeat": "process/complete",
+          "event": {
+            "exception_code": "c0000005",
+            "module": "libwinpthread-1.dll",
+            "module_path": "C:\\Users\\dhruv\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\libwinpthread-1.dll",
+            "offset": "0000000000008c89",
+            "record_id": 30100,
+            "time_utc": "2026-10-25T03:12:06.4786408Z",
+            "pid": 12824,
+            "app_arm": "dynamic_unserialised"
+          }
+        },
+        {
+          "case": "dynamic_unserialised-50803197",
+          "launcher_rc": "0xC0000374",
+          "last_heartbeat": "process/complete",
+          "event": {
+            "exception_code": "c0000374",
+            "module": "ntdll.dll",
+            "module_path": "C:\\windows\\SYSTEM32\\ntdll.dll",
+            "offset": "0000000000118095",
+            "record_id": 30128,
+            "time_utc": "2026-10-25T03:33:54.4722817Z",
+            "pid": 26768,
+            "app_arm": "dynamic_unserialised"
+          }
+        }
+      ],
+      "median_duration_seconds_contended": 1.6563358306884766,
+      "upper95_fault_rate": 0.030250395419737897
+    },
+    "static_unserialised": {
+      "children": 1000,
+      "faults": 1,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "hidden_exit0_faults": 0,
+      "manipulation_failures": [],
+      "modules_unobserved": 1,
+      "effective_replicas": {
+        "4": 999,
+        "None": 1
+      },
+      "last_heartbeat_on_fault": {
+        "sampling/before": 1
+      },
+      "fault_cases": [
+        {
+          "case": "static_unserialised-50801734",
+          "launcher_rc": "0x00000001",
+          "last_heartbeat": "sampling/before",
+          "event": null
+        }
+      ],
+      "unattributed_events_counted": 0,
+      "median_duration_seconds_contended": 1.689267635345459,
+      "upper95_fault_rate": 0.004734993575499725
+    }
+  },
+  "gate": {
+    "static_faults": 1,
+    "static_children": 1000,
+    "static_upper95_fault_rate": 0.004734993575499725,
+    "static_manipulation_failures": 0,
+    "dynamic_unserialised_faults": 4,
+    "fisher_dynamic_unserialised_vs_static": {
+      "one_sided_control_greater": 0.011411453355352303,
+      "two_sided": 0.011411453355352303
+    },
+    "verdict_control_dynamic_unserialised": "not_supported",
+    "dynamic_owned_faults": 0,
+    "fisher_dynamic_owned_vs_static": {
+      "one_sided_control_greater": 1.0,
+      "two_sided": 1.0
+    },
+    "verdict_control_dynamic_owned": "not_supported",
+    "verdict": "not_supported"
+  },
+  "event_1000_attributed": 4,
+  "event_1000_unattributed": []
+}

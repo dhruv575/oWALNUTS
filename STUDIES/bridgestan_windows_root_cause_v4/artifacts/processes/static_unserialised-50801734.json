@@ -1,0 +1,59 @@
+{
+  "schema": "bridgestan-windows-root-cause-v4-process",
+  "case_id": "static_unserialised-50801734",
+  "arm": "static_unserialised",
+  "seed": 50801734,
+  "block": 117,
+  "model": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so",
+  "data": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json",
+  "preload": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll",
+  "expect_runtime": "static",
+  "command": [
+    "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    "& 'C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v4\\build\\arms\\static_unserialised\\bridgestan-windows-root-cause-v4.exe' 'static_unserialised' 'C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\models\\sblrc__blr_model.so' 'C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v1\\models\\nothreads\\sblrc__blr.data.json' 'C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll' '50801734' 'C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v4\\artifacts\\heartbeats\\static_unserialised-50801734' 'C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v4\\artifacts\\raw\\static_unserialised-50801734.json'; exit $LASTEXITCODE"
+  ],
+  "launcher_pid": 38392,
+  "child_pid": 37036,
+  "started_unix_ms": 1792899515844,
+  "ended_unix_ms": 1792899517547,
+  "duration_seconds": 1.7029459476470947,
+  "timed_out": false,
+  "launcher_return_code": {
+    "raw": 1,
+    "signed_32": 1,
+    "unsigned_32": 1,
+    "hex_32": "0x00000001"
+  },
+  "raw_output_exists": false,
+  "raw_status": null,
+  "heartbeats_observed": [
+    "process/start",
+    "load/before",
+    "load/after",
+    "initialization/before",
+    "initialization/after",
+    "sampling/before"
+  ],
+  "heartbeat_complete": false,
+  "last_heartbeat": "sampling/before",
+  "modules_after_load": {
+    "libgcc_s_seh-1.dll": null,
+    "libstdc++-6.dll": null,
+    "libwinpthread-1.dll": null,
+    "tbb.dll": {
+      "bytes": 910951,
+      "path": "C:\\dev\\owalnuts-wt\\windows-native-root-cause\\STUDIES\\bridgestan_windows_root_cause_v3\\build\\static\\tbb\\tbb.dll"
+    }
+  },
+  "modules_after_drop": null,
+  "effective_replicas": null,
+  "draws_fingerprint": null,
+  "stdout": "",
+  "stderr": "error: kernel attempted a nonfinite target position (chain 2, transition 9); the integrator overflowed: try a smaller initial `step_size`, check the gradient's scale, or make the target return `TargetError::recoverable` where it cannot evaluate\n",
+  "process_fault": true
+}

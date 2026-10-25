@@ -1,0 +1,97 @@
+{
+  "schema": "bridgestan-windows-root-cause-v3-phase-b-summary",
+  "planned_children": 480,
+  "recorded_children": 480,
+  "missing_records": [],
+  "arms": {
+    "control_long": {
+      "children": 60,
+      "faults": 1,
+      "heap_corruption": 1,
+      "event_1000": 1,
+      "hidden_exit0_faults": 0,
+      "manipulation_failures": [],
+      "unobservable_modules": 0,
+      "last_heartbeat_on_fault": {
+        "sampling/before": 1
+      },
+      "fault_cases": [
+        {
+          "case": "control_long-50700406",
+          "launcher_rc": "0xC0000374",
+          "last_heartbeat": "sampling/before",
+          "event": {
+            "exception_code": "c0000374",
+            "module": "ntdll.dll",
+            "module_path": "C:\\windows\\SYSTEM32\\ntdll.dll",
+            "offset": "0000000000118095",
+            "record_id": 30063
+          }
+        }
+      ],
+      "median_duration_seconds_contended": 2.203517198562622,
+      "upper95_if_zero": 0.04870291331009746
+    },
+    "control_short": {
+      "children": 60,
+      "faults": 1,
+      "heap_corruption": 1,
+      "event_1000": 1,
+      "hidden_exit0_faults": 0,
+      "manipulation_failures": [],
+      "unobservable_modules": 0,
+      "last_heartbeat_on_fault": {
+        "process/complete": 1
+      },
+      "fault_cases": [
+        {
+          "case": "control_short-50700620",
+          "launcher_rc": "0xC0000374",
+          "last_heartbeat": "process/complete",
+          "event": {
+            "exception_code": "c0000374",
+            "module": "ntdll.dll",
+            "module_path": "C:\\windows\\SYSTEM32\\ntdll.dll",
+            "offset": "0000000000118095",
+            "record_id": 30065
+          }
+        }
+      ],
+      "median_duration_seconds_contended": 2.0363948345184326,
+      "upper95_if_zero": 0.04870291331009746
+    },
+    "static_long": {
+      "children": 300,
+      "faults": 0,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "hidden_exit0_faults": 0,
+      "manipulation_failures": [],
+      "unobservable_modules": 0,
+      "last_heartbeat_on_fault": {},
+      "fault_cases": [],
+      "median_duration_seconds_contended": 2.3270950317382812,
+      "upper95_if_zero": 0.00993608194445772
+    },
+    "static_short": {
+      "children": 60,
+      "faults": 0,
+      "heap_corruption": 0,
+      "event_1000": 0,
+      "hidden_exit0_faults": 0,
+      "manipulation_failures": [],
+      "unobservable_modules": 0,
+      "last_heartbeat_on_fault": {},
+      "fault_cases": [],
+      "median_duration_seconds_contended": 1.8083302974700928,
+      "upper95_if_zero": 0.04870291331009746
+    }
+  },
+  "gate": {
+    "static_long_faults": 0,
+    "static_long_children": 300,
+    "control_long_faults": 1,
+    "verdict": "fix_supported"
+  },
+  "event_1000_correlated": 2
+}

@@ -49,6 +49,72 @@ architecture and operating system (see the `walnutpie` module documentation).
   two-scale target whose median over-states the small coordinates ~20x) and
   a funnel z of -3.02 on one seed. Defaults and kernel fingerprints unchanged.
 
+### Added
+
+- `owalnuts-bridgestan`: opt-in Windows multi-replica dispatch for
+  static-runtime DLLs.
+  - **API:** `ReplicatedStanTarget::load_with_options(..,
+    &ReplicatedOptions::concurrent_if_static_runtime())`.
+  - **How it works:** the load first runs `check_static_runtime(model,
+    preload)`, which reads PE import tables in Rust. The model DLL and the
+    preloads must import no mingw/GCC runtime DLL, and every non-system
+    import must be one of the preloads.
+    - If the check passes, the requested replicas are loaded as distinct
+      cached copies and called directly from the sampler threads, without
+      the owned worker or the process-global native-call lock
+      (`Execution::ReplicatedConcurrent`).
+    - If it fails, the owned worker is kept, and `static_runtime_report()`
+      says why.
+  - **Defaults:** `ReplicatedStanTarget::load` and
+    `ReplicatedOptions::default()` are unchanged and keep the owned worker.
+    Off Windows the option has no effect.
+  - **Output parity:** both Windows dispatches return byte-identical
+    `(logp, gradient)` on every outcome, including recoverable failures.
+    The owned worker's contract is kept as is: the gradient buffer is zeroed
+    before each native call, so after a Stan exception the caller sees zeros
+    whatever it prefilled. Direct replicas now zero the buffer too (see
+    Fixed). Tested by `tests/static_runtime.rs`
+    (`recoverable_stan_exceptions_have_identical_outputs_under_both_dispatches`)
+    with the WP50C static sblrc and arK DLLs.
+- `integrations/bridgestan/tools/build_static_runtime.py` builds model DLLs
+  and a private `tbb.dll` with the mingw runtime linked statically. Log
+  densities and gradients are bit-identical to stock builds (WP50C Phase A).
+
+### Evidence and status
+
+- **Payoff.** WP50C Phase C: 3.2x (sblrc) and 4.0x (arK) contended sampling
+  wall, with bit-identical draws.
+- **Confirmatory gate.** WP50D, `STUDIES/bridgestan_windows_root_cause_v4`:
+  **not supported.**
+  - Static DLLs on the unserialised target: 1/1000. The fault was a
+    sampler-reported nonfinite-position error, not a crash.
+  - Dynamic DLLs on the same target: 4/300 crashes.
+  - Dynamic DLLs under the owned worker: 0/300.
+- **Replay.** WP50E, `STUDIES/bridgestan_windows_root_cause_v5`: the single
+  WP50D static fault (seed 50801734) reproduced 6/6 under both dispatches,
+  plus 3/3 with the original exe. It is the same `Numerical` "nonfinite
+  target position" error each time, from an integrator overflow in early
+  warmup. The shipped `Abort` policy stops it before the target is called,
+  so it is designed sampler behaviour, not a native fault. The frozen verdict
+  was `NOT_ESTABLISHED`: the cross-dispatch stream hash differed, and the
+  only difference was the gradient buffer on 1,512 recoverable evaluations
+  (fixed below). Positions, energies, call counts and draws were
+  bit-identical, including under `RejectLeaf`.
+- **Status.** The option stays opt-in and is not a candidate for the default.
+  WP50D's frozen verdict is not supported. Reading the WP50E replay as
+  dispatch-independent puts the static native-fault count at 0/1000, but the
+  coordinator has not yet accepted that reading.
+
+### Fixed
+
+- `owalnuts-bridgestan` (Windows, opt-in dispatch only): after a
+  recoverable Stan exception, direct static-runtime replicas left the
+  caller's gradient prefill in the buffer (NaN from the kernel), where the
+  owned worker returns zeros. `NativeTarget::evaluate_unlocked` now zeroes
+  the gradient buffer on Windows before the native call. The owned worker
+  already evaluates into a zeroed buffer, so its outputs, and the default
+  path's retained draws, are unchanged. Off Windows nothing changes.
+
 ## [0.2.0] - 2026-09-04
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`

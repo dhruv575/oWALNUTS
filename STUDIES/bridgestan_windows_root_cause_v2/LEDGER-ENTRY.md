@@ -1,0 +1,31 @@
+### WP50B-BRIDGESTAN-WINDOWS-ROOT-CAUSE-V2 — heap-corruption fault reproduced only with the full WinLibs mingw runtime (3/60) and in no mixed or Git-runtime cell (0/180); faulting module WinLibs `libwinpthread-1.dll` at teardown; no factor implicated alone; no fix implemented
+- Ordered time: 2026-10-24/25 on `wt/windows-native-root-cause`.
+  - Preregistration, protocol, child, build manifest and the no-sampling manipulation check committed at `11babbcc` before the first evidence child.
+  - 240 children ran strictly sequentially 18:04–18:14 local; Event 1000/1001 capture followed, then analysis.
+- Protocol/config: `STUDIES/bridgestan_windows_root_cause_v2/{PREREGISTRATION.md,protocol.json}`.
+  - Design: a 2×2 of libwinpthread-1.dll source × launcher.
+    - Source: Git for Windows 63,875 B vs WinLibs GCC 16.1.0 72,171 B, placed beside a byte-identical child exe so the application directory wins the DLL search.
+    - Launcher: PowerShell with the registry PATH vs a Git Bash login shell.
+  - Code path: the integration's reproducing commit `9edcbac` (resident DLLs, scoped pools, 4 concurrent replica modules), child built `--locked` with the comparator's dependency lock.
+  - Child shape: sblrc, 4 replicas / 4 chains / 4 threads / 4+4 draws.
+  - Logging: every child records the mapped path and size of libwinpthread, libgcc_s_seh, libstdc++ and tbb.
+  - Power: P(≥1 fault in a 60-child cell | 8.9%) = 0.996.
+  - Decision rule: a factor is implicated only if both cells at one level reproduce, both at the other level are clean, and the margin Fisher p < 0.05.
+- Seeds: 50600001–50600060, each run once per cell in a balanced Latin-square order. The base was exact-word verified unused; 90101–90103 are forbidden.
+- Status: 240/240 records present; 0 manipulation failures; none rerun.
+  - The launcher was found (and frozen) to also select the libgcc_s_seh/libstdc++ source for `tbb.dll`: WinLibs under PowerShell, Git under Git Bash.
+- Outcome: **single-cell result — powershell/winlibs (all-WinLibs runtime) 3/60 faults, every other cell 0/60.**
+  - The 3 faults:
+    - `50600001`: `0xC0000374` after `process/complete`; Event 1000 `c0000005` in WinLibs `libwinpthread-1.dll`.
+    - `50600014`: return code 0, heartbeats complete, but Event 1000 `c0000005` in `libwinpthread-1.dll` at exit (hidden fault).
+    - `50600035`: `ntdll` `c0000374` at `sampling/before`.
+  - Margins 3/120 vs 0/120 for each factor, Fisher p = 0.123: **no factor implicated** by the frozen rule.
+  - Post-hoc: cell vs rest p = 0.015; the clean cells bound the rate at 1.65%.
+  - The `bash/git` cell — WP50's 0/300 condition — was 0/60 here too, explaining that non-reproduction.
+- Analysis correction: the Event 1000 PID is decimal on this host; the original hex parse matched nothing. The corrected correlator was re-run on the unchanged records and events; it adds `50600014` under the preregistered event-inclusive rule.
+- Artifacts: `STUDIES/bridgestan_windows_root_cause_v2/{PREREGISTRATION.md,protocol.json,README.md,LEDGER-ENTRY.md,build_child.py,child/,run_2x2.py,test_run_2x2.py,checksums.py,CHECKSUMS.sha256}`. Under `artifacts/`: `{processes,raw,heartbeats,launches,stdout,stderr}/`, `build-manifest.json`, `manipulation-check.json`, `launch-environment.json`, `windows-events.json`, `summary.json`, `run-log.txt`, `analyze-log.txt`.
+- Conclusion: the fault depends on which mingw runtime DLLs bind, and that depends on how the process was launched. It reproduced only with the complete WinLibs set, and faulted inside WinLibs winpthreads at thread/process teardown. Not separated: whether winpthreads alone or the libgcc_s pairing is necessary.
+- Next decision (separate):
+  - Keep the owned-worker mitigation.
+  - Consider statically linking the mingw runtime into the model and tbb DLLs, or pinning a qualified DLL search path. Do not depend on Git's copies.
+  - If pursued, run a ≥150-per-cell single-launcher 2×2 separating libwinpthread from libgcc_s/libstdc++, then a ≥300-child stress gate on any candidate fix.
