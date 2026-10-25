@@ -517,7 +517,9 @@ the facade keeps the frozen replay defaults so pinned fingerprints hold.
   [decisions register](wiki/decisions.md), the
   [negative results](wiki/negative-results.md) and the topic pages under
   [`wiki/findings/`](wiki/findings/).
-- [`wiki/release-0.2.0.md`](wiki/release-0.2.0.md): this release's changes,
+- [`wiki/release-0.3.0.md`](wiki/release-0.3.0.md): 0.3.0 changes, validation
+  evidence, limitations and upgrade notes;
+- [`wiki/release-0.2.0.md`](wiki/release-0.2.0.md): 0.2.0 changes,
   validation tables and limitations; [`CHANGELOG.md`](CHANGELOG.md) for the
   upgrade notes.
 - [`wiki/research-ledger-2026-08-31.md`](wiki/research-ledger-2026-08-31.md):

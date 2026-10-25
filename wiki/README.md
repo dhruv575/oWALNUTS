@@ -48,6 +48,8 @@ what worked, what did not work, current default, open questions.
   checksummed entry per study (WP2 to WP40). The source of every number.
 - [Research programme 2026-09-04](research-program-2026-09-04.md): the 0.2
   programme as it stood at release.
+- [Release 0.3.0](release-0.3.0.md): release notes, validation evidence,
+  known limitations and upgrade notes from 0.2.0.
 - [Release 0.2.0](release-0.2.0.md): release notes, validation tables,
   limitations.
 
