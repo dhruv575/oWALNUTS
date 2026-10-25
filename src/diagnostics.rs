@@ -751,7 +751,14 @@ const CHECK_MIN_CHAINS: usize = 3;
 ///
 /// A warning is a reason to look at the chain, not a verdict: a genuinely
 /// multimodal target produces it legitimately, and a run without warnings
-/// still needs the R-hat and ESS gates.
+/// still needs the R-hat and ESS gates. On the 17-model posteriordb screen
+/// at the defaults (WP44, 60 cells) the step and log-density checks never
+/// fired on a healthy run; the R-hat check named a chain twice on runs whose
+/// R-hat was barely above 1.01 and whose chains were all close to the
+/// reference. The warnings cover one-wrong-chain failures only (frozen,
+/// crawling or second-mode chains); runs that fail on ESS, divergences or
+/// all-chain R-hat produce none. Their sensitivity rests on one wrong-chain
+/// run and is not established.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum ChainWarning {

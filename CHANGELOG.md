@@ -5,6 +5,23 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, target
 architecture and operating system (see the `walnutpie` module documentation).
 
+## [Unreleased]
+
+### Added
+
+- Observe-only chain-disagreement checks (`STUDIES/chain_disagreement_warning_v1`,
+  WP44). `walnutpie::ChainWindowSummary` via `RunTelemetry::warmup_end()` /
+  `sampling_end()` records the step and the median and IQR of the selected-state
+  log density over the last slow warmup window and over the retained draws.
+  `diagnostics::ChainWarning` (`Summary::chain_warnings`,
+  `Posterior::chain_warnings()`) flags a collapsed end-of-warmup step, a median
+  log density more than 3 typical IQRs below the other chains', or a chain whose
+  removal alone brings R-hat under 1.01. `Summary` prints one `warning: chain k
+  disagrees with the other chains: ...` line per flagged chain. Python adds
+  `SampleResult.chain_warnings()`, per-chain `warmup_end` / `sampling_end`, and
+  the same lines in `print(result)`. Draws are bit-identical; the kernel
+  revision is unchanged.
+
 ## [0.2.0] - 2026-09-04
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`
