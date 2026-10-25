@@ -54,7 +54,11 @@ def log(msg: str) -> None:
 
 
 def plan() -> list[tuple[str, int, str]]:
-    return [(m, s, "positive") for m in POS for s in SEEDS] + [(m, s, "negative") for m in NEG for s in SEEDS]
+    # amendment A1: radon (the last positive) runs after the negatives
+    late = ["radon_all-radon_hierarchical_intercept_centered"]
+    early = [m for m in POS if m not in late]
+    return ([(m, s, "positive") for m in early for s in SEEDS] + [(m, s, "negative") for m in NEG for s in SEEDS]
+            + [(m, s, "positive") for m in late for s in SEEDS])
 
 
 # --------------------------------------------------------------------------- references

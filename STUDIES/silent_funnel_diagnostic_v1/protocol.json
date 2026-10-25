@@ -18,7 +18,11 @@
   "warmup": 1000,
   "retained": 1000,
   "threads": 4,
-  "seeds": [731401, 731402, 731403],
+  "seeds": [
+    731401,
+    731402,
+    731403
+  ],
   "seeds_verified_unused": "git grep -w over this worktree and the main checkout, and grep -w over every sibling worktree's STUDIES/*/protocol.json and PREREGISTRATION.md: no use of 731401-731403 or 731410-731413.",
   "positives": [
     "funnel10",
@@ -49,15 +53,46 @@
     "posteriordb_models": "every negative and eight_schools_centered: posteriordb reference draws (eight_schools_centered via its reference_posterior_name, as in v6/WP44)",
     "funnel10": "exact: E[omega] = 0, E[x_i] = 0 (i = 1..9), P(omega < -5) = 0.0477903522728147; z = (estimate - exact) / ArviZ MCSE of the mean (of the indicator for the tail mass)",
     "cmdstan_home": "C:/dev/polyscope/STUDIES/matched_competitor_eight_schools_v38/cmdstan/cmdstan-2.39.0",
-    "procedure": {"sampler": "CmdStan 2.39.0 NUTS diag_e", "chains": 10, "parallel_chains": 4, "warmup": 1000, "sampling": 10000, "thin": 10, "adapt_delta": 0.95},
-    "acceptance": {"max_rank_rhat": 1.01, "min_bulk_ess": 2000, "max_divergences": 0},
+    "procedure": {
+      "sampler": "CmdStan 2.39.0 NUTS diag_e",
+      "chains": 10,
+      "parallel_chains": 4,
+      "warmup": 1000,
+      "sampling": 10000,
+      "thin": 10,
+      "adapt_delta": 0.95
+    },
+    "acceptance": {
+      "max_rank_rhat": 1.01,
+      "min_bulk_ess": 2000,
+      "max_divergences": 0
+    },
     "rejected_reference": "if a reference fails acceptance, that model's cells are judged on the gates only, and this is reported",
     "models": {
-      "seeds": {"cell_model": "seeds_data-seeds_centered_model", "stan": "reference_models/seeds_ncp_reference.stan", "data": "reference_models/seeds_ncp_reference.data.json", "seed": 731410, "note": "non-centred rewrite c = sigma * c_raw, c_raw ~ normal(0,1); identical posterior over the centred model's parameters and transformed parameter b"},
-      "radon": {"cell_model": "radon_all-radon_hierarchical_intercept_centered", "stan": "reference_models/radon_ncp_reference.stan", "data": "reference_models/radon_ncp_reference.data.json", "seed": 731411, "note": "posteriordb radon_hierarchical_intercept_noncentered, identical posterior over (alpha, beta, mu_alpha, sigma_alpha, sigma_y)"}
+      "seeds": {
+        "cell_model": "seeds_data-seeds_centered_model",
+        "stan": "reference_models/seeds_ncp_reference.stan",
+        "data": "reference_models/seeds_ncp_reference.data.json",
+        "seed": 731410,
+        "note": "non-centred rewrite c = sigma * c_raw, c_raw ~ normal(0,1); identical posterior over the centred model's parameters and transformed parameter b"
+      },
+      "radon": {
+        "cell_model": "radon_all-radon_hierarchical_intercept_centered",
+        "stan": "reference_models/radon_ncp_reference.stan",
+        "data": "reference_models/radon_ncp_reference.data.json",
+        "seed": 731411,
+        "note": "posteriordb radon_hierarchical_intercept_noncentered, identical posterior over (alpha, beta, mu_alpha, sigma_alpha, sigma_y)"
+      }
     }
   },
-  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
   "estimators": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05/0.95), mean MCSE on the reference parameters (BridgeStan constrained, transformed parameters included; funnel: the 10 coordinates); z = (mean - ref mean) / sqrt(MCSE^2 + ref MCSE^2) as WP44/v6",
   "truth": {
     "wrong_cell": "any house gate fails OR max |z| over reference parameters (and, for the funnel, the tail mass) > 3",
@@ -78,7 +113,17 @@
     "post_hoc": "any other threshold (ROC sweep, optimal cut) is reported as post hoc and is not evidence"
   },
   "decision": {
-    "candidates_in_order": {"C_R": ["refined_leaf_rate > T_R"], "C_S": ["step_collapse_factor > T_S"], "C_RS": ["either"]},
+    "candidates_in_order": {
+      "C_R": [
+        "refined_leaf_rate > T_R"
+      ],
+      "C_S": [
+        "step_collapse_factor > T_S"
+      ],
+      "C_RS": [
+        "either"
+      ]
+    },
     "cell_level": "sensitivity = fired / positive cells >= 0.75 AND specificity = not fired / negative cells >= 13/14 (0.92857)",
     "model_level": "a model fires when >= 2 of its 3 cells fire; a positives-list model is in the denominator when >= 2 of its cells are wrong, a negatives-list model when >= 2 are clean; sensitivity >= 0.75 AND specificity >= 13/14",
     "minimum_positives": "if fewer than 6 positive cells exist, the rule is reported as not met for lack of positives",
@@ -91,5 +136,18 @@
     "P3": "WP44's warnings alone (any ChainWarning in the cell) fire on <= 2 of the 4 positive models (model-level, >= 2 of 3 seeds; all four positives-list models in the denominator) (task prediction)",
     "P4_agent_forecast": "the agent's own forecast from WP34 (refinement_role_v1, da arm: refined fraction 0.0093 on eight_schools_noncentered, 0.0108 on one_comp, 0.0051 on garch11, against a 14-model median near 0.002) and WP46 (seeds_centered stuck chains at 0.04, other chains 0.0001-0.008): C_R cell-level specificity < 13/14 and the decision rule fails; the stuck seeds_centered chain is the highest-R chain of its cell on >= 2 of 3 seeds",
     "P5_agent_forecast": "C_S (cross-chain step collapse) fires on the funnel but not on seeds_centered (WP46: equal steps across chains on seeds_centered)"
-  }
+  },
+  "amendments": [
+    {
+      "id": "A1",
+      "utc": "2026-10-25T09:45Z",
+      "cells_already_run": [
+        "funnel10 x3",
+        "eight_schools_centered x3",
+        "seeds_centered x3"
+      ],
+      "change": "radon_all-radon_hierarchical_intercept_centered moves from 4th positive to the end of the run order (after all negatives). Reason: the frozen CmdStan reference for radon (10 x 11,000 iterations) runs at about 25 min per batch of four chains, about 75 min in all; the first run attempt stopped before radon's first cell because the reference file did not yet exist (no radon launch marker was written, no cell lost). The reference procedure, thresholds, truths and decision rule are unchanged. The reference runs concurrently with the negative cells (contention only; walls are not evidence).",
+      "run_order": "funnel10, eight_schools_centered, seeds_centered (done), then the 14 negatives in listed order, then radon; seeds ascending"
+    }
+  ]
 }

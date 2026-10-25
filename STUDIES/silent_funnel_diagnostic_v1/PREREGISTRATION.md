@@ -110,3 +110,14 @@ entry). Otherwise ship nothing and document the negative.
 
 Smoke runs on seed 1 (eight_schools_noncentered, funnel) were made to check
 the harness output only; they are not evidence and are not committed.
+
+## Amendment A1 (2026-10-25, after the nine funnel / eight_schools_centered / seeds_centered cells, before any other cell)
+
+radon hierarchical_intercept_centered moves from the fourth positive to the
+end of the run order, after all 42 negative cells. The frozen CmdStan
+reference for radon runs at about 25 minutes per batch of four chains (about
+75 minutes for ten), and the first run attempt stopped before radon's first
+cell because the reference file did not exist yet (no radon launch marker
+was written; no cell was lost). The reference procedure, thresholds, truths
+and decision rule are unchanged. The reference run overlaps the negative
+cells, which adds contention only; walls are not evidence.
