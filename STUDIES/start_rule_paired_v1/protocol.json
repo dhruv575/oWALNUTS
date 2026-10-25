@@ -1,0 +1,53 @@
+{
+  "schema": "start-rule-paired-v1",
+  "ledger_id": "WP60",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-25",
+  "question": "Is the per-gradient drop from posteriordb v6 to v7 (oWALNUTS / CmdStan min-bulk-ESS per gradient over the fixed 16: 0.848 -> 0.708) caused by the WP52 Init::best_of(16) start default?",
+  "source_commit_under_test": "f097391c",
+  "worktree": "wt/posteriordb-v7 at the WP56 head, whose src/, integrations/, tests/ and Cargo.toml equal f097391c (checked by the driver before every run)",
+  "arms": {
+    "uniform": "Sampler::new() with only warmup 1000, draws 1000, chains 4, seed, threads 4 and Limits::new().admit_worst_case(); starts Init::uniform() (Stan's uniform(-2,2), up to 100 draws per chain)",
+    "best_of_16": "identical, starts Init::best_of(16) (= Init::default() at f097391c; recorded per cell)"
+  },
+  "arms_order": ["uniform", "best_of_16"],
+  "models": [
+    "mcycle_gp-accel_gp",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "bball_drive_event_0-hmm_drive_0",
+    "earnings-logearn_interaction",
+    "eight_schools-eight_schools_centered",
+    "kidiq-kidscore_momhsiq"
+  ],
+  "model_selection": "accel_gp, one_comp and hmm_drive_0 (the largest v7 per-gradient losses against CmdStan) named by the coordinator, plus the three models with the lowest best_of_16/uniform ratio in STUDIES/init_rule_confirmation_v1/artifacts/summary.json per_model that are not already named: earnings (0.208), eight_schools_centered (0.524), kidiq (0.835). hmm_drive_0 (0.365) is the second-lowest and is already named, so the next one (kidiq) is taken to make six.",
+  "selection_bias_note": "Three of six models were chosen because best_of_16 looked worst on WP52's seeds; with fresh seeds regression to the mean pulls their ratios toward 1, while the selection itself biases the geomean toward H1. Both effects are stated, neither is corrected.",
+  "posteriordb": {"commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "../posteriordb_bench_v7/posteriordb/posterior_database"},
+  "models_source": "BridgeStan libraries copied from STUDIES/posteriordb_bench_v7/models (themselves WP48 sibling builds)",
+  "seeds": [600601, 600602, 600603, 600604, 600605],
+  "seeds_verified_unused": "git grep -w over every tracked file of the worktree at the WP56 head found none of 600601-600605",
+  "chains": 4, "warmup": 1000, "retained": 1000, "threads": 4,
+  "run_order": "models in listed order; within a model seeds ascending; within a seed uniform then best_of_16; strictly sequential; one sampling process at a time",
+  "cell_timeout_seconds": 2700,
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "parameter_set": "posteriordb reference-draw columns (all six models have reference draws); ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05, 0.95), mean MCSE; reference z reported",
+  "statistic": {
+    "cell": "min over reference parameters of bulk ESS divided by gradients_total (start search, warmup and sampling target calls)",
+    "model_ratio": "geometric mean over the five paired seeds of best_of_16 / uniform (equivalently the ratio of the per-arm geomeans over the paired seeds); a seed is paired only if both cells are status ok",
+    "primary": "geometric mean of the six model ratios",
+    "count": "number of models whose ratio is below 1.0",
+    "mechanism_telemetry": "per chain: start log density (re-evaluated after the run), end-of-warmup step, warmup step trace every 50 transitions, warmup and retained gradients, per-chain min bulk ESS; per cell: chain warnings, gates, max |z|"
+  },
+  "hypotheses": {
+    "H1": "the start rule causes the drop: best_of_16 / uniform paired geomean < 0.9",
+    "H0": "the start rule does not cause it (fresh seeds and the WP36 rescue removal do): paired geomean >= 0.95",
+    "between": "0.9 <= geomean < 0.95 supports neither"
+  },
+  "decision_rule": {
+    "revert_below": 0.9,
+    "revert_min_models_below_1": 4,
+    "keep_at_or_above": 0.95,
+    "text": "If the paired geomean is < 0.9 with at least 4 of 6 model ratios below 1.0, recommend reverting the default to Init::uniform() (best_of stays opt-in). If >= 0.95, recommend keeping Init::best_of(16). Otherwise (including < 0.9 with fewer than 4 models below 1.0) report inconclusive and recommend keeping it with the number documented. This study flips nothing.",
+    "incomplete": "A failed cell is a result and is not rerun; its seed is unpaired for that model. The rule is applied to the paired seeds available and the README states the count."
+  },
+  "rules": "No reruns, no tuning after results; failures are results. Walls are contended (shared machine) and are not evidence."
+}
