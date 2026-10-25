@@ -1,0 +1,53 @@
+{
+ "study": "python_callpath_v1",
+ "ledger_id": "WP47",
+ "frozen": "2026-10-24, before the first evidence cell",
+ "base_commit": "3583d130",
+ "question": "Per-target-evaluation cost and end-to-end min-bulk-ESS per second of every Python call path of the owalnuts 0.2.0 wheel, and the ratio to nutpie 0.16.8 on the same PyMC models; then fix the worst actionable problem.",
+ "seeds": [4747001, 4747002, 4747003],
+ "micro_point_seed": 4747501,
+ "hier_data_seed": 4747900,
+ "targets": ["gauss100", "eight", "hier"],
+ "target_dims": {"gauss100": 100, "eight": 10, "hier": 157},
+ "owalnuts_arms": ["py-numpy", "py-njit", "cfunc", "jax", "torch", "pymc", "pymc-numba", "pymc-gilfree"],
+ "nutpie_arms": ["nutpie"],
+ "micro_paths": ["py-numpy", "py-njit", "cfunc", "jax", "torch", "pymc", "pymc-numba", "pymc-gilfree"],
+ "arm_definitions": {
+  "py-numpy": "plain Python callable written in idiomatic numpy (callpath_targets.numpy_target)",
+  "py-njit": "plain Python callable that calls the numba njit kernel shared with the cfunc arm (transport control)",
+  "cfunc": "owalnuts.from_cfunc of a numba cfunc calling the same njit kernel",
+  "jax": "owalnuts.from_jax(logp) (jit=True default)",
+  "torch": "owalnuts.from_torch(logp), CPU, default torch thread count",
+  "pymc": "owalnuts.from_pymc(model) (default PyTensor C backend; thread_safe=True when threads > 1, the documented rule)",
+  "pymc-numba": "owalnuts.from_pymc(model, mode='NUMBA') (same numba-compiled function as gil_free; thread_safe=True when threads > 1)",
+  "pymc-gilfree": "owalnuts.from_pymc(model, gil_free=True)",
+  "nutpie": "nutpie.compile_pymc_model(model) (numba backend), nutpie.sample(draws, tune, chains, cores=threads, seed)"
+ },
+ "threads": [1, 4],
+ "sampler": {"chains": 4, "warmup": 1000, "draws": 1000, "settings": "owalnuts.sample defaults (DEFAULTS); init=None (numpy uniform(-2,2) starts from seed); nutpie defaults"},
+ "micro_calls": 10000,
+ "pytensor_compiledir": "C:/Users/dhruv/AppData/Local/Temp/claude/C--dev-owalnuts/1f373de9-31a5-456c-a915-e435ff4ab78a/scratchpad/pytensor-wp47",
+ "pytensor_compiledir_note": "private compile cache: the shared per-user PyTensor compiledir lock is contended by sibling agents (a setup check blocked ~50 min on it)",
+ "cell_timeout_seconds": 3600,
+ "builds": {
+  "baseline": {"python": "C:\\Users\\dhruv\\AppData\\Local\\Temp\\claude\\C--dev-owalnuts\\1f373de9-31a5-456c-a915-e435ff4ab78a\\scratchpad\\venv-wp47\\Scripts\\python.exe",
+               "source": "wheel built by `maturin build --release` (GNU 1.88 toolchain) from 3583d130, installed non-editable"},
+  "fix": {"python": "C:\\Users\\dhruv\\AppData\\Local\\Temp\\claude\\C--dev-owalnuts\\1f373de9-31a5-456c-a915-e435ff4ab78a\\scratchpad\\venv-wp47-fix\\Scripts\\python.exe",
+          "source": "wheel of the fix commit on wt/python-callpath, installed non-editable; same shared site-packages for numpy/numba/jax/torch/pymc/nutpie"}
+ },
+ "phases": {
+  "phase1": {"builds": ["baseline"], "arms": ["py-numpy", "py-njit", "cfunc", "jax", "torch", "pymc", "pymc-numba", "pymc-gilfree"], "nutpie_arms": ["nutpie"]},
+  "phase2": {"builds": ["baseline", "fix"], "arms": "frozen in the phase-2 addendum before phase 2 runs: every arm the fix touches plus cfunc as an untouched control", "nutpie_arms": []}
+ },
+ "order": "strictly sequential child processes; micro cells first (targets outer, paths rotated per target); then seeds outer, targets, (arm x threads) list rotated by (3*seed_index + target_index); in phase 2 builds alternate inside each arm/threads pair",
+ "metrics": {
+  "functionals": "every unconstrained coordinate (rank-based bulk/tail ESS are invariant to the monotone constraining transforms, so nutpie's constrained draws give the same values) plus theta_1..theta_8 for eight",
+  "ess": "owalnuts.summary (Rust diagnostics, matches ArviZ): minimum bulk ESS, minimum tail ESS, maximum rank R-hat",
+  "ess_per_second": "min bulk ESS / wall of the owalnuts.sample or nutpie.sample call (construction and compilation excluded and reported separately); CONTENDED wall",
+  "ess_per_call": "min bulk ESS / total target calls (owalnuts exact; nutpie warmup+draw n_steps)",
+  "per_call": "micro: median of 10^4 individually timed calls through the Python surface (cfunc arms via ctypes, labelled) plus a decomposition into the raw compiled function; in-sampler: Rust wall / total target calls at threads=1",
+  "bit_identity": "sha256 of the (chains, draws, dim) retained float64 draws"
+ },
+ "health": "reported per cell: divergences, max-depth stops, R-hat <= 1.01, min bulk/tail ESS >= 400; failures reported not dropped",
+ "decision_rule": "A fix is worth merging iff (i) its retained draws are bit-identical (sha256) to the baseline build for every cell of every arm it touches, (ii) on at least one target the geometric mean over the three seeds of the paired fix/baseline ESS/s ratio (same arm, threads, seed, interleaved) is >= 1.3 for at least one touched arm/threads, and (iii) no touched arm/threads/target has that geometric mean below 0.9."
+}
