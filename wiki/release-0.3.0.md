@@ -8,7 +8,7 @@ revision is still `walnutpie-structured-metric-refresh-v1`. Three
 sampler-facade defaults changed: the start rule, the nonfinite-position
 policy and the dense warmup. The retained kernel did not change.
 
-**Publication status: pending CI and tag.**
+**Publication status: tagged `v0.3.0` on 2026-10-25 from `c1829523` after CI run 40222309336 passed every job (Linux GNU 1.88 MSRV, Linux stable, Windows GNU 1.88, Windows MSVC 1.88, the three integration jobs and both BridgeStan real-model jobs). crates.io and PyPI publication are recorded below once complete.**
 
 ## What changed since 0.2.0
 
