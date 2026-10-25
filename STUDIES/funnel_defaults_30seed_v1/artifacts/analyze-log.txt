@@ -1,0 +1,74 @@
+{
+ "predictions": {
+  "P1_default_exceedance": {
+   "predicted": [
+    2,
+    6
+   ],
+   "observed": 4,
+   "held": true
+  },
+  "P2_default_mean_z": {
+   "predicted": [
+    -0.4,
+    0.4
+   ],
+   "observed": -0.41854810068285003,
+   "held": false
+  },
+  "P2_default_sd_z": {
+   "predicted": [
+    0.7,
+    1.4
+   ],
+   "observed": 1.1301250353071748,
+   "held": true
+  },
+  "P3_delta2_exceedance": {
+   "predicted": "<= 4 + 2",
+   "observed": 0,
+   "held": true
+  },
+  "P4_delta2_divergences": {
+   "predicted": "<= 3 x 43",
+   "observed": 37,
+   "ratio": 0.8604651162790697,
+   "held": true
+  },
+  "P5_block_B_divergence_order": {
+   "observed": {
+    "default": 5,
+    "delta2": 3,
+    "delta0.5": 0
+   },
+   "held": false
+  }
+ },
+ "decision_rules": {
+  "R1_default_calibration_failure": {
+   "exceed_rate": 0.13333333333333333,
+   "mean_z": -0.41854810068285003,
+   "triggered": false,
+   "bias_direction": "estimate too low (tail under-sampled)",
+   "pooled_p5_error": -0.0020353522728147055
+  },
+  "R2_recommend_delta2": {
+   "a_exceedance_le_default_plus_2": {
+    "value": [
+     0,
+     4
+    ],
+    "held": true
+   },
+   "b_abs_mean_z_le_0.5": {
+    "value": -0.4081869560297605,
+    "held": true
+   },
+   "c_divergence_rate_lt_0.001": {
+    "value": 1.5416666666666668e-05,
+    "held": true
+   },
+   "recommend": true
+  }
+ }
+}
