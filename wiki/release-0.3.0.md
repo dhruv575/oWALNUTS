@@ -8,7 +8,7 @@ revision is still `walnutpie-structured-metric-refresh-v1`. Three
 sampler-facade defaults changed: the start rule, the nonfinite-position
 policy and the dense warmup. The retained kernel did not change.
 
-**Publication status: tagged `v0.3.0` on 2026-10-25 from `c1829523` after CI run 40222309336 passed every job (Linux GNU 1.88 MSRV, Linux stable, Windows GNU 1.88, Windows MSVC 1.88, the three integration jobs and both BridgeStan real-model jobs). crates.io and PyPI publication are recorded below once complete.**
+**Publication status: published 2026-10-25.** Tag `v0.3.0` = `ab29f490` (the CI-green tree `c1829523` plus docs, a Python 3.10 test skip and an xfail for the PyMC initval limitation). CI run 40222309336 passed every job; wheels run 40225555199 built the sdist and five abi3 wheels (Linux x86_64/aarch64, macOS x86_64/arm64, Windows x86_64), ran the optional-backend suites on Python 3.10 and 3.13, and published `owalnuts 0.3.0` to PyPI by trusted publishing; `cargo publish` placed `owalnuts 0.3.0` on crates.io from the same tree. The integration crates (`owalnuts-bridgestan`, `owalnuts-autodiff`, `owalnuts-autodiff-tape`) remain unpublished path dependencies, as in 0.2.0.**
 
 ## What changed since 0.2.0
 
