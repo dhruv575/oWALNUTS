@@ -1525,7 +1525,9 @@ impl WarmupConfig {
     #[cfg(feature = "research")]
     pub fn with_initial_phase_max_depth(mut self, max_depth: usize) -> Result<Self, Error> {
         if max_depth == 0 {
-            return Err(Error::configuration("initial-phase max_depth must be nonzero"));
+            return Err(Error::configuration(
+                "initial-phase max_depth must be nonzero",
+            ));
         }
         self.initial_phase_max_depth = Some(max_depth);
         Ok(self)
@@ -14042,7 +14044,13 @@ mod tests {
             .unwrap();
         assert_eq!(capped.initial_phase_max_depth(), Some(1));
         let a = sample(&target, &[0.3, -0.2], &mass, &config(capped)).unwrap();
-        let b = sample(&target, &[0.3, -0.2], &mass, &config(WarmupConfig::new(0.8).unwrap())).unwrap();
+        let b = sample(
+            &target,
+            &[0.3, -0.2],
+            &mass,
+            &config(WarmupConfig::new(0.8).unwrap()),
+        )
+        .unwrap();
         assert!(a.diagnostics()[..75].iter().all(|d| d.depth() <= 1));
         assert!(b.diagnostics()[..75].iter().any(|d| d.depth() > 1));
         assert_eq!(a.metadata().tuning().max_depth(), 6);
