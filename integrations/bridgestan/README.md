@@ -95,13 +95,61 @@ Off Windows,
 library only for replicas 1 through n-1 and dispatches calls to free replicas.
 Replica 0 (and every single-replica load) retains the original path so
 `$ORIGIN`/`@loader_path` dependencies resolve exactly as they did for
-`StanTarget`. On Windows
+`StanTarget`. On Windows, by default,
 it records the requested count but deliberately uses one effective owned
-worker; `requested_replicas()` and `effective_replicas()` expose both values
+worker (see the opt-in below); `requested_replicas()` and `effective_replicas()` expose both values
 (`replicas()` remains an alias for the effective count).
-More than one effective worker per Windows target remains out of scope.
 Multiple target instances may each own a worker, but the process-global
 native-call policy serializes those owners.
+
+#### Opt-in: concurrent replicas for static-runtime DLLs (Windows)
+
+```rust
+let target = ReplicatedStanTarget::load_with_options(
+    &so,
+    &[private_tbb],                       // from tools/build_static_runtime.py
+    Some(data),
+    seed,
+    threads,
+    &ReplicatedOptions::concurrent_if_static_runtime(),
+)?;
+// Passed:  effective_replicas() == threads, execution() == ReplicatedConcurrent
+// Failed:  the default owned worker; static_runtime_report().problems says why
+```
+
+With `WindowsDispatch::ConcurrentIfStaticRuntime`, the load first runs
+`check_static_runtime(model, preload)`. That check reads the PE import tables
+in Rust, with no external tool, and passes only if two things hold:
+
+- neither the model DLL nor any preload imports a mingw/GCC runtime DLL
+  (`libwinpthread`, `libgcc_s`, `libstdc++`, `libgomp`, …);
+- every non-system DLL they import is itself one of the preloads, so nothing
+  else can bind from PATH.
+
+**When the check passes** (and more than one replica is requested), the
+target loads that many content-addressed replica copies. The sampler threads
+call them directly, each under its own module lock, with neither the owned
+worker nor the process-global native-call lock.
+
+**When the check fails**, the target uses the default owned worker. There is
+no error, and `static_runtime_report()` records why.
+
+**Defaults are unchanged.** `ReplicatedStanTarget::load` and
+`ReplicatedOptions::default()` keep the owned worker. Off Windows the option
+has no effect.
+
+Evidence:
+
+- `STUDIES/bridgestan_windows_root_cause_v3`: Phase C payoff 3.2–4.0x with
+  bit-identical draws.
+- `STUDIES/bridgestan_windows_root_cause_v4`: the confirmatory WP50D gate,
+  **not supported**.
+  - Static DLLs on this dispatch: 1/1000. The fault was a sampler-reported
+    nonfinite-position error, not a crash.
+  - Dynamic DLLs: 4/300 crashes.
+  - The owned worker: 0/300.
+
+  Keep this option opt-in until that fault is classified.
 
 ## Native-library lifetime
 

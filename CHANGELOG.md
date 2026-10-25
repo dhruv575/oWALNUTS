@@ -5,6 +5,44 @@ identified by `owalnuts::walnutpie::ALGORITHM_REVISION`; a seed reproduces a
 run only under the same revision, crate build, lock file, target
 architecture and operating system (see the `walnutpie` module documentation).
 
+## [Unreleased] (DRAFT, branch `wt/windows-native-root-cause`, not merged)
+
+### Added
+
+- `owalnuts-bridgestan`: opt-in Windows multi-replica dispatch for
+  static-runtime DLLs.
+  - **API:** `ReplicatedStanTarget::load_with_options(..,
+    &ReplicatedOptions::concurrent_if_static_runtime())`.
+  - **How it works:** the load first runs `check_static_runtime(model,
+    preload)`, which reads PE import tables in Rust. The model DLL and the
+    preloads must import no mingw/GCC runtime DLL, and every non-system
+    import must be one of the preloads.
+    - If the check passes, the requested replicas are loaded as distinct
+      cached copies and called directly from the sampler threads, without
+      the owned worker or the process-global native-call lock
+      (`Execution::ReplicatedConcurrent`).
+    - If it fails, the owned worker is kept, and `static_runtime_report()`
+      says why.
+  - **Defaults:** `ReplicatedStanTarget::load` and
+    `ReplicatedOptions::default()` are unchanged and keep the owned worker.
+    Off Windows the option has no effect.
+- `integrations/bridgestan/tools/build_static_runtime.py` builds model DLLs
+  and a private `tbb.dll` with the mingw runtime linked statically. Log
+  densities and gradients are bit-identical to stock builds (WP50C Phase A).
+
+### Evidence and status
+
+- **Payoff.** WP50C Phase C: 3.2x (sblrc) and 4.0x (arK) contended sampling
+  wall, with bit-identical draws.
+- **Confirmatory gate.** WP50D, `STUDIES/bridgestan_windows_root_cause_v4`:
+  **not supported.**
+  - Static DLLs on the unserialised target: 1/1000. The fault was a
+    sampler-reported nonfinite-position error, not a crash.
+  - Dynamic DLLs on the same target: 4/300 crashes.
+  - Dynamic DLLs under the owned worker: 0/300.
+- **Status.** The option stays opt-in, and is not a candidate for the default,
+  until the static fault is classified by a deterministic replay.
+
 ## [0.2.0] - 2026-09-04
 
 The kernel is at revision `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`
