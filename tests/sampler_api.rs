@@ -9,8 +9,9 @@ use std::time::Duration;
 use owalnuts::sampler::{
     Adaptation, Cancellation, ChainOutput, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION,
     DEFAULT_RANDOM_START_CHAINS, DEFAULT_U_TURN_RULE, DEFAULT_WARMUP_EXHAUSTION, Error, ErrorKind,
-    Init, Limits, Metric, Sampler, StructuredBlockMass, StructuredCovarianceBlock,
-    StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, uniform_starts,
+    Init, Limits, Metric, Sampler, StartSelection, StructuredBlockMass, StructuredCovarianceBlock,
+    StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, candidate_starts,
+    uniform_starts,
 };
 use owalnuts::walnutpie::{
     DenseMass, DiagonalMass, KernelOptions, KernelTuning, PaperAdaptationConfig, RunConfig,
@@ -839,6 +840,139 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
         .run_from_random_starts(&target)
         .unwrap();
     assert_eq!(random.chains(), again.chains());
+}
+
+#[test]
+fn candidate_starts_with_one_candidate_are_the_uniform_starts() {
+    for target in [HalfLine(3)] {
+        let uniform = uniform_starts(&target, 4, SEED, 2.0, 100).unwrap();
+        for selection in [
+            StartSelection::HighestDensity,
+            StartSelection::MedianDensity,
+        ] {
+            let one = candidate_starts(&target, 4, SEED, 2.0, 1, 100, selection).unwrap();
+            assert_eq!(one.starts, uniform);
+            assert_eq!(one.chosen, vec![0; 4]);
+        }
+    }
+    let uniform = uniform_starts(&RawNan, 4, SEED, 2.0, 100).unwrap();
+    let one = candidate_starts(
+        &RawNan,
+        4,
+        SEED,
+        2.0,
+        1,
+        100,
+        StartSelection::HighestDensity,
+    )
+    .unwrap();
+    assert_eq!(one.starts, uniform);
+    // Rejected draws are counted as evaluations.
+    assert!(one.evaluations.iter().all(|e| *e >= 1));
+}
+
+#[test]
+fn candidate_starts_select_by_log_density_and_count_every_evaluation() {
+    let target = Gaussian(3);
+    let k = 16;
+    let best = candidate_starts(
+        &target,
+        4,
+        SEED,
+        2.0,
+        k,
+        100,
+        StartSelection::HighestDensity,
+    )
+    .unwrap();
+    let median =
+        candidate_starts(&target, 4, SEED, 2.0, k, 100, StartSelection::MedianDensity).unwrap();
+    // Same RNG stream: the same pools.
+    assert_eq!(best.candidate_log_densities, median.candidate_log_densities);
+    assert_eq!(best.evaluations, vec![k; 4]);
+    for chain in 0..4 {
+        let pool = &best.candidate_log_densities[chain];
+        assert_eq!(pool.len(), k);
+        let max = pool.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        assert_eq!(best.start_log_densities[chain], max);
+        assert_eq!(pool[best.chosen[chain]], max);
+        let mut sorted = pool.clone();
+        sorted.sort_by(f64::total_cmp);
+        assert_eq!(median.start_log_densities[chain], sorted[(k - 1) / 2]);
+        let start = &best.starts[chain];
+        assert!(start.iter().all(|x| x.abs() < 2.0));
+        let mut g = vec![0.0; 3];
+        assert_eq!(target.log_density_gradient(start, &mut g).unwrap(), max);
+    }
+    // Pools are disjoint across chains and deterministic given the seed.
+    assert_ne!(best.starts[0], best.starts[1]);
+    let again = candidate_starts(
+        &target,
+        4,
+        SEED,
+        2.0,
+        k,
+        100,
+        StartSelection::HighestDensity,
+    )
+    .unwrap();
+    assert_eq!(again, best);
+    assert_eq!(
+        candidate_starts(
+            &target,
+            1,
+            SEED,
+            2.0,
+            0,
+            100,
+            StartSelection::HighestDensity
+        )
+        .unwrap_err()
+        .kind(),
+        ErrorKind::Configuration
+    );
+    let error =
+        candidate_starts(&Void, 2, SEED, 2.0, 4, 7, StartSelection::MedianDensity).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Numerical);
+    assert!(error.to_string().contains("after 7"), "{error}");
+}
+
+#[test]
+fn run_with_candidate_init_matches_run_from_the_chosen_starts() {
+    let target = HalfLine(3);
+    for init in [Init::best_of(16), Init::median_of(16)] {
+        let Init::Candidates {
+            radius,
+            candidates,
+            max_attempts,
+            selection,
+        } = init.clone()
+        else {
+            unreachable!()
+        };
+        let posterior = sampler()
+            .chains(3)
+            .metric(Metric::Identity)
+            .run_with_init(&target, &init)
+            .unwrap();
+        let chosen = candidate_starts(
+            &target,
+            3,
+            SEED,
+            radius,
+            candidates,
+            max_attempts,
+            selection,
+        )
+        .unwrap();
+        let direct = sampler()
+            .metric(Metric::Identity)
+            .run(&target, &chosen.starts)
+            .unwrap();
+        assert_eq!(posterior.chains(), direct.chains());
+    }
+    // The default is unchanged.
+    assert_eq!(Init::default(), Init::uniform());
 }
 
 /// The structured paths have no budgeted admission variant; with the

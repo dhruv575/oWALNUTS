@@ -1,0 +1,97 @@
+{
+  "schema": "init-rule-v1",
+  "ledger_id": "WP43",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-24",
+  "question": "wiki/open-questions.md item 6: gates on hmm_drive_0 (second-mode start) and lotka_volterra (starts on the rk45 failure boundary) are decided by the uniform(-2,2) start lottery. Does a cheap init-time rule remove the lottery without hurting anything?",
+  "baseline_commit": "3583d130",
+  "change_under_test": "New opt-in variant owalnuts::sampler::Init::Candidates { radius, candidates, max_attempts, selection: StartSelection } and owalnuts::sampler::candidate_starts. Per chain, `candidates` evaluable starts are drawn exactly as Init::Uniform draws one (same RNG stream; candidates = 1 reproduces Init::uniform() starts bit for bit) and one is kept by its log density. Init::uniform() and Init::Given are unchanged; the default is unchanged.",
+  "arms_order": ["default", "best16", "median16"],
+  "arms": {
+    "default": "Init::uniform(): uniform(-2,2) unconstrained, up to 100 draws per chain until log density and gradient are finite",
+    "best16": "arm A: Init::best_of(16) = Init::Candidates { radius 2, candidates 16, max_attempts 100 per candidate, selection HighestDensity }",
+    "median16": "arm C: Init::median_of(16) = Init::Candidates { radius 2, candidates 16, max_attempts 100 per candidate, selection MedianDensity (the (k-1)/2-th smallest, lower median) }"
+  },
+  "arm_not_run": "arm B (best-of-16 with a gradient-norm feasibility margin) is not run: a highest-density candidate essentially never has a gradient norm many times the pool median, so B would reproduce A on almost every cell and the second arm slot is more informative spent on the opposite hedge (C).",
+  "common": "Sampler at the shipped defaults: Tuning::default() (h0 0.5, depth 10, eight refinement levels, delta 1, MomentumSum), Metric::diagonal() with Stan regularisation, Adaptation::default() (dual averaging 0.8, no chain rescue), Limits::admit_worst_case(), 4 chains x 1,000 warmup / 1,000 retained, 4 threads; owalnuts-bridgestan ReplicatedStanTarget (BridgeStan 2.9.0, no STAN_THREADS)",
+  "init_cost_accounting": "Every init evaluation (rejected non-finite draws included) is a full log-density-and-gradient call and is counted in gradients_total. The default arm's start log densities are measured afterwards with one extra evaluation per chain that is subtracted from gradients_total.",
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posteriordb/posterior_database"
+  },
+  "models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "arma-arma11",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "seeds": [943101, 943102, 943103, 943104, 943105],
+  "seeds_verified_unused": "git grep -w over the whole repository (artifacts included) at 3583d130 finds no occurrence of 943101-943105; no sibling worktree protocol or preregistration names them.",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "run_order": "models in listed order; within a model seeds ascending; within a seed arms default, best16, median16; strictly sequential, one child process per model and one harness process per cell; then the funnel row (seeds ascending, arms in order)",
+  "cell_timeout_seconds": 2700,
+  "parameter_set": "columns of the posteriordb reference draws; draws constrained through BridgeStan with transformed parameters included",
+  "estimators": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS at 0.05/0.95, mean MCSE (posteriordb_bench_v6 functions reused verbatim)",
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "hidden_mode": {
+    "definition": "a cell whose max rank R-hat <= 1.01 but whose mean on some reference parameter is more than 3 reference SD from the posteriordb reference mean",
+    "reference_sd_threshold": 3.0,
+    "scope": "evaluated on every cell of every arm; hmm_drive_0 is the named target",
+    "credit": "a hidden-mode cell is never a credited pass, and ranks below a visible R-hat failure (outcome rank 0 < 1)"
+  },
+  "chain_mode": {
+    "rust": "owalnuts::diagnostics::ChainDisagreement on the unconstrained draws (leave-one-chain-out max R-hat; chains whose removal brings it <= 1.01)",
+    "reference_distance": "per chain, max over reference parameters of |chain mean - reference mean| / reference SD; a chain above 3 is 'off reference' (ended in a different mode)",
+    "reference_sd_threshold": 3.0
+  },
+  "per_cell_record": "each chain's start position and start log density, every candidate log density and the chosen index, init evaluations, gates, credited pass, hidden-mode flag, ChainDisagreement, per-chain reference distance, min bulk ESS per gradient (gradients include init), divergences, frozen chains, final steps",
+  "efficiency": "per cell min over reference parameters of bulk ESS / gradients_total; per model the geometric mean over seeds where both the rule arm and default are ok; ratio rule/default per model; overall geometric mean of the 17 per-model ratios",
+  "funnel": {
+    "target": "Neal's 10-D funnel at the sampler defaults (no rescue); exact P(omega < -5) = 0.0478",
+    "chains": 4, "warmup": 2000, "draws": 20000,
+    "seeds": [943101, 943102, 943103, 943104, 943105],
+    "starts": "default: the house starts omega in {-3,-1,1,3}, x = 0; rule arms: 16 candidates per chain from uniform(-3,3)^10 (the house starts' largest |omega| is the pool's ceiling), chosen by the arm's selection via candidate_starts",
+    "statistic": "per-seed MCSE z of P(omega < -5) (gate |z| <= 2 every seed), batch-means z reported, omega bulk ESS and R-hat reported"
+  },
+  "decision_rule": {
+    "text": "Recommend a rule arm as the new default iff (D1) its credited passes over the 85 cells >= the default arm's, (D2) it has zero hidden-mode cells, (D3) its geomean ESS/gradient ratio vs default >= 0.97, and (D4) its funnel |z| <= 2 on every one of the five seeds. If both arms qualify, recommend the one with more credited passes, then the higher geomean ratio. Otherwise keep Init::uniform() as the default. This study does not change the default: it ships only the opt-in variant; a recommendation is acted on by the coordinator.",
+    "geomean_min": 0.97,
+    "funnel_abs_z_max": 2.0
+  },
+  "predictions": {
+    "P1": "default: 70 to 74 credited passes of 85 (v5/WP34 rate 42/51, WP39B 44/51); centered eight schools fails 5/5, accel_gp 2-3/5",
+    "P2": "the lottery: default has an off-reference (second-mode) hmm_drive_0 chain on 1-2 of 5 seeds; best16 on 0 of 5; best16 passes lotka_volterra 5/5",
+    "P3": "best16 credited passes exceed default by 1 to 3",
+    "P4": "best16 has zero hidden-mode cells (the second mode found from best-of-16 starts, if any, is visible to R-hat)",
+    "P5": "best16 geomean ESS/gradient ratio vs default is in [1.00, 1.15] (init cost <= 0.1% of gradients; the gain comes from removed lottery cells)",
+    "P6": "median16 is indistinguishable from default: credited passes within +-1, geomean ratio in [0.97, 1.03], and it still draws at least one off-reference hmm_drive_0 seed",
+    "P7": "funnel |z| <= 2 on all five seeds for all three arms",
+    "P8": "best16's median start log density exceeds default's on all 17 models",
+    "P9": "mechanical decision: best16 qualifies and median16 does not"
+  },
+  "rules": "Preregistration committed before the first evidence cell. Report all cells; no result-driven reruns; failures are results; nothing tuned after seeing results. A process crash may be relaunched and only a cell without a completed artifact may be run, with the deviation recorded. Walls are contended (nine sibling agents on 16 cores) and are not evidence."
+}

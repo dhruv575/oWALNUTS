@@ -1,0 +1,21 @@
+[package]
+name = "init-rule-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP43: opt-in candidate-pool start rules against Init::uniform() on the 17-model posteriordb screen"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "init-rule-v1"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]
