@@ -14,6 +14,27 @@ public API is a small builder, `owalnuts::sampler`, over a complete
 facade, `owalnuts::walnutpie`. Version `0.2.0`; kernel revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`.
 
+> **Defaults changed since 0.2.0** (unreleased on `main`; see
+> [`CHANGELOG.md`](CHANGELOG.md)). The kernel, `ALGORITHM_REVISION` and the
+> kernel fingerprints are unchanged; each old behaviour is one builder call
+> away.
+>
+> - **Best-of-16 starts.** `Init::default()` and `run_from_random_starts` keep
+>   the highest-log-density of 16 evaluable uniform(-2, 2) starts per chain,
+>   so draws for a given seed differ from 0.2.0; decided by the preregistered
+>   confirmation `STUDIES/init_rule_confirmation_v1` (WP52: 1.254x ESS per
+>   gradient, 42 vs 42 gates) [E20].
+> - **`NonfinitePositionPolicy::RejectLeaf`.** An integrator overflow becomes a
+>   rejected zero-density leaf instead of ending the whole run, and any run
+>   without the event is bit-identical; decided by
+>   `STUDIES/nonfinite_policy_requalification_v1` (WP54: bit-identical on
+>   73/73 cells, 75 vs 73 runs completed) [E21].
+> - **Fixed `Metric::dense()` warmup.** Dense warmup now uses per-transition
+>   seeding, Stan's dense regularisation and a symmetrised precision; an
+>   engineering decision after `STUDIES/dense_metric_confirmation_v1` (WP51:
+>   3.21x the diagonal per gradient against 0.055x for the old dense
+>   defaults), whose own frozen rule failed (40 vs 43 gates) [E19].
+
 ## Quick start
 
 ```toml
@@ -72,13 +93,55 @@ One line each for the other front doors:
 - **Stan models**: [`owalnuts-bridgestan`](integrations/bridgestan/README.md)
   wraps a BridgeStan-compiled model as a `Target`
   (`ReplicatedStanTarget::load(so, preload, data, seed, threads)` for
-  multi-chain runs). On Windows the Rust integration records the requested
-  replica count but uses one effective owned worker per target and serializes
-  all native BridgeStan calls process-wide; Python `from_stan` and direct
-  Python BridgeStan operations are disabled there for 0.2.
+  multi-chain runs). On Windows the Rust integration by default records the
+  requested replica count but uses one effective owned worker per target and
+  serializes all native BridgeStan calls process-wide (see "Threads and
+  chains" for the opt-in static-runtime dispatch); Python `from_stan` and
+  direct Python BridgeStan operations are disabled there for 0.2.
 - **Rust autodiff**: [`owalnuts-autodiff`](integrations/autodiff/README.md)
   turns `fn log_density<S: Scalar>(&self, q: &[S]) -> S` into a `Target`
   with a reverse-mode tape, a few times the cost of a hand-written gradient.
+
+## Diagnostics
+
+`Summary` (and `posterior.chain_warnings()`) also prints observe-only
+`warning: chain k ...` lines; computing them never changes a draw.
+
+- **A chain that disagrees with the others** (WP44): a collapsed
+  end-of-warmup step, a median log density far below the other chains' at
+  the end of warmup or over the draws, or a chain whose removal alone brings
+  R-hat under 1.01. It covers one-wrong-chain failures only (frozen,
+  crawling or second-mode chains), needs at least three chains, and does not
+  replace the R-hat / ESS gates [E22].
+- **Rejected nonfinite positions**: `warning: chain k rejected n nonfinite
+  positions during warmup`. The default `RejectLeaf` rescue records no
+  divergence, so this line (or `WorkTotals::nonfinite_position_rejections`)
+  is where an integrator overflow shows [E21].
+- **Zero divergences does not rule out a funnel.** On centred hierarchical
+  models refinement can absorb the energy error, so a run can be wrong with
+  no divergence at all. In WP55, 11 of 12
+  wrong cells on the funnel, centred Eight Schools, `seeds_centered` and
+  centred radon had zero retained divergences, and the R-hat / bulk ESS /
+  tail ESS gates caught every one of them [E23]. Check those gates, not the
+  divergence count.
+
+## Threads and chains
+
+Chains run in parallel on up to `threads` worker threads (WP45, [E24]):
+
+- `threads` above `chains` does nothing; the driver clamps it to the chain
+  count. Draws are bit-identical at every thread count.
+- Wall time is bounded by the slowest chain. Chain lengths differ by target
+  (max/mean gradients at 16 chains were 1.51 on a 100-D Gaussian and 3.05 on
+  a local-level model), so one straggler sets the wall.
+- **Windows BridgeStan:** the default owned worker serialises every native
+  call. For multi-chain throughput build the model and `tbb.dll` with the
+  static mingw runtime (`integrations/bridgestan/tools/build_static_runtime.py`)
+  and load with `ReplicatedOptions::concurrent_if_static_runtime()`: 3.2x
+  (sblrc) / 4.0x (arK) contended sampling wall with bit-identical draws
+  (WP50C). It is opt-in, not the default, because the WP50D confirmatory
+  gate was not supported (1/1000 static children failed, with a sampler
+  nonfinite-position error rather than a crash) [E25].
 
 ## Where it shines
 
@@ -115,6 +178,10 @@ Every number below is from a preregistered, checksummed study in
   either. [E4]
 
 ## Where it does not (yet)
+
+> **Note:** posteriordb v7 is running against the defaults listed under
+> "Defaults changed since 0.2.0"; until it reports, the figures below are
+> the v5 and v6 results and describe 0.2.0.
 
 The last breadth benchmark admitted by its preregistered release rule is
 [`STUDIES/posteriordb_bench_v5`](STUDIES/posteriordb_bench_v5/README.md),
@@ -206,6 +273,8 @@ regression that CmdStan already samples cleanly still costs oWALNUTS
 | `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75); warmup exhaustion rule `AcceptUnlessDivergent` [E10] |
 | `Metric` | adapted diagonal | Welford, regularised with Stan's prior (`DiagonalMetricRegularization::Stan`, **post-hoc default change after WP31**; the `v10` `TowardUnit` prior floors small variances at 0.01 and collapsed the step on `sblrc` / `arma11`) [E14, E15] |
 | warmup chain rescue | none (`DEFAULT_CHAIN_RESCUE = None`) | `two_hit` failed its conjunctive gates; `current` then hit registered red lines in four origin-overwrite cells (five events) plus unknown HMM/92104 run history, selecting the WP36 fallback; default telemetry has no rescue records [E18] |
+| starts (`Init::default()`, `run_from_random_starts`) | `Init::best_of(16)`: highest log density of 16 evaluable uniform(-2, 2) starts per chain | WP52 default-flip confirmation: 1.254x ESS per gradient, 42 vs 42 gates; the gain is the `arma11` / `lotka_volterra` start lottery, the other 14 models are 0.862x [E20] |
+| `Tuning::nonfinite_position` | `NonfinitePositionPolicy::RejectLeaf` | WP54: bit-identical wherever `Abort` completed (73/73), 75 vs 73 runs completed; `KernelTuning::default()` keeps `Abort` [E21] |
 | initial evaluation | cached | one gradient per transition saved, draws bit-identical [E6] |
 | `Limits` | admit the exact worst case | the worst case is a bound the run cannot exceed, so admission costs nothing |
 
@@ -367,8 +436,10 @@ wraps (`tests/sampler_api.rs`).
   GNU Rust `StanTarget` owned-worker mitigation completed 540 ordinary and 180
   concurrent-target diagnostic children without a fault, but the historical
   root cause is not proven and sampling was 3.1–5.1x the four-replica
-  comparator. Windows execution is therefore limited to one effective replica
-  per target with a process-global native-call lock. Windows MSVC and the
+  comparator. Windows execution is therefore limited by default to one
+  effective replica per target with a process-global native-call lock;
+  static-runtime DLLs can opt into concurrent replicas (see "Threads and
+  chains"). Windows MSVC and the
   Linux/macOS/package matrices remain release gates; Windows Python
   `from_stan` and direct Python BridgeStan calls remain disabled.
 
@@ -519,3 +590,40 @@ provenance.
   (`WP48-DENSE-METRIC-POSTERIORDB-V1`),
   [`STUDIES/dense_metric_confirmation_v1`](STUDIES/dense_metric_confirmation_v1/README.md)
   (`WP51-DENSE-METRIC-CONFIRMATION-V1`).
+- [E20] Start rule: `Init::best_of(16)` met WP43's frozen rule (72 vs 71
+  credited passes, 1.258x, no hidden mode) and the preregistered default-flip
+  confirmation (1.254x, 42 vs 42 gates, funnel |z| <= 1.11, no two-mode hide
+  event; the other 14 models 0.862x, one hidden-mode `hmm_drive_0` cell that
+  `chain_warnings` named):
+  [`STUDIES/init_rule_v1`](STUDIES/init_rule_v1/README.md)
+  (`WP43-INIT-RULE-V1`),
+  [`STUDIES/init_rule_confirmation_v1`](STUDIES/init_rule_confirmation_v1/README.md)
+  (`WP52-INIT-RULE-CONFIRMATION-V1`).
+- [E21] `RejectLeaf` as the sampler default: bit-identical on 73/73
+  completed-abort cells, 75 vs 73 runs completed, the WP50 fatal sblrc seed
+  rescued with every gate passing (max |z| 1.63); the rescue is in warmup and
+  adds no divergence:
+  [`STUDIES/nonfinite_policy_requalification_v1`](STUDIES/nonfinite_policy_requalification_v1/README.md)
+  (`WP54-NONFINITE-POLICY-REQUALIFICATION-V1`).
+- [E22] Chain-disagreement warnings: zero step/density false positives in 60
+  screen cells, R-hat-check false positives only at R-hat 1.013 / 1.014,
+  sensitivity resting on one wrong-chain cell:
+  [`STUDIES/chain_disagreement_warning_v1`](STUDIES/chain_disagreement_warning_v1/README.md)
+  (`WP44-CHAIN-DISAGREEMENT-WARNING`).
+- [E23] Silent funnel: 11 of 12 wrong cells with zero retained divergences,
+  all 12 failing the R-hat / ESS gates; the refined-leaf rate is not a
+  usable warning:
+  [`STUDIES/silent_funnel_diagnostic_v1`](STUDIES/silent_funnel_diagnostic_v1/README.md)
+  (`WP55-SILENT-FUNNEL-DIAGNOSTIC`).
+- [E24] Thread scaling: draws bit-identical across every thread count, the
+  driver clamps threads to chains, wall tracks the longest chain (contended
+  pilot):
+  [`STUDIES/thread_scaling_v1`](STUDIES/thread_scaling_v1/README.md)
+  (`WP45-THREAD-SCALING-V1`).
+- [E25] Windows BridgeStan static runtime: 0/360 vs 2/120 faults and 3.2x /
+  4.0x contended wall (WP50C); confirmatory gate not supported, 1/1000
+  static (a sampler numerical error) vs 4/300 dynamic crashes (WP50D):
+  [`STUDIES/bridgestan_windows_root_cause_v3`](STUDIES/bridgestan_windows_root_cause_v3/README.md)
+  (`WP50C-BRIDGESTAN-WINDOWS-ROOT-CAUSE-V3`),
+  [`STUDIES/bridgestan_windows_root_cause_v4`](STUDIES/bridgestan_windows_root_cause_v4/README.md)
+  (`WP50D-BRIDGESTAN-WINDOWS-ROOT-CAUSE-V4`).
