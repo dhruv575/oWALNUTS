@@ -1,0 +1,283 @@
+{
+ "wp": "WP84",
+ "ledger_id": "WP84-ONLINE-SV-QUOTE-V1",
+ "model": {
+  "source": "market_uncertainty_v1 sv_prototype Target, P=1 intercept, K=0 flow",
+  "rho": 0.95,
+  "nu": 5,
+  "coordinates": "[mu, log_sigma, beta, z[n]]",
+  "data": "simulated, simulate.py seed 84084 (real receipts not reused: no reuse licence recorded)"
+ },
+ "stream": {
+  "N": [
+   250,
+   1000
+  ],
+  "ticks": 100,
+  "obs_per_tick": 1,
+  "posterior_at_tick_t": "first N+t returns"
+ },
+ "quantities": {
+  "h_next": "mu + rho (h_last - mu) + exp(log_sigma) eps, eps[c,j] = default_rng(840000+tick).normal(size=(4,20000))[c,j]",
+  "quantiles": [
+   0.05,
+   0.5,
+   0.95
+  ],
+  "quote": "straddle proportional to E[exp(h_next/2)], Rao-Blackwellised exp(m/2+sigma^2/8); reported, not gated"
+ },
+ "reference": {
+  "arm": "oWALNUTS defaults 4 x 2000/20000, seed 849000+N then *1000+tick",
+  "mcse": "arviz.mcse method=quantile"
+ },
+ "validity": {
+  "primary": "|q_arm - q_ref| <= 3 mcse_ref for all three quantiles AND max rank R-hat(mu,log_sigma,h_last,h_next) <= 1.01 AND 0 divergences (retained)",
+  "secondary_reported_only": "|q_arm - q_ref| <= 3 sqrt(mcse_ref^2 + mcse_arm^2), same R-hat/divergence conditions",
+  "chain_warnings": "recorded for ref/refit; n/a for warm (four single-chain runs)"
+ },
+ "arms": {
+  "warm": "tick-0 default fit 4x1000/1000 (not in latency stats, reported); then K in {50,200} transitions/chain/tick, Adaptation::None, warmup 0, step and diagonal metric frozen from tick 0, new z appended at 0 with mass 1",
+  "refit": "oWALNUTS defaults 4x1000/1000, best-of-16 starts",
+  "cmdstan": "CmdStan 2.39.0 defaults via cmdstanpy 1.3.0, 4 parallel chains",
+  "nutpie": "nutpie 0.16.8 defaults, cores=4"
+ },
+ "latency": "wall per tick from new-target construction to draws in memory (Stan arms: data update + sample call incl. process/CSV); quantile computation excluded",
+ "metrics": [
+  "median/p95 latency",
+  "frac<0.4s",
+  "frac<2s",
+  "primary validity rate",
+  "secondary validity rate",
+  "valid AND <threshold rate",
+  "warm drift"
+ ],
+ "drift": {
+  "statistic": "per tick fraction of warm h_next draws inside reference [P5,P95]",
+  "bound": "|mean over ticks 1-100 - 0.90| <= 0.03 AND |mean(76-100) - mean(1-25)| <= 0.03, per seed",
+  "secondary": "coverage of true h[N+t] by the arm's 90% interval over 100 ticks (reported)"
+ },
+ "decision_rule": "README may say 'real-time' only if for some K the warm arm is (primary-valid AND under 0.4 s) on >= 95% of the 300 ticks at N=250 AND (primary-valid AND under 2 s) on >= 95% at N=1000, and drift is within bound on all 3 seeds at both N. Otherwise the README states measured latency and validity only.",
+ "predictions": {
+  "P1": "warm K=50 median latency 5-60 ms at N=250, 20-250 ms at N=1000; K=200 4x that",
+  "P2": "refit oWALNUTS median 0.3-2 s at N=250, 1-8 s at N=1000",
+  "P3": "CmdStan median 0.4-3 s at N=250, 1.5-10 s at N=1000; nutpie 0.3-2 s / 1-8 s",
+  "P4": "primary validity <= 40% for every arm (an arm's own MC error is 2-20x the reference MCSE), so the real-time rule FAILS",
+  "P5": "secondary validity >= 80% for refit arms, >= 60% for warm K=200, >= 40% warm K=50",
+  "P6": "warm drift within bound on >= 5/6 (N, seed) for K=200"
+ },
+ "basis_for_predictions": "WP78 per-gradient walls (Rust 1.6 us at d=100) scaled to about 5 us (N=250) and 20 us (N=1000) per SV gradient, about 30-80 gradients per transition",
+ "software": {
+  "cmdstan_path": "/home/ubuntu/infra/cmdstan/cmdstan-2.39.0",
+  "nutpie": "0.16.8",
+  "cmdstanpy": "1.3.0",
+  "rust": "1.88.0"
+ },
+ "execution": "lane 4 (cores 12-15) of the shared c7a.4xlarge, taskset-pinned, co-tenanted with three other lanes: walls are 'pinned, co-tenanted'; validity unaffected",
+ "discipline": "cells sequential in this order; a started cell is never rerun; failures are results",
+ "cells": [
+  {
+   "id": "ref-N250",
+   "arm": "ref",
+   "N": 250,
+   "seed": 849250
+  },
+  {
+   "id": "ref-N1000",
+   "arm": "ref",
+   "N": 1000,
+   "seed": 850000
+  },
+  {
+   "id": "warm50-N250-s84001",
+   "arm": "warm",
+   "N": 250,
+   "seed": 84001,
+   "K": 50
+  },
+  {
+   "id": "warm200-N250-s84001",
+   "arm": "warm",
+   "N": 250,
+   "seed": 84001,
+   "K": 200
+  },
+  {
+   "id": "refit-N250-s84001",
+   "arm": "refit",
+   "N": 250,
+   "seed": 84001
+  },
+  {
+   "id": "cmdstan-N250-s84001",
+   "arm": "cmdstan",
+   "N": 250,
+   "seed": 84001
+  },
+  {
+   "id": "nutpie-N250-s84001",
+   "arm": "nutpie",
+   "N": 250,
+   "seed": 84001
+  },
+  {
+   "id": "warm50-N250-s84002",
+   "arm": "warm",
+   "N": 250,
+   "seed": 84002,
+   "K": 50
+  },
+  {
+   "id": "warm200-N250-s84002",
+   "arm": "warm",
+   "N": 250,
+   "seed": 84002,
+   "K": 200
+  },
+  {
+   "id": "refit-N250-s84002",
+   "arm": "refit",
+   "N": 250,
+   "seed": 84002
+  },
+  {
+   "id": "cmdstan-N250-s84002",
+   "arm": "cmdstan",
+   "N": 250,
+   "seed": 84002
+  },
+  {
+   "id": "nutpie-N250-s84002",
+   "arm": "nutpie",
+   "N": 250,
+   "seed": 84002
+  },
+  {
+   "id": "warm50-N250-s84003",
+   "arm": "warm",
+   "N": 250,
+   "seed": 84003,
+   "K": 50
+  },
+  {
+   "id": "warm200-N250-s84003",
+   "arm": "warm",
+   "N": 250,
+   "seed": 84003,
+   "K": 200
+  },
+  {
+   "id": "refit-N250-s84003",
+   "arm": "refit",
+   "N": 250,
+   "seed": 84003
+  },
+  {
+   "id": "cmdstan-N250-s84003",
+   "arm": "cmdstan",
+   "N": 250,
+   "seed": 84003
+  },
+  {
+   "id": "nutpie-N250-s84003",
+   "arm": "nutpie",
+   "N": 250,
+   "seed": 84003
+  },
+  {
+   "id": "warm50-N1000-s84001",
+   "arm": "warm",
+   "N": 1000,
+   "seed": 84001,
+   "K": 50
+  },
+  {
+   "id": "warm200-N1000-s84001",
+   "arm": "warm",
+   "N": 1000,
+   "seed": 84001,
+   "K": 200
+  },
+  {
+   "id": "refit-N1000-s84001",
+   "arm": "refit",
+   "N": 1000,
+   "seed": 84001
+  },
+  {
+   "id": "cmdstan-N1000-s84001",
+   "arm": "cmdstan",
+   "N": 1000,
+   "seed": 84001
+  },
+  {
+   "id": "nutpie-N1000-s84001",
+   "arm": "nutpie",
+   "N": 1000,
+   "seed": 84001
+  },
+  {
+   "id": "warm50-N1000-s84002",
+   "arm": "warm",
+   "N": 1000,
+   "seed": 84002,
+   "K": 50
+  },
+  {
+   "id": "warm200-N1000-s84002",
+   "arm": "warm",
+   "N": 1000,
+   "seed": 84002,
+   "K": 200
+  },
+  {
+   "id": "refit-N1000-s84002",
+   "arm": "refit",
+   "N": 1000,
+   "seed": 84002
+  },
+  {
+   "id": "cmdstan-N1000-s84002",
+   "arm": "cmdstan",
+   "N": 1000,
+   "seed": 84002
+  },
+  {
+   "id": "nutpie-N1000-s84002",
+   "arm": "nutpie",
+   "N": 1000,
+   "seed": 84002
+  },
+  {
+   "id": "warm50-N1000-s84003",
+   "arm": "warm",
+   "N": 1000,
+   "seed": 84003,
+   "K": 50
+  },
+  {
+   "id": "warm200-N1000-s84003",
+   "arm": "warm",
+   "N": 1000,
+   "seed": 84003,
+   "K": 200
+  },
+  {
+   "id": "refit-N1000-s84003",
+   "arm": "refit",
+   "N": 1000,
+   "seed": 84003
+  },
+  {
+   "id": "cmdstan-N1000-s84003",
+   "arm": "cmdstan",
+   "N": 1000,
+   "seed": 84003
+  },
+  {
+   "id": "nutpie-N1000-s84003",
+   "arm": "nutpie",
+   "N": 1000,
+   "seed": 84003
+  }
+ ]
+}
