@@ -1,0 +1,26 @@
+[package]
+name = "refinement-levels10-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP68: is ten refinement levels a safe sampler default? Funnel + posteriordb, default build vs candidate-levels10 build"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[features]
+# The `levels10` arm: the same harness source built with the library's
+# study-only candidate default (`Tuning::default()` at ten levels).
+levels10 = ["owalnuts/candidate-levels10"]
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[[bin]]
+name = "pdb"
+path = "src/bin/pdb.rs"
+
+[workspace]

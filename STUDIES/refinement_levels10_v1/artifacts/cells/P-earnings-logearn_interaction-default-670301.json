@@ -1,0 +1,124 @@
+{
+ "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+ "argmax_abs_z": "beta[2]",
+ "argmin_bulk_ess": "beta[1]",
+ "arm": "default",
+ "chain_warnings": [],
+ "defaults": {
+  "adaptation_default": "DualAveraging { target_accept: 0.8 }",
+  "default_chain_rescue": "None",
+  "default_max_refinement_levels": 8,
+  "default_metric_regularization": "Stan",
+  "default_u_turn_rule": "MomentumSum",
+  "default_warmup_exhaustion": "AcceptUnlessDivergent",
+  "init_default": "Candidates { radius: 2.0, candidates: 16, max_attempts: 100, selection: HighestDensity }",
+  "kernel_options": "KernelOptions { u_turn: MomentumSum, exhaustion: Stop }",
+  "metric_default": "Diagonal { adapt: true, initial: None }",
+  "metric_used": "Diagonal { adapt: true, initial: None }",
+  "sampler_debug": "Sampler { warmup: 1000, draws: 1000, chains: Some(4), seed: 670301, threads: Some(4), metric: Diagonal { adapt: true, initial: None }, adaptation: DualAveraging { target_accept: 0.8 }, tuning: Tuning { step_size: 0.5, max_depth: 10, min_micro_steps: 1, max_refinement_levels: 8, max_error: 1.0, divergence_threshold: 1000.0, kernel_options: KernelOptions { u_turn: MomentumSum, exhaustion: Stop }, nonfinite_position: RejectLeaf }, limits: Limits { max_target_evaluations: None, admit_worst_case: true, deadline: None, timeout: None, cancellation: None, max_depth_stops: None }, cache_initial_evaluation: true }",
+  "tuning_default": "Tuning { step_size: 0.5, max_depth: 10, min_micro_steps: 1, max_refinement_levels: 8, max_error: 1.0, divergence_threshold: 1000.0, kernel_options: KernelOptions { u_turn: MomentumSum, exhaustion: Stop }, nonfinite_position: RejectLeaf }"
+ },
+ "dimension": 5,
+ "divergences": 0,
+ "draws_fnv": [
+  "995d7ca8ea2ff592",
+  "8ecad12d47f775a2",
+  "c3f699a18f3d48cd",
+  "304243101bf5f105"
+ ],
+ "execution": "ReplicatedConcurrent",
+ "exhaustion_stops_all_transitions": 7,
+ "final_step_size": [
+  0.01540404465865376,
+  0.016556486092349186,
+  0.0154440072612732,
+  0.016184376277873058
+ ],
+ "gates": {
+  "finite_draws": true,
+  "max_rank_rhat": true,
+  "min_bulk_ess": true,
+  "min_tail_ess": true,
+  "no_sampler_error": true,
+  "sampling_divergences": true
+ },
+ "gradients_sampling": 706677,
+ "gradients_total": 1649513,
+ "init": "Candidates { radius: 2.0, candidates: 16, max_attempts: 100, selection: HighestDensity }",
+ "level7_selected_all_transitions": 9,
+ "level8_plus_selected_all_transitions": 0,
+ "max_abs_z": 0.9818581831426932,
+ "max_depth_stops": 0,
+ "max_rank_rhat": 1.0038620461868624,
+ "min_bulk_ess": 985.4699732428405,
+ "min_bulk_ess_per_gradient": 0.0005974308618621621,
+ "min_tail_ess": 1190.5768129181617,
+ "min_tail_ess_per_gradient": 0.000721774737706318,
+ "model": "earnings-logearn_interaction",
+ "parameters": {
+  "beta[1]": {
+   "bulk_ess": 985.4699732428405,
+   "mean": 8.417175584332925,
+   "rhat": 1.003011791848139,
+   "tail_ess": 1190.5768129181617,
+   "z": 0.9725644016599272
+  },
+  "beta[2]": {
+   "bulk_ess": 986.4295446898897,
+   "mean": 0.016561614393492442,
+   "rhat": 1.0028996261231873,
+   "tail_ess": 1190.7446437044496,
+   "z": -0.9818581831426932
+  },
+  "beta[3]": {
+   "bulk_ess": 1080.423791965732,
+   "mean": -0.08510044240417065,
+   "rhat": 1.0033297500827139,
+   "tail_ess": 1568.2459170874995,
+   "z": -0.18572751498634846
+  },
+  "beta[4]": {
+   "bulk_ess": 1058.156399249653,
+   "mean": 0.007577519693837959,
+   "rhat": 1.0033394480556423,
+   "tail_ess": 1536.3479681479182,
+   "z": 0.2532448975382697
+  },
+  "sigma": {
+   "bulk_ess": 1878.996904342724,
+   "mean": 0.8823878563198364,
+   "rhat": 1.0038620461868624,
+   "tail_ess": 1445.2751822597927,
+   "z": 0.8275570872177902
+  }
+ },
+ "passed": true,
+ "replicas": 4,
+ "retained_exhaustions": 0,
+ "retained_refinement_level_histogram": [
+  3964,
+  28,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "schema": "refinement-levels10-v1-pdb-metrics",
+ "seed": 670301,
+ "status": "ok",
+ "tuning": {
+  "divergence_threshold": 1000.0,
+  "exhaustion": "Stop",
+  "max_depth": 10,
+  "max_error": 1.0,
+  "max_refinement_levels": 8,
+  "min_micro_steps": 1,
+  "step_size": 0.5,
+  "u_turn": "MomentumSum"
+ },
+ "wall_seconds_pinned_cotenanted": 13.767145946,
+ "warmup_divergences": 12
+}

@@ -1,0 +1,32 @@
+{
+ "commit": "938470bf7d766b4864476c6523822a78d7a2ddc5",
+ "library_diff_files": [
+  "Cargo.toml",
+  "src/sampler.rs",
+  "tests/sampler_api.rs"
+ ],
+ "library_diff_removed": [
+  "max_refinement_levels: 8,"
+ ],
+ "library_diff_sampler_code_added": [
+  "pub const DEFAULT_MAX_REFINEMENT_LEVELS: usize = if cfg!(feature = \"candidate-levels10\") {",
+  "10",
+  "} else {",
+  "8",
+  "};",
+  "max_refinement_levels: DEFAULT_MAX_REFINEMENT_LEVELS,"
+ ],
+ "library_default_build_unchanged": true,
+ "kernel_fingerprint_test_passed": true,
+ "feature_test_passed": true,
+ "feature_off_test_exit": 0,
+ "feature_on_test_exit": 0,
+ "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+ "uname": "Linux-7.0.0-1014-aws-x86_64-with-glibc2.39",
+ "cpu": "AMD EPYC 9R14",
+ "taskset": "8-11",
+ "lane": 3,
+ "cotenancy": "other lanes active on cores 0-7 and 12-15",
+ "bridgestan_source_sha256": "b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c",
+ "fingerprint_log_tail": "v1.0.151\n   Compiling either v1.18.0\n   Compiling rayon v1.12.0\n   Compiling memchr v2.8.3\n   Compiling ppv-lite86 v0.2.21\n   Compiling rand_chacha v0.9.0\n   Compiling rand v0.9.5\n   Compiling itoa v1.0.18\n   Compiling rand_distr v0.5.1\n   Compiling owalnuts v0.3.0 (/home/ubuntu/lanes/refinement_levels10_v1/repo)\n    Finished `release` profile [optimized] target(s) in 9.00s\n     Running tests/kernel_fingerprint.rs (/home/ubuntu/lanes/refinement_levels10_v1/target-tests/release/deps/kernel_fingerprint-94a6504522450390)\n\nrunning 3 tests\ntest default_start_rule_is_best_of_16 ... ok\ntest funnel_paper_tuning_four_chains_are_bit_exact ... ok\ntest eight_schools_adapted_four_chains_are_bit_exact ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s\n\n"
+}

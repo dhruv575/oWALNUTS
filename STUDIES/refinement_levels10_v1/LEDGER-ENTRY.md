@@ -1,0 +1,43 @@
+### WP68-REFINEMENT-LEVELS10-V1 — ten refinement levels are NOT QUALIFIED as a default: the funnel clauses pass (divergences 268 -> 0, tail mass unchanged), but posteriordb fails P1 (42 vs 44 passes) and P2 (geomean 0.824); only 13/51 cells are bit-identical, and the losses sit on the `hmm_drive_0` second-mode lottery and one R-hat of 1.0105; the default funnel at 80,000 draws is exact (0.0478 ± 0.0010)
+- **Ordered time:** 2026-10-26 on `wt/funnel-tail`.
+  - Commit `13fd02f6` adds the study-only Cargo feature `candidate-levels10` (off by default).
+  - `PREREGISTRATION.md` and `protocol.json` were frozen in `b34bdf60` as WP67 and renumbered to WP68 in `938470bf` on the coordinator's correction, both before any evidence cell.
+  - The disclosed non-evidence work was the BridgeStan compile and pipeline checks on seed 990667.
+  - Block F ran 60 cells, block P run 1 ran 102 cells, block L ran 30 cells.
+  - **Amendment 1** (committed before re-execution): P run 1 failed all 102 cells at model load. The cause was a driver env-var rename made during the renumbering; the failure was symmetric and happened before sampling. Block P was rerun once on the same seeds, all 102 cells completed, and the run-1 cells are kept in `artifacts/void-P-run1/`.
+  - Everything ran on AWS `owalnuts-bench`, lane 3, pinned `taskset -c 8-11` and co-tenanted.
+- **Protocol/config:**
+  - **Arms.** The arms are builds of one harness: the plain build (8 levels) and `--features levels10` (10 levels). Both run untouched sampler defaults.
+  - **Block F.** WP66's funnel harness at 4 x 2,000/20,000 x 30 seeds.
+  - **Block P.** The v7 oWALNUTS cell (WP62 `main.rs`) on the 17 house models x 3 seeds at 4 x 1,000/1,000. It uses BridgeStan 2.9.0 from source and posteriordb `28f8d3d` read directly. The gates are v7's: rank R-hat <= 1.01, bulk and tail ESS >= 400, zero divergences.
+  - **Block L.** The default arm at 4 x 2,000/80,000 x 30 seeds, descriptive only.
+  - **Rules.** SAFE iff all of:
+    - F1: funnel divergences `levels10` <= `default`;
+    - F2: |P5 − exact| <= 2 s.e.;
+    - P1: pass count not lower;
+    - P2: geomean of the per-model median ESS/gradient ratio >= 0.95;
+    - D: build integrity.
+  - **Not applied by design.** No flip in this study. By precedent a flip would not move `ALGORITHM_REVISION` or the kernel fingerprints.
+- **Seeds:** F 670101–670130, P 670301–670303, L 670201–670230. The one repo hit, 670129, is a numeric substring of a float.
+- **Status:** preregistered default-change qualification study with one recorded deviation; all 192 evidence cells present.
+- **Outcome, funnel (block F):**
+  - Divergences 268 -> **0**, with divergence-free seeds 19 -> 30/30.
+  - Exhaustions 1,204 -> 1.
+  - P5 0.0512 ± 0.0017 vs 0.0504 ± 0.0016, paired −0.0008 ± 0.0008.
+  - Tail ESS 0.97x; ESS per gradient 1.01x; 9/30 cells bit-identical.
+  - F1 and F2 hold.
+- **Outcome, posteriordb (block P):**
+  - Pass count 44 -> **42** (`hmm_drive_0` 2 -> 1, `sblrc` 3 -> 2), so P1 fails.
+  - Geomean **0.824**, so P2 fails. The geomean is driven by `hmm_drive_0` at 0.034, where a second-mode chain is named by `chain_warnings`, and by `accel_gp` at 0.47, which passes 0/3 in both arms.
+  - Not preregistered: excluding `hmm_drive_0`, the geomean is 1.007.
+  - 13/51 cells are bit-identical. In the default arm, 33/51 cells have exhaustion stops (140 warmup transitions, 25 retained) and 40/51 select level 7.
+  - Largest passing |z| is 4.20 in both arms, on the same bit-identical cell.
+- **Outcome, build integrity (D):** holds — the library diff is limited to the constant and its feature; `kernel_fingerprint` passes; the feature test passes in both builds.
+- **Outcome, descriptive (block L):** 0.0478 ± 0.0010 (t +0.06), with 1,241 divergences.
+- **Predictions:** Fa, Fc, Fd, Ld held; Fb (narrowly), Pa, Pb, Pc failed.
+- **Diagnostics:** `artifacts/results-table.md`, `artifacts/summary.json`, `artifacts/cells/`, `artifacts/environment.json`, `artifacts/box-logs/` (drivers, build, fingerprint and feature-test logs, library diff), `artifacts/draws-manifest.sha256`, `artifacts/void-P-run1/`, `AMENDMENTS.md`.
+- **Artifacts:** `STUDIES/refinement_levels10_v1/{PREREGISTRATION.md, protocol.json, AMENDMENTS.md, README.md, LEDGER-ENTRY.md, Cargo.toml, Cargo.lock, src/bin/funnel.rs, src/bin/pdb.rs, run_study.py, checksums.py, CHECKSUMS.sha256, artifacts/}`. Library: `Cargo.toml` (feature `candidate-levels10`), `src/sampler.rs` (`DEFAULT_MAX_REFINEMENT_LEVELS`), `tests/sampler_api.rs`.
+- **Conclusion:**
+  - Supported: ten levels eliminate funnel divergences at no funnel cost; the default funnel tail mass is exact at 80,000 draws, which closes WP66's residual.
+  - Not supported: ten levels as a qualified default. The frozen posteriordb clauses fail at 3 seeds because the arms decorrelate after early-warmup exhaustion.
+- **Next decision:** keep eight levels; document `max_refinement_levels(10)` as the funnel opt-in. A re-qualification needs at least 6–10 posteriordb seeds and a hidden-mode gate for `hmm_drive_0`. The feature can stay study-only or be dropped when the branch merges.

@@ -1,0 +1,59 @@
+{
+  "schema": "refinement-levels10-v1",
+  "ledger_id": "WP68",
+  "wp_number_note": "WP68 on the coordinator's correction (2026-10-26): the coordinator first assigned WP67, which lane 4 (trapped_chain_restart_v1) had already taken. The files committed in b34bdf60 said WP67; they were renamed to WP68 in the next commit, before any evidence cell ran (only the disclosed pipeline checks had run), so no amendment file is needed.",
+  "status": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+  "frozen_utc": "2026-10-26",
+  "question": "Is ten refinement levels (finest micro step h/512) a safe default change for sampler::Tuning::default() (currently eight, h/128)?",
+  "motivation": "WP66 (STUDIES/funnel_tail_deficit_v1): Tuning::default().max_refinement_levels(10) cut funnel retained divergences 59 -> 1 and exhaustions 756 -> 10 over 30 seeds with the tail mass unchanged in sign (paired -0.0012 +/- 0.0007) and draw-identical cells on Eight Schools and a 100-D Gaussian.",
+  "library_under_test": "wt/funnel-tail on top of main 5af9903e (= a49df800 library + WP66 study). One library change, behind a Cargo feature that is off by default: feature `candidate-levels10` makes sampler::DEFAULT_MAX_REFINEMENT_LEVELS (used by Tuning::default()) 10 instead of 8; tests/sampler_api.rs gains default_refinement_levels_follow_the_candidate_feature. With the feature off the library is the main library plus a public constant equal to 8.",
+  "flip_note": "A flip (making 10 the unconditional default) is NOT applied here. By the project's precedent it would not advance ALGORITHM_REVISION or change tests/kernel_fingerprint.rs: both pin walnutpie::KernelTuning (the frozen replay tuning with explicit level counts), not sampler::Tuning::default(), exactly as the MomentumSum (WP31/32), RejectLeaf (WP54) and best-of-16 (WP52) sampler-default flips left them unchanged. It would change sampler draws for any seed whose run exhausts eight levels, the Python DEFAULTS mapping (read from Rust), the README defaults table and CHANGELOG, and admission bounds (Sampler::worst_case_target_evaluations grows about 4x). The coordinator's brief asked to note that a flip would bump ALGORITHM_REVISION and the fingerprint tests; the study records the precedent instead and leaves that policy call to the coordinator.",
+  "machine": "AWS EC2 c7a.4xlarge owalnuts-bench, lane 3: every build and cell under taskset -c 8-11, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1; files under ~/lanes/refinement_levels10_v1/ only; three other lanes active (shared L3 and memory bandwidth), so walls are 'pinned, co-tenanted' and are not used in any rule; ESS per gradient, pass counts and divergence counts are unaffected.",
+  "arms": {
+    "default": "harness built plainly (target/release): Tuning::default() has 8 levels",
+    "levels10": "the same harness source built with --features levels10 (= owalnuts/candidate-levels10) into target-levels10/release: Tuning::default() has 10 levels",
+    "arm_check": "each binary refuses an arm whose level count differs from its build's DEFAULT_MAX_REFINEMENT_LEVELS"
+  },
+  "house_models": ["eight_schools-eight_schools_noncentered", "eight_schools-eight_schools_centered", "diamonds-diamonds", "earnings-logearn_interaction", "mesquite-logmesquite_logvash", "kidiq-kidscore_momhsiq", "sblrc-blr", "nes2000-nes", "arK-arK", "arma-arma11", "garch-garch11", "gp_pois_regr-gp_pois_regr", "hmm_example-hmm_example", "bball_drive_event_0-hmm_drive_0", "one_comp_mm_elim_abs-one_comp_mm_elim_abs", "hudson_lynx_hare-lotka_volterra", "mcycle_gp-accel_gp"],
+  "posteriordb": {"path": "~/infra/posteriordb/posterior_database (read-only)", "commit": "28f8d3d", "reader": "files read directly (posteriors/*.json, models/stan/*.stan, data/data/*.json.zip, reference_posteriors/draws/draws/*.json.zip); no posteriordb package"},
+  "bridgestan": "BridgeStan 2.9.0 source (GitHub release tarball) in the lane directory; models compiled with its makefile defaults (no STAN_THREADS), make -j2 per model; Python bridgestan 2.9.0 from ~/venv (read-only) for param_constrain; ArviZ 0.23.4 from ~/venv for the statistics.",
+  "seeds": {
+    "F": [670101, 670102, 670103, 670104, 670105, 670106, 670107, 670108, 670109, 670110, 670111, 670112, 670113, 670114, 670115, 670116, 670117, 670118, 670119, 670120, 670121, 670122, 670123, 670124, 670125, 670126, 670127, 670128, 670129, 670130],
+    "P": [670301, 670302, 670303],
+    "L": [670201, 670202, 670203, 670204, 670205, 670206, 670207, 670208, 670209, 670210, 670211, 670212, 670213, 670214, 670215, 670216, 670217, 670218, 670219, 670220, 670221, 670222, 670223, 670224, 670225, 670226, 670227, 670228, 670229, 670230]
+  },
+  "seed_check": "git grep -nowE over every tracked file of 5af9903e: the only hit is 670129 as the digits of the float 0.670129 in two bridgestan_owned_worker_v1 artifacts (a numeric substring of a float, excluded by wiki/methods.md); no hit in any protocol.json / PREREGISTRATION.md of C:/dev/owalnuts-wt/*/STUDIES or ~/lanes/*/*/STUDIES on the box. Pipeline seed 990667: no hit.",
+  "blocks": {
+    "F": {"kind": "funnel", "arms": ["default", "levels10"], "warmup": 2000, "draws": 20000, "seeds": "F", "role": "(a) funnel arm; decides F1, F2"},
+    "P": {"kind": "posteriordb", "arms": ["default", "levels10"], "warmup": 1000, "draws": 1000, "seeds": "P", "role": "(b) posteriordb arm; decides P1, P2"},
+    "L": {"kind": "funnel", "arms": ["default"], "warmup": 2000, "draws": 80000, "seeds": "L", "role": "(c) descriptive long default funnel run (WP66's suggestion); no rule"}
+  },
+  "run_order": "F (seeds ascending; within a seed default then levels10), then P (models in house order; within a model seeds ascending; within a seed default then levels10), then L (seeds ascending). One process per cell, strictly sequential, four threads. Cell timeout 2,700 s (v7). An errored or timed-out cell is a failed cell (funnel: counts as |z| > 2; posteriordb: not passed, excluded from that model's geomean, which then drops the model per v7's rule). Never rerun; a host-killed driver is a recorded deviation.",
+  "funnel_harness": "STUDIES/funnel_tail_deficit_v1/src/bin/funnel.rs (WP66) with three changes: the arm is the build (checked), an FNV-1a hash of the retained draws per chain and per cell, and default_max_refinement_levels recorded. Neal's 10-D funnel, house starts omega in {-3,-1,1,3}, x = 0, Metric::diagonal(), Limits::new().admit_worst_case(), 4 chains, 4 threads; statistic P(omega < -5) with the house MCSE z; per-class transition diagnostics as WP66.",
+  "posteriordb_harness": "STUDIES/posteriordb_bench_v7_seed_extension/src/main.rs (WP62 = v7 oWALNUTS cell) with: build arms default / levels10 replacing defaults / dense; per-chain FNV-1a hash of the retained draws; per-chain counts over warmup + retained of selections of level 7, of levels >= 8, and of RefinementExhausted stops. Sampler::new() with only the run shape and admit_worst_case; Init::default() (best_of(16)) starts drawn as the sampler would. Driver metrics are v7's: draws constrained through BridgeStan with transformed parameters, gate parameters = posteriordb reference-draw columns, ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05, 0.95), mean MCSE; gradients = target calls including start search, warmup and sampling.",
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "cell_timeout_seconds": 2700,
+  "statistics": {
+    "funnel": "per arm: pooled P5 = mean of the 30 per-seed estimates, between-seed s.e. = sd / sqrt(30); paired seed differences levels10 - default; total retained divergences and exhaustions; median omega tail ESS; geomean min ESS per gradient; bit-identical cells by draws hash.",
+    "posteriordb": "pass counts per arm out of 51; per model the median over the 3 seeds of min bulk ESS per gradient (warmup and start search included), ratio levels10 / default, geomean over the models whose 3 seeds are status ok on both arms (v7 rule); bit-identical cells (all four chains' retained-draw hashes equal); largest passing |z| (reported)."
+  },
+  "decision_rules": {
+    "F1": "funnel: total retained divergences of levels10 <= default's (block F).",
+    "F2": "funnel: |pooled P5(levels10) - 0.0477903522728147| <= 2 x its between-seed s.e.",
+    "P1": "posteriordb: levels10 pass count >= default pass count (out of 51).",
+    "P2": "posteriordb: geomean over models of (median ESS/gradient levels10) / (median ESS/gradient default) >= 0.95.",
+    "D": "build integrity: on the box, with the feature off, git diff 5af9903e of src/ and Cargo.toml / Cargo.lock at the repository root touches only the feature-gated constant (DEFAULT_MAX_REFINEMENT_LEVELS, value 8 off) and the Cargo feature entry, cargo test --release --test kernel_fingerprint passes, and the feature test passes in both builds.",
+    "verdict": "SAFE (ten levels qualify as a default change; the flip itself is the coordinator's and is not applied here) iff F1, F2, P1, P2 and D all hold; otherwise NOT QUALIFIED, naming the failed clauses. Block L decides nothing."
+  },
+  "predictions": {
+    "Fa": "funnel divergences fall by an order of magnitude: levels10 total x 10 <= default total (coordinator's prediction from WP66)",
+    "Fb": "funnel pooled P5 unchanged: |paired mean difference| <= 1 paired s.e. (coordinator's prediction from WP66)",
+    "Fc": "median omega tail ESS ratio levels10 / default in [0.9, 1.1]",
+    "Fd": "funnel retained exhaustions fall by an order of magnitude",
+    "Pa": "at least 25 of the 51 posteriordb cells are bit-identical across the two builds",
+    "Pb": "posteriordb geomean ESS/gradient ratio in [0.97, 1.03]",
+    "Pc": "levels10 passes the same number of posteriordb cells as default (equality)",
+    "Ld": "block L (descriptive) pooled P5 within 1.5 between-seed s.e. of 0.0478"
+  },
+  "pre_freeze_runs": "Non-evidence, disclosed: BridgeStan compile of the 17 models (infrastructure); pipeline checks on seed 990667 (one funnel cell per arm at 2,000/20,000; one eight_schools_noncentered posteriordb pair) after these predictions were written; outputs in the lane scratch directory, not committed."
+}
