@@ -1,0 +1,25 @@
+### WP69-TRAPPED-CHAIN-RESTART-CONFIRMATION-V1: the frozen WP67 step rule is not specific enough to become a default; it flags 3 healthy or self-recovering chains, misses a real `lotka_volterra` trap at ratio 0.111, and 0/240 fresh lotka chains were trapped at the defaults; (c), (d) and the fingerprint hold; DO NOT PROPOSE the default
+
+- **When.** 2026-10-26 UTC (2026-10-25 local).
+  - Library unchanged from WP67 (`8887a0f0`, research flag, default off).
+  - Preregistration and harness frozen at `38ae95df` before the first cell.
+  - 261 one-shot cells in manifest order, 01:43–02:16 UTC. None rerun; none failed or timed out.
+  - Lane 4 of the shared Linux box (c7a.4xlarge, `taskset -c 12-15`, other lanes active: walls are pinned, co-tenanted).
+- **Protocol.** `STUDIES/trapped_chain_restart_confirmation_v1/{PREREGISTRATION.md,protocol.json}`.
+  - Detector and restart exactly as WP67: flag iff the step at transition 99 is below 0.1 x the chain median; rerun from transition 0 from the best of 16 fresh independent candidates.
+  - Arms `defaults` / `restart`, 4 x 1,000/1,000, `Init::best_of(16)`.
+  - Blocks: C = `hmm_drive_0` (targeted 952202, 600602, 600605; fresh 6903101–6903103); M = WP52 two-mode target (6903201–6903206); D = 100-D Gaussian sync cost at 1/4/16 chains x 5 repeats of 7 interleaved pairs; A = lotka 6901001–6901060; B = 17 house models x 6902001–6902003.
+  - Gates v7 (R-hat <= 1.01, bulk/tail ESS >= 400, 0 divergences); arm A also |z| <= 4. Trapped / second mode = more than 3 reference SD off.
+  - BridgeStan 2.9.0 built in the lane; posteriordb `28f8d3d`; ArviZ 0.23.4.
+- **Outcome.**
+  - **(a) fails.** Trapped chains 0/240 at the defaults and 0/240 with the restart. The rule fired on 6901025 chain 0 (ratio 0.024) and 6901036 chain 1 (0.027). Both chains recovered on their own at the defaults (shifts 0.10 / 0.07 SD), so both flags are false positives. The restarts were harmless and cheaper (cell gradients 0.83x / 0.85x); passes 55 = 55.
+  - **(b) fails on the false-positive clause.** Passes 42 = 42 of 51; geomean ESS/gradient ratio 1.0007; all 50 unflagged cells bit-identical. One flag on a passing cell: `earnings` 6902001 chain 1 (0.031). Missed trap: `lotka_volterra` 6902003 chain 2, 88 SD off, R-hat 1.149, ratio 0.111.
+  - **(c) holds.** 0 firings on 24 cells, actual or emulated. The `hmm_drive_0` targeted seeds did not reproduce their second mode on this build; fresh 6903102 did (R-hat 1.022) and `chain_warnings` named it. Two-mode: 5 of 6 cells mixed (R-hat 1.50–1.73). The warning was silent on the three 2-2 splits (6/12 cell-arms reported); R-hat reported 12/12.
+  - **(d) holds.** Median sync overhead +0.10 % (1 chain), +1.15 % (4), +1.86 % (16), under the 2 % limit; 16-chain repeats ranged to +5.1 %.
+  - **Fingerprint: 123/123 pairs, 15/15 sync cells identical.**
+  - **Predictions:** P1–P4 failed (P4 on its warning half, as recorded beforehand); P5, P6 held.
+- **Decision.** DO NOT PROPOSE. (a) and (b) fail; (c), (d) and the fingerprint hold.
+  - Across WP67 + WP69, 3 of 5 flags fell on chains that were healthy or would have recovered, and true traps occur at ratios 0.111 (here) and 0.114 (WP44). No single threshold separates them.
+  - The fresh-seed lotka trap rate is about 1 in 252 chains, not WP57's targeted 2 in 48.
+- **Change.** None. The opt-in stays research-only; `ALGORITHM_REVISION` unchanged.
+- **Next.** Not a threshold retune. If revisited, preregister a two-signal rule (step ratio at S1 confirmed by still-slow, low-density at the end of S2) and test it on these same 261 cells' seeds plus new ones.

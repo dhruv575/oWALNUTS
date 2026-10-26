@@ -1,0 +1,113 @@
+{
+ "schema": "trapped-chain-restart-confirmation-v1-protocol",
+ "ledger_id": "WP69",
+ "ledger_id_note": "assigned by the coordinator (WP68 is lane 3's refinement_levels10_v1)",
+ "status": "FROZEN_BEFORE_EVIDENCE",
+ "question": "Confirmation of WP67 (STUDIES/trapped_chain_restart_v1): with the detector and restart unchanged, does the research-only trapped-chain restart (a) cut lotka_volterra trapped chains on 60 fresh seeds with no false positives, (b) leave the 17 house posteriordb models' passes and ESS per gradient intact with every unflagged cell bit-identical and no flag on a cell that passes at the defaults, (c) stay silent on genuine second modes (hmm_drive_0 and a synthetic bimodal target) while the chain-disagreement warning still reports them, and (d) cost under 2 % of wall at its synchronisation point? If all four hold, propose making it the default (which would bump ALGORITHM_REVISION).",
+ "baseline_commit": "fec52186 (local main: 0.3.0 + WP66 + WP67 merged; the restart flag is default-off)",
+ "library": "unchanged from WP67 (8887a0f0): WarmupConfig::with_trapped_chain_restart(TrappedChainRestartConfig::step_rule()), research feature; nothing re-tuned",
+ "machine": {
+  "box": "AWS EC2 c7a.4xlarge, 16 dedicated AMD cores (no SMT), 32 GB, Ubuntu 24.04, Rust 1.88.0, Python 3.12.3",
+  "lane": "lane 4, cores 12-15; every build and cell under taskset -c 12-15; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, TMPDIR under the lane",
+  "co_tenancy": "other lanes run concurrently on cores 0-11 (shared L3 and memory bandwidth): wall-clock numbers are 'pinned, co-tenanted' and arm (d) is read only as a restart/defaults ratio; gradients, ESS per gradient, hashes and pass counts are unaffected"
+ },
+ "models_build": "prepare_models.py (unchanged from WP67): Stan programs and data from the shared read-only posteriordb checkout, BridgeStan 2.9.0 source tarball (sha256 b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c) under the lane, gcc 13.3.0, no STAN_THREADS; the 7 WP67 libraries are reused byte-identically and the 10 others are built the same way; hashes in artifacts/models.json",
+ "posteriordb": {
+  "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+  "path": "~/infra/posteriordb/posterior_database",
+  "access": "read-only shared checkout; reference draws read directly from reference_posteriors/draws/draws/*.json.zip"
+ },
+ "python": "~/venv (shared, read-only): arviz 0.23.4, bridgestan 2.9.0, numpy 2.5.4",
+ "lotka_model": "hudson_lynx_hare-lotka_volterra",
+ "house_models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "sampler": "owalnuts::sampler: Metric::diagonal() (default), Tuning::default() (RejectLeaf), Limits::admit_worst_case(), 4 chains x 1,000 warmup / 1,000 draws on 4 threads (arm D: chains x 1,000/1,000 on min(chains, 4) threads), starts Init::default() = Init::best_of(16) drawn by candidate_starts exactly as Sampler::run_with_init",
+ "arms": {
+  "defaults": "Adaptation::default()",
+  "restart": "Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION).with_trapped_chain_restart(TrappedChainRestartConfig::step_rule()))"
+ },
+ "detector": "unchanged from WP67: flag chain c iff its step at transition 99 (the last transition of the first slow window) is below 0.1 x the median over chains; checked once with the chains synchronised there; skipped with < 3 chains",
+ "restart_action": "unchanged from WP67: the flagged chain reruns the full schedule from transition 0 from the best of 16 fresh uniform(-2, 2) candidates on an independent seed stream, initial metric and step, fresh dual averaging and RNG stream; at most once per chain",
+ "blocks": [
+  {"name": "C", "arm_letter": "c", "kind": "pdb", "models": ["bball_drive_event_0-hmm_drive_0"],
+   "seeds": [952202, 600602, 600605, 6903101, 6903102, 6903103], "targeted_seeds": [952202, 600602, 600605],
+   "note": "genuine second mode: 952202 (WP52 hidden-mode cell, one chain in a second mode for its first 46 retained draws) and 600602 / 600605 (WP60: one best_of_16 chain in a second mode each) are declared targeted replications on a different build (Windows -> Linux), so the second mode need not reappear; 6903101-6903103 are fresh"},
+  {"name": "M", "arm_letter": "c", "kind": "two_mode", "seeds": [6903201, 6903202, 6903203, 6903204, 6903205, 6903206],
+   "note": "synthetic well-separated bimodal target (the WP52 two-mode target: d = 10, 0.7 N(+4 e1, I) + 0.3 N(-4 e1, I), 8 SD apart), fresh seeds"},
+  {"name": "D", "arm_letter": "d", "kind": "sync", "chains": [1, 4, 16], "repeats": 5, "seeds": [6904001, 6904002, 6904003, 6904004, 6904005],
+   "note": "100-D standard Gaussian; one process per (chain count, repeat); in each, one untimed warm-up run then 7 interleaved (defaults, restart) pairs, order reversed on odd repeats; repeat ratio = median restart wall / median defaults wall"},
+  {"name": "A", "arm_letter": "a", "kind": "lotka",
+   "seeds": [6901001, 6901002, 6901003, 6901004, 6901005, 6901006, 6901007, 6901008, 6901009, 6901010, 6901011, 6901012, 6901013, 6901014, 6901015, 6901016, 6901017, 6901018, 6901019, 6901020, 6901021, 6901022, 6901023, 6901024, 6901025, 6901026, 6901027, 6901028, 6901029, 6901030, 6901031, 6901032, 6901033, 6901034, 6901035, 6901036, 6901037, 6901038, 6901039, 6901040, 6901041, 6901042, 6901043, 6901044, 6901045, 6901046, 6901047, 6901048, 6901049, 6901050, 6901051, 6901052, 6901053, 6901054, 6901055, 6901056, 6901057, 6901058, 6901059, 6901060]},
+  {"name": "B", "arm_letter": "b", "kind": "pdb", "models": "house_models", "seeds": [6902001, 6902002, 6902003]}
+ ],
+ "blocks_note": "block B's models field means the house_models list (17 models)",
+ "cell_order": "C, M, D, A, B in that order; within C/M/A seeds in listed order, defaults then restart; D chain counts ascending, repeats ascending; B models in listed order, seeds ascending, defaults then restart. Strictly sequential, one harness process per cell, no cell rerun; failures are results. 12 + 12 + 15 + 120 + 102 = 261 cells.",
+ "seeds_verified_unused": "git grep -w over the repository at fec52186 and the protocol.json / PREREGISTRATION.md of every sibling worktree find none of 6901001-6901060, 6902001-6902003, 6903101-6903103, 6903201-6903206, 6904001-6904005 or 6909901 (952202, 600602, 600605 are declared targeted replications)",
+ "smoke_seed": 6909901,
+ "timeouts": {
+  "lotka_cooperative_seconds": 1200,
+  "lotka_process_backstop_seconds": 1500,
+  "pdb_process_seconds": 2700,
+  "other_process_seconds": 1800
+ },
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "finite_draws": true,
+  "no_sampler_error": true,
+  "lotka_efficacy_also": "max |z| <= 4 on arm A cells only (the WP57/WP67 lotka gate); arms B and C use the v7 gates without z",
+  "note": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05/0.95), mean MCSE on every posteriordb reference parameter (v7 code); a cell that errors or times out fails every gate"
+ },
+ "definitions": {
+  "chain_shift": "per chain, max over reference parameters of |chain mean - reference mean| / reference SD",
+  "trapped_chain": "arm A: a chain of a completed cell with shift > 3; in a cell that did not complete, every chain that had not finished",
+  "flagged_chain": "restart arm: a chain the library restarted; defaults arm: the detector emulated on the defaults run's transition-99 steps",
+  "false_positive_a": "a chain flagged in arm A whose defaults counterpart is not trapped",
+  "false_positive_b": "any flagged chain in a block-B cell whose defaults cell passes every gate",
+  "firing": "a restart-arm cell with a flagged chain (or a defaults cell whose emulated set is non-empty)",
+  "second_mode_chain_hmm": "a hmm_drive_0 chain with shift > 3",
+  "second_mode_cell_two_mode": "a two-mode cell whose chains do not all end in the same mode (mixed end modes)",
+  "warning_reports_it": "Summary::chain_warnings (Posterior::chain_warnings) is non-empty on the cell",
+  "efficiency": "per cell min bulk ESS / total target calls (start search, abandoned runs, replacement pools included); per model geometric mean over seeds where both arms completed; ratio restart / defaults; geometric mean over the 17 models",
+  "sync_overhead": "per chain count, the median over the 5 repeats of the repeat ratio (median restart wall / median defaults wall), minus 1",
+  "fingerprint": "on every defaults/restart pair of arms A, B, C: flagged sets equal and transition-99 steps equal; a non-firing pair bit-identical (all-chain draw hash and total target calls); every unflagged chain of a firing pair bit-identical (draw hash and target calls); arm D: every run of a cell has the same draw hash and target calls"
+ },
+ "predictions": {
+  "P1": "arm A: defaults has 4-16 trapped chains of 240 (WP57 + WP67 saw 4 of 192 at the defaults on these code paths, about 2 %, but with targeted seeds included); restart has at most 1",
+  "P2": "arm A: the detector flags every defaults trapped chain that reached transition 99 (sensitivity 1) and no other chain (0 false positives)",
+  "P3": "arm B: the detector fires only on lotka_volterra cells; 0 flags on cells that pass at the defaults; passes restart >= defaults; geomean ESS/gradient ratio >= 1.00 (1.0000 on every model the rule never fires on)",
+  "P4": "arm C: 0 firings on all 24 cells (a mode is not a trap: the mode's step is not 10x smaller); on every hmm_drive_0 cell with a second-mode chain and on every mixed-mode two-mode cell the chain-disagreement warning is non-empty",
+  "P4_expectation": "my own expectation, recorded separately: the warning is reliable for a single minority chain but WP52 showed it silent on 2 of 3 mixed two-mode cells (two chains per mode, leave-one-out R-hat cannot isolate a chain), so I expect P4's warning half to fail on 2-2 splits, while max split R-hat > 1.01 reports every mixed cell",
+  "P5": "arm D: sync overhead < 2 % at 4 and 16 chains; at 1 chain the restart path is not entered (fewer than 3 chains) so the ratio measures only timing noise",
+  "P6": "fingerprint holds on every pair and every arm-D cell"
+ },
+ "decision_rule": {
+  "frozen": true,
+  "a": "arm A: restart trapped chains < defaults trapped chains (so defaults needs >= 1) and 0 false positives (false_positive_a)",
+  "b": "arm B: passes restart >= defaults of 51, geomean ESS/gradient ratio >= 0.99, every unflagged cell bit-identical (fingerprint), and 0 false_positive_b",
+  "c": "arm C: zero firings over all 24 cells (both arms, actual and emulated)",
+  "d": "arm D: sync overhead < 0.02 at 4 chains and at 16 chains",
+  "fingerprint_any_arm": "a fingerprint failure anywhere is an implementation fault: verdict FAILED (implementation)",
+  "verdict": "PROPOSE THE DEFAULT iff a, b, c and d all hold and the fingerprint holds; a default change would bump ALGORITHM_REVISION and needs the house v7-style validation afterwards. Otherwise DO NOT PROPOSE. The prediction about the chain-disagreement warning (P4, second half) is reported but is not a decision clause.",
+  "no_default_flip_in_this_study": true
+ }
+}
