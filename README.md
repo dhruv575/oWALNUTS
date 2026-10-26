@@ -450,8 +450,10 @@ in both arms [E19]:
 **When not to:** GP-hyperparameter posteriors. At 1,000 draws `gp_pois_regr`
 went 3/3 -> 0/3 gates: it is 1.73x per gradient, but it takes fewer
 gradients per draw and the length-scale's ESS falls below 400. `accel_gp`
-went 1/3 -> 0/3 at 0.38x. Funnels and hierarchical scale problems also need
-care: on Neal's funnel the tail mass is exact, but there were 2 retained
+went 1/3 -> 0/3 at 0.38x. For GP models that must pass their gates, a
+target acceptance of 0.95 is the measured opt-in: on `accel_gp` it passes
+3/3 with 2.7x the ESS at 2.5x the gradients (WP70, [E35]). Funnels and
+hierarchical scale problems also need care: on Neal's funnel the tail mass is exact, but there were 2 retained
 divergences against 0 for the diagonal. Over all 17 models dense passes
 40/51 gate cells against the diagonal's 43/51 (geomean 3.21x per gradient).
 On fresh seeds in posteriordb v7's descriptive dense arm, `Metric::dense()`
@@ -798,3 +800,12 @@ provenance.
   funnel z +0.29, -0.53, +0.55:
   [`STUDIES/posteriordb_bench_v7_linux_v1`](STUDIES/posteriordb_bench_v7_linux_v1/README.md)
   (WP64).
+- [E35] `accel_gp` gap (Linux, 3 fresh seeds, replicated dispatch vs
+  CmdStan 2.39.0): 0.567x per gradient at the defaults, 0/3 gates for both
+  samplers (CmdStan 37–174 divergences). None of three mechanisms met its
+  criterion (reverse-check stops 55 % of orbits but median integration time
+  0.87x CmdStan's; depth-cap stops 0.0001; metric mismatch 1.43x). No
+  candidate qualifies: `target_accept 0.95` 0.616x (passes `accel_gp` 3/3,
+  2.7x ESS at 2.5x gradients), `max_depth 12` 0.084x, warmup 2,000 0.192x.
+  No default or flag changed:
+  [`STUDIES/accel_gp_gap_v1`](STUDIES/accel_gp_gap_v1/README.md) (WP70).

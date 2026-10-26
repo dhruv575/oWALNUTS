@@ -27,6 +27,9 @@ architecture and operating system (see the `walnutpie` module documentation).
 - posteriordb v7 reproduced on Linux (WP64): pass counts within one cell per
   block, draws not bit-identical across platforms, wall per gradient 0.94x
   CmdStan's; the per-gradient headline is platform- and seed-dependent.
+- `accel_gp` gap (WP70): no mechanism supported, no candidate qualifies;
+  `target_accept 0.95` documented as the GP opt-in (passes 3/3 at 2.5x
+  gradients).
 
 ## [0.3.0] - 2026-10-25
 
