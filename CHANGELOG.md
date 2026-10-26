@@ -7,7 +7,23 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Research flag `WarmupConfig::with_trapped_chain_restart` (default off): a
+  chain whose step size at the end of the first slow adaptation window is
+  below a fraction of the chain median restarts from an independent best-of-16
+  start (WP67, `STUDIES/trapped_chain_restart_v1`; confirmation pending).
+- Study-only Cargo feature `candidate-levels10` (off): ten refinement levels
+  in `sampler::Tuning::default()` for WP68. Not qualified as a default; eight
+  levels stay.
+
+### Documented
+
+- Linux BridgeStan: the concurrent-replica dispatch is qualified on x86_64
+  glibc (WP65): 0/500 child faults, bit-identical draws, 0.96x CmdStan wall
+  per gradient. Build without `STAN_THREADS` on Linux too.
+- Funnel tail deficit closed (WP66, WP68): not a bias; the default's tail mass
+  at 80,000 draws over 30 seeds is 0.0478, the exact value.
 
 ## [0.3.0] - 2026-10-25
 

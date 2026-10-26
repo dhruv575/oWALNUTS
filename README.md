@@ -144,6 +144,14 @@ Chains run in parallel on up to `threads` worker threads (WP45, [E24]):
   (WP50C). It is opt-in, not the default, because the WP50D confirmatory
   gate was not supported (1/1000 static children failed, with a sampler
   nonfinite-position error rather than a crash) [E25].
+- **Linux BridgeStan (x86_64, glibc):** the default concurrent-replica
+  dispatch is qualified (WP65, [E30]): 0/500 child faults, draws bit-identical
+  to the serialised path, 4.0–5.4x gradient throughput at four callers, and
+  wall per gradient 0.96x CmdStan's on the fixed-16 models (pinned,
+  co-tenanted, one seed). Serialising the calls costs 3.6x. Build without
+  `STAN_THREADS` on Linux too: a threaded library costs up to 1.57x per call
+  (`arK`) and is not unloaded on drop. macOS, aarch64 and Windows multi-worker
+  dispatch remain unqualified.
 
 ## Where it shines
 
@@ -720,3 +728,47 @@ provenance.
   posteriordb confirmation candidate; no default changed:
   [`STUDIES/funnel_defaults_30seed_v1`](STUDIES/funnel_defaults_30seed_v1/README.md)
   (`WP53-FUNNEL-DEFAULTS-30SEED-V1`).
+- [E30] BridgeStan dispatch on Linux (x86_64 glibc, GCC 13.3, BridgeStan
+  2.9.0, 16 dedicated cores, pinned and co-tenanted): the default
+  concurrent-replica dispatch is qualified: 0/500 child faults on every path,
+  draws bit-identical to the serialised path on 16/16 fixed-16 models, 4.0–5.4x
+  gradient throughput at four callers, wall per gradient 0.96x CmdStan's
+  (one seed); serialising the calls costs 3.46x, which is where the Windows
+  1.85x gap came from. `STAN_THREADS=true` is not free on Linux (1.57x per
+  call on `arK`) and such a library is not unloaded on drop:
+  [`STUDIES/bridgestan_linux_dispatch_v1`](STUDIES/bridgestan_linux_dispatch_v1/README.md)
+  (WP65).
+- [E31] Funnel tail deficit: at 30 fresh seeds the WP53 deficit did not
+  replicate (default pooled 0.0465 ± 0.0017 against 0.0478, mean z -0.39);
+  none of three mechanisms (step adaptation, refinement ceiling, U-turn rule)
+  is supported and no setting is recommended; the default at 4 x 2,000/80,000
+  over 30 seeds gives 0.0478 ± 0.0010, exactly the true value, so the
+  residual was a low draw, not bias. Side finding: ten refinement levels cut
+  funnel divergences 59 -> 1 with identical draws on the side targets:
+  [`STUDIES/funnel_tail_deficit_v1`](STUDIES/funnel_tail_deficit_v1/README.md)
+  (WP66) and the 80,000-draw arm of
+  [`STUDIES/refinement_levels10_v1`](STUDIES/refinement_levels10_v1/README.md)
+  (WP68).
+- [E32] Trapped-chain restart (research flag
+  `WarmupConfig::with_trapped_chain_restart`, default off): a chain whose
+  step at the end of the first slow window is below 0.1x the chain median
+  restarts from an independent best-of-16 start. On WP57's 12 `lotka_volterra`
+  seeds it flagged exactly the two trapped chains (step ratios 0.0023 and
+  0.025; lowest healthy 0.388), 0/48 trapped after restart, both cells passing
+  with 2.4–4.6x fewer gradients; 0 false positives over 96 lotka and 72
+  posteriordb chains; every unflagged run bit-identical to the defaults
+  (42/42 pairs); the six-model regression arm identical (12/18 passes, ratio
+  1.0000). Supported on two events; a confirmation study (WP69) runs before
+  any default is proposed:
+  [`STUDIES/trapped_chain_restart_v1`](STUDIES/trapped_chain_restart_v1/README.md)
+  (WP67).
+- [E33] Ten refinement levels as a default candidate (Cargo feature
+  `candidate-levels10`, off): on the funnel at 30 seeds, divergences 268 -> 0,
+  exhaustions 1,204 -> 1, tail mass unchanged (paired -0.0008 ± 0.0008), ESS
+  per gradient 1.01x; on the 17 house posteriordb models x 3 seeds it is
+  **not qualified**: 42 vs 44 passes and geomean ESS per gradient 0.824
+  (the `hmm_drive_0` second-mode trap and three-seed noise; 1.007 excluding
+  it, not preregistered). Eight levels stay; `max_refinement_levels(10)` is
+  the funnel opt-in:
+  [`STUDIES/refinement_levels10_v1`](STUDIES/refinement_levels10_v1/README.md)
+  (WP68).

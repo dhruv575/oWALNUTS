@@ -45,6 +45,14 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
    future funnel checks should pool tail mass over 12 or more seeds and
    count divergences. The 4-5 % tail deficit at the defaults is a new open
    item (why both `delta = 1` and `delta = 2` under-sample `omega < -5`).
+   **Closed (WP66, WP68):** at 30 fresh seeds the deficit did not replicate
+   (0.0465 ± 0.0017), none of three mechanisms (step adaptation, refinement
+   ceiling, U-turn rule) is supported, and the default at 4 x 2,000/80,000
+   over 30 seeds gives 0.0478 ± 0.0010, exactly the true value
+   (`STUDIES/funnel_tail_deficit_v1`, `STUDIES/refinement_levels10_v1`).
+   What remains on the funnel is divergences, not bias: ten refinement levels
+   remove all of them (268 -> 0) with the tail unchanged, but failed the
+   posteriordb rule (42 vs 44 passes, 0.824x) and stay an opt-in.
 4. **Closed as a warmup-statistic line (WP49): target-adaptive `delta`.** A
    rule driven by the warmup-window level-0 leaf-error tail does not qualify:
    the inverse-tail rule is 1.016x and the refined-fraction controller
@@ -115,7 +123,11 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
    dispatch is opt-in (`ReplicatedOptions::concurrent_if_static_runtime()`);
    the owned worker stays the default. Open: whether the coordinator accepts
    the WP50E dispatch-independent reading (static native-fault count 0/1000),
-   a larger static gate before any default change, and MSVC.
+   a larger static gate before any default change, and MSVC. On Linux the
+   question does not arise: WP65 (`STUDIES/bridgestan_linux_dispatch_v1`)
+   qualified the concurrent-replica dispatch with 0/500 faults per path,
+   bit-identical draws and 0.96x CmdStan wall per gradient, and showed the
+   Windows 1.85x gap is the cost of serialising calls (3.46x on Linux).
 9. **Reverse-coarsening cost on `accel_gp`** (WP34, WP39, WP39B, WP48): 54 %
    reverse-coarser stops and 0.47x CmdStan; not a truncation artefact, and
    not linear correlation either (a dense metric at condition number 18 is
@@ -144,7 +156,13 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     not per-call ODE cost. Neither `best_of(64)` (1/12 trapped, plus R-hat
     1.039 on another seed) nor an initial-phase depth cap (the same 2/12)
     fixes it. Open: the trap rate over many seeds, and the restart in
-    item 19.
+    item 19. WP67 (`STUDIES/trapped_chain_restart_v1`) detected both trapped
+    chains by their first-slow-window step (0.1x the chain median; ratios
+    0.0023 and 0.025 against a lowest healthy 0.388) and restarted them from
+    an independent best-of-16 start: 0/48 trapped, no false positives over
+    168 chains, unflagged runs bit-identical. Supported on two events; WP69
+    is the confirmation (60 fresh seeds, 17-model breadth, a genuine
+    second-mode arm where the rule must not fire, synchronisation cost).
 13. **The per-gradient gap to nutpie on PyMC models** (WP47, WP58): nutpie
     gets 1.6–2.4x more ESS per gradient than oWALNUTS on all three models of
     `STUDIES/python_callpath_v1`. WP58 (`STUDIES/nutpie_per_gradient_gap_v1`)
