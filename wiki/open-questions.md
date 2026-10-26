@@ -109,7 +109,12 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
    study (forced starts on `lotka_volterra` / `arma11`, the WP33 trap) is
    still needed, and emitting the warmup-end check while the run is going
    (the frozen-chain case is the one that times out) is untried. A narrowly
-   scoped step-only rescue remains unmeasured.
+   scoped step-only rescue remains unmeasured. WP69
+   (`STUDIES/trapped_chain_restart_confirmation_v1`) measured the step-only
+   rescue: not proposed (false positives on recovering chains at step ratios
+   0.024–0.031, a real trap missed at 0.111). It also found the warning
+   silent on three 2-vs-2 splits of a two-mode target that R-hat > 1.01
+   caught (6 of 12 split runs reported); WP74 tests a split-aware rule.
 8. **Windows native root cause** (WP35A, `bridgestan_lifetime_v1`,
    `bridgestan_owned_worker_v1`, WP50–WP50E): the heap corruption
    reproduced only with the full WinLibs mingw runtime (3/60, WP50B), and
