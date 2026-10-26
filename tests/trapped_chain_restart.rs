@@ -170,6 +170,43 @@ fn fewer_than_three_chains_or_no_slow_window_is_the_plain_run() {
     }
 }
 
+/// `with_check_window(k)` (WP89) scores the end of the `k`-th non-empty slow
+/// window: with 600 warmup transitions (75 / 25, 50, 100, 200, 150 / 50) window
+/// 1 ends at transition 150; a window index past the schedule skips the check.
+/// Unflagged runs stay bit-identical to the plain run.
+#[test]
+fn later_check_window_scores_that_window_and_stays_bit_identical() {
+    let target = Gaussian(3);
+    let mass = DiagonalMass::identity(NonZeroUsize::new(3).unwrap());
+    let starts = starts(4, 3, 2.0);
+    let threads = NonZeroUsize::new(4).unwrap();
+    let plain = sample_chains(&target, &starts, &mass, &config(600, 200, false), threads).unwrap();
+    let with_window = |window: usize| {
+        let restart = TrappedChainRestartConfig::step_rule().with_check_window(window);
+        assert_eq!(restart.check_window(), window);
+        let warmup = WarmupConfig::new(0.8)
+            .unwrap()
+            .with_trapped_chain_restart(restart);
+        let cfg = config(600, 200, false).with_warmup(warmup);
+        sample_chains(&target, &starts, &mass, &cfg, threads).unwrap()
+    };
+    let second = with_window(1);
+    let none = with_window(50);
+    for (chain, a) in plain.chains().iter().enumerate() {
+        let b = &second.chains()[chain];
+        assert_eq!(a.samples(), b.samples(), "chain {chain} draws (window 1)");
+        assert_eq!(a.diagnostics(), b.diagnostics());
+        let checks = b.telemetry().trapped_chain_checks();
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].transition(), 149, "end of slow window 100..150");
+        assert_eq!(checks[0].step(), b.diagnostics()[149].step_size());
+        assert!(!checks[0].restarted());
+        let c = &none.chains()[chain];
+        assert_eq!(a.samples(), c.samples(), "chain {chain} draws (no window)");
+        assert!(c.telemetry().trapped_chain_checks().is_empty());
+    }
+}
+
 #[test]
 fn a_chain_started_in_a_narrow_trap_is_restarted_from_an_independent_start() {
     let target = Trap;
