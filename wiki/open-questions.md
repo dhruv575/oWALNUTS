@@ -132,6 +132,17 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
    reverse-coarser stops and 0.47x CmdStan; not a truncation artefact, and
    not linear correlation either (a dense metric at condition number 18 is
    1.34x and still 0/3, WP48 post hoc). Its difficulty is unexplained.
+   WP70 (`STUDIES/accel_gp_gap_v1`, Linux, 3 seeds) measured 0.567x CmdStan
+   and tested three mechanisms, none supported under its frozen criteria:
+   reverse-check stops end 55 % of orbits but the median integration time is
+   0.87x CmdStan's (cut orbits integrate 0.8–1.2 time units against 3.8–4.0
+   for U-turn orbits, a split a median cannot see); depth-cap stops are
+   0.0001; metric mismatch is 1.43x CmdStan's. No candidate qualifies:
+   `max_depth 12` 0.084x, warmup 2,000 0.192x, `target_accept 0.95` 0.616x
+   (it passes `accel_gp` 3/3 at 2.7x the ESS but 2.5x the gradients, 1.09x
+   the default per gradient). Post hoc: a smaller adapted step means fewer
+   reverse-check cuts and more ESS; a follow-up should preregister the cut
+   share and a step-size dose design.
 10. **Paper-mode borderline omega R-hat at 4 x 50,000** (WP14, WP12): third
     sighting; a longer run or pooled delta would settle whether it is run
     length.
