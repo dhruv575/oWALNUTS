@@ -9,6 +9,15 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Added
 
+- Research flag `WarmupConfig::with_stable_metric_stop(StableMetricStop)`
+  (default off, diagonal adaptive facade only): at the close of each slow
+  metric window from a given index on, if the new diagonal metric and the
+  dual-averaging step are within stated factors of the previous window's,
+  the remaining slow windows are dropped and the warmup ends after one
+  terminal fast buffer. Retained draws are unchanged in number; each chain
+  reports its own warmup length, and a stopped chain is bit-identical to the
+  run with that shorter warmup (`tests/stable_metric_stop.rs`). For WP73
+  (`STUDIES/warmup_spend_v1`).
 - Research flag `WarmupConfig::with_trapped_chain_restart` (default off): a
   chain whose step size at the end of the first slow adaptation window is
   below a fraction of the chain median restarts from an independent best-of-16
