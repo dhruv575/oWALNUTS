@@ -214,7 +214,12 @@ and 0/3 on GLMM_Poisson, `seeds_centered` and radon. Those three fail on a
 slow `sigma` or `beta[1]`, the same parameters that defeat the competitors
 (CmdStan passes one radon cell; nutpie none). [E26]
 
-ESS per gradient is **about 0.76x CmdStan's**. v7's own three seeds gave
+ESS per gradient is **0.83x CmdStan's over 18 Linux seeds** (median of
+paired per-seed ratios over the fixed-16 models, seed-bootstrap interval
+[0.79, 0.94]; WP72, [E38]). The earlier six-seed figures, 0.76 on Windows
+and 1.21 on Linux, were both seed noise: on six seeds the interval spans
+0.7–1.6 on either platform. Gates over the same 288 cells are 239 for
+oWALNUTS and 198 for CmdStan. v7's own three seeds gave
 0.708 over the 15 complete fixed-16 models, against v6's 0.848; a
 preregistered three-seed extension (WP62) gave 0.810 on the new seeds and
 **0.761 pooled over six**, with a leave-one-seed-out interval of
@@ -235,8 +240,8 @@ Linux seeds it is **1.21x CmdStan**, because CmdStan's chain sits in
 `hmm_drive_0`'s second mode on 4 of 6 Linux seeds (2 of 6 on Windows), and
 0.86x without that model (Windows 0.75x). Wall per gradient falls to 0.94x
 CmdStan's with the concurrent-replica dispatch, and ESS per second is 1.22x
-CmdStan's and 1.45x nutpie's. A preregistered robustness study (WP72)
-decides which per-gradient statistic the v8 headline uses. [E34]
+CmdStan's and 1.45x nutpie's. The robustness study (WP72, 12 further seeds)
+fixed the headline statistic above. [E34]
 
 v7 did **not** pass the v6 release rule. Its per-gradient clause (>= 0.75
 CmdStan) failed: the value was 0.708, and the clause was formally
@@ -832,3 +837,15 @@ provenance.
   0.0026; flag-off runs bit-identical and the fingerprint test passes:
   [`STUDIES/gradient_metric_v1`](STUDIES/gradient_metric_v1/README.md)
   (WP71).
+- [E38] Per-gradient headline robustness: 12 further fresh Linux seeds of the
+  fixed-16 set (oWALNUTS and CmdStan 2.39.0, 384 cells), analysed with
+  WP64's six under four preregistered statistics: v7 pooled geomean 0.822
+  [0.776, 0.892]; both-pass cells 0.870 [0.833, 0.891]; median of paired
+  per-seed ratios **0.826 [0.789, 0.935]** (the statistic the frozen rule
+  selects as the headline); without `hmm_drive_0` 0.824. CmdStan
+  mode-trapped on `hmm_drive_0` in 5/18 cells (4/6 on WP64's seeds, 1/12
+  on the new ones), oWALNUTS 1/18 and warned. Gates 239/288 vs 198/288.
+  `one_comp` (CmdStan fails 18/18), `accel_gp` (0.48) and centred Eight
+  Schools (0.39) move the headline most:
+  [`STUDIES/posteriordb_ratio_robustness_v1`](STUDIES/posteriordb_ratio_robustness_v1/README.md)
+  (WP72).

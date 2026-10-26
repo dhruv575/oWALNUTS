@@ -32,6 +32,10 @@ architecture and operating system (see the `walnutpie` module documentation).
 - posteriordb v7 reproduced on Linux (WP64): pass counts within one cell per
   block, draws not bit-identical across platforms, wall per gradient 0.94x
   CmdStan's; the per-gradient headline is platform- and seed-dependent.
+- Headline statistic fixed (WP72): ESS per gradient is 0.83x CmdStan's over
+  18 Linux seeds (median of paired per-seed ratios, [0.79, 0.94]); the
+  six-seed 0.76 (Windows) and 1.21 (Linux) were seed noise. Gates 239/288
+  vs 198/288.
 - `accel_gp` gap (WP70): no mechanism supported, no candidate qualifies;
   `target_accept 0.95` documented as the GP opt-in (passes 3/3 at 2.5x
   gradients).
