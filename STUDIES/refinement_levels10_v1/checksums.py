@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-FILES = ["protocol.json", "PREREGISTRATION.md", "README.md", "LEDGER-ENTRY.md", "run_study.py", "checksums.py",
+FILES = ["protocol.json", "PREREGISTRATION.md", "AMENDMENTS.md", "README.md", "LEDGER-ENTRY.md", "run_study.py", "checksums.py",
          "Cargo.toml", "Cargo.lock", "src/bin/funnel.rs", "src/bin/pdb.rs", ".gitignore"]
 paths = [HERE / f for f in FILES if (HERE / f).exists()] + sorted(
     p for p in (HERE / "artifacts").rglob("*") if p.is_file())
