@@ -1316,6 +1316,7 @@ pub struct WarmupConfig {
     max_window_shrink: Option<f64>,
     chain_rescue: Option<ChainRescueConfig>,
     trapped_chain_restart: Option<TrappedChainRestartConfig>,
+    stable_metric_stop: Option<StableMetricStop>,
 }
 
 impl Default for WarmupConfig {
@@ -1347,6 +1348,7 @@ impl Default for WarmupConfig {
             max_window_shrink: None,
             chain_rescue: None,
             trapped_chain_restart: None,
+            stable_metric_stop: None,
         }
     }
 }
@@ -1552,6 +1554,17 @@ impl WarmupConfig {
 
     pub fn warmup_exhaustion_rule(&self) -> Option<ExhaustionRule> {
         self.warmup_exhaustion
+    }
+
+    /// Research-only (WP73): end the warmup early once the metric and the
+    /// step have stabilised; see [`StableMetricStop`]. Off by default.
+    pub fn with_stable_metric_stop(mut self, rule: StableMetricStop) -> Self {
+        self.stable_metric_stop = Some(rule);
+        self
+    }
+
+    pub fn stable_metric_stop(&self) -> Option<&StableMetricStop> {
+        self.stable_metric_stop.as_ref()
     }
 
     /// Use `policy` as the reverse-coarser policy for the discarded (warmup)
@@ -2437,6 +2450,152 @@ fn reject_paper_adaptation(config: &RunConfig, facade: &str) -> Result<(), Error
     {
         return Err(Error::configuration(format!(
             "paper adaptation is not supported by the {facade} facade"
+        )));
+    }
+    Ok(())
+}
+
+/// Research-only (WP73, `STUDIES/warmup_spend_v1`): end the warmup early once
+/// the diagonal metric and the step have stabilised. Off by default.
+///
+/// At the close of every slow metric window with zero-based index
+/// `>= first_window` that is not the last warmup transition, after the new
+/// diagonal metric is installed, two changes are measured against the
+/// previous window close:
+///
+/// * the metric change: the `quantile` (nearest rank) over coordinates of
+///   `|ln(new_i / old_i)|`, `old` being the diagonal in force during the
+///   window just closed;
+/// * the step change: `|ln(h_k / h_{k-1})|`, where `h_k` is the
+///   dual-averaging averaged step (`exp(log_step_bar)`) of the stream that
+///   ran during window `k`.
+///
+/// If both are within their tolerances the remaining slow windows are
+/// dropped: the warmup becomes the transitions so far plus one terminal fast
+/// buffer of [`WarmupWindowConfig::terminal_buffer`] transitions (dual
+/// averaging restarts as at every window close), then the retained
+/// transitions follow. The number of retained draws is unchanged; the
+/// chain's [`RunMetadata::discarded`] reports its own warmup length. A chain
+/// that stops at window `k` runs exactly the transitions a run whose warmup
+/// length is `windows[k].end + terminal_buffer` would run, so its retained
+/// draws are bit-identical to that run's. Every check is recorded in
+/// [`RunTelemetry::stable_metric_checks`].
+///
+/// Supported by the diagonal adaptive facade only (no paper adaptation, no
+/// chain rescue, no trapped-chain restart, no continuation session); every
+/// other configuration is rejected.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StableMetricStop {
+    first_window: usize,
+    quantile: f64,
+    metric_tolerance: f64,
+    step_tolerance: f64,
+}
+
+impl StableMetricStop {
+    /// `first_window` must be at least one (the first slow window is compared
+    /// with the unadapted start metric otherwise); `quantile` in `(0, 1]`;
+    /// both tolerances finite and non-negative (log scale).
+    pub fn new(
+        first_window: usize,
+        quantile: f64,
+        metric_tolerance: f64,
+        step_tolerance: f64,
+    ) -> Result<Self, Error> {
+        if first_window == 0 {
+            return Err(Error::configuration(
+                "the stable-metric stop needs first_window >= 1",
+            ));
+        }
+        if !(quantile > 0.0 && quantile <= 1.0) {
+            return Err(Error::configuration(
+                "the stable-metric stop quantile must lie in (0, 1]",
+            ));
+        }
+        if !(metric_tolerance.is_finite() && metric_tolerance >= 0.0)
+            || !(step_tolerance.is_finite() && step_tolerance >= 0.0)
+        {
+            return Err(Error::configuration(
+                "stable-metric stop tolerances must be finite and non-negative",
+            ));
+        }
+        Ok(Self {
+            first_window,
+            quantile,
+            metric_tolerance,
+            step_tolerance,
+        })
+    }
+    pub fn first_window(&self) -> usize {
+        self.first_window
+    }
+    pub fn quantile(&self) -> f64 {
+        self.quantile
+    }
+    pub fn metric_tolerance(&self) -> f64 {
+        self.metric_tolerance
+    }
+    pub fn step_tolerance(&self) -> f64 {
+        self.step_tolerance
+    }
+}
+
+/// One evaluation of the [`StableMetricStop`] rule at a window close.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct StableMetricCheck {
+    window_index: usize,
+    transition: usize,
+    metric_change: f64,
+    step_change: Option<f64>,
+    stopped: bool,
+}
+
+impl StableMetricCheck {
+    pub fn window_index(&self) -> usize {
+        self.window_index
+    }
+    /// Zero-based index of the transition that closed the window.
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    pub fn metric_change(&self) -> f64 {
+        self.metric_change
+    }
+    /// `None` when no earlier window close recorded a step.
+    pub fn step_change(&self) -> Option<f64> {
+        self.step_change
+    }
+    /// Whether the warmup was shortened at this check.
+    pub fn stopped(&self) -> bool {
+        self.stopped
+    }
+}
+
+/// Nearest-rank `quantile` of `|ln(new_i / old_i)|` over coordinates.
+fn quantile_abs_log_ratio(old: &[f64], new: &[f64], quantile: f64) -> f64 {
+    let mut changes: Vec<f64> = old
+        .iter()
+        .zip(new)
+        .map(|(a, b)| (b / a).ln().abs())
+        .map(|value| if value.is_nan() { f64::INFINITY } else { value })
+        .collect();
+    if changes.is_empty() {
+        return 0.0;
+    }
+    changes.sort_by(f64::total_cmp);
+    let rank = ((quantile * changes.len() as f64).ceil() as usize).clamp(1, changes.len());
+    changes[rank - 1]
+}
+
+fn reject_stable_metric_stop(config: &RunConfig, facade: &str) -> Result<(), Error> {
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.stable_metric_stop.is_some())
+    {
+        return Err(Error::configuration(format!(
+            "the stable-metric warmup stop is not supported by the {facade} facade"
         )));
     }
     Ok(())
@@ -5468,6 +5627,7 @@ pub struct RunTelemetry {
     trapped_chain_checks: Vec<TrappedChainCheck>,
     warmup_end: Option<ChainWindowSummary>,
     sampling_end: Option<ChainWindowSummary>,
+    stable_metric_checks: Vec<StableMetricCheck>,
 }
 
 /// One chain's step and selected-state log density over a window of
@@ -5609,6 +5769,10 @@ impl RunTelemetry {
     }
     pub fn metric_updates(&self) -> &[MetricUpdateTelemetry] {
         &self.metric_updates
+    }
+    /// Every [`StableMetricStop`] evaluation (empty when the rule is off).
+    pub fn stable_metric_checks(&self) -> &[StableMetricCheck] {
+        &self.stable_metric_checks
     }
     pub fn warmup_checkpoints(&self) -> &[WarmupCheckpointTelemetry] {
         &self.warmup_checkpoints
@@ -6710,6 +6874,18 @@ where
             "warmup requires at least one discarded transition",
         ));
     }
+    if let Some(warmup) = config.warmup.as_ref()
+        && warmup.stable_metric_stop.is_some()
+        && (warmup.paper_adaptation.is_some()
+            || warmup.chain_rescue.is_some()
+            || warmup.trapped_chain_restart.is_some()
+            || !warmup.adapt_mass
+            || !warmup.adapt_step_size)
+    {
+        return Err(Error::configuration(
+            "the stable-metric warmup stop needs step and mass adaptation and no paper adaptation, chain rescue or trapped-chain restart",
+        ));
+    }
     if config
         .warmup
         .as_ref()
@@ -7778,6 +7954,12 @@ struct ChainRun<'a, T: Target> {
     /// before the first). Read-only bookkeeping for the trapped-chain
     /// restart record; never feeds the kernel.
     last_selected_log_density: f64,
+    /// This chain's warmup length: `config.discarded`, unless a
+    /// [`StableMetricStop`] shortened it.
+    discarded: usize,
+    /// Averaged step of the dual-averaging stream at the previous metric
+    /// window close ([`StableMetricStop`] bookkeeping).
+    last_close_step: Option<f64>,
 }
 
 impl<'a, T: Target> ChainRun<'a, T> {
@@ -7828,6 +8010,9 @@ impl<'a, T: Target> ChainRun<'a, T> {
         shared_initial_step_search: Option<&(f64, InitialStepSearchTelemetry)>,
         persistent: Option<&'a mut PersistentChainContext>,
     ) -> Result<Self, Error> {
+        if persistent.is_some() {
+            reject_stable_metric_stop(config, "continuation-session")?;
+        }
         let transitions = config
             .discarded
             .checked_add(config.retained)
@@ -7978,6 +8163,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
             check_log_densities,
             check_warmup_window,
             last_selected_log_density: f64::NAN,
+            discarded: config.discarded,
+            last_close_step: None,
         })
     }
 
@@ -7996,7 +8183,10 @@ impl<'a, T: Target> ChainRun<'a, T> {
             ref mut active_mass,
             ref mut inverse_mass,
             ref mut active_tuning,
-            ref schedule,
+            ref mut schedule,
+            ref mut transitions,
+            ref mut discarded,
+            ref mut last_close_step,
             ref mut dual_averaging,
             ref mut search_step,
             ref mut stream_step,
@@ -8016,7 +8206,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             ..
         } = *self;
         let (rng, cached_state) = rng_slot.parts();
-        while *next_transition < end {
+        while *next_transition < end.min(*transitions) {
             let transition_index = *next_transition;
             #[cfg(feature = "research")]
             clear_generated_reverse_schedules();
@@ -8027,7 +8217,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 && warmup.paper_adaptation.is_none()
             {
                 active_tuning.max_error =
-                    if transition_index < schedule.initial_fast_end.min(config.discarded) {
+                    if transition_index < schedule.initial_fast_end.min(*discarded) {
                         initial_max_error
                     } else {
                         config.tuning.max_error
@@ -8038,7 +8228,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 && warmup.paper_adaptation.is_none()
             {
                 active_tuning.max_depth =
-                    if transition_index < schedule.initial_fast_end.min(config.discarded) {
+                    if transition_index < schedule.initial_fast_end.min(*discarded) {
                         initial_max_depth.min(config.tuning.max_depth)
                     } else {
                         config.tuning.max_depth
@@ -8047,7 +8237,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             if let Some(warmup) = config.warmup.as_ref()
                 && let Some(rule) = warmup.warmup_exhaustion
             {
-                active_tuning.options.exhaustion = if transition_index < config.discarded {
+                active_tuning.options.exhaustion = if transition_index < *discarded {
                     rule
                 } else {
                     config.tuning.options.exhaustion
@@ -8056,7 +8246,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             if let Some(warmup) = config.warmup.as_ref()
                 && let Some(policy) = warmup.warmup_reverse_coarser_policy
             {
-                active_tuning.reverse_coarser_policy = if transition_index < config.discarded {
+                active_tuning.reverse_coarser_policy = if transition_index < *discarded {
                     policy
                 } else {
                     config.tuning.reverse_coarser_policy
@@ -8138,7 +8328,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                             control,
                             ObservationInput {
                                 transition: transition_index,
-                                discarded: transition_index < config.discarded,
+                                discarded: transition_index < *discarded,
                                 context,
                                 theta,
                                 gradient: $gradient,
@@ -8250,7 +8440,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         theta: std::mem::take(position),
                         rho: momentum,
                     };
-                    if (config.warmup.is_some() && transition_index < config.discarded)
+                    if (config.warmup.is_some() && transition_index < *discarded)
                         || config.capture_acceptance
                     {
                         let traced = if let Some(cached) = cached_input {
@@ -8498,7 +8688,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             };
             #[cfg(feature = "research")]
             let comparison_diagnostics = public.clone();
-            let partition = if transition_index < config.discarded {
+            let partition = if transition_index < *discarded {
                 &mut telemetry.discarded
             } else {
                 samples.extend_from_slice(position);
@@ -8520,7 +8710,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 nonfinite_position_rejections,
                 &internal,
             )?;
-            if transition_index < config.discarded
+            if transition_index < *discarded
                 && let Some(schedule) = schedule
             {
                 let phase = schedule
@@ -8549,8 +8739,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
             }
             diagnostics.push(public);
             if direct_boundary_hook
-                && transition_index < config.discarded
-                && (transition_index + 1 == config.discarded
+                && transition_index < *discarded
+                && (transition_index + 1 == *discarded
                     || schedule.as_ref().is_some_and(|schedule| {
                         schedule
                             .windows
@@ -8566,7 +8756,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 telemetry.acceptance_values.push(acceptance);
             }
 
-            if transition_index < config.discarded
+            if transition_index < *discarded
                 && let Some(warmup) = &config.warmup
             {
                 let window_index = schedule.as_ref().and_then(|schedule| {
@@ -8663,7 +8853,50 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         update.outcome = MetricUpdateOutcome::Installed;
                         update.mass_diagonal = Some(active_mass.diagonal.clone());
 
-                        let is_final = transition_index + 1 == config.discarded;
+                        let is_final = transition_index + 1 == *discarded;
+                        if let Some(rule) = warmup.stable_metric_stop.as_ref() {
+                            let close_step = dual_averaging.as_ref().map(DualAveraging::final_step);
+                            if !is_final && window_index >= rule.first_window {
+                                let before = update
+                                    .mass_diagonal_before
+                                    .as_deref()
+                                    .expect("diagonal metric before the update");
+                                let metric_change = quantile_abs_log_ratio(
+                                    before,
+                                    &active_mass.diagonal,
+                                    rule.quantile,
+                                );
+                                let step_change = match (close_step, *last_close_step) {
+                                    (Some(now), Some(then)) => Some((now / then).ln().abs()),
+                                    _ => None,
+                                };
+                                let stable = metric_change <= rule.metric_tolerance
+                                    && step_change.is_some_and(|change| change <= rule.step_tolerance);
+                                let shortened = transition_index
+                                    .checked_add(1)
+                                    .and_then(|value| value.checked_add(warmup.windows.terminal_buffer))
+                                    .ok_or_else(Error::overflow)?;
+                                let stopped = stable && shortened < *discarded;
+                                if stopped {
+                                    *discarded = shortened;
+                                    *transitions = shortened
+                                        .checked_add(config.retained)
+                                        .ok_or_else(Error::overflow)?;
+                                    if let Some(schedule) = schedule.as_mut() {
+                                        schedule.windows.truncate(window_index + 1);
+                                        schedule.terminal_fast_start = transition_index + 1;
+                                    }
+                                }
+                                telemetry.stable_metric_checks.push(StableMetricCheck {
+                                    window_index,
+                                    transition: transition_index,
+                                    metric_change,
+                                    step_change,
+                                    stopped,
+                                });
+                            }
+                            *last_close_step = close_step;
+                        }
                         if warmup.adapt_step_size && !is_final {
                             if let Some(search) = &warmup.initial_step_search {
                                 let event_index = telemetry.step_searches.len();
@@ -8716,7 +8949,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         paper.exclude_unhealthy_orbits,
                     );
                     let schedule = schedule.as_ref().expect("warmup schedule");
-                    let is_final = transition_index + 1 == config.discarded;
+                    let is_final = transition_index + 1 == *discarded;
                     let boundary = if transition_index + 1 == schedule.initial_fast_end {
                         Some(None)
                     } else {
@@ -8785,7 +9018,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         }
                     }
                 }
-                if transition_index + 1 == config.discarded
+                if transition_index + 1 == *discarded
                     && let Some(dual) = dual_averaging.as_ref()
                 {
                     active_tuning.step_size = warmup.floored_step(
@@ -8832,7 +9065,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             if let (Some(observer), Some((theta, rho, log_density, gradient))) =
                 (control.public.comparison_observer, comparison_selected)
             {
-                let adaptation = if transition_index < config.discarded {
+                let adaptation = if transition_index < *discarded {
                     let schedule = schedule.as_ref().expect("warmup schedule");
                     let stage = schedule
                         .phase_at(transition_index)
@@ -8870,7 +9103,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 let observation = ComparisonTransitionObservation {
                     chain: control.chain,
                     transition: transition_index,
-                    discarded: transition_index < config.discarded,
+                    discarded: transition_index < *discarded,
                     selected_theta: theta,
                     selected_rho: rho,
                     selected_log_density: log_density,
@@ -8889,13 +9122,13 @@ impl<'a, T: Target> ChainRun<'a, T> {
             // Observe-only chain-check bookkeeping (`ChainWindowSummary`):
             // reads the selected log density and the step, mutates nothing
             // the kernel or adaptation reads.
-            if transition_index < config.discarded {
+            if transition_index < *discarded {
                 if transition_index >= check_warmup_window.0
                     && transition_index < check_warmup_window.1
                 {
                     check_log_densities.push(selected_log_density);
                 }
-                if transition_index + 1 == config.discarded {
+                if transition_index + 1 == *discarded {
                     telemetry.warmup_end = ChainWindowSummary::from_log_densities(
                         check_warmup_window.0,
                         active_tuning.step_size,
@@ -8915,11 +9148,11 @@ impl<'a, T: Target> ChainRun<'a, T> {
     /// The retained-draw chain-check window so far (`None` before the first
     /// retained transition).
     fn sampling_end_summary(&self) -> Option<ChainWindowSummary> {
-        if self.next_transition <= self.config.discarded {
+        if self.next_transition <= self.discarded {
             return None;
         }
         ChainWindowSummary::from_log_densities(
-            self.config.discarded,
+            self.discarded,
             self.active_tuning.step_size,
             &self.check_log_densities,
         )
@@ -8950,7 +9183,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 base_seed: config.seed,
                 effective_seed: self.seed,
                 dimension: self.dimension,
-                discarded: config.discarded,
+                discarded: self.discarded,
                 retained: config.retained,
                 maximum_depth_stop_limit: config.max_maximum_depth_stops,
                 step_size: self.active_tuning.step_size,
@@ -9600,6 +9833,7 @@ pub fn sample_dense_with_control<T: Target>(
         return sample_dense_fixed(target, initial_position, mass, config, run_control);
     };
     reject_paper_adaptation(config, "dense adaptive")?;
+    reject_stable_metric_stop(config, "dense adaptive")?;
     reject_chain_rescue(config, "dense adaptive")?;
     if config.discarded == 0 {
         return Err(Error::configuration(
@@ -9949,6 +10183,7 @@ pub fn sample_chains_dense_with_control<T: Target>(
         .is_some_and(|warmup| warmup.adapt_mass)
     {
         reject_paper_adaptation(config, "dense adaptive")?;
+        reject_stable_metric_stop(config, "dense adaptive")?;
         reject_chain_rescue(config, "dense adaptive")?;
     }
     if initial_positions.is_empty() || initial_positions.len() > config.limits.max_chains {
@@ -10429,6 +10664,7 @@ fn validate_structured_refresh<T: Target>(
         .as_ref()
         .ok_or_else(|| Error::configuration("structured metric refresh requires warmup"))?;
     reject_paper_adaptation(config, "structured metric refresh")?;
+    reject_stable_metric_stop(config, "structured metric refresh")?;
     reject_chain_rescue(config, "structured metric refresh")?;
     if !warmup.adapt_mass {
         return Err(Error::configuration(
@@ -11053,6 +11289,7 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
         .is_some_and(|warmup| warmup.adapt_mass)
     {
         reject_paper_adaptation(config, "dense adaptive")?;
+        reject_stable_metric_stop(config, "dense adaptive")?;
         reject_chain_rescue(config, "dense adaptive")?;
     }
     if budget.started() != 0 {
