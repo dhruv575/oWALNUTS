@@ -49,12 +49,15 @@ architecture and operating system (see the `walnutpie` module documentation).
   reports its own warmup length, and a stopped chain is bit-identical to the
   run with that shorter warmup (`tests/stable_metric_stop.rs`). For WP73
   (`STUDIES/warmup_spend_v1`).
-- Research flag `WarmupConfig::with_trapped_chain_restart` (default off): a
-  chain whose step size at the end of the first slow adaptation window is
-  below a fraction of the chain median restarts from an independent best-of-16
-  start (WP67, `STUDIES/trapped_chain_restart_v1`). The confirmation (WP69)
-  did not support a default: false positives on recovering chains and a
-  trap rate of about 1 in 252 fresh chains. It stays research-only.
+- `WarmupConfig::with_trapped_chain_restart` (added as a research flag,
+  default off): a chain whose step size at the end of the first slow
+  adaptation window is below a fraction of the chain median restarts from an
+  independent best-of-16 start (WP67, `STUDIES/trapped_chain_restart_v1`).
+  The confirmation at ratio 0.1 (WP69) did not support a default: false
+  positives on recovering chains and a trap rate of about 1 in 252 fresh
+  chains. At ratio 0.01 it became the sampler default in this release
+  (WP89, WP90; see **Changed** below), and the method, the configuration and
+  `RunTelemetry::trapped_chain_checks` are public in the default build.
 - Research flag `WarmupConfig::with_dense_auto_select` (off, dense facade
   only): choose dense or diagonal once per run from a warmup-window
   condition-number statistic (WP75). Not proposed: 2.30x geomean but five
@@ -77,10 +80,11 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Study-only Cargo feature `candidate-levels10` (off): ten refinement levels
   in `sampler::Tuning::default()` for WP68. Not qualified as a default; eight
   levels stay.
-- Research `TrappedChainRestartConfig::with_check_window(n)` (default 0,
-  bit-identical): score the trapped-chain step rule at the close of the
-  n-th non-empty slow window instead of the first (WP89,
-  `STUDIES/sv_stuck_chains_v1`, `tests/trapped_chain_restart.rs`).
+- `TrappedChainRestartConfig::with_check_window(n)` (default 0,
+  bit-identical; public in the default build since the WP90 flip): score the
+  trapped-chain step rule at the close of the n-th non-empty slow window
+  instead of the first (WP89, `STUDIES/sv_stuck_chains_v1`,
+  `tests/trapped_chain_restart.rs`).
 - Research-only `DiagonalMetricRegularization::StanLowAnchor` and
   `StanCoordinateCap` (feature `research`, WP81,
   `STUDIES/diagonal_metric_shrinkage_v1`): Stan's rule with its `1e-3`
@@ -90,6 +94,63 @@ architecture and operating system (see the `walnutpie` module documentation).
   bit-identical (the prior terms are now computed by one shared helper).
 
 ### Changed
+
+- **DEFAULT CHANGE (WP90): the trapped-chain guard is on.** The sampler's
+  own adaptation modes (`Adaptation::DualAveraging`, the default, and
+  `Adaptation::Paper`) now install `sampler::DEFAULT_TRAPPED_CHAIN_RESTART`
+  (`TrappedChainRestartConfig::guard()`: the WP67 step rule at ratio 0.01,
+  checked at the close of the first non-empty slow window) on the identity
+  and diagonal metrics. With three or more chains, every chain stops at
+  transition 99 of Stan's 1,000-transition schedule; a chain whose step
+  there is below 0.01x the chain median abandons its work and reruns the
+  whole warmup and sampling schedule from an independent best-of-16
+  uniform(-2, 2) start with a fresh RNG stream. Nothing is copied from
+  another chain, so the restarted chain is an independent start and
+  independent-chain R-hat remains valid. A chain restarts at most once; the
+  check and any restart are recorded in `RunTelemetry::trapped_chain_checks`
+  (Python: each chain's `trapped_chain_checks`). The guard is inert with one
+  or two chains, is never installed on the dense or structured facades, and
+  `Adaptation::Custom` configurations are used exactly as given (a custom
+  configuration with chain rescue, the stable-metric stop or a non-default
+  diagonal metric estimator keeps those and never gains the guard).
+  **Draws are unchanged unless a chain fires**: a run in which no chain
+  fires has the draws, target calls and diagnostics of the run without the
+  guard (WP90: 282/282 cell pairs bit-identical on the unfired cells and on
+  the untouched chains of fired cells). The retained kernel,
+  `walnutpie::WarmupConfig::default()`, `RunConfig` runs, the kernel
+  fingerprints and `ALGORITHM_REVISION` are unchanged, as for the
+  MomentumSum, RejectLeaf and best-of-16 flips. Chosen by the preregistered
+  default-flip confirmation `STUDIES/trap_guard_confirmation_v1` (WP90), on
+  WP89's mechanism (`STUDIES/sv_stuck_chains_v1`: a stiff start freezes the
+  identity-metric step before the first metric update), whose frozen rules
+  all held:
+  - SV model, 120 fresh seeds: trapped chains 8/480 at the defaults to
+    0/480 with the guard (13 firings: the 8 traps and 5 near-traps, every
+    restarted chain at the mode, 0.88x the target calls);
+  - 22 posteriordb v7 posteriors x 6 fresh seeds: gate passes 92 = 92,
+    headline ESS per gradient 1.000 [1.0, 1.0], no new divergences;
+  - the funnel at 30 seeds: 0 firings, bit-identical, P5 within 1.3 s.e.;
+  - two firings in 1,056 posteriordb chains, both on `kilpisjarvi` (step
+    ratios 0.009 and 0.006), on chains that would have recovered on their
+    own; both cells fail their gates in both arms on other chains, the
+    restarted chains ended at the mode, at no cost (gradients 0.99x and
+    1.03x).
+
+  Opt out with `WarmupConfig::without_trapped_chain_restart()` on a custom
+  configuration, or spell out the pre-WP90 default:
+  `Adaptation::Custom(WarmupConfig::new(0.8)?.with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION))`;
+  `tests/trapped_chain_restart.rs` checks that this is the previous
+  behaviour bit for bit. The worst-case admission bound of a configuration
+  that carries the restart now counts the abandoned transitions of at most
+  `chains / 2` restarted chains (the step rule cannot flag more) and
+  nothing below `minimum_chains` chains, so one- and two-chain default runs
+  keep their previous bound; a four-chain default run at depth 10 exceeds
+  the conservative 0.1 ceiling at shorter lengths than before
+  (`Limits::admit_worst_case`, the default, is unaffected). Python: no
+  signature change; the draws follow the Rust default,
+  `Adaptation(trapped_chain_restart=False)` is the opt-out,
+  `DEFAULTS["trapped_chain_restart"]` reports the rule and each chain dict
+  gains `trapped_chain_checks`.
 
 - `diagnostics::ChainWarning` gains an observe-only pairwise-agreement
   cluster check, `ChainWarning::RHatCluster` (WP74,
@@ -164,7 +225,7 @@ architecture and operating system (see the `walnutpie` module documentation).
   initial metric is gradient-scaled. The trapped-chain restart rule at ratio
   0.01 removes every trap (8/480 to 0/480) with unfired cells bit-identical
   and no firing elsewhere; proposed for a confirmation study before any
-  default change.
+  default change (WP90, confirmed and applied; see **Changed**).
 - Online stochastic-volatility quote benchmark (WP84): a harness-level warm
   continuation (frozen step and metric, 50–200 transitions per chain)
   refreshes a 250-return SV posterior in 20–80 ms median and stays

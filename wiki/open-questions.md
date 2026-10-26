@@ -197,9 +197,13 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     **WP69 result: not proposed.** 0/240 chains trapped on 60 fresh seeds
     (the trap rate is about 1 in 252 fresh chains), 3 of 5 flags across
     WP67 and WP69 fell on healthy or self-recovering chains, and one real
-    trap sat at ratio 0.111, above the 0.1 cut. The restart stays a
-    research-only flag; a two-signal rule is the only candidate worth a
-    further study.
+    trap sat at ratio 0.111, above the 0.1 cut. The restart stayed a
+    research-only flag until WP89 and WP90 (`STUDIES/sv_stuck_chains_v1`,
+    `STUDIES/trap_guard_confirmation_v1`): the same rule at ratio 0.01
+    (`guard-0.01-0`) is now the sampler default,
+    `DEFAULT_TRAPPED_CHAIN_RESTART`. Of WP67's two `lotka_volterra` traps
+    (ratios 0.0023 and 0.025) the 0.01 cut catches one; the trap rate over
+    many seeds and the ratio-0.111 trap remain the open part of this item.
 13. **The per-gradient gap to nutpie on PyMC models** (WP47, WP58): nutpie
     gets 1.6–2.4x more ESS per gradient than oWALNUTS on all three models of
     `STUDIES/python_callpath_v1`. WP58 (`STUDIES/nutpie_per_gradient_gap_v1`)
@@ -309,7 +313,13 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     not bound the mode-destruction risk, and WP61 declined to recommend
     restoring rescue for that reason. This is the step-only rescue that
     item 7 lists as unmeasured. WP57 says it would need its own
-    confirmation.
+    confirmation. **Closed to the WP90 flip.** WP67 built the restart as an
+    independent start (nothing copied from another chain, so WP36's
+    objection does not apply and independent-chain R-hat stays valid),
+    WP69 declined it at ratio 0.1, WP89 found the ratio-0.01 rule removes
+    every SV trap with unfired cells bit-identical, and WP90 confirmed it
+    on every frozen rule; it is the default (`DEFAULT_TRAPPED_CHAIN_RESTART`,
+    items 12 and 23).
 20. **The per-gradient release figure is seed-noisy** (WP56, WP60, WP61).
     posteriordb v7 (`STUDIES/posteriordb_bench_v7`) passed 43/51 house cells
     (CmdStan 34, nutpie 26) and 6/15 on the five hard posteriors (CmdStan 7,
@@ -382,7 +392,10 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     (`STUDIES/trap_guard_confirmation_v1`): every rule held (passes 92 =
     92, 282/282 bit-identical pairs, headline 1.000, funnel 0 firings, SV
     0/480 against 8/480), with two firings on kilpisjarvi chains that would
-    have recovered on their own (no cost, restarted chains at the mode).
+    have recovered on their own (no cost, restarted chains at the mode),
+    and applied as the sampler default (`DEFAULT_TRAPPED_CHAIN_RESTART`,
+    opt-out `WarmupConfig::without_trapped_chain_restart`). The frozen-chain
+    part of this item is closed.
     Open: a gradient-scaled initial metric as a cause-level fix (nutpie's;
     the `nutpie_init` arm gave 1/240 without any restart), and whether
     CmdStan-style uniform starts should be warned against for stiff
