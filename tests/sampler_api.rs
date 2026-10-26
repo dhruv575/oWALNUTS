@@ -1141,10 +1141,17 @@ fn dense_per_transition_seeding_is_the_default_and_recovers_the_precision() {
 /// refinement levels and nothing else.
 #[test]
 fn default_refinement_levels_follow_the_candidate_feature() {
-    let expected = if cfg!(feature = "candidate-levels10") { 10 } else { 8 };
+    let expected = if cfg!(feature = "candidate-levels10") {
+        10
+    } else {
+        8
+    };
     assert_eq!(owalnuts::sampler::DEFAULT_MAX_REFINEMENT_LEVELS, expected);
     let tuning = owalnuts::sampler::Tuning::default();
-    assert_eq!(tuning.to_kernel().unwrap().max_refinement_levels(), expected);
+    assert_eq!(
+        tuning.to_kernel().unwrap().max_refinement_levels(),
+        expected
+    );
     let eight = owalnuts::sampler::Tuning::default().max_refinement_levels(8);
     let ten = owalnuts::sampler::Tuning::default().max_refinement_levels(10);
     assert_eq!(tuning, if expected == 10 { ten } else { eight });
