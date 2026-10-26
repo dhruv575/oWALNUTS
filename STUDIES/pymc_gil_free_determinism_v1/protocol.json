@@ -1,0 +1,53 @@
+{
+ "study": "pymc_gil_free_determinism_v1",
+ "ledger_id": "WP86-PYMC-GIL-FREE-DETERMINISM-V1",
+ "frozen": "2026-10-26, before the first evidence process (PREREGISTRATION.md)",
+ "base_commit": "3efdc7ba",
+ "question": "Why does from_pymc(gil_free=True) sometimes not reproduce the draws of the compiled function it wraps (WP83: data_dims_det 0/3, ar1 2/3, simplex_bounded 2/3, one t1 != t4), and is there a single flag or cache step that makes it bit-identical?",
+ "models": {
+  "affected": ["data_dims_det", "ar1", "simplex_bounded"],
+  "unaffected": ["eight", "logistic"],
+  "source": "models.py and callpath_targets.py copied verbatim from STUDIES/pymc_gil_free_default_v1 (WP83)"
+ },
+ "seed": 8686001,
+ "sampler": {"chains": 4, "warmup": 1000, "draws": 1000, "settings": "owalnuts.sample defaults (init=None = best-of-16)"},
+ "control": {
+  "primary": "callable_same_fn: the very PyTensor NUMBA function object that gil_free wraps (target.keep_alive[2]), called as a Python callable with from_pymc's own wrapper code, threads=1, in the same process. For data_dims_det this is the frozen (freeze_dims_and_data) graph, so the comparison is no longer between two different numba programs as in WP83.",
+  "secondary": "wp83_control: owalnuts.from_pymc(model, mode='NUMBA') on a fresh build of the model (WP83's control: for data_dims_det the unfrozen graph), threads=1, same process; arm A only, descriptive."
+ },
+ "cache_states": "processes alternate cold (index even: before the process the parent deletes NUMBA_CACHE_DIR and PyTensor's base_compiledir, which holds PyTensor's numba cache) and warm (index odd: the cache left by the preceding cold process of the same arm and model).",
+ "arms": {
+  "A": {"label": "package as is", "models": ["data_dims_det", "ar1", "simplex_bounded", "eight", "logistic"], "processes": 10, "wp83_control": true},
+  "B": {"label": "PyTensor numba fastmath off", "pytensor_flags": ["numba__fastmath=False"], "models": ["data_dims_det", "ar1", "simplex_bounded", "eight", "logistic"], "processes": 10},
+  "C": {"label": "cfunc error_model='numpy' (package default: numba's 'python')", "cfunc_kwargs": {"error_model": "numpy"}, "models": ["data_dims_det", "ar1", "simplex_bounded", "eight", "logistic"], "processes": 10},
+  "D": {"label": "cfunc compiled with PyTensor's fastmath flag set {arcp, contract, afn, reassoc, nsz} (package default: no fastmath on the wrapper)", "cfunc_kwargs": {"fastmath": "pytensor"}, "models": ["data_dims_det", "ar1", "simplex_bounded", "eight", "logistic"], "processes": 10},
+  "E": {"label": "PyTensor numba file cache off (every process compiles fresh)", "pytensor_flags": ["numba__cache=False"], "models": ["data_dims_det", "ar1", "simplex_bounded", "eight", "logistic"], "processes": 10},
+  "T": {"label": "thread arm: package as is, gil_free at threads 1 and 4 in every process", "models": ["data_dims_det", "ar1", "simplex_bounded"], "processes": 20, "threads4_every_process": true}
+ },
+ "order": {"arms": ["A", "B", "C", "D", "E", "T"], "within": "arm, then model in list order, then process index 0..n-1 (even cold, odd warm)"},
+ "process_timeout_seconds": 1800,
+ "gradient_probe": {"points": 50, "rng_seed": 86, "scale": 0.5, "definition": "q0 (the model's unconstrained initial point) + 0.5 x N(0, I) from numpy default_rng(86); at each point the log density and gradient from the cfunc (through ctypes, as the sampler calls it) and from the wrapped PyTensor function; bit identity, max abs and ulp differences, and |diff| <= 1e-15 x max(1, |g|)"},
+ "recorded": "per process: cache file counts at start; PyTensor fastmath/cache config; the inner dispatcher's numba cache hits/misses; the cfunc's LLVM IR and assembly (size, sha256, fmuladd/fma and vfmadd counts, calls); the gradient probe; draw sha256 of gil_free t1, callable_same_fn t1 (and gil_free t4, wp83_control where the arm says); walls (descriptive, co-tenanted)",
+ "criteria": {
+  "D2_wrapper_fidelity": "in a process, gil_free t1 draws are bit-identical to callable_same_fn t1 draws and the gradient probe is bit-identical at all 50 points",
+  "D1_cross_process": "for an (arm, model), every process gives the same gil_free t1 draw hash",
+  "D3_threads": "in a process with gil_free t4, its draws are bit-identical to gil_free t1"
+ },
+ "predictions": {
+  "H1": "arm A: on the three affected models, D2 fails only in cold processes (every warm process passes D2); the unaffected models pass D2 in every process; where the gradient probe differs, the largest difference is <= 4 ulp",
+  "H2": "arm A: callable_same_fn draws are identical across all 10 processes of a model (the compiled PyTensor function itself is deterministic); the cross-process variation (D1 failures) is in the cfunc only",
+  "H3": "arm B (fastmath off) passes D1 and D2 on all 5 models x 10 processes",
+  "H4": "arms C (error_model) and D (wrapper fastmath) do not remove the cold-process mismatches",
+  "H5": "arm E (no file cache) passes D1 but fails D2 on the affected models in every process (every process behaves as cold)",
+  "H6": "arm T: D3 holds in all 60 processes (WP83's t1 != t4 was a cold process against a warm one), while D2 fails only in cold processes as in H1",
+  "mechanism": "on a cold compile the cfunc links the freshly compiled PyTensor function's LLVM IR, inlines it and re-optimises it under PyTensor's per-instruction fastmath flags (contraction / reassociation), so the cfunc's arithmetic differs from the separately compiled dispatcher's; on a warm process the dispatcher comes from the cache and the cfunc calls the same object code. The LLVM/asm evidence (IR size, fmuladd and vfmadd counts, calls) is recorded to test this."
+ },
+ "fix_rule": {
+  "frozen": true,
+  "candidates": "arms B, C, D, E (each a single flag) and the cache-warming step (arm A restricted to warm processes, descriptive: it cannot be shipped as a package change because the package cannot guarantee a warm cache)",
+  "qualifies_iff": "D2 holds in every one of the 50 processes (5 models x 10) and D1 holds for every model",
+  "if_one_or_more_qualify": "propose the qualifying flag as a package change in owalnuts.from_pymc(gil_free=True), behind nothing (a correctness fix); preference order C, D (wrapper-local, no effect on the user's PyTensor configuration), then B (applied by compiling gil_free's function under pytensor.config.change_flags(numba__fastmath=False)), then E (change_flags(numba__cache=False)); the wall-per-gradient cost of the proposed flag against arm A (median over processes) is reported",
+  "if_none_qualify": "document the caveat precisely in the from_pymc docstring and the docs: which models, which cache state, what size of difference, and what does reproduce"
+ },
+ "rules": "PREREGISTRATION.md and protocol.json committed before the first evidence process. Lane setup (venv with the WP78 pins, the extension built from the frozen commit) and a smoke run on the non-study model 'poisson' are infrastructure and disclosed. Every process is reported; failures and timeouts are results; no reruns, no tuning after seeing results. A process with no record may be rerun once, recorded as a deviation. Amendments only for processes not yet run, committed before them."
+}
