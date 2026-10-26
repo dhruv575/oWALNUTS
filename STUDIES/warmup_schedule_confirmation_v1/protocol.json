@@ -1,0 +1,78 @@
+{
+  "schema": "warmup-schedule-confirmation-v1",
+  "ledger_id": "WP77",
+  "ledger_title": "WP77-WARMUP-SCHEDULE-CONFIRMATION-V1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-26",
+  "purpose": "Confirm on fresh seeds whether either WP73 candidate warmup schedule, `half` (warmup 500) or `init25` (initial fast phase 25), should become the sampler default, by rules fixed before any cell.",
+  "wp_number_rule": "Assigned by the coordinator: WP77 (WP74-WP76 are taken).",
+  "source_commit_under_test": "e7a30d00",
+  "source_commit_note": "local main at freeze (WP71-WP73 merged). WP71's gradient-metric option and WP73's stable-metric stop are research flags, off here. run_confirm.py refuses oWALNUTS cells if src/, integrations/, tests/ or Cargo.toml differ from it or are dirty. No library change in this study.",
+  "prior_evidence": {
+    "WP73": "3 seeds (730731-730733): half ESS per total gradient vs default geomean 1.315, median model 1.245, leave-one-out min 1.209, total gradients 0.80x, warmup gradients 0.58x, min bulk ESS 1.03x; passes 40 vs 40 (sblrc -1, one_comp +1); 0 retained divergences; one passing cell with max |z| 4.99 (one_comp 730731). init25 geomean 1.440 but median model 1.038 and leave-one-out min 1.093 (hmm_drive_0 118x, where the default had stuck chains on 2 of 3 seeds); passes 43 vs 40.",
+    "WP72": "the paired-ratio headline (median over seeds of per-seed ratios, geomean over models) is the record's per-gradient statistic; six seeds give wide intervals for median statistics against CmdStan, whose stuck chains move between seeds. Here both arms are oWALNUTS on the same seeds."
+  },
+  "environment": {
+    "host": "AWS EC2 c7a.4xlarge (16 dedicated AMD EPYC 9R14 cores, no SMT, 32 GB), Ubuntu 24.04, g++ 13, Rust 1.88.0",
+    "lane": "lane 2, cores 4-7; every process under taskset -c 4-7; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1; other lanes active (shared L3 and memory bandwidth)",
+    "timing_label": "pinned, co-tenanted; walls are not used. Gradients, ESS and gates do not depend on co-tenancy.",
+    "software": "lane venv from the WP65 freeze (cmdstanpy 1.3.0, bridgestan 2.9.0, arviz 0.23.4, posteriordb 0.2.0); CmdStan 2.39.0 (lane copy); BridgeStan 2.9.0 without STAN_THREADS; the 17 BridgeStan libraries and CmdStan executables copied from this lane's WP73 build (same posteriordb sources and recipe; sha256 checked against WP73's build manifest)"
+  },
+  "posteriordb": {"commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "posterior_database"},
+  "house_models": ["eight_schools-eight_schools_noncentered", "eight_schools-eight_schools_centered", "diamonds-diamonds", "earnings-logearn_interaction", "mesquite-logmesquite_logvash", "kidiq-kidscore_momhsiq", "sblrc-blr", "nes2000-nes", "arK-arK", "arma-arma11", "garch-garch11", "gp_pois_regr-gp_pois_regr", "hmm_example-hmm_example", "bball_drive_event_0-hmm_drive_0", "one_comp_mm_elim_abs-one_comp_mm_elim_abs", "hudson_lynx_hare-lotka_volterra", "mcycle_gp-accel_gp"],
+  "gates_only_models": [],
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "seeds": [770771, 770772, 770773, 770774, 770775, 770776],
+  "seeds_verified_unused": "grep -rlw over STUDIES, wiki, src and tests (*.json, *.md, *.py, *.rs) of local main found no whole-word occurrence of 770771-770776 or 770801-770830 before freezing.",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "cell_timeout_seconds": 2700,
+  "owalnuts_arms": {
+    "owalnuts": {"harness_arm": "default", "role": "the default (control)", "setting": "Sampler defaults, warmup 1,000 (WP73's `default`)"},
+    "owalnuts-half": {"harness_arm": "half", "role": "candidate", "setting": "Sampler defaults with warmup 500 (75 / 25, 50, 100, 200 / 50); WP73's `half` unchanged"},
+    "owalnuts-init25": {"harness_arm": "init25", "role": "candidate", "setting": "Adaptation::Custom(house warmup .with_windows(WarmupWindowConfig::new(25, 25, 50))), warmup 1,000 (25 / 25, 50, 100, 200, 550 / 50); WP73's `init25` unchanged"}
+  },
+  "dropped": {"stablestop": "not run: in WP73 its robust readings were 1.08 (median model, without eight_schools_centered, leave-one-out min), below this study's per-model-median threshold 1.10; its saving is a subset of `half`'s (a stopped chain is the `half` chain), so it cannot pass where `half` fails and adds no default question of its own."},
+  "descriptive_arms": {"cmdstan": "CmdStan 2.39.0 at cmdstanpy defaults, 4 x 1,000/1,000, same seeds (v7 recipe). Reported only: where each candidate puts oWALNUTS against CmdStan in WP72's headline form, per total and per sampling gradient."},
+  "phases": {
+    "T": "cargo test --release --test kernel_fingerprint and --test stable_metric_stop in the lane clone at the frozen commit (integrity record; no library change in this study). Runs first.",
+    "A": "for each of the 17 models in protocol order, arms owalnuts, owalnuts-half, owalnuts-init25, cmdstan in that order, each over the 6 seeds ascending",
+    "F": "funnel: for each of the 30 funnel seeds ascending, arms default, half, init25"
+  },
+  "run_order": "T, A, F, then analyze; strictly sequential, one sampling process at a time; each (model, arm, seed) in its own child process",
+  "metrics": {
+    "gradients_total": "oWALNUTS target calls including the best-of-16 start search, warmup and sampling; CmdStan sum n_leapfrog__ including warmup (v7)",
+    "ess_per_total_gradient": "min over gate (reference) parameters of ArviZ 0.23.4 bulk ESS / gradients_total (v7 min_bulk_ess_per_gradient)",
+    "ess_per_sampling_gradient": "the same min bulk ESS / sampling (retained-transition) gradients (v7 min_bulk_ess_per_gradient_sampling)"
+  },
+  "statistic": {
+    "name": "WP72 headline form, statistic (c): median of paired per-seed ratios",
+    "definition": "per model, the ratio candidate / default of the per-cell quantity on each seed where both cells are status ok, then the median over those seeds; a model enters with at least ceil(5/6 x 6) = 5 such seeds (WP72's min_ok_fraction); headline = geometric mean over the entering models. Per-model median = median over the entering models of the per-model ratios. Leave-one-model-out minimum = the smallest headline recomputed without one model, over all entering models.",
+    "min_ok_fraction": 0.8333333333333334,
+    "bootstrap": {"unit": "seed", "resamples": 10000, "rng_seed": 77, "percentiles": [2.5, 97.5], "role": "reported interval of the headline, not a rule clause"},
+    "computed_for": ["min_bulk_ess_per_gradient (the rule)", "min_bulk_ess_per_gradient_sampling (reported, so that the per-sampling-gradient benchmark comparison is visible)", "candidate and default against CmdStan, both quantities (reported)"]
+  },
+  "decision_rule": {
+    "per_candidate": "A candidate is proposed as the sampler default only if all hold on the 6 seeds. G: its gate passes over the 102 cells >= the default's on the same seeds. H: headline ESS per total gradient vs default >= 1.15. M: per-model median >= 1.10. L: leave-one-model-out minimum >= 1.05. D: no new divergences: no (model, seed) where the candidate cell has a retained divergence and the default cell on that model and seed (status ok) has none. Z: max |z| over the candidate's passing reference cells <= 4. F: funnel, 30 fresh seeds x 4 chains x 2,000 draws with the candidate's warmup (WP73 funnel binary; explicit starts omega in {-3,-1,1,3}, x = 0, Metric::diagonal()): |mean over seeds of P(omega < -5) - 0.0477903522728147| <= the between-seed s.e. (sd / sqrt 30), and every seed produces a cell.",
+    "headline_threshold": 1.15,
+    "per_model_median_threshold": 1.10,
+    "lomo_min_threshold": 1.05,
+    "max_abs_z": 4.0,
+    "both_pass": "If both candidates meet every clause, the one with the larger headline is proposed; their combination is untested and needs its own study.",
+    "notes": "An errored or timed-out candidate cell fails its gates and does not enter the paired statistic. Clause F is evaluated as worded: the funnel uses each arm's own warmup at the study's nominal 1,000 (default 1,000, half 500, init25 1,000) and 2,000 retained draws per chain, 30 seeds; the default arm runs too (descriptive). At 2,000 draws the per-seed P5 is noisier than WP73's 20,000, so F tests a coarser bias than WP73's R3, and at 30 seeds it fails an unbiased sampler about 32 % of the time (|t| > 1)."
+  },
+  "default_change_meaning": {
+    "half": "An API default, not a kernel change: `Sampler::new()`'s default warmup (src/sampler.rs, `warmup: 1_000`) becomes 500, and the Python package's `warmup: int = 1000` keyword defaults (integrations/python/python/owalnuts/__init__.py) follow. The window rule, `walnutpie::WarmupConfig`/`WarmupWindowConfig` defaults, the retained kernel, ALGORITHM_REVISION and tests/kernel_fingerprint.rs (which pass explicit warmup lengths) are unchanged. Runs that set `.warmup(n)` explicitly are bit-identical; runs on the default warmup get different draws (fewer warmup transitions, same seeds).",
+    "init25": "A warmup-schedule default. Proposed only as a sampler-facade default (a `DEFAULT_WARMUP_WINDOWS = WarmupWindowConfig::new(25, 25, 50)` installed by `Adaptation::warmup_config` like DEFAULT_METRIC_REGULARIZATION), leaving `walnutpie::WarmupWindowConfig::default()` (75 / 25 / 50), RunConfig runs, the retained kernel and ALGORITHM_REVISION unchanged; the kernel fingerprint tests build WarmupConfig directly and stay pinned. Every default-configured sampler run gets different draws: the schedule changes, so no draw is identical. Changing `WarmupWindowConfig::default()` itself instead would change the pinned `eight_schools_adapted_four_chains_are_bit_exact` fingerprint on both platforms and is not proposed."
+  },
+  "predictions": {
+    "half": "G holds (within +/-2 cells of the default; WP73 40 vs 40); H holds (1.20-1.30); M holds (>= 1.15); L holds (>= 1.10); D holds (WP73: no retained divergence); Z fails (a passing one_comp cell above 4, as in WP73); F holds. Overall: half fails only on Z, so no default is proposed, and the record should say that halving the warmup buys about 1.2x per total gradient at the price of agreement on one_comp.",
+    "init25": "G holds; H fails (1.00-1.08); M fails (about 1.04); L fails; D, Z, F hold. Not proposed.",
+    "sampling_gradient": "per sampling gradient, half is 1.00-1.08x the default and init25 0.97-1.05x: the gain is the warmup spend, not the retained kernel"
+  },
+  "funnel_sanity": {"arms": ["default", "half", "init25"], "warmup": 1000, "draws": 2000, "seeds": [770801, 770802, 770803, 770804, 770805, 770806, 770807, 770808, 770809, 770810, 770811, 770812, 770813, 770814, 770815, 770816, 770817, 770818, 770819, 770820, 770821, 770822, 770823, 770824, 770825, 770826, 770827, 770828, 770829, 770830], "exact_p5": 0.0477903522728147, "binary": "src/bin/funnel.rs (WP73's); nominal warmup 1,000, which `half` halves"},
+  "tests": {"targets": ["kernel_fingerprint", "stable_metric_stop"]},
+  "rules": "PREREGISTRATION.md and protocol.json committed before the first cell. Lane setup, the copied builds and a smoke run on a non-study posterior (kidiq-kidscore_momiq) at non-evidence seed 1 are infrastructure. Every cell is reported; failures and timeouts are results; no reruns and no tuning after seeing results. A cell with no artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for cells not yet run, committed before them."
+}

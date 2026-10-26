@@ -1,0 +1,27 @@
+[package]
+name = "warmup-schedule-confirmation-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP77: confirmation of the WP73 warmup schedules half (warmup 500) and init25 (initial fast phase 25)"
+
+[lib]
+name = "warmup_schedule_confirmation_v1"
+path = "src/lib.rs"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+# WP73's harness, unchanged except the crate name (itself the WP70 / WP65 / v7 harness).
+[[bin]]
+name = "harness"
+path = "src/main.rs"
+
+# WP73's funnel binary, unchanged except the crate name (rule clause F).
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]
