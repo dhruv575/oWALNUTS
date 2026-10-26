@@ -1109,3 +1109,20 @@ provenance.
   flipped. Research `TrappedChainRestartConfig::with_check_window` added:
   [`STUDIES/sv_stuck_chains_v1`](STUDIES/sv_stuck_chains_v1/README.md)
   (WP89).
+- [E54] Trapped-chain guard default-flip confirmation (Linux, 22 v7
+  posteriors x 6 fresh seeds x {defaults, guard} at 4 x 1,000/1,000,
+  funnel 30 seeds, the SV model at 120 fresh seeds): **qualifies on every
+  rule**. Passes 92 = 92, 282/282 cell pairs bit-identical where the guard
+  did not fire (268 cells) or on the untouched chains (14 fired cells), no
+  new divergences, headline ESS per gradient 1.000 [1.0, 1.0], funnel P5
+  0.0458 ± 0.0016 with 0 firings, SV trapped chains 0/480 against the
+  defaults' 8/480 (13 firings: the 8 traps and 5 near-traps). On the
+  posteriordb set it fired twice in 1,056 chains, both on kilpisjarvi at
+  step ratios 0.009 and 0.006; each restarted chain ended at the mode, and
+  both cells fail their gates in both arms on other chains. Caveat: at the
+  defaults those two chains would have recovered on their own, so on this
+  3-D model the rule fired on a slow start rather than a trap, at no cost.
+  Applied as the default (ratio 0.01, first slow window; draws change only
+  on fired chains; `ALGORITHM_REVISION` and fingerprints unchanged):
+  [`STUDIES/trap_guard_confirmation_v1`](STUDIES/trap_guard_confirmation_v1/README.md)
+  (WP90).
