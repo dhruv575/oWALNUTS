@@ -1,0 +1,25 @@
+[package]
+name = "posteriordb-bench-v7"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP56: posteriordb benchmark v7 (17 house + 5 WP46 breadth posteriors) at the oWALNUTS sampler defaults"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "posteriordb-bench-v7"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[[bin]]
+name = "telemetry"
+path = "src/bin/telemetry.rs"
+
+[workspace]
