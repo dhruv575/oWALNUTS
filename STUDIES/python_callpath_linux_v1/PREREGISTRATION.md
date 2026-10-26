@@ -233,3 +233,16 @@ Result of the check: no match on any branch (`git grep` exit 1) and none in
 * Disclosure: one `grep -rlw` for the seeds over `~/lanes` was first run
   without `taskset` (about 2 s of file reading, before any cell); it was
   repeated pinned. Every later command is pinned.
+
+## Amendment A1 (harness; committed after the setup check, before the smoke and every evidence cell)
+
+The setup check (value/gradient of every path against the numpy density at 5
+points per model) showed the Rust arm's gauss100 gradient off by 1.1e-16
+from `-q`: `serde_json` without its `float_roundtrip` feature can misparse
+a decimal by one ulp, so the micro points and `models/hier_data.json` the
+Rust harness reads may differ from Python's values in the last bit. That
+would make the Rust arm's hier density a different function at the ulp
+level and could break P4 (rust ≡ cfunc) for a harness reason. Fix:
+`serde_json` with `features = ["float_roundtrip"]` in `rust/Cargo.toml`.
+No prediction, rule or other code changes. The setup check is repeated on
+the rebuilt binary before the smoke.
