@@ -352,3 +352,27 @@ fn validation() {
         .unwrap_err();
     assert_eq!(beyond.kind(), ErrorKind::Configuration, "beyond schedule");
 }
+
+#[test]
+fn above_the_dense_dimension_cap_the_flag_is_the_diagonal_run() {
+    let d = 300;
+    let scales: Vec<f64> = (0..d).map(|i| 0.5 + (i % 7) as f64 * 0.3).collect();
+    let target = Gaussian::new(scales.clone(), 0.0);
+    let short = |a: Option<Adaptation>| {
+        let s = Sampler::new()
+            .warmup(300)
+            .draws(50)
+            .chains(2)
+            .seed(85)
+            .limits(Limits::new().admit_worst_case());
+        let s = match a {
+            Some(a) => s.adaptation(a),
+            None => s,
+        };
+        s.run(&target, &starts(&scales, 2)).unwrap()
+    };
+    let default = short(None);
+    let auto = short(Some(Adaptation::Custom(warmup(Some(hessian())))));
+    assert_same_run(&default, &auto);
+    assert!(auto.chains()[0].telemetry().dense_auto_select().is_none());
+}
