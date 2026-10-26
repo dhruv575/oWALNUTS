@@ -204,84 +204,63 @@ cells where v3 froze (`STUDIES/paper_adaptation_robust_v1`).
 The extension builds the crate with the `research` Cargo feature (needed
 for the raised evaluation ceiling behind `max_target_evaluations`).
 
-## What Python costs (measured; `STUDIES/python_callpath_v1`)
+## Which path to use (measured; `STUDIES/python_callpath_linux_v1`, WP78)
 
-Every path runs the same kernel, so ESS per target call is the same to
+Every path runs the same kernel, so ESS per gradient is the same to
 Monte-Carlo noise (paths that call the same compiled function give
-bit-identical draws); what differs is the cost of one call. Measured on a
-contended 16-core Windows machine (walls are relative, not absolute; the
-`threads=4` column is the build with the fixes below) on a 100-D Gaussian,
-noncentered Eight Schools and a 157-D hierarchical regression, 4 chains x
-1,000/1,000 at the defaults:
+bit-identical draws); what differs is the cost of one call. Measured on
+Linux (four pinned cores of a shared 16-core box, CPython 3.12) on a 100-D
+Gaussian, noncentered Eight Schools and a 157-D hierarchical regression,
+4 chains x 1,000/1,000 at the defaults, against a native Rust target with
+the same density:
 
-| path | µs per call in the sampler (gauss / eight / hier) | `threads=4` vs `threads=1` |
-|---|---|---|
-| `from_cfunc` (numba `cfunc`) | 1.4 / 0.6 / 2.9 | 2.7–3.3x faster |
-| `from_pymc(model, gil_free=True)` | 4 / 6 / 24 | 2.5–3x faster (one contended outlier) |
-| plain callable calling a numba `njit` kernel | 3.0 / 1.8 / 4.2 | 1.8–3.2x **slower** |
-| plain numpy callable | 3.8 / 9.2 / 36 | 1.4–2.3x **slower** |
-| `from_pymc(model)` (default: compiled PyTensor C function, a Python callable) | 7 / 12 / 31 | 1.4–3x **slower** (`thread_safe=True`) |
-| `from_jax(logp)` | 22 / 19 / 32 | 2.3–3.3x **slower** |
-| `from_torch(logp)` | 66 / 290 / 500 | 1.1–2.8x **slower** |
+| path | µs per gradient, `threads=1` (gauss / eight / hier) | vs native Rust | `threads=4` vs `threads=1` |
+|---|---|---|---|
+| native Rust `Target` | 1.6 / 0.6 / 3.8 | 1 | 3.4–3.8x faster |
+| `from_cfunc` (numba `cfunc`) | 1.7 / 0.7 / 3.8 | 0.98–1.15x | 3.4–3.8x faster |
+| `from_pymc(model, gil_free=True)` | 1.9 / 1.3 / 15 | 1.2–4.0x | 3.2–3.8x faster |
+| plain callable calling a numba `njit` kernel | 3.1 / 2.0 / 5.3 | 1.4–3.5x | 0.39–0.82x (slower) |
+| `from_pymc(model)` (default: PyTensor C function, a Python callable) | 6.7 / 10 / 34 | 4–17x | 0.45–0.80x (slower) |
+| `from_jax(logp)` | 23 / 22 / 44 | 11–39x | 0.46–0.68x (slower) |
 
-Against nutpie 0.16.8 on the same PyMC models (same chains and draws),
-`from_pymc(model)` reaches 0.17–0.24x nutpie's ESS/s at one core.
-`from_pymc(model, gil_free=True)` reaches 0.5–1.0x at one core and
-0.5–0.9x at four. A hand-written numba `cfunc` (below) is 2–9x nutpie's
-ESS/s.
-
-nutpie gets 1.4–2.1x more ESS per gradient on these three models (1.70x
-pooled). `STUDIES/nutpie_per_gradient_gap_v1` (WP58) decomposed that gap:
-
-* **Gradient accounting: 0.15 %.** Our counts equal counted callbacks.
-* **WALNUTS refinement: ≤ 7 %.** Few leaves refine; turning refinement off
-  or raising `delta` to 2 recovers 5–7 %.
-* **Step-size statistic:** switching to Stan's `accept_stat__` widens the
-  gap.
-* **Diagonal mass-matrix adaptation: the main factor.** Running oWALNUTS
-  with nutpie's final metric closes 44–60 %. nutpie's gradient-based
-  estimate is less noisy on a 100-D Gaussian. On the hierarchical model it
-  converges in fewer warmup gradients: 72 % of oWALNUTS's gradients there
-  are warmup, against nutpie's 49 %.
-
-On Eight Schools (both parametrisations) and `gp_pois_regr`, nutpie's
-per-gradient lead comes with divergences in every run, and nutpie fails the
-gates (0/9). oWALNUTS's defaults pass them (9/9).
+The Windows measurements (`STUDIES/python_callpath_v1`, WP47, contended)
+rank the paths the same way.
 
 Guidance:
 
+* **PyMC models: use `from_pymc(model, gil_free=True)` with `threads=4`.**
+  On Linux it gave 8–22x the ESS/s of the default `from_pymc(model)` at
+  `threads=1`, with every gate passed. It needs numba. A model it cannot
+  snapshot (for example `pm.Data` together with explicit `initval`s on
+  PyMC >= 5.28) fails closed with `NotImplementedError`; the fallback is
+  `from_pymc(model)` at `threads=1`.
+* **nutpie on PyMC models.** nutpie 0.16.8 needs 1.4–1.9x fewer gradients
+  per unit of ESS on these models (pooled 1.67x on Linux, 1.70x on
+  Windows; adaptation, not the call path), so on smooth and larger
+  hierarchical models (the Gaussian and the hierarchical regression) it is
+  1.4–1.9x faster per second than `gil_free=True` at four cores. On
+  noncentered Eight Schools nutpie fails the convergence gates on every
+  seed (divergences), where every oWALNUTS path passes.
+* **Hand-written densities: use `from_cfunc`**, with numba
+  `error_model="numpy"` on the `cfunc` and its `njit` helpers and the
+  nonfinite guard (return `-inf`, gradient zeroed, when the value or any
+  gradient element is nonfinite; example below). It runs within 1.15x of a
+  native Rust target and scales 3.4–3.8x on four threads. Numba's default
+  `error_model="python"` raises `ZeroDivisionError` on a float division by
+  zero, which cannot cross the C ABI: the call returns garbage and the run
+  fails with "raw target wrote a nonfinite gradient element". The callable
+  transport hides this (it treats `ZeroDivisionError` and any nonfinite
+  output as a zero-density point by default).
 * **Python callables (numpy, JAX, PyTorch, the default `from_pymc`): use
   `threads=1`.** A callable holds the GIL, so chains on worker threads queue
-  for it, and `threads=4` is slower than `threads=1` for every cheap
-  callable. Only a callable that spends most of its time outside the GIL
-  (large XLA or PyTorch kernels) can gain.
-* **For speed, use a compiled C-ABI target**: `from_pymc(model,
-  gil_free=True)` for PyMC models (numba required), or `from_cfunc` for a
-  hand-written numba kernel; both run `threads` chains in parallel.
-* **Compile numba kernels for `from_cfunc` with `error_model="numpy"`** on
-  both the `njit` helpers and the `cfunc`, and return `-inf` (gradient
-  zeroed) when the value or any gradient element is nonfinite. Numba's
-  default `error_model="python"` raises `ZeroDivisionError` on a float
-  division by zero, which cannot cross the C ABI: the call returns garbage
-  and the run fails with "raw target wrote a nonfinite gradient element".
-  The callable transport hides this (it treats `ZeroDivisionError` and any
-  nonfinite output as a zero-density point by default); the raw ABI
-  treats a finite value with a nonfinite gradient as fatal.
-* `from_jax` calls the jitted `value_and_grad` on the numpy position directly
-  (after 0.2.0; 2.0–2.6x ESS/s over 0.2.0's extra `jnp.asarray` dispatch).
-  JAX's per-call dispatch (15–30 µs) still dominates small models.
-* `from_pymc(model)` is a Python callable around PyMC's compiled
-  `logp_dlogp_function` (PyTensor C backend by default), not a compiled
-  transport. `thread_safe=True` (one compiled function per worker thread) is
-  needed for `threads > 1`; in 0.2.0 it recompiled the PyTensor function
-  on every callback at `threads > 1` (a run did not finish), because worker
-  threads got a fresh Python thread state per call. After 0.2.0 each worker
-  thread keeps one Python thread state for the whole run, so
-  `threading.local` state persists and Python callables at `threads=4` are
-  1.1–1.9x faster than in 0.2.0 (PyTorch unchanged; all still slower than
-  `threads=1`).
-* PyTorch's per-call cost is mostly the autograd/dispatcher overhead of
-  many small ops; it is the slowest path for small models.
+  for it; `threads=4` was slower than `threads=1` on every model.
+  `from_pymc(model)` needs `thread_safe=True` for `threads > 1`.
+* **`from_jax` adds about 20–40 µs per gradient** (JAX's per-call
+  dispatch), which dominates small models: 0.09–0.14x the ESS/s of a
+  compiled numba callable. Prefer a numba `cfunc` when the density is
+  cheap.
+* PyTorch's per-call cost is mostly autograd/dispatcher overhead; it is the
+  slowest path for small models (WP47: 66–500 µs per call).
 
 ## Tests
 
@@ -294,7 +273,7 @@ Guidance:
 Every `sample` call releases the GIL for the whole run; at `threads=1` the
 chains run on the calling thread, at `threads > 1` on Rust worker threads.
 A Python callable re-attaches the interpreter on each call, so those chains
-are serialised by the GIL (use `threads=1`; see the table above).
+are serialised by the GIL (use `threads=1`; see "Which path to use").
 The built-in native targets and compiled C-ABI callbacks (`from_cfunc`,
 `from_pymc(gil_free=True)`) never touch the interpreter and run `threads`
 chains in parallel. Off Windows, `from_stan` (BridgeStan, above) does too:
@@ -339,8 +318,8 @@ transforms or changed parameter layouts also fail before sampling.
 Nonfinite densities or gradients during proposals
 become recoverable zero-density evaluations, matching the callable adapter's
 default; an invalid initial point still fails verification.
-Measured on Eight Schools: ~31,000 min-bulk
-ESS/s at 4 threads — parity with nutpie — vs ~2,300 through the GIL path.
+On Linux (WP78) it ran at 1.2–4.0x a native Rust target's cost per gradient
+and 8–22x the default `from_pymc(model)` ESS/s.
 The callback must be thread-safe, deterministic, write every gradient
 element on finite returns, and never raise across the ABI (hence
 `error_model="numpy"` for numba).

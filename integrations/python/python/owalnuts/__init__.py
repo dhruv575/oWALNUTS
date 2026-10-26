@@ -412,7 +412,9 @@ def from_cfunc(
     zero-density point. For numba, compile the ``cfunc`` and its ``njit``
     helpers with ``error_model="numpy"``: the default ``"python"`` raises
     ``ZeroDivisionError`` on a float division by zero, which cannot cross
-    the ABI (STUDIES/python_callpath_v1).
+    the ABI (STUDIES/python_callpath_v1). With that recipe it runs within
+    1.15x of a native Rust target and scales with ``threads``
+    (STUDIES/python_callpath_linux_v1, WP78).
     """
     address = getattr(cfunc_or_address, "address", cfunc_or_address)
     return CFuncTarget(
@@ -1022,7 +1024,12 @@ def from_numpy(logp: Callable[[np.ndarray], float], grad: Callable[[np.ndarray],
 
 
 def from_jax(logp_fn: Callable[[Any], Any], *, jit: bool = True) -> LogpGrad:
-    """Wrap a JAX scalar log density. Enables x64 (the kernel is binary64)."""
+    """Wrap a JAX scalar log density. Enables x64 (the kernel is binary64).
+
+    A Python callable: use ``threads=1``. JAX's per-call dispatch adds about
+    20-40 us per gradient (STUDIES/python_callpath_linux_v1, WP78), so for a
+    cheap density a numba ``from_cfunc`` is much faster.
+    """
     import jax
     import jax.numpy as jnp
 
@@ -1263,8 +1270,14 @@ def from_pymc(model: Any, *, mode: str | None = None, gil_free: bool = False,
     one function per calling thread (a small one-time cost per thread), which
     restores ``threads > 1`` sampling on the callable transport. The default
     single-function wrapper is only safe with ``threads=1``. Either way this
-    is a Python callable serialised by the GIL, so ``threads=1`` is faster;
-    ``gil_free=True`` is the parallel, compiled transport.
+    is a Python callable serialised by the GIL, so ``threads=1`` is faster.
+
+    For speed use ``gil_free=True`` with ``threads=4``: the parallel,
+    compiled (numba) transport, 8-22x the default's ESS/s on Linux
+    (STUDIES/python_callpath_linux_v1, WP78). It needs numba and fails
+    closed (``NotImplementedError``) on models it cannot snapshot, such as
+    ``pm.Data`` with explicit ``initval``s; fall back to the default at
+    ``threads=1``.
     """
     import pymc as pm  # noqa: F401
 
