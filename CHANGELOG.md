@@ -12,7 +12,9 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Research flag `WarmupConfig::with_trapped_chain_restart` (default off): a
   chain whose step size at the end of the first slow adaptation window is
   below a fraction of the chain median restarts from an independent best-of-16
-  start (WP67, `STUDIES/trapped_chain_restart_v1`; confirmation pending).
+  start (WP67, `STUDIES/trapped_chain_restart_v1`). The confirmation (WP69)
+  did not support a default: false positives on recovering chains and a
+  trap rate of about 1 in 252 fresh chains. It stays research-only.
 - Study-only Cargo feature `candidate-levels10` (off): ten refinement levels
   in `sampler::Tuning::default()` for WP68. Not qualified as a default; eight
   levels stay.

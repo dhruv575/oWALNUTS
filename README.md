@@ -809,3 +809,16 @@ provenance.
   2.7x ESS at 2.5x gradients), `max_depth 12` 0.084x, warmup 2,000 0.192x.
   No default or flag changed:
   [`STUDIES/accel_gp_gap_v1`](STUDIES/accel_gp_gap_v1/README.md) (WP70).
+- [E36] Trapped-chain restart confirmation (Linux, 261 cells, WP67's rule
+  unchanged): **not proposed as a default**. On 60 fresh `lotka_volterra`
+  seeds the defaults trapped 0/240 chains (about 1 in 252 over all fresh
+  seeds, against 2/48 on WP57's targeted seeds) and the step rule fired on
+  two chains that recovered on their own; on the 17 house models x 3 seeds
+  it fired once on a passing `earnings` cell and missed a real `lotka` trap
+  at step ratio 0.111 (cut 0.1); passes 42 = 42, ratio 1.0007, 50/50
+  unflagged cells identical; 0 firings on 24 genuine second-mode cells;
+  synchronisation cost +0.1 % / +1.2 % / +1.9 % at 1 / 4 / 16 chains. The
+  chain-disagreement warning stayed silent on three 2-vs-2 mode splits that
+  R-hat > 1.01 reported:
+  [`STUDIES/trapped_chain_restart_confirmation_v1`](STUDIES/trapped_chain_restart_confirmation_v1/README.md)
+  (WP69).

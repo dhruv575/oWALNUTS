@@ -174,6 +174,12 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     168 chains, unflagged runs bit-identical. Supported on two events; WP69
     is the confirmation (60 fresh seeds, 17-model breadth, a genuine
     second-mode arm where the rule must not fire, synchronisation cost).
+    **WP69 result: not proposed.** 0/240 chains trapped on 60 fresh seeds
+    (the trap rate is about 1 in 252 fresh chains), 3 of 5 flags across
+    WP67 and WP69 fell on healthy or self-recovering chains, and one real
+    trap sat at ratio 0.111, above the 0.1 cut. The restart stays a
+    research-only flag; a two-signal rule is the only candidate worth a
+    further study.
 13. **The per-gradient gap to nutpie on PyMC models** (WP47, WP58): nutpie
     gets 1.6–2.4x more ESS per gradient than oWALNUTS on all three models of
     `STUDIES/python_callpath_v1`. WP58 (`STUDIES/nutpie_per_gradient_gap_v1`)
