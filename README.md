@@ -964,3 +964,16 @@ provenance.
   for a default-flip confirmation (WP85):
   [`STUDIES/metric_autoselect_v2`](STUDIES/metric_autoselect_v2/README.md)
   (WP79).
+- [E47] `from_pymc(gil_free=True)` as a default (Linux, 10 PyMC model
+  kinds x 3 seeds, 150 four-thread robustness runs): **not proposed**. It
+  never errors where the default runs (the initval + `pm.Data` limitation
+  raises `NotImplementedError` before sampling, pointing to
+  `gil_free=False`), passes every gate the default passes, costs 0.13–0.46x
+  the default's wall per gradient, 0/150 faults; but on 3 of 10 models
+  (Data + dims + Deterministics 0/3, ar1 2/3, simplex 2/3) its draws did
+  not reproduce those of the same compiled function run as a numba
+  callable, all from the first process to compile each model; and the
+  returned `CFuncTarget` is not callable as `target(q)`, so a flip would
+  break the API. gil_free stays the documented opt-in:
+  [`STUDIES/pymc_gil_free_default_v1`](STUDIES/pymc_gil_free_default_v1/README.md)
+  (WP83).
