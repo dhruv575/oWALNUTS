@@ -319,7 +319,7 @@ def funnel_arm(arm: str) -> dict | None:
         return None
     est = [c["tail_mass"]["estimate"] for c in cs.values()]
     p5 = statistics.fmean(est)
-    se = statistics.stdev(est) / math.sqrt(len(est))
+    se = statistics.stdev(est) / math.sqrt(len(est)) if len(est) > 1 else float("nan")
     return {"cells": len(cs), "errors": [s for s in SEEDS["F"] if s not in cs], "pooled_p5": p5, "se_p5": se,
             "abs_error": abs(p5 - EXACT_P5), "within_1se": abs(p5 - EXACT_P5) <= se,
             "divergences": sum(ch["divergences"] for c in cs.values() for ch in c["chains_data"]),
