@@ -1,0 +1,42 @@
+### WP65-BRIDGESTAN-LINUX-DISPATCH-V1: on Linux the concurrent-replica BridgeStan dispatch is qualified (0/500 faults, draws bit-identical to the serialised path, 4.0–5.4x throughput, 0.96x CmdStan wall per gradient); the serialised path costs 3.46x; `STAN_THREADS` is safe but up to 1.57x per call
+
+- **Ordered time:** 2026-10-26 on `wt/bridgestan-linux`, on the shared AWS box `owalnuts-bench`, lane 2 (cores 4-7), with three other lanes active.
+  - Preregistered at `42455688` (library `a49df800`). The commit came after builds and a disclosed smoke run on a non-study posterior (`kidiq-kidscore_momiq`); no prediction was changed.
+  - Single run: (a) 01:13–01:17 UTC, (b) 01:17–01:23, (c) 01:23–01:40. Strictly sequential; no rerun, no interruption.
+- **Protocol/config:** `STUDIES/bridgestan_linux_dispatch_v1/{PREREGISTRATION.md,protocol.json}`.
+  - Paths: DirectSerialised (`StanTarget`, no `STAN_THREADS`), ReplicatedConcurrent (`ReplicatedStanTarget`, 4 replicas), DirectConcurrent (`StanTarget`, `STAN_THREADS=true`). The crate has no Linux owned worker.
+  - Toolchain: BridgeStan 2.9.0 / Stan 2.39.0 from the release tarball in two private trees; CmdStan 2.39.0 (lane byte copy); g++ 13.3; Rust 1.88. Every process ran under `taskset -c 4-7`.
+  - (a) eight_schools_noncentered, arK and diamonds × both builds × 5 processes, five paths each.
+  - (b) WP50D run shape (sblrc, 4 chains / 4 threads, 1,000/1,000). 500 paired seeds 65201001–65201500 × 3 paths, one child at a time.
+  - (c) The v7 fixed-16, seed 652651, 4 × 1,000/1,000, against CmdStan with the v7 harness and driver copied and parametrised (changes listed in the preregistration).
+- **Outcome:**
+  - **(a)** A2–A4 held.
+    - Nothreads replicated4/direct4 throughput: 5.43 / 4.06 / 3.98.
+    - Threads direct4 / nothreads direct4: 4.37 / 2.54 / 4.03.
+    - Wrapper and dispatch overhead: <= 1.06.
+    - **A1 failed**: threads/nothreads raw latency 1.215 / **1.572** / 1.008 against a 1.25 threshold.
+  - **(b)** **0/500 faults on each path** (95% upper bound 0.597%). Serialised vs replicated parity 500/500; serialised vs threaded_direct also 500/500. Median sampling wall: 0.354 / 0.088 / 0.105 s.
+  - **(c)** Wall per gradient over 16/16 models:
+    - replicated / CmdStan **0.959**;
+    - serialised / CmdStan **3.462**;
+    - serialised / replicated 3.609;
+    - threaded / replicated 1.248.
+
+    Draws were identical across all three arms on 16/16 models, and 48/48 cells completed. Predictions C1–C6 held, C6 by 0.002. Reported: gates 13/16 in each oWALNUTS arm vs CmdStan 12/16; ESS per gradient 0.944x CmdStan (one seed).
+  - **Frozen rule:** ReplicatedConcurrent **qualified** (Q1–Q4); DirectConcurrent **qualified** (T1–T3, T3 marginal).
+- **Diagnostics (descriptive):**
+  - A `STAN_THREADS` library stays mapped after its `StanTarget` drops (500/500; glibc pins a DSO with thread-local destructors). Non-threaded libraries unmapped, and replica copy directories were removed, in every child.
+  - DirectSerialised with four callers has lower total throughput than one caller on eight schools (5.7x per-caller latency).
+  - The passing oWALNUTS `one_comp` cell has max |z| 4.69 (CmdStan's failing cell: 4.41).
+- **Artifacts:** `STUDIES/bridgestan_linux_dispatch_v1/`:
+  - `{README.md,LEDGER-ENTRY.md,PREREGISTRATION.md,protocol.json,build_models.py,run_latency.py,run_stress.py,run_bench.py,verdict.py,checksums.py,Cargo.toml,Cargo.lock,src/}`;
+  - `artifacts/{build-manifest.json,latency/,stress/ (heartbeats as heartbeats.tgz),bench/ (cells, summary),verdict.{json,md}}`;
+  - `CHECKSUMS.sha256`, including the uncommitted draws.
+- **Conclusion:**
+  - Supported: the Linux concurrent-replica path is safe and is the fast path; the Windows 1.85x gap is serialisation. Linux serialisation costs more (3.46x pinned) than it did on contended Windows.
+  - Not supported: "`STAN_THREADS` is cheap on Linux" (arK 1.57x per call, 1.62x in sampling).
+- **Next decision (coordinator):**
+  - Update the README "Threads and chains" / Known limitations and the integration README build table with the qualified-Linux sentence in this study's README.
+  - Keep recommending the non-threaded build plus `ReplicatedStanTarget` on Linux.
+  - Correct the integration README's unload-on-drop claim for `STAN_THREADS` libraries.
+  - macOS and aarch64 remain unqualified.

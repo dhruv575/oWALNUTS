@@ -1,0 +1,95 @@
+{
+ "generated_utc": "2026-10-26T01:22:48Z",
+ "interrupted": [],
+ "parity": {
+  "serialised_vs_replicated": {
+   "comparable": 500,
+   "differing_seeds": [],
+   "identical": 500
+  },
+  "serialised_vs_threaded_direct": {
+   "comparable": 500,
+   "differing_seeds": [],
+   "identical": 500
+  }
+ },
+ "per_arm": {
+  "replicated": {
+   "children_counted": 500,
+   "children_recorded": 500,
+   "executions": [
+    "ReplicatedConcurrent"
+   ],
+   "fault_kinds": {},
+   "faulted": [],
+   "faults": 0,
+   "leftover_copy_dirs": 0,
+   "median_process_wall_seconds": 0.13524482549973982,
+   "median_sampling_wall_seconds": 0.08774240650000001,
+   "model_mapped_after_drop": 0,
+   "upper_bound_95_one_sided": 0.005973551516349541
+  },
+  "serialised": {
+   "children_counted": 500,
+   "children_recorded": 500,
+   "executions": [
+    "DirectSerialised"
+   ],
+   "fault_kinds": {},
+   "faulted": [],
+   "faults": 0,
+   "leftover_copy_dirs": 0,
+   "median_process_wall_seconds": 0.39729465600021285,
+   "median_sampling_wall_seconds": 0.35350827149999997,
+   "model_mapped_after_drop": 0,
+   "upper_bound_95_one_sided": 0.005973551516349541
+  },
+  "threaded_direct": {
+   "children_counted": 500,
+   "children_recorded": 500,
+   "executions": [
+    "DirectConcurrent"
+   ],
+   "fault_kinds": {},
+   "faulted": [],
+   "faults": 0,
+   "leftover_copy_dirs": 0,
+   "median_process_wall_seconds": 0.14891686949977156,
+   "median_sampling_wall_seconds": 0.10524616,
+   "model_mapped_after_drop": 500,
+   "upper_bound_95_one_sided": 0.005973551516349541
+  }
+ },
+ "predictions": {
+  "B1_zero_faults_every_path": {
+   "held": true,
+   "value": {
+    "replicated": 0,
+    "serialised": 0,
+    "threaded_direct": 0
+   }
+  },
+  "B2_serialised_replicated_fingerprint_parity_every_seed": {
+   "held": true,
+   "value": {
+    "comparable": 500,
+    "differing_seeds": [],
+    "identical": 500
+   }
+  },
+  "reported_serialised_vs_threaded_direct_parity": {
+   "value": {
+    "comparable": 500,
+    "differing_seeds": [],
+    "identical": 500
+   }
+  }
+ },
+ "protocol_sha256": "36b1cdfe77f47c51858190ff7ecba268541d98fd23bbca598f80d44456375ee8",
+ "schema": "bridgestan-linux-dispatch-v1-stress-summary",
+ "statements": {
+  "B1": "0 faults on every path: serialised 0/500, replicated 0/500, threaded_direct 0/500 (the Windows record had STATUS_HEAP_CORRUPTION at drop on the unserialised dynamic-runtime path, 2/120 and 4/300; Linux has native TLS and one C runtime).",
+  "B2": "serialised and replicated give bit-identical draw fingerprints and identical target-call counts on all 500 seeds.",
+  "reported": "serialised vs threaded_direct parity (different library build) is reported, not gated; expected identical."
+ }
+}
