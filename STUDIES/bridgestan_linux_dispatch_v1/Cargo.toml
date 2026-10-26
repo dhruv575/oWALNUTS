@@ -1,0 +1,30 @@
+[package]
+name = "bridgestan-linux-dispatch-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP65: BridgeStan dispatch paths on Linux (latency, fault rate, wall per gradient vs CmdStan)"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+libloading = "0.8"
+serde_json = "1"
+rand = { version = "0.9", features = ["small_rng"] }
+
+# (c) wall per gradient: a copy of STUDIES/posteriordb_bench_v7/src/main.rs with a dispatch argument.
+[[bin]]
+name = "harness"
+path = "src/main.rs"
+
+# (a) gradient-call latency per dispatch path.
+[[bin]]
+name = "latency"
+path = "src/bin/latency.rs"
+
+# (b) one fault-rate child process.
+[[bin]]
+name = "stress_child"
+path = "src/bin/stress_child.rs"
+
+[workspace]
