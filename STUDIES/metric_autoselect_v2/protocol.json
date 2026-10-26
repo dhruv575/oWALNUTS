@@ -1,0 +1,161 @@
+{
+ "schema": "metric-autoselect-v2",
+ "ledger_id": "WP79",
+ "status": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+ "frozen_utc": "2026-10-26",
+ "question": "Fix the two things WP75 identified, as separate preregistered changes: (A) the diagonal branch is the diagonal driver itself (bit-identical to the default diagonal run on the same seed); (B) a GP guard and an earnings fix through a Hessian-fit statistic with a linearity bound, fixed in advance from the WP75 records.",
+ "library_under_test": "wt/metric-autoselect-v2: main b542b394 plus one library commit. Research flag only: DenseAutoSelectConfig::hessian_fit(select_window, threshold, min_linearity) through WarmupConfig::with_dense_auto_select, diagonal facade only (multi-chain diagonal driver, new sample_chains_auto_selected). src/walnutpie.rs plus tests/metric_autoselect_hessian.rs. Flag off: no driver change; the observer exists only in the new driver.",
+ "change_A": {
+  "what": "The run is the unflagged diagonal run (the flag is stripped from the per-chain config) with a passive observer that reads each transition's selected position and gradient in slow windows 1 and 2 (no RNG, no target calls). Decision at the close of window 2 (after transition 249; the diagonal driver's own window-2 install is already done). Diagonal branch: the chains continue the same ChainRun to the end. Dense branch: each chain hands its position, step and window-2 position moments to the dense adaptive driver, which installs the Stan dense precision of the chain's window-2 draws (the dense facade's rule), runs its step search and dual-averaging restart, then windows 3-4, terminal fast and retained exactly as the dense driver (PerTransition seeds from splitmix64((seed + chain) ^ tag)); a chain whose dense candidate fails stays diagonal. The diagonal driver's superseded window-2 install and its step search stay in the telemetry and in the gradient counts.",
+  "frozen_rule_R5": "100 % of diagonal-branch auto cells (posteriordb and funnel) have the diag arm's per-chain draws hashes (funnel: the cell draws hash) and total gradient count on the same seed."
+ },
+ "change_B": {
+  "statistic": "From every chain's slow windows 1+2 (150 draws per chain, 600 pooled): pooled within-chain covariance C of z = (x, g), x the unconstrained position and g the log-density gradient at each selected draw. B = C_gx C_xx^-1; linearity = min_i R^2_i, R^2_i = (C_gx C_xx^-1 C_xg)_ii / (C_gg)_ii; P = -(B + B^T)/2; if P is positive definite, Sigma = P^-1 and G_H = kappa_diag / kappa_dense of Sigma whitened by its Stan-regularised (n = 500) diagonal and dense estimates (the population version of WP48's k, so WP75's threshold 5 keeps its WP48/WP51 justification). Dense iff P is SPD, G_H >= 5 and linearity >= 0.5. The WP75 window-whitening G is recorded too (descriptive).",
+  "select_window": 2,
+  "threshold": 5.0,
+  "min_linearity": 0.5,
+  "calibration": "artifacts/calibration.json (calibrate.py): WP75's recorded diag- and dense-arm retained draws (17 models x 3 seeds x 4 chains x 1,000) cut into six 150-draw windows per chain, gradients through BridgeStan. Min / median linearity over the 18 diag-arm windows: diamonds 0.994/0.995, earnings 0.995/0.996, kidiq 0.988/0.991, nes2000 0.975/0.980, arK 0.953/0.965, hmm_example 0.917/0.941, mesquite 0.809/0.840, lotka_volterra 0.800/0.843, versus gp_pois_regr 0.053/0.104 (max 0.163), accel_gp 0.062/0.096 (max 0.131, P not SPD in every window), eight_schools_centered 0.002/0.047; funnel (artifacts/calibration-funnel.json, exact draws) 0.0002/0.001, P never SPD. G_H medians: diamonds 22,789, mesquite 510, nes 393, lotka 272, kidiq 173, earnings 140, arK 108, hmm_example 17, garch 8.0, one_comp 4.5, es_nc 2.0, arma 1.6, hmm_drive 1.5, sblrc 1.08.",
+  "why_0.5": "Any bound in (0.163, 0.80) separates the two GP posteriors (and the funnel geometries) from every dense winner; 0.5 is a round value inside the gap (half of every coordinate's gradient variance explained by one Gaussian curvature), 3x above the GP maximum and 0.3 below mesquite / lotka. It also sends garch11 (median 0.465) and one_comp (0.43) to diag.",
+  "why_gp_trips": "In gp_pois_regr 12 of 13 coordinates have R^2 < 0.5: the latent GP values enter through exp(f) and K(rho, alpha)^-1, so the curvature changes across the posterior and no single fitted Hessian explains the gradients; for accel_gp the fitted P is not even positive definite. diamonds and mesquite are near-Gaussian in the unconstrained space: gradients are linear in position (R^2 >= 0.81 in every window), so the fit recovers one curvature. WP75's window-whitening G only compares covariances, and the GP windows are strongly correlated (G about 100).",
+  "earnings_miss": "WP75 in-run kappa_diag / kappa_dense were 4e4-1.9e6 / 2.7e4-8.6e7 on earnings: under a diagonal warmup, windows 1 and 2 of a posterior with max |corr| about 1.0 are non-stationary, so window 1's covariance does not whiten window 2 and G fell to 0.02-1.5 (reference 49). The Hessian fit does not need stationary windows: for a near-Gaussian posterior g = -P(x - mu) wherever the chain is, so the regression recovers P from non-stationary warmup draws (calibration G_H 139-141, linearity 0.995). Predicted fixed by the statistic: earnings and kidiq dense on every seed."
+ },
+ "machine": "AWS c7a.4xlarge owalnuts-bench, lane 3: every build and cell under taskset -c 8-11, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, files under ~/lanes/metric_autoselect_v2/ only; co-tenanted, walls 'pinned, co-tenanted' and not used in any rule.",
+ "dispatch": "owalnuts_bridgestan::ReplicatedStanTarget with 4 replicas (WP65 ReplicatedConcurrent, recorded per cell); 4 threads for 4 chains.",
+ "arms": {
+  "diag": "Sampler::new() defaults",
+  "dense": "Sampler::new().metric(Metric::dense())",
+  "auto": "Sampler::new().adaptation(Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION).with_dense_auto_select(DenseAutoSelectConfig::hessian_fit(2, 5.0, 0.5)))) with the default diagonal metric; funnel: Metric::diagonal() and the same adaptation.",
+  "build": "One harness build (owalnuts with research); the pipeline check compares the diag cell with a plain-feature build."
+ },
+ "house_models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "predicted_branch": {
+  "eight_schools-eight_schools_noncentered": "diag",
+  "eight_schools-eight_schools_centered": "diag",
+  "diamonds-diamonds": "dense",
+  "earnings-logearn_interaction": "dense",
+  "mesquite-logmesquite_logvash": "dense",
+  "kidiq-kidscore_momhsiq": "dense",
+  "sblrc-blr": "diag",
+  "nes2000-nes": "dense",
+  "arK-arK": "dense",
+  "arma-arma11": "diag",
+  "garch-garch11": "diag",
+  "gp_pois_regr-gp_pois_regr": "diag",
+  "hmm_example-hmm_example": "dense",
+  "bball_drive_event_0-hmm_drive_0": "diag",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs": "diag",
+  "hudson_lynx_hare-lotka_volterra": "dense",
+  "mcycle_gp-accel_gp": "diag"
+ },
+ "posteriordb": {
+  "path": "~/infra/posteriordb/posterior_database (read-only)",
+  "commit": "28f8d3d",
+  "reader": "files read directly; no posteriordb package"
+ },
+ "bridgestan": "BridgeStan 2.9.0 source (sha256 b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c) in the lane directory; Python bridgestan 2.9.0 and ArviZ 0.23.4 from ~/venv (read-only).",
+ "seeds": {
+  "P": [
+   797501,
+   797502,
+   797503
+  ],
+  "F": [
+   797401,
+   797402,
+   797403,
+   797404,
+   797405,
+   797406,
+   797407,
+   797408,
+   797409,
+   797410
+  ]
+ },
+ "seed_check": "git grep -nowE over b542b394 for 7974(0[1-9]|10), 79750[1-3], 990679 and the calibration RNG seed 797900: no hit; no hit in protocol.json / PREREGISTRATION.md of C:/dev/owalnuts-wt/*/STUDIES; box lanes checked before the first cell (environment.json).",
+ "blocks": {
+  "P": {
+   "kind": "posteriordb",
+   "arms": [
+    "diag",
+    "dense",
+    "auto"
+   ],
+   "warmup": 1000,
+   "draws": 1000,
+   "seeds": "P",
+   "role": "decides R1-R4"
+  },
+  "F": {
+   "kind": "funnel",
+   "arms": [
+    "diag",
+    "dense",
+    "auto"
+   ],
+   "warmup": 2000,
+   "draws": 20000,
+   "seeds": "F",
+   "role": "funnel sanity arm; decides F"
+  }
+ },
+ "run_order": "P (models in house order; seeds ascending; arms diag, dense, auto), then F (seeds ascending; same arm order). One process per cell, strictly sequential, four threads. Cell timeout 2,700 s. An errored or timed-out cell is a failed cell (not passed; the model leaves that arm's geomean and counts as below 0.9x for R3). Never rerun.",
+ "posteriordb_harness": "STUDIES/metric_autoselect_v1/src/bin/pdb.rs (WP75) with the v2 auto arm and the new decision fields; v7 metrics and gates.",
+ "funnel_harness": "STUDIES/metric_autoselect_v1/src/bin/funnel.rs (WP75) with the v2 auto arm; P(omega < -5), exact 0.0477903522728147.",
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "finite_draws": true,
+  "no_sampler_error": true
+ },
+ "cell_timeout_seconds": 2700,
+ "statistics": "Per arm pass counts out of 51; per model the median over 3 seeds of min bulk ESS per gradient; auto/diag and dense/diag ratios per model and their geomean over models whose 3 seeds are ok on both arms; per-model retained divergences summed over seeds; branch taken per run vs predicted; funnel pooled P5 and between-seed s.e. over 10 seeds.",
+ "decision_rules": {
+  "R1": "auto pass count >= diag pass count on the same seeds (out of 51).",
+  "R2": "geomean over models of (median ESS/gradient auto) / (median ESS/gradient diag) >= 1.5.",
+  "R3": "No model worse than 0.9x the diagonal: every model's auto/diag ratio >= 0.9 (a model with an errored auto or diag cell counts as failing).",
+  "R4": "0 new divergences: for every model, auto retained divergences summed over its 3 seeds <= diag's.",
+  "F": "Funnel: |pooled P5(auto) - 0.0477903522728147| <= 1 x its between-seed s.e. over 10 seeds (a correct sampler fails this about 32 % of the time; recorded, not softened).",
+  "R5": "Bit identity (change A): 100 % of diagonal-branch auto cells, posteriordb and funnel, equal the diag arm on the same seed in draws hashes and total gradient count. Zero such cells counts as failed.",
+  "D": "Flag-off integrity on the box: git diff b542b394 of src/, tests/, Cargo.toml, Cargo.lock touches only src/walnutpie.rs and tests/metric_autoselect_hessian.rs; kernel_fingerprint passes without and with research; tests/metric_autoselect.rs and tests/metric_autoselect_hessian.rs pass (flag-off and diagonal-branch bit identity). The full test suites are run and recorded.",
+  "verdict": "PROPOSE (auto qualifies to be proposed for a default-flip confirmation; the flip is the coordinator's) iff R1-R5, F and D all hold; otherwise NOT PROPOSED naming the failed clauses. Research flag only either way."
+ },
+ "predictions": {
+  "change_A": {
+   "A1": "R5 holds: every diagonal-branch cell (predicted 27 posteriordb + 10 funnel) is bit-identical.",
+   "A2": "Every all-diagonal model has auto/diag exactly 1.000 and the same passes; WP75's R3 failures (hmm_drive_0 0.09x, eight_schools_nc 0.89x) disappear.",
+   "A3": "F's outcome is the diag arm's own (identical P5), so F holds iff the diag arm meets 1 s.e. (about 68 % for a correct sampler)."
+  },
+  "change_B": {
+   "Pa": "At least 48 of 51 auto runs take the predicted branch (8 dense models x 3 = 24 dense runs, 27 diag). Likeliest misses: garch11 (linearity 0.31-0.55 straddles 0.5), mesquite / lotka_volterra (warmup windows less linear than retained ones).",
+   "B1": "gp_pois_regr and accel_gp take diag on 6/6 runs (WP75: dense 6/6).",
+   "B2": "earnings and kidiq take dense on 6/6 runs (the earnings fix).",
+   "B3": "diamonds and mesquite take dense on 6/6.",
+   "B4": "The funnel takes diag on 10/10.",
+   "B5": "Descriptive: WP75's window-whitening G recorded in the same auto runs is below 5 on at least 2 of 3 earnings seeds."
+  },
+  "rules": "R1 holds (diagonal-branch cells tie by construction; every predicted dense model was 3/3 under diag and dense in WP75; main risk a stuck lotka_volterra chain as in WP75's auto). R2 holds, point prediction about 2.7 (range 2.0-3.5). R3 holds (dense-branch models were >= 2.9x in WP75; others exactly 1.0). R4 holds. R5 holds. D holds. F as A3. Predicted verdict PROPOSE, conditional on F.",
+  "predicted_failed_rules": []
+ },
+ "pre_freeze_runs": "Non-evidence, disclosed: calibrate.py on the box over WP75's recorded draws (no sampling) and the analytic funnel calibration; local Windows unit tests (tests/metric_autoselect_hessian.rs). After the freeze: the pipeline check on seed 990679 (one kidiq cell per arm, a plain-feature diag cell, one funnel cell per arm) in the lane scratch directory, not committed."
+}
