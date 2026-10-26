@@ -24,6 +24,10 @@ architecture and operating system (see the `walnutpie` module documentation).
   start (WP67, `STUDIES/trapped_chain_restart_v1`). The confirmation (WP69)
   did not support a default: false positives on recovering chains and a
   trap rate of about 1 in 252 fresh chains. It stays research-only.
+- Research flag `WarmupConfig::with_dense_auto_select` (off, dense facade
+  only): choose dense or diagonal once per run from a warmup-window
+  condition-number statistic (WP75). Not proposed: 2.30x geomean but five
+  fewer gates; WP79 is the second round.
 - Research flag `walnutpie::DiagonalMetricEstimator` (off): nutpie's
   gradient-informed diagonal metric estimator (WP71). Not supported as a
   default (0.98x geomean, three fewer gates); kept for reference.

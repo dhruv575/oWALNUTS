@@ -872,3 +872,17 @@ provenance.
   passing cells. **Proposed to ship** as an added observe-only check:
   [`STUDIES/chain_disagreement_splits_v1`](STUDIES/chain_disagreement_splits_v1/README.md)
   (WP74).
+- [E41] Per-run dense / diagonal auto-selection (research flag
+  `WarmupConfig::with_dense_auto_select`, off): dense iff the
+  whitened-covariance condition-number ratio G = κ_diag / κ_dense >= 5 at
+  the close of slow window 2, threshold fixed from WP48/WP51 records; 17
+  house models x 3 seeds on Linux: 45/51 runs took the predicted branch,
+  geomean ESS per gradient 2.30x the diagonal (dense arm 2.92x), funnel P5
+  0.0480 ± 0.0034, flag-off bit-identical; **not proposed**: passes 39 vs
+  the diagonal's 44 (gp_pois_regr 3 -> 1 on the dense branch, hmm_drive_0
+  3 -> 1 and lotka_volterra / one_comp one seed each on the diagonal
+  branch, which the dense driver ran rather than the diagonal path itself),
+  and hmm_drive_0 0.09x; earnings chose diagonal on all seeds (in-run G
+  0.02–1.5). WP79 fixes the diagonal branch and adds a GP guard:
+  [`STUDIES/metric_autoselect_v1`](STUDIES/metric_autoselect_v1/README.md)
+  (WP75).
