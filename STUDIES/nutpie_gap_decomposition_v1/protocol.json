@@ -1,0 +1,167 @@
+{
+ "schema": "nutpie-gap-decomposition-v1",
+ "ledger_id": "WP80",
+ "status": "FROZEN_BEFORE_EXECUTION",
+ "frozen_utc": "2026-10-25",
+ "question": "Where does nutpie's per-gradient lead over oWALNUTS on the fixed 16 (WP76: oWALNUTS/nutpie (c) 0.699, a 1.43x nutpie lead) come from, model by model and mechanism by mechanism? WP71 (nutpie's metric estimator) and WP73 (warmup spend) are ruled out as sufficient explanations.",
+ "output": "A ranked list of mechanisms with evidence. No candidate sampler change, no default change, no flag.",
+ "commit": {
+  "full": "c5c6012287fb99bea3ee73dd1abe01e7369c5d6f",
+  "short": "c5c60122",
+  "note": "WP72's commit under test (default sampler identical to f097391c)"
+ },
+ "models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "seeds": {
+  "wp64_v7": [
+   560561,
+   560562,
+   560563
+  ],
+  "wp64_ext": [
+   620601,
+   620602,
+   620603
+  ],
+  "wp72": [
+   720701,
+   720702,
+   720703,
+   720704,
+   720705,
+   720706,
+   720707,
+   720708,
+   720709,
+   720710,
+   720711,
+   720712
+  ],
+  "all": [
+   560561,
+   560562,
+   560563,
+   620601,
+   620602,
+   620603,
+   720701,
+   720702,
+   720703,
+   720704,
+   720705,
+   720706,
+   720707,
+   720708,
+   720709,
+   720710,
+   720711,
+   720712
+  ]
+ },
+ "part1": {
+  "what": "descriptive decomposition from the 288 + 288 fixed-16 cells already on disk; no new cell",
+  "owalnuts_cells": "WP64 posteriordb_bench_v7_linux_v1/artifacts/{v7,ext}/cells (560561-3 at f097391c, 620601-3 at c5c60122) and WP72 posteriordb_ratio_robustness_v1/artifacts/cells (720701-12 at c5c60122)",
+  "nutpie_cells": "WP76 nutpie_18seed_v1/artifacts/cells (all 18 seeds)",
+  "split": "per paired seed (both cells status ok): G = ln(nutpie min-bulk-ESS per gradient / oWALNUTS) = A + B + C exactly; A = ln(min bulk ESS n/o) (ESS per draw; both arms retain 4 x 1,000); B = ln(sampling gradients o/n) (sampling gradients per retained draw); C = ln((total/sampling gradients) o / (total/sampling) n) (warmup overhead). Per model: mean over paired ok seeds; a model enters with >= 15 of 18 paired ok seeds (WP72 rule). Carrying = largest mean G. Also reported: WP76's per-model (c), each model's share of the sum of G, and the cell-level approximation ln(gradients_sampling / retained_leaves_built) of the oWALNUTS refinement spend."
+ },
+ "telemetry": {
+  "models": [
+   "sblrc-blr",
+   "bball_drive_event_0-hmm_drive_0",
+   "eight_schools-eight_schools_centered",
+   "diamonds-diamonds"
+  ],
+  "carrying_models": [
+   "sblrc-blr",
+   "bball_drive_event_0-hmm_drive_0",
+   "eight_schools-eight_schools_centered"
+  ],
+  "owalnuts_leads_model": "diamonds-diamonds",
+  "seeds": [
+   720701,
+   720702,
+   720703
+  ],
+  "design": "4 chains x 1,000 warmup / 1,000 retained, both samplers, v7 cell code. oWALNUTS: the 'telemetry' binary = v7's main.rs plus per-transition arrays (retained and warmup) of depth, target_evaluations, leaves_attempted, leaves_built, refinement_attempts, selected_refinement_level, step_size, maximum_absolute_energy_error, orbit_states, reverse_coarser_rejections, divergent, acceptance_statistic, stop; with the final mass diagonal and step size per chain. nutpie: nutpie.sample(..., store_mass_matrix=True, store_unconstrained=True), every numeric sample_stats variable kept (step_size, depth, n_steps, diverging, mean_tree_accept, mass_matrix_inv, unconstrained_draw, ...), retained and warmup. Storage only: no sampler setting changes.",
+  "seed_reuse": "seeds 720701-3 are WP72's / WP76's, so each telemetry cell is checked against the same-seed prior cell (status, gradients_total, gradients_sampling, min_bulk_ess, divergences equal); a mismatch is reported, not repaired",
+  "run_order": "models in the order listed, oWALNUTS then nutpie, seeds ascending; one child process per cell; strictly sequential; no reruns",
+  "cells": 24
+ },
+ "platform": {
+  "machine": "AWS EC2 c7a.4xlarge (AMD EPYC 9R14), Ubuntu 24.04, lane 1: taskset -c 0-3, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, files under ~/lanes/nutpie_gap_decomposition_v1/",
+  "wall_label_note": "Linux, core-pinned to 4 dedicated cores (taskset -c 0-3) on a shared box with other pinned lanes active (shared L3 and memory bandwidth): walls are 'pinned, co-tenanted'. Pass counts, gradient counts and ESS per gradient are unaffected by co-tenancy. No statistic of this study uses a wall.",
+  "software": "lane venv on Python 3.12.3: nutpie 0.16.8, bridgestan 2.9.0, arviz 0.23.4, numpy 2.4.6, scipy 1.17.1, xarray 2026.9.0, posteriordb 0.2.0, pandas 3.1.0, cmdstanpy 1.3.0; oWALNUTS harness built with Rust 1.88.0 on the box (as WP64/WP72), --release --locked -j4"
+ },
+ "analysis": {
+  "min_ok_fraction": 0.8333333333333334,
+  "telemetry_split": "per usable telemetry seed (both cells status ok), with sums over the 4 x 1,000 retained transitions: B = ln(sum oWALNUTS target_evaluations / sum nutpie n_steps) = B4 + B1 + B2 exactly. B4 = ln(sum target_evaluations / sum leaves_attempted) (gradients per attempted macro leaf: refinement micro-steps and reverse checks; nutpie's equivalent is 1). B1 = ln(e_n / e_o), ln e = mean over chains of the median over unconstrained coordinates i of ln(eps * sqrt(Minv_i) / sigma_i). B2 = B - B4 - B1 = ln((leaves attempted per draw x e_o) / (n_steps per draw x e_n)), the distance per draw in posterior-scale units. Per model: mean over usable seeds.",
+  "metric_conventions": "oWALNUTS: mass_diagonal is M with K(p) = 0.5 sum p_i^2 / M_i (src/walnutpie.rs module docs), so Minv_i = 1 / M_i; eps = final_step_size (the retained macro step). nutpie: Minv = mass_matrix_inv at the last retained draw (fixed after tuning); eps = step_size at the last retained draw.",
+  "sigma": "sigma_i = 1.4826 x MAD of coordinate i over the pooled unconstrained retained draws of both samplers of that seed (8,000 draws); the sd where the MAD is 0",
+  "H3_spread": "S = mean over chains of the SD over coordinates of ln(Minv_i / sigma_i^2) (the overall level is absorbed by the step and is reported only)",
+  "component_threshold_ratio": 1.25,
+  "min_models_supporting": 2,
+  "H3_spread_threshold": 0.35,
+  "ranking": "the five additive components A (ESS per draw), C (warmup), B4 (refinement spend), B1 (step), B2 (distance per draw), ranked by their mean over the three carrying models on the telemetry seeds; H3 is a cause test for B1 and is reported beside it, not ranked as an additive term"
+ },
+ "hypotheses": {
+  "H1_step": {
+   "mechanism": "oWALNUTS adapts a smaller effective step than nutpie, so each draw needs more leapfrog steps for the same distance",
+   "diagnostic": "B1",
+   "criterion": "B1 >= ln 1.25 on >= 2 of the 3 carrying models"
+  },
+  "H2_distance_per_draw": {
+   "mechanism": "oWALNUTS travels further per draw (longer orbits: U-turn criterion, depth, unmerged final subtrees) than nutpie at its own step",
+   "diagnostic": "B2, with the depth and n_steps distributions and the unmerged-leaf fraction",
+   "criterion": "B2 >= ln 1.25 on >= 2 of the 3 carrying models"
+  },
+  "H3_metric_match": {
+   "mechanism": "oWALNUTS's final diagonal metric matches the posterior scales worse than nutpie's, which forces its smaller step",
+   "diagnostic": "S_o - S_n",
+   "criterion": "S_o - S_n >= 0.35 on >= 2 of the 3 carrying models"
+  },
+  "H4_refinement_spend": {
+   "mechanism": "oWALNUTS spends gradients on step-size refinement and reverse checks that nutpie does not",
+   "diagnostic": "B4",
+   "criterion": "B4 >= ln 1.25 on >= 2 of the 3 carrying models"
+  },
+  "H5_ess_per_draw": {
+   "mechanism": "at the same number of draws, oWALNUTS's draws are less independent (lower min bulk ESS per draw)",
+   "diagnostic": "A",
+   "criterion": "A >= ln 1.25 on >= 2 of the 3 carrying models"
+  }
+ },
+ "predictions": {
+  "P1": {
+   "text": "the three models with the largest mean G in part 1 are sblrc-blr, hmm_drive_0 and eight_schools_centered (WP76's three lowest per-model (c): 0.342, 0.484, 0.607; accel_gp at 0.610 is the nearest rival)",
+   "top3": [
+    "sblrc-blr",
+    "bball_drive_event_0-hmm_drive_0",
+    "eight_schools-eight_schools_centered"
+   ]
+  },
+  "P2": {
+   "text": "the first-ranked component is B1 (step size): WP71 and WP73 ruled out the metric estimator and warmup spend, leaving the adapted step given the metric",
+   "first": "B1"
+  },
+  "P3": {
+   "text": "on diamonds (where oWALNUTS leads) B1 is below ln 1.25"
+  }
+ },
+ "rules": "Freeze PREREGISTRATION.md and protocol.json in a commit before the first telemetry cell and before part 1 is computed. Sequential cells; failures, crashes and timeouts are results; no reruns, no tuning after results. A driver crash may be relaunched; only an interrupted cell without a completed artifact may be rerun from scratch with the same seed, recorded in AMENDMENTS.md. Raw draws and telemetry are checksummed and not committed."
+}
