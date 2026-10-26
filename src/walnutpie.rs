@@ -554,6 +554,15 @@ pub enum DualAveragingAcceptance {
     /// accepted endpoint; a rejected leaf (invalid evaluation, refinement
     /// exhaustion, reverse-coarsening rejection) contributes zero.
     MeanTrajectoryAcceptance,
+    /// Research-only, off by default (`STUDIES/centered_eight_schools_refinement_v1`,
+    /// WP82): the [`Self::CurrentCoarseEndpoint`] value of every leaf, averaged
+    /// with weight equal to the leaf's target evaluations (its refinement
+    /// attempts and reverse checks included) instead of uniformly. A refined
+    /// leaf, whose coarse value is below `exp(-max_error)`, then counts in
+    /// proportion to what it cost, so dual averaging sees the refinement spend.
+    /// Identical to [`Self::CurrentCoarseEndpoint`] when every leaf costs the
+    /// same.
+    CostWeightedCoarseEndpoint,
     /// Research-only: adapt on the accepted-trajectory statistic.
     #[cfg(feature = "research")]
     AcceptedTrajectory,
@@ -6578,6 +6587,44 @@ struct DualAveraging {
     max_descent: Option<f64>,
 }
 
+/// [`DualAveragingAcceptance::CostWeightedCoarseEndpoint`]: the mean of the
+/// leaves' coarse-endpoint values weighted by each leaf's target evaluations.
+/// A leaf event's evaluation counter is cumulative within its span and is
+/// always preceded by the depth-0 `enter` event carrying the counter before
+/// the leaf, so the difference is the leaf's own cost (at least 1). When
+/// every leaf costs the same the uniform mean of
+/// [`DualAveragingAcceptance::CurrentCoarseEndpoint`] is returned, so the two
+/// statistics are bit-identical whenever no leaf refines.
+fn cost_weighted_coarse_mean(events: &[crate::kernel::TransitionTraceEvent]) -> Option<f64> {
+    let mut previous = 0usize;
+    let mut weighted = 0.0;
+    let mut total = 0.0;
+    let mut first_cost = None;
+    let mut uniform = true;
+    let mut values = Vec::new();
+    for event in events {
+        if event.event == "leaf"
+            && let Some(value) = event.adaptation_value
+        {
+            let cost = event.target_evaluations.saturating_sub(previous).max(1);
+            match first_cost {
+                None => first_cost = Some(cost),
+                Some(first) if first != cost => uniform = false,
+                Some(_) => {}
+            }
+            weighted += cost as f64 * value;
+            total += cost as f64;
+            values.push(value);
+        }
+        previous = event.target_evaluations;
+    }
+    if uniform {
+        acceptance_summary(values.into_iter()).mean
+    } else {
+        (total > 0.0).then(|| weighted / total)
+    }
+}
+
 fn acceptance_summary(values: impl Iterator<Item = f64>) -> AcceptanceStatisticSummary {
     let mut count = 0usize;
     let mut mean = 0.0;
@@ -9381,6 +9428,9 @@ impl<'a, T: Target> ChainRun<'a, T> {
                                                 |event| event.trajectory_acceptance_value,
                                             ))
                                             .mean
+                                        }
+                                        DualAveragingAcceptance::CostWeightedCoarseEndpoint => {
+                                            cost_weighted_coarse_mean(&output.events)
                                         }
                                         #[cfg(feature = "research")]
                                         DualAveragingAcceptance::AcceptedTrajectory => {

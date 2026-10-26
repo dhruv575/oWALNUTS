@@ -1,0 +1,200 @@
+{
+ "schema": "centered-eight-schools-refinement-v1-protocol",
+ "ledger_id": "WP82-CENTERED-EIGHT-SCHOOLS-REFINEMENT-V1",
+ "ledger_title": "refinement spend on the centred eight schools: where it happens and three research candidates",
+ "status": "frozen before the first evidence cell",
+ "frozen_utc": "2026-10-26",
+ "purpose": "(1) Measure where and how oWALNUTS spends refinement on eight_schools_centered (and its non-centred twin) against CmdStan's step and leapfrog counts. (2) Test at most three research candidates against a frozen rule. No default flip in any outcome.",
+ "wp_number_rule": "WP82 as assigned by the coordinator.",
+ "source_commit_under_test": "70343cdf",
+ "prior_evidence": {
+  "WP72": "over 18 Linux seeds, eight_schools_centered is oWALNUTS's worst per-gradient ratio vs CmdStan: 0.39 (median of paired ratios, min bulk ESS per total gradient).",
+  "WP80": "telemetry on 3 seeds: about 30 % of eight_schools_centered retained transitions are refined and a refined macro leaf costs about 4.3 gradients; refinement spend B4 = 1.38 there and about 0 on the other telemetry models; B1 (smaller effective step) 0.21 there.",
+  "WP42": "delta 0.5 costs 0.936x over posteriordb; refinement is almost all at level 1 on 16/17 models.",
+  "WP49": "a warmup-time adaptive delta does not qualify; its worst model was the centred eight schools (0.61x).",
+  "WP53/WP66/WP68": "the default funnel P(omega < -5) is unbiased at 80,000 draws (0.0478 +- 0.0010); 10 refinement levels remove funnel divergences but fail posteriordb (0.824).",
+  "WP73/WP77": "warmup length and the initial phase are not the lever (WP77: neither half nor init25 confirms).",
+  "step_collapse_v1 (WP27)": "MeanTrajectoryAcceptance alone did not move sblrc's step (the cause there was the metric floor)."
+ },
+ "environment": {
+  "host": "AWS EC2 c7a.4xlarge (16 dedicated AMD EPYC 9R14 cores, no SMT, 32 GB), Ubuntu 24.04, g++ 13, Rust 1.88.0",
+  "lane": "lane 2, cores 4-7; every process under taskset -c 4-7; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1; other lanes active (shared L3 and memory bandwidth)",
+  "timing_label": "pinned, co-tenanted; walls are not used. Gradients, ESS and gates do not depend on co-tenancy.",
+  "software": "lane venv from the WP65 freeze (cmdstanpy 1.3.0, bridgestan 2.9.0, arviz 0.23.4, posteriordb 0.2.0); CmdStan 2.39.0 (lane copy); BridgeStan 2.9.0 without STAN_THREADS; the 17 BridgeStan libraries and CmdStan executables copied from this lane's WP73 build (same posteriordb sources and recipe; sha256 checked against WP73's build manifest)"
+ },
+ "posteriordb": {
+  "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+  "path": "posterior_database"
+ },
+ "telemetry_models": [
+  "eight_schools-eight_schools_centered",
+  "eight_schools-eight_schools_noncentered"
+ ],
+ "centered_model": "eight_schools-eight_schools_centered",
+ "regression_models": [
+  "eight_schools-eight_schools_noncentered",
+  "sblrc-blr",
+  "arK-arK",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example"
+ ],
+ "regression_models_note": "five house models other than eight_schools_centered, fixed here: the non-centred twin; sblrc (the largest step gap in WP80); arK and gp_pois_regr (refinement-free, step-sensitive); hmm_example (third in WP80's gap ranking). All run in seconds.",
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "finite_draws": true,
+  "no_sampler_error": true
+ },
+ "gates_only_models": [],
+ "seeds": [
+  821821,
+  821822,
+  821823,
+  821824,
+  821825,
+  821826
+ ],
+ "regression_seeds": [
+  821821,
+  821822,
+  821823
+ ],
+ "seeds_verified_unused": "git grep -w over the tracked files of wt/centered-refine and over every sibling worktree's protocol.json and PREREGISTRATION.md: no hit for 821821-821826 or 821901-821910 (the 8208xx block had a hit, 820824, in an unrelated study and was dropped).",
+ "chains": 4,
+ "warmup": 1000,
+ "retained": 1000,
+ "threads": 4,
+ "cell_timeout_seconds": 2700,
+ "owalnuts_arms": {
+  "owalnuts": {
+   "harness_arm": "default",
+   "role": "the default (control and telemetry arm)",
+   "setting": "Sampler defaults, warmup 1,000"
+  },
+  "owalnuts-costda": {
+   "harness_arm": "costda",
+   "role": "candidate 1",
+   "setting": "Adaptation::Custom(house warmup .with_dual_averaging_acceptance(DualAveragingAcceptance::CostWeightedCoarseEndpoint)): dual averaging on the leaf coarse-endpoint values weighted by each leaf's target evaluations, so refined leaves count by their cost and the step adapts to the refinement spend",
+   "flag": "new research variant (library commit 70343cdf), off by default"
+  },
+  "owalnuts-stanacc": {
+   "harness_arm": "stanacc",
+   "role": "candidate 2",
+   "setting": "Adaptation::Custom(house warmup .with_dual_averaging_acceptance(DualAveragingAcceptance::MeanTrajectoryAcceptance)): Stan's accept_stat__ (per leaf min(1, exp(H_0 - H_leaf)) against the transition's initial Hamiltonian), so the step sees the trajectory-level error that accumulates through the neck",
+   "flag": "existing opt-in, off by default"
+  },
+  "owalnuts-levels2": {
+   "harness_arm": "levels2",
+   "role": "candidate 3",
+   "setting": "Tuning::default().max_refinement_levels(2): at most one halving; a leaf over delta at both levels ends the orbit (refinement exhaustion, retained rule Stop); warmup under the sampler's warmup exhaustion rule (AcceptUnlessDivergent)",
+   "flag": "existing Tuning option, default 8"
+  }
+ },
+ "candidates_not_chosen": {
+  "larger delta in the first slow window only": "the step and metric used for sampling are set in the later windows; WP49's window-wise delta rules did not qualify and WP42's delta changes cost posteriordb; not chosen.",
+  "warmup length / stablestop": "closed by WP77."
+ },
+ "descriptive_arms": {
+  "cmdstan": "CmdStan 2.39.0 at defaults (4 x 1,000/1,000, save_warmup) on the two telemetry models x 6 seeds: the reference for clause K1 and for the telemetry comparison (stepsize__, accept_stat__, n_leapfrog__, treedepth__, divergent__ per draw)."
+ },
+ "phases": {
+  "T": "cargo test --release --test kernel_fingerprint, --test stable_metric_stop, --test cost_weighted_acceptance at the frozen commit (clause K5).",
+  "E": "telemetry: the two telemetry models x 6 seeds x {owalnuts, cmdstan} (24 cells).",
+  "C": "candidates on eight_schools_centered x 6 seeds x {costda, stanacc, levels2} (18 cells).",
+  "R": "regression: 5 models x 3 seeds x {owalnuts, costda, stanacc, levels2} (60 cells). The 3 noncentred owalnuts cells at seeds 821821-3 were already run in phase E and are reused (the driver skips an existing cell; cells are deterministic).",
+  "F": "funnel: 10 seeds x {default, costda, stanacc, levels2}, 4 x 2,000 warmup / 20,000 draws (WP73's shape)."
+ },
+ "run_order": "T, E, C, R, F, analyze; one process at a time; within a phase model-major, then arm, then seed.",
+ "metrics": {
+  "gradients_total": "oWALNUTS target calls including the best-of-16 start search, warmup and sampling; CmdStan sum n_leapfrog__ including warmup (v7)",
+  "ess_per_total_gradient": "min over gate (reference) parameters of ArviZ 0.23.4 bulk ESS / gradients_total (v7 min_bulk_ess_per_gradient)",
+  "ess_per_sampling_gradient": "the same min bulk ESS / sampling (retained-transition) gradients (v7 min_bulk_ess_per_gradient_sampling)"
+ },
+ "statistic": {
+  "name": "WP72 headline form, statistic (c): median of paired per-seed ratios",
+  "definition": "per model, the ratio candidate / default of the per-cell quantity on each seed where both cells are status ok, then the median over those seeds; a model enters with at least ceil(5/6 x 6) = 5 such seeds (WP72's min_ok_fraction); headline = geometric mean over the entering models. Per-model median = median over the entering models of the per-model ratios. Leave-one-model-out minimum = the smallest headline recomputed without one model, over all entering models.",
+  "min_ok_fraction": 0.8333333333333334,
+  "bootstrap": {
+   "unit": "seed",
+   "resamples": 10000,
+   "rng_seed": 82,
+   "percentiles": [
+    2.5,
+    97.5
+   ],
+   "role": "reported interval of the headline, not a rule clause"
+  },
+  "computed_for": [
+   "K1: candidate (and default) / CmdStan on eight_schools_centered, per total gradient (the rule) and per sampling gradient (reported)",
+   "K4: candidate / default on the 5 regression models over 3 seeds (a model enters with ceil(0.8333 x 3) = 3 paired ok seeds)"
+  ]
+ },
+ "telemetry": {
+  "per_transition": "retained transitions: target evaluations, depth, stop, step, selected refinement level (the highest level of any built leaf; none = no leaf), refinement attempts, leaves attempted / built, maximum absolute energy error, divergent. Warmup transitions: target evaluations, step, depth, stop, acceptance statistic, selected level. Per-cell built-leaf histogram by level.",
+  "location": "retained transition t >= 1 of a chain starts at retained draw t-1; its position is that draw's constrained log tau. Quartiles of log tau are those of the cell's own pooled retained draws; Q1 (lowest) is the funnel neck. Transition 0 is excluded.",
+  "refined": "a transition is refined when its selected level is >= 1.",
+  "step": "oWALNUTS final adapted step per chain vs CmdStan's adapted stepsize per chain (median over chains per seed, ratio per seed, median over seeds). Each is an integrator step in its own sampler's metric; the oWALNUTS mass diagonal is reported alongside.",
+  "acceptance": "oWALNUTS: mean step-adaptation statistic over the terminal fast window (warmup transitions 950-999; the facade does not capture retained acceptance). CmdStan: mean accept_stat__ over retained draws and over warmup draws 950-999.",
+  "gradient_split": "retained gradients in refined vs unrefined transitions: shares and gradients per transition, and gradients per transition per log-tau quartile; CmdStan n_leapfrog__ per draw per log-tau quartile on the same quartile definition (its own draws)."
+ },
+ "predictions": {
+  "P1_concentration": "on eight_schools_centered, >= 50 % of refined retained transitions start in the lowest log-tau quartile (pooled over 6 seeds), and the refined fraction in Q1 is >= 2x that in Q4.",
+  "P2_step_set_by_bulk": "on eight_schools_centered, the oWALNUTS / CmdStan adapted-step ratio (median over seeds) is >= 1.0: oWALNUTS does not take a smaller step everywhere.",
+  "P3_neck_paid_in_refinement": "on eight_schools_centered, refined transitions take >= 40 % of retained gradients, and the oWALNUTS gradients-per-transition ratio Q1/Q4 exceeds CmdStan's n_leapfrog Q1/Q4.",
+  "P4_twin": "on eight_schools_noncentered fewer than 5 % of retained transitions are refined.",
+  "candidates": {
+   "owalnuts-costda": "smaller step (0.7-0.9x the default), refined fraction about halves, K1 about 0.45: fails K1",
+   "owalnuts-stanacc": "step near CmdStan's, K1 about 0.45-0.55: fails K1; K4 may fail on sblrc",
+   "owalnuts-levels2": "K1 about 0.45; fails K3 (truncated neck orbits bias the funnel tail)"
+  },
+  "overall": "no candidate qualifies."
+ },
+ "decision_rule": {
+  "K1_centered_ratio_vs_cmdstan": {
+   "threshold": 0.6,
+   "definition": "WP72 form on eight_schools_centered: median over the 6 seeds (>= 5 paired ok) of candidate / CmdStan min bulk ESS per total gradient"
+  },
+  "K2_centered_gates_held": "candidate gate passes on eight_schools_centered over the 6 seeds >= the default's, and retained divergences summed over the 6 cells <= the default's",
+  "K3_funnel": "10 seeds x 4 x 2,000/20,000: |mean P(omega < -5) - 0.0477903522728147| <= between-seed s.e.",
+  "K4_no_regression": "over the 5 regression models x 3 seeds: candidate gate passes >= the default's, and the geomean over models of the per-model median paired ratio (candidate / default, min bulk ESS per total gradient) >= 0.95",
+  "K5_integrity": "phase T: kernel_fingerprint (flags off), stable_metric_stop and cost_weighted_acceptance pass",
+  "qualifies": "all of K1-K5. A qualifying candidate is recommended for a posteriordb-wide confirmation; no default changes in this study.",
+  "errors": "an errored candidate cell fails its gates and has no ratio."
+ },
+ "funnel_sanity": {
+  "arms": [
+   "default",
+   "costda",
+   "stanacc",
+   "levels2"
+  ],
+  "warmup": 2000,
+  "draws": 20000,
+  "seeds": [
+   821901,
+   821902,
+   821903,
+   821904,
+   821905,
+   821906,
+   821907,
+   821908,
+   821909,
+   821910
+  ],
+  "exact_p5": 0.0477903522728147,
+  "binary": "src/bin/funnel.rs (WP73 / WP66 funnel binary, arms from src/lib.rs)"
+ },
+ "tests": {
+  "targets": [
+   "kernel_fingerprint",
+   "stable_metric_stop",
+   "cost_weighted_acceptance"
+  ]
+ },
+ "default_change_meaning": "none proposed in this study. For the record: costda and stanacc would be facade adaptation defaults (the WarmupConfig acceptance statistic), changing every adapted run's draws but not the kernel, ALGORITHM_REVISION or the kernel fingerprints (which build WarmupConfig directly); levels2 would change Tuning::default() and so the retained kernel.",
+ "rules": "PREREGISTRATION.md and protocol.json committed before the first cell. Lane setup and the copied builds are infrastructure; a smoke run, if any, uses the non-study posterior kidiq-kidscore_momiq at non-evidence seed 1 and is disclosed. Every cell is reported; failures and timeouts are results; no reruns and no tuning after seeing results. A cell with no artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for cells not yet run, committed before them.",
+ "source_commit_note": "library commit 70343cdf (main aa7160bd plus the default-off research variant DualAveragingAcceptance::CostWeightedCoarseEndpoint and tests/cost_weighted_acceptance.rs); the driver refuses cells unless src, integrations, Cargo.toml and tests at HEAD equal it. Set by Amendment 1."
+}

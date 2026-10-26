@@ -1,0 +1,27 @@
+[package]
+name = "centered-eight-schools-refinement-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP82: refinement spend on the centred eight schools (telemetry + three research candidates)"
+
+[lib]
+name = "centered_eight_schools_refinement_v1"
+path = "src/lib.rs"
+
+[dependencies]
+owalnuts = { path = "../.." }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+# WP77 / WP73 harness with the WP82 arms and extra per-transition telemetry.
+[[bin]]
+name = "harness"
+path = "src/main.rs"
+
+# WP77 / WP73 funnel binary with the WP82 arms (rule clause F).
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]
