@@ -849,3 +849,14 @@ provenance.
   Schools (0.39) move the headline most:
   [`STUDIES/posteriordb_ratio_robustness_v1`](STUDIES/posteriordb_ratio_robustness_v1/README.md)
   (WP72).
+- [E39] Warmup gradient spend (Linux, 17 house models x 3 seeds): median
+  warmup share oWALNUTS 0.524, CmdStan 0.508, nutpie 0.523, so spend is not
+  the nutpie gap; the first 75 transitions cost 1.24x CmdStan per
+  transition, slow windows 1.01x. Three research schedules all passed the
+  frozen rule (gates not lower, ESS per total gradient >= 1.10, funnel
+  exact): `init25` 43 gates / 1.44x but carried by `hmm_drive_0` (1.09x
+  without it); **warmup 500** 40 gates / 1.32x, per-model median 1.25x and
+  never below 1.21x leaving any model out, funnel P5 0.0499 ± 0.0032;
+  `stablestop` (flag `WarmupConfig::with_stable_metric_stop`, off) 40 /
+  1.12x. No default changed; WP77 is the fresh-seed confirmation:
+  [`STUDIES/warmup_spend_v1`](STUDIES/warmup_spend_v1/README.md) (WP73).

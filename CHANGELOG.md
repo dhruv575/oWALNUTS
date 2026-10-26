@@ -41,6 +41,10 @@ architecture and operating system (see the `walnutpie` module documentation).
 - posteriordb v7 reproduced on Linux (WP64): pass counts within one cell per
   block, draws not bit-identical across platforms, wall per gradient 0.94x
   CmdStan's; the per-gradient headline is platform- and seed-dependent.
+- Warmup spend (WP73): not the nutpie gap (median warmup shares 0.52 /
+  0.51 / 0.52 for oWALNUTS / CmdStan / nutpie). A 500-transition warmup
+  gave 1.32x ESS per total gradient with no gate lost; WP77 confirms on
+  fresh seeds before any default changes.
 - Headline statistic fixed (WP72): ESS per gradient is 0.83x CmdStan's over
   18 Linux seeds (median of paired per-seed ratios, [0.79, 0.94]); the
   six-seed 0.76 (Windows) and 1.21 (Linux) were seed noise. Gates 239/288

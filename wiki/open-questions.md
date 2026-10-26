@@ -208,7 +208,15 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     43, 3 new divergences on centred Eight Schools; the installed variances
     on correlated models came out 3–11x too small. The funnel improved
     (1.57x, divergences 9 -> 5). So the metric estimator is not the gap;
-    nutpie's warmup schedule is the remaining candidate (WP73).
+    nutpie's warmup schedule is the remaining candidate (WP73). WP73
+    (`STUDIES/warmup_spend_v1`) then measured the spend: median warmup
+    shares 0.524 (oWALNUTS), 0.508 (CmdStan), 0.523 (nutpie), so spend is
+    not the gap either. What WP73 did find is that every sampler's
+    1,000-transition warmup is longer than these models need: a
+    500-transition warmup gave 1.32x ESS per total gradient with no gate
+    lost (median model 1.25x). WP77 confirms it on fresh seeds. The nutpie
+    gap on PyMC models (WP47, WP58) therefore remains unexplained by either
+    half of the WP58 attribution.
 14. **Fixed `delta = 2`** (WP34, WP37A, WP49, WP53): WP37A did not
     qualify it (funnel gates F3 and F4 failed). As WP49's control it is
     1.141x over posteriordb with 43 gates (1.067x without two seed
