@@ -1,0 +1,83 @@
+{
+  "schema": "warmup-spend-v1",
+  "ledger_id": "WP73",
+  "ledger_title": "WP73-WARMUP-SPEND-V1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-26",
+  "purpose": "WP58 attributed the remaining per-gradient gap to nutpie to warmup gradient spend and to the gradient-informed metric; lane 3 (WP71) tests the metric, this study the spend. (1) Descriptive: measure, on the 17 house posteriordb models x 3 fresh seeds at 4 x 1,000/1,000, the share of all gradients spent before the first retained draw and the gradients per transition by warmup phase, for oWALNUTS (WP65-qualified replicated BridgeStan dispatch), CmdStan 2.39.0 and nutpie 0.16.8 (where its diagnostics expose it). (2) Three research warmup schedules, each judged by one frozen rule.",
+  "wp_number_rule": "Assigned by the coordinator: WP73 (WP71 and WP72 are lanes 3 and 1).",
+  "source_commit_under_test": "ed573c67",
+  "source_commit_note": "wt/warmup-spend: local main 705c0b53 plus one library commit that adds the research-only, default-off WarmupConfig::with_stable_metric_stop (src/walnutpie.rs, tests/stable_metric_stop.rs, CHANGELOG). run_spend.py refuses oWALNUTS cells if src/, integrations/, tests/ or Cargo.toml differ from it or are dirty.",
+  "prior_evidence": {
+    "WP58": "nutpie 1.70x oWALNUTS min bulk ESS per gradient over gauss100, eight, hier (Python path); warmup cost 44 % of the pooled log gap, from hier (83 %; oWALNUTS 72 % of gradients in warmup vs nutpie 49 %) and gauss100 (16 %), eight 1 %. None of the three is a posteriordb house model. On the house models it ran (eight_schools_noncentered, gp_pois_regr, lotka_volterra) the warmup shares were within 0.02 of nutpie's.",
+    "WP40": "older defaults (53a4ef2, Windows, one seed): oWALNUTS warmup gradients 1.56x CmdStan's on 14 healthy models; initial fast phase 2.07x CmdStan per transition, slow windows 1.14-1.27x, terminal 1.01x. Unpreregistered.",
+    "WP64": "current defaults on this host (posteriordb v7 Linux reproduction, 6 seeds for oWALNUTS and CmdStan, 3 for nutpie): median over the 17 house models of the oWALNUTS - CmdStan warmup share 0.024 (range -0.157 eight_schools_centered to +0.066 sblrc); oWALNUTS - nutpie 0.011. Computed from the committed WP64 cells before this freeze."
+  },
+  "environment": {
+    "host": "AWS EC2 c7a.4xlarge (16 dedicated AMD EPYC 9R14 cores, no SMT, 32 GB), Ubuntu 24.04, g++ 13, Rust 1.88.0",
+    "lane": "lane 2, cores 4-7; every process (builds, tests, drivers, harness, CmdStan, nutpie) under taskset -c 4-7; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1; three other lanes active (shared L3 and memory bandwidth)",
+    "timing_label": "pinned, co-tenanted; walls are not used. Gradients, ESS and gates do not depend on co-tenancy.",
+    "software": "lane venv from the WP65 freeze: cmdstanpy 1.3.0, nutpie 0.16.8, bridgestan 2.9.0, arviz 0.23.4, posteriordb 0.2.0; CmdStan 2.39.0 (lane copy); BridgeStan 2.9.0 trees without (oWALNUTS) and with STAN_THREADS (nutpie)"
+  },
+  "posteriordb": {"commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "posterior_database"},
+  "house_models": ["eight_schools-eight_schools_noncentered", "eight_schools-eight_schools_centered", "diamonds-diamonds", "earnings-logearn_interaction", "mesquite-logmesquite_logvash", "kidiq-kidscore_momhsiq", "sblrc-blr", "nes2000-nes", "arK-arK", "arma-arma11", "garch-garch11", "gp_pois_regr-gp_pois_regr", "hmm_example-hmm_example", "bball_drive_event_0-hmm_drive_0", "one_comp_mm_elim_abs-one_comp_mm_elim_abs", "hudson_lynx_hare-lotka_volterra", "mcycle_gp-accel_gp"],
+  "gates_only_models": [],
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "seeds": [730731, 730732, 730733],
+  "seeds_verified_unused": "grep -rlw over STUDIES, wiki, src and tests (*.json, *.md, *.py, *.rs) of the worktree found no whole-word occurrence of 730731-730733 or 730801-730810 before freezing.",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "cell_timeout_seconds": 2700,
+  "owalnuts_arms": {
+    "owalnuts": {"harness_arm": "default", "role": "descriptive arm and the rule's default", "setting": "Sampler::new() with the run shape, seed, threads, admit_worst_case, Tuning::default() and Adaptation::default() (v7's defaults)"},
+    "owalnuts-init25": {"harness_arm": "init25", "role": "candidate C1: shorter initial fast phase", "setting": "Adaptation::Custom(house warmup .with_windows(WarmupWindowConfig::new(25, 25, 50))): 25 / 25, 50, 100, 200, 550 / 50 at 1,000"},
+    "owalnuts-half": {"harness_arm": "half", "role": "candidate C2: earlier metric window closure by a fixed half-length warmup", "setting": "Adaptation::default() with half the warmup transitions (500 here, 1,000 on the funnel): the same window rule ends the last metric window at 450 instead of 950"},
+    "owalnuts-stablestop": {"harness_arm": "stablestop", "role": "candidate C3: warmup budget that ends adaptation once metric and step have stabilised", "setting": "Adaptation::Custom(house warmup .with_stable_metric_stop(StableMetricStop::new(first_window 3, quantile 0.9, metric tolerance ln 1.5, step tolerance ln 1.5))): at the close of window 3 (transition 449; on the funnel also window 4 at 849), if q90 over coordinates of |ln(new / previous diagonal)| <= ln 1.5 and |ln(h_k / h_(k-1))| <= ln 1.5 for the dual-averaging averaged steps of the last two window streams, warmup ends after a 50-transition terminal buffer (500 here). A stopped chain is bit-identical to the `half` run's chain."}
+  },
+  "house_warmup": "WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION), which tests/stable_metric_stop.rs pins as bit-identical to Adaptation::default()",
+  "competitors": {
+    "cmdstan": "2.39.0 via cmdstanpy 1.3.0 at defaults (adapt_delta 0.8, max_treedepth 10, diag_e), 4 chains, iter_warmup 1000, iter_sampling 1000, save_warmup, seed (v7)",
+    "nutpie": "0.16.8, nutpie.sample(compiled, draws=1000, tune=1000, chains=4, seed, progress_bar=False, save_warmup=True) (v7), plus store_mass_matrix=True so that the draw after which the diagonal stops changing is observable; library built with STAN_THREADS (v7 recipe)"
+  },
+  "schedules": {
+    "oWALNUTS_default": "WarmupWindowConfig 75 / 25 / 50 with doubling windows, the last extended (Stan's rule): 75 | 25, 50, 100, 200, 500 | 50 at 1,000. Dual averaging gamma 0.05, t0 10, kappa 0.75, target 0.8 on the current coarse endpoint acceptance; started from h0 = 0.5 with mu = ln(10 h0); restarted at every metric update from the current step with mu = ln(1 h) (Stan: ln(10 h)); no step search at the start or at restarts (Stan: init_stepsize at both); final step exp(log_step_bar). Diagonal variance by Welford per window with Stan's regularisation; the window's metric is installed at its close.",
+    "CmdStan": "adapt init_buffer 75, window 25, term_buffer 50 (the same windows); dual averaging gamma 0.05, t0 10, kappa 0.75, delta 0.8 on the mean tree acceptance; init_stepsize heuristic from eps 1 at the start and after every metric update, restart with mu = ln(10 eps).",
+    "nutpie": "0.16.8 settings object: num_tune (400 default; 1,000 here), initial_step 0.1, step_size_adapt_method dual_average, step_size_jitter 0.1, early_window_switch_freq 10, mass_matrix_switch_freq 80, use_grad_based_mass_matrix true, target 0.8. The early-window and final step-size-window fractions are not readable from the settings object; the study records where the stored mass matrix stops changing instead."
+  },
+  "phases": {
+    "T": "cargo test --release --test kernel_fingerprint and --test stable_metric_stop in the lane clone at the frozen commit (rule clause R4); writes artifacts/tests.json. Runs first.",
+    "A": "descriptive arm: for each of the 17 house models in protocol order, arms owalnuts, cmdstan, nutpie, seeds ascending",
+    "B": "candidates: for each of owalnuts-init25, owalnuts-half, owalnuts-stablestop, the 17 models in order, seeds ascending",
+    "F": "funnel sanity: for each funnel seed ascending, arms default, init25, half, stablestop"
+  },
+  "run_order": "T, A, B, F, then analyze; strictly sequential, one sampling process at a time (CmdStan: its four chain processes); each (model, arm, seed) in its own child process",
+  "metrics": {
+    "gradients_total": "oWALNUTS target calls including the best-of-16 start search, warmup and sampling; CmdStan sum n_leapfrog__ including warmup; nutpie sum n_steps including warmup (v7)",
+    "warmup_share": "1 - sampling gradients / gradients_total per cell (oWALNUTS: the start search counts as pre-sampling spend; the share without it is reported)",
+    "per_phase": "gradients per transition in the initial fast phase, each slow window and the terminal fast phase (oWALNUTS by each chain's own schedule, CmdStan by Stan's identical schedule), and in sampling; for nutpie, fixed index bins [0,75,100,150,250,450,950,1000) and its own two phases split at the last stored mass-matrix change",
+    "ess_per_gradient": "minimum over gate (reference) parameters of ArviZ 0.23.4 bulk ESS divided by gradients_total (v7)",
+    "ratios": "seed-median over seed-median; geomeans over models whose three seeds are status ok on both arms (v7)"
+  },
+  "predictions": {
+    "P1": {"statement": "median over the 17 models of (oWALNUTS - CmdStan seed-median warmup share) in [0.00, 0.05] (WP64: 0.024). The spend gap to CmdStan on the house models is small.", "interval": [0.0, 0.05]},
+    "P2": {"statement": "on the house models WP58 measured (eight_schools_noncentered, gp_pois_regr, lotka_volterra), oWALNUTS exceeds CmdStan's warmup share by a margin in [0.00, 0.05] on each; WP58's large warmup component (hier, gauss100) is on PyMC models outside the house set. The oWALNUTS - nutpie difference on the three is reported (WP58: within 0.02).", "models": ["eight_schools-eight_schools_noncentered", "gp_pois_regr-gp_pois_regr", "hudson_lynx_hare-lotka_volterra"], "vs_cmdstan_interval": [0.0, 0.05]},
+    "P3": {"statement": "median over models of the oWALNUTS / CmdStan gradients per transition in the initial fast phase >= 1.5 (WP40: 2.07)", "initial_fast_min": 1.5},
+    "P4": {"statement": "median over models and the five slow windows of the oWALNUTS / CmdStan gradients per transition in [1.0, 1.3] (WP40: 1.14-1.27)", "interval": [1.0, 1.3]},
+    "candidates": {
+      "owalnuts-init25": "R2 fails (geomean 0.97-1.05); R1, R3, R4 hold",
+      "owalnuts-half": "R2 holds (geomean 1.15-1.35, total gradients about 0.75x) and R1 fails (at least one gate lost on the near-gate models accel_gp, gp_pois_regr, one_comp, hmm_drive_0); R3, R4 hold",
+      "owalnuts-stablestop": "stops early on a minority of chains; R2 fails (geomean 1.00-1.10); R1, R3 (no funnel chain stops), R4 hold",
+      "overall": "no candidate qualifies"
+    }
+  },
+  "decision_rule": {
+    "per_candidate": "A candidate qualifies as a research flag (no default flip) only if all hold. R1: its gate passes over the 51 cells >= the default's on the same seeds. R2: geometric mean over the 17 models of (candidate / default seed-median min bulk ESS per total gradient, warmup included) >= 1.10, over the models whose three seeds are ok on both arms; excluded models are listed. R3: funnel sanity, 10 seeds x 4 x 2,000/20,000 with WP66's funnel binary (explicit starts omega in {-3,-1,1,3}, x = 0, Metric::diagonal()): |mean over seeds of P(omega < -5) - 0.0477903522728147| <= the between-seed standard error (sd / sqrt 10); every seed must produce a cell. R4: cargo test --release --test kernel_fingerprint passes in the lane clone at the frozen commit (every research flag off).",
+    "geomean_threshold": 1.10,
+    "notes": "An errored or timed-out candidate cell fails its gates. R3 at 10 seeds has a false-fail rate of about 32 % for an unbiased sampler (|t| > 1); that is the rule as assigned. Passing cells with max |z| > 4 are reported, not gated. The default arm also runs the funnel (descriptive)."
+  },
+  "funnel_sanity": {"arms": ["default", "init25", "half", "stablestop"], "warmup": 2000, "draws": 20000, "seeds": [730801, 730802, 730803, 730804, 730805, 730806, 730807, 730808, 730809, 730810], "exact_p5": 0.0477903522728147, "binary": "src/bin/funnel.rs (WP66's, arms from src/lib.rs; nominal warmup 2,000, which `half` halves)"},
+  "tests": {"targets": ["kernel_fingerprint", "stable_metric_stop"]},
+  "rules": "PREREGISTRATION.md and protocol.json committed before the first cell. Builds, the lane setup and a smoke run on a non-study posterior (kidiq-kidscore_momiq) at non-evidence seeds are infrastructure. Every cell is reported; failures and timeouts are results; no reruns and no tuning after seeing results. A driver killed by the host may be restarted; a cell with no artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for cells not yet run, committed before them."
+}
