@@ -1,0 +1,27 @@
+[package]
+name = "trapped-chain-restart-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP67: early detection and restart of a trapped warmup chain (research-only opt-in)"
+
+[dependencies]
+# `research` is needed for the observe-only comparison observer (per-transition
+# telemetry streamed during the lotka runs) and the research-only
+# WarmupConfig::with_trapped_chain_restart; it changes no default.
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "trap-cell"
+path = "src/bin/trap_cell.rs"
+
+[[bin]]
+name = "pdb-cell"
+path = "src/bin/pdb_cell.rs"
+
+[profile.release]
+debug = false
+
+[workspace]

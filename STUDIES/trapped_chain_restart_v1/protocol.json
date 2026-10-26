@@ -1,0 +1,105 @@
+{
+ "schema": "trapped-chain-restart-v1-protocol",
+ "ledger_id": "WP67",
+ "ledger_id_note": "the highest WP in README / wiki / ledger at 2026-10-25 is WP63; the three lanes ahead of this one on the shared box take WP64-WP66, so this study takes the fourth, WP67",
+ "status": "FROZEN_BEFORE_EVIDENCE",
+ "question": "Can a trapped warmup chain be detected at the end of the first slow adaptation window by a step rule (its step far below the other chains') and restarted from the best of a fresh independent best-of-16 candidate pool, so that the hudson_lynx_hare-lotka_volterra trapped-chain count falls from WP57's 2/48 toward 0, without changing any draw on runs where no chain is flagged, and without losing gates or more than 5 % ESS per gradient on six house posteriordb models?",
+ "baseline_commit": "a49df800 (main, 0.3.0 + docs)",
+ "library_commit": "8887a0f0 (wt/trapped-chain: research-only WarmupConfig::with_trapped_chain_restart, TrappedChainRestartConfig::step_rule(), TrappedChainCheck; default None; no default changed; fingerprints untouched)",
+ "machine": {
+  "box": "AWS EC2 c7a.4xlarge, 16 dedicated AMD cores (no SMT), 32 GB, Ubuntu 24.04, Rust 1.88.0, Python 3.12.3",
+  "lane": "lane 4, cores 12-15; every build and cell prefixed with taskset -c 12-15; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, TMPDIR under the lane",
+  "co_tenancy": "three other lanes run concurrently on cores 0-11 (shared L3 and memory bandwidth): wall-clock numbers are 'pinned, co-tenanted'; gradient counts, ESS per gradient, draw hashes and pass counts are unaffected by co-tenancy",
+  "build": "taskset -c 12-15 cargo build --release -j4 in ~/lanes/trapped_chain_restart_v1/repo/STUDIES/trapped_chain_restart_v1"
+ },
+ "models_build": "prepare_models.py: Stan programs and data copied from the shared read-only posteriordb checkout, libraries built with BridgeStan 2.9.0 source (release tarball sha256 b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c) under the lane, gcc 13.3.0, no STAN_THREADS; hashes in artifacts/models.json",
+ "posteriordb": {
+  "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+  "path": "~/infra/posteriordb/posterior_database",
+  "access": "read-only shared checkout; reference draws read directly from reference_posteriors/draws/draws/*.json.zip"
+ },
+ "python": "~/venv (shared, read-only): arviz 0.23.4, bridgestan 2.9.0, numpy 2.5.4",
+ "lotka_model": "hudson_lynx_hare-lotka_volterra",
+ "regression_models": [
+  "eight_schools-eight_schools_centered",
+  "bball_drive_event_0-hmm_drive_0",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs"
+ ],
+ "sampler": "owalnuts::sampler at the library commit: Metric::diagonal() (default), Tuning::default() (RejectLeaf), Limits::admit_worst_case(), 4 chains x 1,000 warmup / 1,000 draws, 4 threads, starts Init::default() = Init::best_of(16) drawn by candidate_starts exactly as Sampler::run_with_init; ReplicatedStanTarget construct seed 1",
+ "arms": {
+  "defaults": "Adaptation::default()",
+  "restart": "Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION).with_trapped_chain_restart(TrappedChainRestartConfig::step_rule()))"
+ },
+ "detector": {
+  "statistic": "s_c = the step size used by chain c's transition 99 (TransitionDiagnostics::step_size), the last transition of the first slow metric window (transitions 75..99 of Stan's 1,000-transition schedule)",
+  "reference": "m = median of s_c over the 4 chains (mean of the middle two)",
+  "rule": "flag chain c iff s_c < 0.1 x m",
+  "when": "once, after every chain has completed transition 99 (the chains are synchronised there and nowhere else)",
+  "skip": "no check if fewer than 3 chains, if the first slow window has fewer than 10 transitions or ends after warmup, or if any s_c is not finite and positive",
+  "provenance": "the WP33/WP44 step rule (ratio 0.1, frozen since WP33), applied at the end of S1 as WP57 emulated it; WP57's S1 emulation flagged 10/10 trapped or stalled chains and 0/139 healthy chains (healthy ratios >= 0.304, trapped <= 0.027); the threshold is not re-tuned"
+ },
+ "restart_action": {
+  "what": "the flagged chain's run is discarded (its transitions 0..99 are abandoned; their target calls stay in the run's call count) and the chain reruns the full 1,000 + 1,000 schedule from transition 0",
+  "start": "the highest-log-density of 16 fresh evaluable uniform(-2, 2) candidates (up to 100 draws each), drawn by sampler::candidate_starts for one chain with seed splitmix64(base_seed ^ TRAPPED_CHAIN_RESTART_SEED_TAG) + chain",
+  "state": "initial metric (identity), initial step (Tuning step 0.5), fresh dual averaging, fresh RNG stream seed splitmix64(chain_seed ^ TRAPPED_CHAIN_RESTART_SEED_TAG); nothing copied from any other chain",
+  "limits": "at most one restart per chain; the restarted chain is not checked again",
+  "telemetry": "RunTelemetry::trapped_chain_checks on every chain (score, median, threshold, flag) and, on a restarted chain, the abandoned run's target calls, the replacement start, its log density and evaluation count, and the new seed"
+ },
+ "blocks": [
+  {"name": "L1", "kind": "lotka", "seeds": [5701101, 5701102, 5701103, 5701104, 5701105, 5701106, 5701107, 5701108, 5701109, 5701110, 5701111, 5701112],
+   "targeted": true, "note": "declared targeted replication (NOT fresh): WP57's block A seeds, where defaults trapped 2/48 chains (5701103 chain 3, 5701106 chain 2) on Windows; the Linux BridgeStan build may not reproduce those trajectories"},
+  {"name": "R", "kind": "regression", "models": "regression_models", "seeds": [6701301, 6701302, 6701303], "targeted": false},
+  {"name": "L2", "kind": "lotka", "seeds": [6701201, 6701202, 6701203, 6701204, 6701205, 6701206, 6701207, 6701208, 6701209, 6701210, 6701211, 6701212], "targeted": false,
+   "note": "fresh seeds, secondary; pooled with L1 for the efficacy clause"}
+ ],
+ "cell_order": "L1 (seeds ascending; per seed defaults then restart), then R (models in listed order, seeds ascending, per seed defaults then restart), then L2 (as L1). Strictly sequential, one harness process per cell, one cell at a time, no cell rerun; failures are results.",
+ "seeds_verified_unused": "git grep -w over the repository at a49df800 and the protocol.json / PREREGISTRATION.md of every sibling worktree find no occurrence of 6701201-6701212, 6701301-6701303 or 6709901",
+ "smoke_seed": 6709901,
+ "smoke": "non-evidence, before the first cell: lotka seed 6709901, defaults vs restart vs custom_noop vs --plain; report the draw hashes; and eight_schools_centered seed 6709901 defaults vs restart through pdb-cell",
+ "timeouts": {
+  "lotka_cooperative_seconds": 1200,
+  "lotka_process_backstop_seconds": 1500,
+  "regression_process_seconds": 2700
+ },
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "finite_draws": true,
+  "no_sampler_error": true,
+  "lotka_also": "max |z| <= 4 (WP57 house lotka gate)",
+  "note": "ArviZ 0.23.4 rank R-hat, bulk ESS, tail ESS (0.05/0.95), mean MCSE on every posteriordb reference parameter (columns of the reference draws; draws constrained by BridgeStan param_constrain with transformed parameters); z = (mean - ref mean) / sqrt(mcse^2 + ref mcse^2). No CmdStan arm. A cell that errors or times out fails every gate."
+ },
+ "definitions": {
+  "chain_shift": "per chain, max over reference parameters of |chain mean - reference mean| / reference SD",
+  "trapped_chain": "a chain of a completed cell with chain_shift > 3 (the WP44/WP52 'off reference' rule); in a cell that did not complete, every chain that had not finished its transitions (from the streamed telemetry); this outcome is defined without the detector",
+  "flagged_chain": "restart arm: a chain whose TrappedChainCheck says restarted; defaults arm (emulated): the same rule applied to the defaults run's step at transition 99 (from chains_data step_at_transition_99, or the streamed telemetry if the cell did not complete)",
+  "firing_cell": "a restart-arm cell with at least one flagged chain",
+  "wrong_chain_cell": "a completed cell with some chain_shift > 3",
+  "efficiency": "per cell min over reference parameters of bulk ESS / total target calls (start search, abandoned runs and replacement pools included); per model the geometric mean over seeds where both arms completed; ratio restart / defaults per model; geometric mean over the six models"
+ },
+ "predictions": {
+  "P1": "L1 defaults has 1-3 trapped chains of 48 (WP57 saw 2; cross-platform floating point may move them)",
+  "P2": "L1 restart has at most 1 trapped chain of 48 (expected 0)",
+  "P3": "the detector flags every defaults-arm trapped chain of the lotka blocks that reached transition 99 (sensitivity 1) and at most 1 chain of all lotka defaults chains that is not trapped",
+  "P4": "fingerprint: on every cell (lotka and regression) the restart arm's flagged set equals the defaults arm's emulated set; every non-firing cell is bit-identical to defaults (all-chain draw hash and total target calls); every non-flagged chain of a firing cell is bit-identical per chain (draw hash and per-chain target calls)",
+  "P5": "the detector fires on 0 of the 18 regression cells, so the regression arm is identical (equal pass counts, efficiency ratio exactly 1)",
+  "P6": "pooled over L1 and L2, the restart arm spends fewer total target calls than defaults when at least one restart occurs",
+  "P7": "a restarted chain ends trapped in at most 1 case"
+ },
+ "decision_rule": {
+  "frozen": true,
+  "E_efficacy": "pooled over L1 and L2 (96 chains per arm): defaults has >= 2 trapped chains and restart has at most floor(defaults / 2); if defaults has < 2 trapped chains pooled, efficacy is not evaluable and the rule cannot pass (verdict: inconclusive, no events)",
+  "F_fingerprint": "P4 holds on every cell, without exception; any failure is an implementation fault and the verdict is 'failed (implementation)' whatever else holds",
+  "G_lotka_gates": "lotka cells passing every gate (incl. max |z| <= 4): restart >= defaults, pooled over L1 and L2",
+  "R1_regression_passes": "regression cells passing every gate: restart >= defaults (of 18)",
+  "R2_regression_efficiency": "geometric mean over the six models of the restart / defaults efficiency ratio >= 0.95",
+  "R3_regression_safety": "wrong-chain cells in R: restart <= defaults",
+  "verdict": "SUPPORTED iff E, F, G, R1, R2 and R3 all hold; then recommend a default-flip confirmation study (fresh seeds, broader posteriordb, the house rule that any default flip needs a v7-style validation); otherwise NOT SUPPORTED (or INCONCLUSIVE / FAILED (implementation) as above) and no default change is proposed",
+  "no_default_flip_in_this_study": true
+ }
+}
