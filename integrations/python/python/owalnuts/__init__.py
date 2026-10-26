@@ -44,6 +44,8 @@ HAS_STAN: bool = bool(getattr(_owalnuts, "HAS_STAN", False))
 #: ``init`` (the default start rule, ``"best_of"`` = ``Init::default()``),
 #: ``init_candidates``, ``init_radius``, ``init_max_attempts``, ``cache_initial_evaluation``,
 #: ``admit_worst_case``, ``chain_rescue`` (``None`` after WP36),
+#: ``trapped_chain_restart`` (the WP90 guard, ``DEFAULT_TRAPPED_CHAIN_RESTART``,
+#: as a dict of its rule: ``step_ratio`` 0.01 at ``check_window`` 0),
 #: ``algorithm_revision`` and
 #: ``paper_adaptation_revision``. ``Tuning()`` and ``Adaptation()`` take
 #: their defaults from here, and ``sample`` sends only what you set, so a
@@ -119,13 +121,26 @@ class Adaptation:
     ``"scale_free_stan_median"``, the last two opt-in from WP41) overrides the
     diagonal-metric prior;
     ``adapt_step_size=False`` and an override are expressed through
-    ``Adaptation::Custom`` with the same warmup exhaustion rule."""
+    ``Adaptation::Custom`` with the same warmup exhaustion rule.
+
+    ``trapped_chain_restart`` (default ``True``, the Rust
+    ``DEFAULT_TRAPPED_CHAIN_RESTART`` since WP90, ``DEFAULTS["trapped_chain_restart"]``):
+    with at least three chains and a diagonal (or identity) mass, a chain
+    whose step size at the close of the first slow warmup window is below
+    0.01x the chain median abandons its work and reruns the whole schedule
+    from an independent best-of-16 start; every other chain is untouched,
+    and a run in which no chain fires has the same draws as one without
+    the guard. Each chain's ``trapped_chain_checks`` records the check.
+    ``False`` removes it (``Adaptation::Custom`` without the restart, the
+    pre-WP90 behaviour, bit for bit); it has no effect on a structured
+    mass, which never carries it."""
 
     target_accept: float = DEFAULTS["target_accept"]
     adapt_step_size: bool = True
     adapt_mass: bool = DEFAULTS["adapt_mass"]
     paper: PaperAdaptation | None = None
     metric_regularization: str | None = None
+    trapped_chain_restart: bool = DEFAULTS["trapped_chain_restart"] is not None
 
 
 @dataclass(frozen=True)
@@ -395,6 +410,7 @@ def _config_dict(
         cfg["adapt_mass"] = bool(adaptation.adapt_mass)
         cfg["paper_adaptation"] = adaptation.paper.to_dict() if adaptation.paper else None
         cfg["metric_regularization"] = adaptation.metric_regularization
+        cfg["trapped_chain_restart"] = bool(adaptation.trapped_chain_restart)
     return cfg
 
 
