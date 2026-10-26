@@ -6,7 +6,7 @@
  "frozen_utc": "2026-10-26",
  "purpose": "(1) Measure where and how oWALNUTS spends refinement on eight_schools_centered (and its non-centred twin) against CmdStan's step and leapfrog counts. (2) Test at most three research candidates against a frozen rule. No default flip in any outcome.",
  "wp_number_rule": "WP82 as assigned by the coordinator.",
- "source_commit_under_test": "the commit that freezes this protocol on wt/centered-refine (main aa7160bd plus library commit 70343cdf, which adds the default-off research variant DualAveragingAcceptance::CostWeightedCoarseEndpoint and tests/cost_weighted_acceptance.rs)",
+ "source_commit_under_test": "70343cdf",
  "prior_evidence": {
   "WP72": "over 18 Linux seeds, eight_schools_centered is oWALNUTS's worst per-gradient ratio vs CmdStan: 0.39 (median of paired ratios, min bulk ESS per total gradient).",
   "WP80": "telemetry on 3 seeds: about 30 % of eight_schools_centered retained transitions are refined and a refined macro leaf costs about 4.3 gradients; refinement spend B4 = 1.38 there and about 0 on the other telemetry models; B1 (smaller effective step) 0.21 there.",
@@ -195,5 +195,6 @@
   ]
  },
  "default_change_meaning": "none proposed in this study. For the record: costda and stanacc would be facade adaptation defaults (the WarmupConfig acceptance statistic), changing every adapted run's draws but not the kernel, ALGORITHM_REVISION or the kernel fingerprints (which build WarmupConfig directly); levels2 would change Tuning::default() and so the retained kernel.",
- "rules": "PREREGISTRATION.md and protocol.json committed before the first cell. Lane setup and the copied builds are infrastructure; a smoke run, if any, uses the non-study posterior kidiq-kidscore_momiq at non-evidence seed 1 and is disclosed. Every cell is reported; failures and timeouts are results; no reruns and no tuning after seeing results. A cell with no artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for cells not yet run, committed before them."
+ "rules": "PREREGISTRATION.md and protocol.json committed before the first cell. Lane setup and the copied builds are infrastructure; a smoke run, if any, uses the non-study posterior kidiq-kidscore_momiq at non-evidence seed 1 and is disclosed. Every cell is reported; failures and timeouts are results; no reruns and no tuning after seeing results. A cell with no artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for cells not yet run, committed before them.",
+ "source_commit_note": "library commit 70343cdf (main aa7160bd plus the default-off research variant DualAveragingAcceptance::CostWeightedCoarseEndpoint and tests/cost_weighted_acceptance.rs); the driver refuses cells unless src, integrations, Cargo.toml and tests at HEAD equal it. Set by Amendment 1."
 }
