@@ -587,6 +587,73 @@ pub enum DiagonalMetricRegularization {
     /// [`Self::Stan`] when `m = 1`. If `m` is not finite and positive the
     /// anchor falls back to `1`, i.e. to [`Self::Stan`] for that window.
     ScaleFreeStanMedian,
+    /// Research-only (`STUDIES/diagonal_metric_shrinkage_v1`, WP81): Stan's
+    /// rule with its absolute `1e-3` anchor lowered to the window's smallest
+    /// scale, `(n / (n + 5)) * var_i + (5 / (n + 5)) * a` with
+    /// `a = min(1e-3, v_min)` and `v_min` the smallest finite positive window
+    /// variance. Identical to [`Self::Stan`] for any window whose variances
+    /// are all at least `1e-3`. A coordinate whose window variance is not
+    /// finite and positive (it did not move) keeps Stan's anchor `1e-3`.
+    #[cfg(feature = "research")]
+    StanLowAnchor,
+    /// Research-only (WP81): Stan's rule with a coordinate-wise anchor,
+    /// `(n / (n + 5)) * var_i + (5 / (n + 5)) * min(1e-3, var_i)`, so a
+    /// coordinate whose window variance is below `1e-3` is installed at its
+    /// own variance and every other coordinate exactly as [`Self::Stan`]. A
+    /// coordinate whose window variance is not finite and positive keeps
+    /// Stan's anchor `1e-3`.
+    #[cfg(feature = "research")]
+    StanCoordinateCap,
+}
+
+/// The per-coordinate prior term (already multiplied by `5 / (n + 5)`) that
+/// [`DiagonalMetricRegularization`] adds to `(n / (n + 5)) * estimate_i`.
+/// `median` is the scale-free anchor of the estimates (`1` when not finite
+/// and positive).
+fn diagonal_prior_terms(
+    regularization: DiagonalMetricRegularization,
+    estimates: &[f64],
+    n: f64,
+    median: impl Fn() -> f64,
+) -> Vec<f64> {
+    let weight = 5.0 / (n + 5.0);
+    let uniform = |prior: f64| vec![prior; estimates.len()];
+    match regularization {
+        DiagonalMetricRegularization::TowardUnit => uniform(weight),
+        DiagonalMetricRegularization::Stan => uniform(1.0e-3 * weight),
+        DiagonalMetricRegularization::ScaleFreeMedian => uniform(median() * weight),
+        DiagonalMetricRegularization::ScaleFreeStanMedian => uniform(1.0e-3 * median() * weight),
+        #[cfg(feature = "research")]
+        DiagonalMetricRegularization::StanLowAnchor => {
+            let low = estimates
+                .iter()
+                .copied()
+                .filter(|v| v.is_finite() && *v > 0.0)
+                .fold(f64::INFINITY, f64::min);
+            let anchor = low.min(1.0e-3);
+            estimates
+                .iter()
+                .map(|v| {
+                    if v.is_finite() && *v > 0.0 {
+                        anchor * weight
+                    } else {
+                        1.0e-3 * weight
+                    }
+                })
+                .collect()
+        }
+        #[cfg(feature = "research")]
+        DiagonalMetricRegularization::StanCoordinateCap => estimates
+            .iter()
+            .map(|v| {
+                if v.is_finite() && *v > 0.0 {
+                    v.min(1.0e-3) * weight
+                } else {
+                    1.0e-3 * weight
+                }
+            })
+            .collect(),
+    }
 }
 
 /// Which windowed statistic the diagonal warmup turns into the inverse
@@ -7219,21 +7286,16 @@ impl DiagonalVariance {
             return None;
         }
         let n = self.count as f64;
-        let prior = match regularization {
-            DiagonalMetricRegularization::TowardUnit => 5.0 / (n + 5.0),
-            DiagonalMetricRegularization::Stan => 1.0e-3 * (5.0 / (n + 5.0)),
-            DiagonalMetricRegularization::ScaleFreeMedian => {
-                self.median_variance_anchor() * (5.0 / (n + 5.0))
-            }
-            DiagonalMetricRegularization::ScaleFreeStanMedian => {
-                1.0e-3 * self.median_variance_anchor() * (5.0 / (n + 5.0))
-            }
-        };
+        let variances: Vec<f64> = self.m2.iter().map(|m2| m2 / (n - 1.0)).collect();
+        let priors = diagonal_prior_terms(regularization, &variances, n, || {
+            self.median_variance_anchor()
+        });
         Some(
-            self.m2
+            variances
                 .iter()
-                .map(|m2| {
-                    ((n / (n + 5.0)) * (m2 / (n - 1.0)) + prior)
+                .zip(&priors)
+                .map(|(variance, prior)| {
+                    ((n / (n + 5.0)) * variance + prior)
                         .max(MIN_ADAPTATION_VARIANCE)
                         .recip()
                 })
@@ -7291,18 +7353,12 @@ impl DiagonalVariance {
                 1.0
             }
         };
-        let prior = match regularization {
-            DiagonalMetricRegularization::TowardUnit => 5.0 / (n + 5.0),
-            DiagonalMetricRegularization::Stan => 1.0e-3 * (5.0 / (n + 5.0)),
-            DiagonalMetricRegularization::ScaleFreeMedian => anchor() * (5.0 / (n + 5.0)),
-            DiagonalMetricRegularization::ScaleFreeStanMedian => {
-                1.0e-3 * anchor() * (5.0 / (n + 5.0))
-            }
-        };
+        let priors = diagonal_prior_terms(regularization, &estimates, n, anchor);
         Some(
             estimates
                 .iter()
-                .map(|estimate| {
+                .zip(&priors)
+                .map(|(estimate, prior)| {
                     ((n / (n + 5.0)) * estimate + prior)
                         .max(MIN_ADAPTATION_VARIANCE)
                         .recip()
@@ -15452,6 +15508,55 @@ mod tests {
             "{plain_outcome:?} {plain_failures} {plain_ridge}"
         );
         assert!(WarmupConfig::default().dense_symmetrized_precision());
+    }
+
+    #[test]
+    #[cfg(feature = "research")]
+    fn wp81_low_anchor_and_coordinate_cap_match_the_formula() {
+        // Coordinates at scales 1e-3, 1, 1e2 (window variances 9.17e-6, 9.17,
+        // 9.17e4) plus one that never moves.
+        let values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let scales = [1.0e-3, 1.0, 1.0e2];
+        let mut variance = DiagonalVariance::new(4);
+        for value in values {
+            let mut point: Vec<f64> = scales.iter().map(|s| s * value).collect();
+            point.push(0.5);
+            variance.update(&point);
+        }
+        let n: f64 = 10.0;
+        let w = 5.0 / (n + 5.0);
+        let base: f64 = 9.166_666_666_666_666;
+        let window: Vec<f64> = scales.iter().map(|s| s * s * base).chain([0.0]).collect();
+        let low = window[0];
+        let check = |rule, priors: [f64; 4]| {
+            let mass = variance.regularized_mass(rule).unwrap();
+            for ((installed, var), prior) in mass.iter().zip(&window).zip(priors) {
+                let expected = ((n / (n + 5.0)) * var + prior * w).recip();
+                assert!((installed - expected).abs() < 1.0e-9 * expected, "{rule:?}");
+            }
+        };
+        check(
+            DiagonalMetricRegularization::StanLowAnchor,
+            [low, low, low, 1.0e-3],
+        );
+        check(
+            DiagonalMetricRegularization::StanCoordinateCap,
+            [low, 1.0e-3, 1.0e-3, 1.0e-3],
+        );
+        // A window whose variances are all at least 1e-3 is exactly Stan's.
+        let mut wide = DiagonalVariance::new(2);
+        for value in values {
+            wide.update(&[value, 10.0 * value]);
+        }
+        for rule in [
+            DiagonalMetricRegularization::StanLowAnchor,
+            DiagonalMetricRegularization::StanCoordinateCap,
+        ] {
+            assert_eq!(
+                wide.regularized_mass(rule),
+                wide.regularized_mass(DiagonalMetricRegularization::Stan)
+            );
+        }
     }
 
     #[test]
