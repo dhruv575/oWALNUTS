@@ -1315,6 +1315,7 @@ pub struct WarmupConfig {
     step_floor_relative_to_search: Option<f64>,
     max_window_shrink: Option<f64>,
     chain_rescue: Option<ChainRescueConfig>,
+    trapped_chain_restart: Option<TrappedChainRestartConfig>,
 }
 
 impl Default for WarmupConfig {
@@ -1345,6 +1346,7 @@ impl Default for WarmupConfig {
             step_floor_relative_to_search: None,
             max_window_shrink: None,
             chain_rescue: None,
+            trapped_chain_restart: None,
         }
     }
 }
@@ -1782,6 +1784,21 @@ impl WarmupConfig {
     pub fn chain_rescue(&self) -> Option<&ChainRescueConfig> {
         self.chain_rescue.as_ref()
     }
+
+    /// Restart a chain whose step collapsed by the end of the first slow
+    /// window; see [`TrappedChainRestartConfig`]. Research-only opt-in
+    /// (`STUDIES/trapped_chain_restart_v1`, WP67); off by default. Acts only
+    /// through the multi-chain diagonal facade and cannot be combined with
+    /// [`WarmupConfig::with_chain_rescue`].
+    #[cfg(feature = "research")]
+    pub fn with_trapped_chain_restart(mut self, restart: TrappedChainRestartConfig) -> Self {
+        self.trapped_chain_restart = Some(restart);
+        self
+    }
+
+    pub fn trapped_chain_restart(&self) -> Option<&TrappedChainRestartConfig> {
+        self.trapped_chain_restart.as_ref()
+    }
 }
 
 fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
@@ -1794,7 +1811,210 @@ fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
             "chain rescue is not supported by the {facade} facade"
         )));
     }
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.trapped_chain_restart.is_some())
+    {
+        return Err(Error::configuration(format!(
+            "trapped-chain restart is not supported by the {facade} facade"
+        )));
+    }
     Ok(())
+}
+
+/// Tag mixed into the seeds of a [`TrappedChainRestartConfig`] restart so
+/// that the replacement start and the restarted chain's RNG stream are
+/// independent of the start rule's and every original chain's streams.
+pub const TRAPPED_CHAIN_RESTART_SEED_TAG: u64 = 0x7472_6170_7065_6400_u64;
+
+/// Research-only warmup restart of a chain whose step collapsed early
+/// (`STUDIES/trapped_chain_restart_v1`, WP67).
+///
+/// The multi-chain diagonal driver runs every chain to the end of the first
+/// non-empty slow metric window (transition 100 of Stan's 1,000-transition
+/// schedule) and stops them there together. For each chain `c` it reads
+/// `s_c`, the step of the window's last transition (the step that
+/// transition used, [`TransitionDiagnostics::step_size`]), and the median
+/// `m` of the `s_c` over chains. Chain `c` is flagged when
+/// `s_c < step_ratio * m` (default 0.1, the WP33/WP44 step rule). The check
+/// is skipped when fewer than `minimum_chains` chains run (default 3), when
+/// the window has fewer than `minimum_window_transitions` (default 10), or
+/// when any `s_c` is not finite and positive.
+///
+/// A flagged chain is restarted from scratch: its transitions so far are
+/// discarded and it reruns the whole warmup and sampling schedule from
+/// transition 0, from a replacement start, with the initial metric and
+/// step, fresh dual averaging and a fresh RNG stream. The replacement start
+/// is the highest-density of `candidates` fresh evaluable
+/// uniform(-radius, radius) candidates (up to `max_attempts` draws each),
+/// drawn exactly as `sampler::candidate_starts` draws one chain's pool with
+/// seed `splitmix64(base_seed ^ TRAPPED_CHAIN_RESTART_SEED_TAG) + chain`;
+/// the chain's new RNG seed is `splitmix64(chain_seed ^
+/// TRAPPED_CHAIN_RESTART_SEED_TAG)`. Nothing is copied from another chain:
+/// the other chains only decide *whether* the chain restarts, so the
+/// restarted chain is an independent start. A chain restarts at most once
+/// and is not checked again.
+///
+/// A run in which no chain is flagged produces exactly the draws, target
+/// calls and diagnostics of the run without the configuration (the chains
+/// only wait for each other at the boundary). Every chain's
+/// [`RunTelemetry::trapped_chain_checks`] records its score; a restarted
+/// chain's record also carries the abandoned run's work and the replacement
+/// start. The abandoned work is not in the restarted chain's
+/// [`WorkTotals`]; it is in the target's call count and in
+/// [`TrappedChainCheck::abandoned_target_calls`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrappedChainRestartConfig {
+    step_ratio: f64,
+    minimum_chains: usize,
+    minimum_window_transitions: usize,
+    candidates: usize,
+    radius: f64,
+    max_attempts: usize,
+}
+
+impl Default for TrappedChainRestartConfig {
+    fn default() -> Self {
+        Self::step_rule()
+    }
+}
+
+impl TrappedChainRestartConfig {
+    /// The WP67 preregistered rule: step ratio 0.1 at the end of the first
+    /// slow window, at least 3 chains and 10 window transitions, replacement
+    /// start best of 16 uniform(-2, 2) candidates with 100 attempts each.
+    pub const fn step_rule() -> Self {
+        Self {
+            step_ratio: 0.1,
+            minimum_chains: 3,
+            minimum_window_transitions: 10,
+            candidates: 16,
+            radius: 2.0,
+            max_attempts: 100,
+        }
+    }
+
+    /// Flag a chain whose step is below `ratio` times the median step.
+    /// Finite, in `(0, 1)`.
+    pub fn with_step_ratio(mut self, ratio: f64) -> Result<Self, Error> {
+        if !ratio.is_finite() || ratio <= 0.0 || ratio >= 1.0 {
+            return Err(Error::configuration(
+                "trapped-chain restart step ratio must be finite and strictly between zero and one",
+            ));
+        }
+        self.step_ratio = ratio;
+        Ok(self)
+    }
+
+    /// Replacement-start pool: `candidates` evaluable
+    /// uniform(-`radius`, `radius`) draws, each redrawn up to
+    /// `max_attempts` times.
+    pub fn with_replacement_start(
+        mut self,
+        candidates: usize,
+        radius: f64,
+        max_attempts: usize,
+    ) -> Result<Self, Error> {
+        if candidates == 0 || max_attempts == 0 || !radius.is_finite() || radius <= 0.0 {
+            return Err(Error::configuration(
+                "trapped-chain restart needs a positive candidate count, attempt count and radius",
+            ));
+        }
+        self.candidates = candidates;
+        self.radius = radius;
+        self.max_attempts = max_attempts;
+        Ok(self)
+    }
+
+    pub fn step_ratio(&self) -> f64 {
+        self.step_ratio
+    }
+    pub fn minimum_chains(&self) -> usize {
+        self.minimum_chains
+    }
+    pub fn minimum_window_transitions(&self) -> usize {
+        self.minimum_window_transitions
+    }
+    pub fn candidates(&self) -> usize {
+        self.candidates
+    }
+    pub fn radius(&self) -> f64 {
+        self.radius
+    }
+    pub fn max_attempts(&self) -> usize {
+        self.max_attempts
+    }
+}
+
+/// One chain's record of the [`TrappedChainRestartConfig`] check.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct TrappedChainCheck {
+    chain: usize,
+    transition: usize,
+    step: f64,
+    median_step: f64,
+    threshold: f64,
+    restarted: bool,
+    abandoned_target_calls: usize,
+    abandoned_log_density: f64,
+    replacement_start: Option<Vec<f64>>,
+    replacement_start_log_density: Option<f64>,
+    replacement_candidate_evaluations: Option<usize>,
+    replacement_seed: Option<u64>,
+}
+
+impl TrappedChainCheck {
+    /// The chain this record belongs to.
+    pub fn chain(&self) -> usize {
+        self.chain
+    }
+    /// Index of the scored transition (the first slow window's last).
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    /// The step that transition used.
+    pub fn step(&self) -> f64 {
+        self.step
+    }
+    /// Median of the scored steps over chains.
+    pub fn median_step(&self) -> f64 {
+        self.median_step
+    }
+    /// `step_ratio * median_step`.
+    pub fn threshold(&self) -> f64 {
+        self.threshold
+    }
+    /// Whether the chain was restarted.
+    pub fn restarted(&self) -> bool {
+        self.restarted
+    }
+    /// Target calls of the abandoned run (all of its transitions); zero
+    /// when not restarted.
+    pub fn abandoned_target_calls(&self) -> usize {
+        self.abandoned_target_calls
+    }
+    /// Selected-state log density of the scored transition.
+    pub fn abandoned_log_density(&self) -> f64 {
+        self.abandoned_log_density
+    }
+    /// The replacement start (restarted chains only).
+    pub fn replacement_start(&self) -> Option<&[f64]> {
+        self.replacement_start.as_deref()
+    }
+    /// Log density of the replacement start (restarted chains only).
+    pub fn replacement_start_log_density(&self) -> Option<f64> {
+        self.replacement_start_log_density
+    }
+    /// Target evaluations spent drawing the replacement pool.
+    pub fn replacement_candidate_evaluations(&self) -> Option<usize> {
+        self.replacement_candidate_evaluations
+    }
+    /// The restarted chain's RNG seed.
+    pub fn replacement_seed(&self) -> Option<u64> {
+        self.replacement_seed
+    }
 }
 
 /// Which warmup-time chain rescue the multi-chain diagonal driver performs
@@ -4768,8 +4988,31 @@ impl RunConfig {
             .unwrap_or(0)
             .checked_mul(chain_count.get())
             .ok_or_else(Error::overflow)?;
+        let restart_extra = match self
+            .warmup
+            .as_ref()
+            .and_then(|warmup| warmup.trapped_chain_restart.as_ref())
+        {
+            Some(restart) => {
+                let boundary_end = schedule
+                    .as_ref()
+                    .and_then(|schedule| trapped_chain_boundary(schedule, self.discarded, restart))
+                    .unwrap_or(0);
+                let per_chain_searches = searches / chain_count.get();
+                boundary_end
+                    .checked_mul(self.tuning.max_target_calls_per_transition()?)
+                    .and_then(|value| {
+                        value.checked_add(restart.candidates.checked_mul(restart.max_attempts)?)
+                    })
+                    .and_then(|value| value.checked_add(per_chain_searches))
+                    .and_then(|value| value.checked_mul(chain_count.get()))
+                    .ok_or_else(Error::overflow)?
+            }
+            None => 0,
+        };
         transition_evaluations
             .checked_add(searches)
+            .and_then(|value| value.checked_add(restart_extra))
             .ok_or_else(Error::overflow)
     }
 
@@ -5222,6 +5465,7 @@ pub struct RunTelemetry {
     warmup_checkpoints: Vec<WarmupCheckpointTelemetry>,
     paper_adaptation_updates: Vec<PaperAdaptationUpdate>,
     chain_rescues: Vec<ChainRescueUpdate>,
+    trapped_chain_checks: Vec<TrappedChainCheck>,
     warmup_end: Option<ChainWindowSummary>,
     sampling_end: Option<ChainWindowSummary>,
 }
@@ -5327,6 +5571,12 @@ impl RunTelemetry {
     /// [`WarmupConfig::with_chain_rescue`] was used on a multi-chain run.
     pub fn chain_rescues(&self) -> &[ChainRescueUpdate] {
         &self.chain_rescues
+    }
+    /// Trapped-chain restart check records (at most one per chain); empty
+    /// unless [`WarmupConfig::with_trapped_chain_restart`] was used on a run
+    /// with enough chains.
+    pub fn trapped_chain_checks(&self) -> &[TrappedChainCheck] {
+        &self.trapped_chain_checks
     }
     /// Paper-rule update points, in transition order; empty unless
     /// [`WarmupConfig::with_paper_adaptation`] was used.
@@ -7490,7 +7740,7 @@ impl ChainRngSlot<'_> {
 struct ChainRun<'a, T: Target> {
     target: &'a T,
     dimension: usize,
-    initial_position: &'a [f64],
+    initial_position: std::borrow::Cow<'a, [f64]>,
     fixed_mass: Option<&'a (dyn MassOperator + Sync)>,
     direct_boundary_hook: bool,
     config: &'a RunConfig,
@@ -7524,6 +7774,10 @@ struct ChainRun<'a, T: Target> {
     check_log_densities: Vec<f64>,
     /// `[start, end)` of the warmup chain-check window.
     check_warmup_window: (usize, usize),
+    /// Selected-state log density of the last completed transition (NaN
+    /// before the first). Read-only bookkeeping for the trapped-chain
+    /// restart record; never feeds the kernel.
+    last_selected_log_density: f64,
 }
 
 impl<'a, T: Target> ChainRun<'a, T> {
@@ -7532,6 +7786,38 @@ impl<'a, T: Target> ChainRun<'a, T> {
         target: &'a T,
         dimension: usize,
         initial_position: &'a [f64],
+        mass: &DiagonalMass,
+        fixed_mass: Option<&'a (dyn MassOperator + Sync)>,
+        direct_boundary_hook: bool,
+        config: &'a RunConfig,
+        seed: u64,
+        thread_count: usize,
+        control: &'a ExecutionControl<'a>,
+        shared_initial_step_search: Option<&(f64, InitialStepSearchTelemetry)>,
+        persistent: Option<&'a mut PersistentChainContext>,
+    ) -> Result<Self, Error> {
+        Self::start_from(
+            target,
+            dimension,
+            std::borrow::Cow::Borrowed(initial_position),
+            mass,
+            fixed_mass,
+            direct_boundary_hook,
+            config,
+            seed,
+            thread_count,
+            control,
+            shared_initial_step_search,
+            persistent,
+        )
+    }
+
+    /// [`ChainRun::start`] from an owned or borrowed start.
+    #[allow(clippy::too_many_arguments)]
+    fn start_from(
+        target: &'a T,
+        dimension: usize,
+        initial_position: std::borrow::Cow<'a, [f64]>,
         mass: &DiagonalMass,
         fixed_mass: Option<&'a (dyn MassOperator + Sync)>,
         direct_boundary_hook: bool,
@@ -7566,7 +7852,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
         }) {
             let (step, telemetry) = search_initial_step(
                 target,
-                initial_position,
+                &initial_position,
                 &active_mass,
                 &inverse_mass,
                 active_tuning,
@@ -7691,6 +7977,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             rescue_record,
             check_log_densities,
             check_warmup_window,
+            last_selected_log_density: f64::NAN,
         })
     }
 
@@ -7725,6 +8012,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             ref mut rescue_record,
             ref mut check_log_densities,
             check_warmup_window,
+            ref mut last_selected_log_density,
             ..
         } = *self;
         let (rng, cached_state) = rng_slot.parts();
@@ -8618,6 +8906,7 @@ impl<'a, T: Target> ChainRun<'a, T> {
             } else {
                 check_log_densities.push(selected_log_density);
             }
+            *last_selected_log_density = selected_log_density;
             *next_transition += 1;
         }
         Ok(())
@@ -10923,6 +11212,13 @@ fn sample_chains_validated<T: Target>(
     } else {
         None
     };
+    if config.warmup.as_ref().is_some_and(|warmup| {
+        warmup.chain_rescue.is_some() && warmup.trapped_chain_restart.is_some()
+    }) {
+        return Err(Error::configuration(
+            "trapped-chain restart cannot be combined with chain rescue",
+        ));
+    }
     if let Some(rescue) = config
         .warmup
         .as_ref()
@@ -10946,6 +11242,31 @@ fn sample_chains_validated<T: Target>(
             dimension,
             shared_initial_step_search.as_ref(),
             rescue,
+        );
+    }
+    if let Some(restart) = config
+        .warmup
+        .as_ref()
+        .and_then(|warmup| warmup.trapped_chain_restart.as_ref())
+        && initial_positions.len() >= restart.minimum_chains
+    {
+        let controls: Vec<ExecutionControl<'_>> = (0..initial_positions.len())
+            .map(|chain| ExecutionControl {
+                public: run_control,
+                failed_chain: Some(&failed_chain),
+                chain,
+            })
+            .collect();
+        return sample_chains_restartable(
+            target,
+            initial_positions,
+            mass,
+            config,
+            threads,
+            &controls,
+            dimension,
+            shared_initial_step_search.as_ref(),
+            restart,
         );
     }
     let execute = |chain: usize, position: &Vec<f64>| {
@@ -11837,6 +12158,261 @@ fn sample_chains_rescued<'a, T: Target>(
     } else {
         with_scoped_pool(threads, |pool| run(Some(pool)))?
     }
+}
+
+/// End of the window the trapped-chain check scores: the first non-empty
+/// slow window, if it lies inside warmup and has enough transitions.
+fn trapped_chain_boundary(
+    schedule: &WarmupScheduleMetadata,
+    discarded: usize,
+    restart: &TrappedChainRestartConfig,
+) -> Option<usize> {
+    let window = schedule.windows.iter().find(|window| !window.is_empty())?;
+    (window.end <= discarded && window.len() >= restart.minimum_window_transitions)
+        .then_some(window.end)
+}
+
+/// The multi-chain diagonal driver with [`TrappedChainRestartConfig`]: the
+/// chains run to the end of the first slow window, meet once, flagged
+/// chains are restarted, and every chain then runs to the end.
+#[allow(clippy::too_many_arguments)]
+fn sample_chains_restartable<'a, T: Target>(
+    target: &'a T,
+    initial_positions: &'a [Vec<f64>],
+    mass: &DiagonalMass,
+    config: &'a RunConfig,
+    threads: usize,
+    controls: &'a [ExecutionControl<'a>],
+    dimension: usize,
+    shared_initial_step_search: Option<&(f64, InitialStepSearchTelemetry)>,
+    restart: &TrappedChainRestartConfig,
+) -> Result<MultiChainOutput, Error> {
+    let warmup = config
+        .warmup
+        .as_ref()
+        .ok_or_else(|| Error::configuration("trapped-chain restart requires warmup"))?;
+    let schedule = warmup_schedule(config.discarded, &warmup.windows)?;
+    let boundary = trapped_chain_boundary(&schedule, config.discarded, restart);
+    let transitions = config
+        .discarded
+        .checked_add(config.retained)
+        .ok_or_else(Error::overflow)?;
+    let chains = initial_positions.len();
+    let segment = |slot: &mut RescueSlot<'a, T>, chain: usize, end: usize| {
+        if slot.error.is_some() {
+            return;
+        }
+        let control = &controls[chain];
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _context_kinetic =
+                ContextKineticScope::new(control.public.proposal_observations.is_some());
+            if slot.run.is_none() {
+                control.check().map_err(control_error)?;
+                slot.run = Some(ChainRun::start(
+                    target,
+                    dimension,
+                    &initial_positions[chain],
+                    mass,
+                    None,
+                    false,
+                    config,
+                    chain_seed(config.seed, chain),
+                    threads,
+                    control,
+                    shared_initial_step_search,
+                    None,
+                )?);
+            }
+            slot.run.as_mut().expect("started").advance(end)
+        }))
+        .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "Rayon worker panicked")))
+        .map_err(|error| error.at_chain(chain));
+        if let Err(error) = result {
+            if let Some(failed) = control.failed_chain {
+                failed.fetch_min(chain, Ordering::AcqRel);
+            }
+            slot.error = Some(error);
+        }
+    };
+    let run = |pool: Option<&rayon::ThreadPool>| -> Result<MultiChainOutput, Error> {
+        let mut slots: Vec<RescueSlot<'a, T>> = (0..chains)
+            .map(|_| RescueSlot {
+                run: None,
+                error: None,
+            })
+            .collect();
+        let run_segment = |slots: &mut Vec<RescueSlot<'a, T>>, end: usize| -> Result<(), Error> {
+            match pool {
+                None => slots
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(chain, slot)| segment(slot, chain, end)),
+                Some(pool) => catch_unwind(AssertUnwindSafe(|| {
+                    pool.install(|| {
+                        slots
+                            .par_iter_mut()
+                            .enumerate()
+                            .for_each(|(chain, slot)| segment(slot, chain, end));
+                    })
+                }))
+                .map_err(|_| Error::new(ErrorKind::Panic, "Rayon pool panicked"))?,
+            }
+            for slot in slots.iter_mut() {
+                if let Some(error) = slot.error.take() {
+                    return Err(error);
+                }
+            }
+            Ok(())
+        };
+        if let Some(end) = boundary {
+            run_segment(&mut slots, end)?;
+            trapped_chain_restart_boundary(
+                target, &mut slots, end, restart, config, mass, dimension, threads, controls,
+            )?;
+        }
+        run_segment(&mut slots, transitions)?;
+        let mut outputs = Vec::with_capacity(chains);
+        for (chain, slot) in slots.into_iter().enumerate() {
+            let run = slot
+                .run
+                .ok_or_else(|| Error::new(ErrorKind::Internal, "chain never started"))?;
+            outputs.push(run.finish().map_err(|error| error.at_chain(chain))?);
+        }
+        Ok(MultiChainOutput {
+            chains: outputs,
+            base_seed: config.seed,
+            algorithm_revision: ALGORITHM_REVISION,
+        })
+    };
+    if threads == 1 {
+        run(None)
+    } else {
+        with_scoped_pool(threads, |pool| run(Some(pool)))?
+    }
+}
+
+/// Score every chain at the trapped-chain boundary and restart the flagged
+/// ones; see [`TrappedChainRestartConfig`].
+#[allow(clippy::too_many_arguments)]
+fn trapped_chain_restart_boundary<'a, T: Target>(
+    target: &'a T,
+    slots: &mut [RescueSlot<'a, T>],
+    end: usize,
+    restart: &TrappedChainRestartConfig,
+    config: &'a RunConfig,
+    mass: &DiagonalMass,
+    dimension: usize,
+    threads: usize,
+    controls: &'a [ExecutionControl<'a>],
+) -> Result<(), Error> {
+    let transition = end
+        .checked_sub(1)
+        .ok_or_else(|| Error::new(ErrorKind::Internal, "empty trapped-chain window"))?;
+    let mut steps = Vec::with_capacity(slots.len());
+    let mut densities = Vec::with_capacity(slots.len());
+    for slot in slots.iter() {
+        let run = slot.run.as_ref().ok_or_else(|| {
+            Error::new(ErrorKind::Internal, "trapped-chain boundary before start")
+        })?;
+        let diagnostics = run.diagnostics.get(transition).ok_or_else(|| {
+            Error::new(
+                ErrorKind::Internal,
+                "trapped-chain boundary transition missing",
+            )
+        })?;
+        steps.push(diagnostics.step_size());
+        densities.push(run.last_selected_log_density);
+    }
+    if !steps.iter().all(|step| step.is_finite() && *step > 0.0) {
+        return Ok(());
+    }
+    let median_step = median_of(&steps);
+    let threshold = restart.step_ratio * median_step;
+    for (chain, slot) in slots.iter_mut().enumerate() {
+        let step = steps[chain];
+        let mut check = TrappedChainCheck {
+            chain,
+            transition,
+            step,
+            median_step,
+            threshold,
+            restarted: false,
+            abandoned_target_calls: 0,
+            abandoned_log_density: densities[chain],
+            replacement_start: None,
+            replacement_start_log_density: None,
+            replacement_candidate_evaluations: None,
+            replacement_seed: None,
+        };
+        if step >= threshold {
+            slot.run
+                .as_mut()
+                .expect("started")
+                .telemetry
+                .trapped_chain_checks
+                .push(check);
+            continue;
+        }
+        let abandoned = slot.run.take().expect("started");
+        let abandoned_target_calls = abandoned
+            .diagnostics
+            .iter()
+            .map(TransitionDiagnostics::target_evaluations)
+            .sum::<usize>();
+        let original_seed = abandoned.seed;
+        drop(abandoned);
+        let control = &controls[chain];
+        let start_seed =
+            splitmix64(config.seed ^ TRAPPED_CHAIN_RESTART_SEED_TAG).wrapping_add(chain as u64);
+        let pool = crate::sampler::candidate_starts(
+            target,
+            1,
+            start_seed,
+            restart.radius,
+            restart.candidates,
+            restart.max_attempts,
+            crate::sampler::StartSelection::HighestDensity,
+        )
+        .map_err(|error| error.at_chain(chain))?;
+        let start = pool.starts.into_iter().next().ok_or_else(|| {
+            Error::new(
+                ErrorKind::Internal,
+                "replacement start pool returned no start",
+            )
+        })?;
+        let new_seed = splitmix64(original_seed ^ TRAPPED_CHAIN_RESTART_SEED_TAG);
+        check.restarted = true;
+        check.abandoned_target_calls = abandoned_target_calls;
+        check.replacement_start = Some(start.clone());
+        check.replacement_start_log_density = pool.start_log_densities.first().copied();
+        check.replacement_candidate_evaluations = pool.evaluations.first().copied();
+        check.replacement_seed = Some(new_seed);
+        let started = catch_unwind(AssertUnwindSafe(|| {
+            let _context_kinetic =
+                ContextKineticScope::new(control.public.proposal_observations.is_some());
+            control.check().map_err(control_error)?;
+            ChainRun::start_from(
+                target,
+                dimension,
+                std::borrow::Cow::Owned(start),
+                mass,
+                None,
+                false,
+                config,
+                new_seed,
+                threads,
+                control,
+                None,
+                None,
+            )
+        }))
+        .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "chain restart panicked")))
+        .map_err(|error| error.at_chain(chain))?;
+        let mut started = started;
+        started.telemetry.trapped_chain_checks.push(check);
+        slot.run = Some(started);
+    }
+    Ok(())
 }
 
 /// Sample multiple chains from the same exact initial position. No jitter is added.
