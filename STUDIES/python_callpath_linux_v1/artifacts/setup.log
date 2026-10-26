@@ -1,0 +1,227 @@
++ . /home/ubuntu/lanes/python_callpath_linux_v1/env.sh
+++ export L=/home/ubuntu/lanes/python_callpath_linux_v1
+++ L=/home/ubuntu/lanes/python_callpath_linux_v1
+++ export S=/home/ubuntu/lanes/python_callpath_linux_v1/repo/STUDIES/python_callpath_linux_v1
+++ S=/home/ubuntu/lanes/python_callpath_linux_v1/repo/STUDIES/python_callpath_linux_v1
+++ export TMPDIR=/home/ubuntu/lanes/python_callpath_linux_v1/tmp RAYON_NUM_THREADS=4 OMP_NUM_THREADS=1
+++ TMPDIR=/home/ubuntu/lanes/python_callpath_linux_v1/tmp
+++ RAYON_NUM_THREADS=4
+++ OMP_NUM_THREADS=1
+++ export CARGO_TARGET_DIR=/home/ubuntu/lanes/python_callpath_linux_v1/target
+++ CARGO_TARGET_DIR=/home/ubuntu/lanes/python_callpath_linux_v1/target
+++ export PIP_CACHE_DIR=/home/ubuntu/lanes/python_callpath_linux_v1/pip-cache
+++ PIP_CACHE_DIR=/home/ubuntu/lanes/python_callpath_linux_v1/pip-cache
+++ export XDG_CACHE_HOME=/home/ubuntu/lanes/python_callpath_linux_v1/cache
+++ XDG_CACHE_HOME=/home/ubuntu/lanes/python_callpath_linux_v1/cache
+++ export NUMBA_CACHE_DIR=/home/ubuntu/lanes/python_callpath_linux_v1/cache/numba
+++ NUMBA_CACHE_DIR=/home/ubuntu/lanes/python_callpath_linux_v1/cache/numba
+++ export PYTENSOR_FLAGS=compiledir=/home/ubuntu/lanes/python_callpath_linux_v1/cache/pytensor
+++ PYTENSOR_FLAGS=compiledir=/home/ubuntu/lanes/python_callpath_linux_v1/cache/pytensor
+++ export JAX_PLATFORMS=cpu
+++ JAX_PLATFORMS=cpu
+++ . /home/ubuntu/.cargo/env
++++ case ":${PATH}:" in
++++ export PATH=/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++++ PATH=/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+++ export PATH=/home/ubuntu/lanes/python_callpath_linux_v1/venv/bin:/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+++ PATH=/home/ubuntu/lanes/python_callpath_linux_v1/venv/bin:/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++ cd /home/ubuntu/lanes/python_callpath_linux_v1
++ taskset -c 12-15 python3 -m venv /home/ubuntu/lanes/python_callpath_linux_v1/venv
++ taskset -c 12-15 /home/ubuntu/lanes/python_callpath_linux_v1/venv/bin/pip install -q -U pip
++ taskset -c 12-15 /home/ubuntu/lanes/python_callpath_linux_v1/venv/bin/pip install numpy==2.4.6 numba==0.67.0 'jax[cpu]==0.10.2' pymc==5.28.5 pytensor==2.38.2 nutpie==0.16.8 arviz==0.23.4 maturin==1.15.0
+Collecting numpy==2.4.6
+  Downloading numpy-2.4.6-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting numba==0.67.0
+  Downloading numba-0.67.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.7 kB)
+Collecting jax==0.10.2 (from jax[cpu]==0.10.2)
+  Downloading jax-0.10.2-py3-none-any.whl.metadata (13 kB)
+Collecting pymc==5.28.5
+  Downloading pymc-5.28.5-py3-none-any.whl.metadata (17 kB)
+Collecting pytensor==2.38.2
+  Downloading pytensor-2.38.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (6.9 kB)
+Collecting nutpie==0.16.8
+  Downloading nutpie-0.16.8-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+Collecting arviz==0.23.4
+  Downloading arviz-0.23.4-py3-none-any.whl.metadata (9.1 kB)
+Collecting maturin==1.15.0
+  Downloading maturin-1.15.0-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl.metadata (17 kB)
+Collecting llvmlite<0.50,>=0.49.0dev0 (from numba==0.67.0)
+  Downloading llvmlite-0.49.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.0 kB)
+Collecting jaxlib<=0.10.2,>=0.10.1 (from jax==0.10.2->jax[cpu]==0.10.2)
+  Downloading jaxlib-0.10.2-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+Collecting ml_dtypes>=0.5.0 (from jax==0.10.2->jax[cpu]==0.10.2)
+  Downloading ml_dtypes-0.6.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (8.8 kB)
+Collecting opt_einsum (from jax==0.10.2->jax[cpu]==0.10.2)
+  Downloading opt_einsum-3.4.0-py3-none-any.whl.metadata (6.3 kB)
+Collecting scipy>=1.14 (from jax==0.10.2->jax[cpu]==0.10.2)
+  Downloading scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting cachetools<7,>=4.2.1 (from pymc==5.28.5)
+  Downloading cachetools-6.2.6-py3-none-any.whl.metadata (5.6 kB)
+Collecting cloudpickle (from pymc==5.28.5)
+  Downloading cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+Collecting pandas>=0.24.0 (from pymc==5.28.5)
+  Downloading pandas-3.1.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+Collecting rich>=13.7.1 (from pymc==5.28.5)
+  Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting threadpoolctl<4.0.0,>=3.1.0 (from pymc==5.28.5)
+  Downloading threadpoolctl-3.7.0-py3-none-any.whl.metadata (24 kB)
+Collecting typing-extensions>=3.7.4 (from pymc==5.28.5)
+  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting setuptools>=59.0.0 (from pytensor==2.38.2)
+  Downloading setuptools-84.2.1-py3-none-any.whl.metadata (6.6 kB)
+Collecting filelock>=3.15 (from pytensor==2.38.2)
+  Downloading filelock-4.2.4-py3-none-any.whl.metadata (2.0 kB)
+Collecting etuples (from pytensor==2.38.2)
+  Downloading etuples-0.3.10-py3-none-any.whl.metadata (4.8 kB)
+Collecting logical-unification (from pytensor==2.38.2)
+  Downloading logical_unification-0.4.7-py3-none-any.whl.metadata (15 kB)
+Collecting miniKanren (from pytensor==2.38.2)
+  Downloading minikanren-1.0.5-py3-none-any.whl.metadata (7.6 kB)
+Collecting cons (from pytensor==2.38.2)
+  Downloading cons-0.4.7-py3-none-any.whl.metadata (3.8 kB)
+Collecting matplotlib>=3.8 (from arviz==0.23.4)
+  Downloading matplotlib-3.11.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (80 kB)
+Collecting packaging (from arviz==0.23.4)
+  Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Collecting xarray>=2023.7.0 (from arviz==0.23.4)
+  Downloading xarray-2026.9.0-py3-none-any.whl.metadata (12 kB)
+Collecting h5netcdf>=1.0.2 (from arviz==0.23.4)
+  Downloading h5netcdf-1.8.1-py3-none-any.whl.metadata (15 kB)
+Collecting h5py (from arviz==0.23.4)
+  Downloading h5py-3.16.0-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (3.0 kB)
+Collecting xarray-einstats>=0.3 (from arviz==0.23.4)
+  Downloading xarray_einstats-0.11.0-py3-none-any.whl.metadata (5.8 kB)
+Collecting platformdirs (from arviz==0.23.4)
+  Downloading platformdirs-4.13.5-py3-none-any.whl.metadata (5.5 kB)
+Collecting pyarrow>=12.0.0 (from nutpie==0.16.8)
+  Downloading pyarrow-26.0.0-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (3.0 kB)
+Collecting arro3-core>=0.6.0 (from nutpie==0.16.8)
+  Downloading arro3_core-0.9.1-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (516 bytes)
+Collecting obstore>=0.8.0 (from nutpie==0.16.8)
+  Downloading obstore-0.12.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.9 kB)
+Collecting zarr>=3.1.0 (from nutpie==0.16.8)
+  Downloading zarr-3.4.1-py3-none-any.whl.metadata (5.8 kB)
+Collecting contourpy>=1.0.1 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading contourpy-1.4.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+Collecting cycler>=0.10 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+Collecting fonttools>=4.28.2 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading fonttools-4.67.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (137 kB)
+Collecting kiwisolver>=1.3.1 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading kiwisolver-1.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.2 kB)
+Collecting pillow>=9 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading pillow-13.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Collecting pyparsing>=3 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading pyparsing-3.3.3-py3-none-any.whl.metadata (5.9 kB)
+Collecting python-dateutil>=2.7 (from matplotlib>=3.8->arviz==0.23.4)
+  Downloading python_dateutil-3.0.0-py2.py3-none-any.whl.metadata (8.2 kB)
+Collecting six>=1.6 (from python-dateutil>=2.7->matplotlib>=3.8->arviz==0.23.4)
+  Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting tzdata (from python-dateutil>=2.7->matplotlib>=3.8->arviz==0.23.4)
+  Downloading tzdata-2026.5-py2.py3-none-any.whl.metadata (1.4 kB)
+Collecting markdown-it-py>=2.2.0 (from rich>=13.7.1->pymc==5.28.5)
+  Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich>=13.7.1->pymc==5.28.5)
+  Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7.1->pymc==5.28.5)
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting donfig>=0.8 (from zarr>=3.1.0->nutpie==0.16.8)
+  Downloading donfig-0.8.1.post1-py3-none-any.whl.metadata (5.0 kB)
+Collecting google-crc32c>=1.5 (from zarr>=3.1.0->nutpie==0.16.8)
+  Downloading google_crc32c-1.9.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.2 kB)
+Collecting msgspec>=0.19 (from zarr>=3.1.0->nutpie==0.16.8)
+  Downloading msgspec-0.22.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (6.0 kB)
+Collecting numcodecs>=0.16 (from zarr>=3.1.0->nutpie==0.16.8)
+  Downloading numcodecs-0.17.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (3.2 kB)
+Collecting pyyaml (from donfig>=0.8->zarr>=3.1.0->nutpie==0.16.8)
+  Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting toolz (from logical-unification->pytensor==2.38.2)
+  Downloading toolz-1.2.0-py3-none-any.whl.metadata (5.2 kB)
+Collecting multipledispatch (from logical-unification->pytensor==2.38.2)
+  Downloading multipledispatch-1.0.0-py3-none-any.whl.metadata (3.8 kB)
+Downloading numpy-2.4.6-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.6/16.6 MB 179.3 MB/s  0:00:00
+Downloading numba-0.67.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.9/3.9 MB 167.5 MB/s  0:00:00
+Downloading jax-0.10.2-py3-none-any.whl (3.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.2/3.2 MB 160.0 MB/s  0:00:00
+Downloading pymc-5.28.5-py3-none-any.whl (562 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 562.9/562.9 kB 61.1 MB/s  0:00:00
+Downloading pytensor-2.38.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (2.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 137.0 MB/s  0:00:00
+Downloading arviz-0.23.4-py3-none-any.whl (1.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.7/1.7 MB 118.4 MB/s  0:00:00
+Downloading nutpie-0.16.8-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (8.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.7/8.7 MB 125.4 MB/s  0:00:00
+Downloading maturin-1.15.0-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl (10.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.5/10.5 MB 167.2 MB/s  0:00:00
+Downloading cachetools-6.2.6-py3-none-any.whl (11 kB)
+Downloading jaxlib-0.10.2-cp312-cp312-manylinux_2_27_x86_64.whl (85.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 85.5/85.5 MB 197.2 MB/s  0:00:00
+Downloading llvmlite-0.49.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (59.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.9/59.9 MB 195.9 MB/s  0:00:00
+Downloading scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.3/35.3 MB 224.7 MB/s  0:00:00
+Downloading threadpoolctl-3.7.0-py3-none-any.whl (26 kB)
+Downloading arro3_core-0.9.1-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 MB 157.3 MB/s  0:00:00
+Downloading filelock-4.2.4-py3-none-any.whl (162 kB)
+Downloading h5netcdf-1.8.1-py3-none-any.whl (62 kB)
+Downloading matplotlib-3.11.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (9.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.9/9.9 MB 220.9 MB/s  0:00:00
+Downloading contourpy-1.4.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (383 kB)
+Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Downloading fonttools-4.67.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.4/5.4 MB 220.6 MB/s  0:00:00
+Downloading kiwisolver-1.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 178.9 MB/s  0:00:00
+Downloading ml_dtypes-0.6.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (409 kB)
+Downloading obstore-0.12.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (5.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.6/5.6 MB 184.3 MB/s  0:00:00
+Downloading packaging-26.3-py3-none-any.whl (129 kB)
+Downloading pandas-3.1.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (12.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.0/12.0 MB 231.8 MB/s  0:00:00
+Downloading pillow-13.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.1/7.1 MB 222.1 MB/s  0:00:00
+Downloading pyarrow-26.0.0-cp312-cp312-manylinux_2_28_x86_64.whl (53.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 53.9/53.9 MB 214.1 MB/s  0:00:00
+Downloading pyparsing-3.3.3-py3-none-any.whl (126 kB)
+Downloading python_dateutil-3.0.0-py2.py3-none-any.whl (94 kB)
+Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 154.5 MB/s  0:00:00
+Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading setuptools-84.2.1-py3-none-any.whl (876 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 876.3/876.3 kB 134.2 MB/s  0:00:00
+Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Downloading xarray-2026.9.0-py3-none-any.whl (1.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 181.8 MB/s  0:00:00
+Downloading xarray_einstats-0.11.0-py3-none-any.whl (39 kB)
+Downloading zarr-3.4.1-py3-none-any.whl (405 kB)
+Downloading donfig-0.8.1.post1-py3-none-any.whl (21 kB)
+Downloading google_crc32c-1.9.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (36 kB)
+Downloading msgspec-0.22.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (230 kB)
+Downloading numcodecs-0.17.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 182.3 MB/s  0:00:00
+Downloading cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+Downloading cons-0.4.7-py3-none-any.whl (8.6 kB)
+Downloading logical_unification-0.4.7-py3-none-any.whl (13 kB)
+Downloading etuples-0.3.10-py3-none-any.whl (12 kB)
+Downloading h5py-3.16.0-cp312-cp312-manylinux_2_28_x86_64.whl (5.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.4/5.4 MB 230.4 MB/s  0:00:00
+Downloading minikanren-1.0.5-py3-none-any.whl (24 kB)
+Downloading multipledispatch-1.0.0-py3-none-any.whl (12 kB)
+Downloading opt_einsum-3.4.0-py3-none-any.whl (71 kB)
+Downloading platformdirs-4.13.5-py3-none-any.whl (32 kB)
+Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 121.4 MB/s  0:00:00
+Downloading toolz-1.2.0-py3-none-any.whl (60 kB)
+Downloading tzdata-2026.5-py2.py3-none-any.whl (347 kB)
+Installing collected packages: multipledispatch, tzdata, typing-extensions, toolz, threadpoolctl, six, setuptools, pyyaml, pyparsing, pygments, pyarrow, platformdirs, pillow, packaging, opt_einsum, numpy, msgspec, mdurl, maturin, llvmlite, kiwisolver, google-crc32c, fonttools, filelock, cycler, cloudpickle, cachetools, arro3-core, scipy, python-dateutil, obstore, numcodecs, numba, ml_dtypes, markdown-it-py, logical-unification, h5py, h5netcdf, donfig, contourpy, zarr, rich, pandas, matplotlib, jaxlib, cons, xarray, jax, etuples, xarray-einstats, miniKanren, pytensor, arviz, pymc, nutpie
+
+Successfully installed arro3-core-0.9.1 arviz-0.23.4 cachetools-6.2.6 cloudpickle-3.1.2 cons-0.4.7 contourpy-1.4.0 cycler-0.12.1 donfig-0.8.1.post1 etuples-0.3.10 filelock-4.2.4 fonttools-4.67.0 google-crc32c-1.9.0 h5netcdf-1.8.1 h5py-3.16.0 jax-0.10.2 jaxlib-0.10.2 kiwisolver-1.5.1 llvmlite-0.49.0 logical-unification-0.4.7 markdown-it-py-4.2.0 matplotlib-3.11.2 maturin-1.15.0 mdurl-0.1.2 miniKanren-1.0.5 ml_dtypes-0.6.0 msgspec-0.22.0 multipledispatch-1.0.0 numba-0.67.0 numcodecs-0.17.1 numpy-2.4.6 nutpie-0.16.8 obstore-0.12.0 opt_einsum-3.4.0 packaging-26.3 pandas-3.1.0 pillow-13.0.0 platformdirs-4.13.5 pyarrow-26.0.0 pygments-2.21.0 pymc-5.28.5 pyparsing-3.3.3 pytensor-2.38.2 python-dateutil-3.0.0 pyyaml-6.0.3 rich-15.0.0 scipy-1.18.1 setuptools-84.2.1 six-1.17.0 threadpoolctl-3.7.0 toolz-1.2.0 typing-extensions-4.16.0 tzdata-2026.5 xarray-2026.9.0 xarray-einstats-0.11.0 zarr-3.4.1
++ /home/ubuntu/lanes/python_callpath_linux_v1/venv/bin/pip freeze
++ echo setup-done
+setup-done
