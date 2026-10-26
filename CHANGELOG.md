@@ -77,6 +77,10 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Study-only Cargo feature `candidate-levels10` (off): ten refinement levels
   in `sampler::Tuning::default()` for WP68. Not qualified as a default; eight
   levels stay.
+- Research `TrappedChainRestartConfig::with_check_window(n)` (default 0,
+  bit-identical): score the trapped-chain step rule at the close of the
+  n-th non-empty slow window instead of the first (WP89,
+  `STUDIES/sv_stuck_chains_v1`, `tests/trapped_chain_restart.rs`).
 - Research-only `DiagonalMetricRegularization::StanLowAnchor` and
   `StanCoordinateCap` (feature `research`, WP81,
   `STUDIES/diagonal_metric_shrinkage_v1`): Stan's rule with its `1e-3`
@@ -153,6 +157,14 @@ architecture and operating system (see the `walnutpie` module documentation).
 - nutpie gap decomposition (WP80): the lead is sampling gradients per draw
   from a smaller effective step (installed inverse mass far from the
   posterior variance on some coordinates), not warmup and not ESS per draw.
+- Frozen warmup chains on the SV model (WP89): a chain that starts at
+  log_sigma above 1.3 has its first transitions rejected, its step collapses
+  under the identity metric, and the first metric update installs the
+  regularisation floor on every coordinate; nutpie never traps because its
+  initial metric is gradient-scaled. The trapped-chain restart rule at ratio
+  0.01 removes every trap (8/480 to 0/480) with unfired cells bit-identical
+  and no firing elsewhere; proposed for a confirmation study before any
+  default change.
 - Online stochastic-volatility quote benchmark (WP84): a harness-level warm
   continuation (frozen step and metric, 50–200 transitions per chain)
   refreshes a 250-return SV posterior in 20–80 ms median and stays

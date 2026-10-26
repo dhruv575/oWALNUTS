@@ -1090,3 +1090,22 @@ provenance.
   200-draw warm refresh at those tolerances because of stuck chains on
   7 % / 13 % of ticks (nutpie 0 %), each named by the chain warnings;
   the reference itself had a frozen chain on 4 of 100 ticks.
+- [E53] Why one chain freezes in warmup on the WP84 SV model (Linux, 120
+  fresh seeds x {oWALNUTS, CmdStan, nutpie} at 4 x 1,000/1,000, 9
+  mechanism arms x 60 seeds, 3 candidates on the same 120 seeds, funnel 30
+  seeds, 3 house models; 1,416 cells): trapped chains per 480 are nutpie
+  0, oWALNUTS 8, CmdStan 17. Every trap starts at log_sigma above 1.3 (max
+  |gradient| 2.5e7 against 1.5e3 at the mode), its first transitions are
+  rejected, the identity-metric step collapses below 1e-4 by transition 6,
+  and the first metric update at transition 99 installs the Stan
+  regularisation floor on every coordinate, locking the chain 1,000–4,300
+  nats below the mode at 4.7x the warmup gradients; the chain warnings
+  name all 8 with no false positive. nutpie escapes through its
+  gradient-scaled initial metric alone (1/240 with oWALNUTS's starts);
+  step search, estimator and window schedule do not help. The WP67 restart
+  rule at ratio 0.01 instead of 0.1 (`guard-0.01-0`) takes 8/480 to 0/480
+  with 110/110 unfired cells bit-identical, no firing on the funnel or the
+  house models and no cost; proposed for a default-flip confirmation, not
+  flipped. Research `TrappedChainRestartConfig::with_check_window` added:
+  [`STUDIES/sv_stuck_chains_v1`](STUDIES/sv_stuck_chains_v1/README.md)
+  (WP89).

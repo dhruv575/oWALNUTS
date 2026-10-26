@@ -369,11 +369,21 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     CmdStan ticks, against 0 of 300 for nutpie; the 4 x 20,000 reference
     had one on 4 of 100 ticks. Every oWALNUTS case was named by the chain
     warnings, with zero divergences. This is a warmup / initialisation
-    result, not a WP84 claim: open is why nutpie's warmup never traps on
-    this model (its initial step search, its mass-matrix start, or its
-    early-window schedule) and whether the trapped-chain restart (WP67,
-    WP69) or a warmup-step collapse guard would close the gap. See items 12
-    and 19.
+    result, not a WP84 claim. WP89 (`STUDIES/sv_stuck_chains_v1`) answered
+    it: the trap is a stiff high-sigma start (log_sigma above 1.3, max
+    |gradient| 2.5e7) whose first transitions are rejected, so the
+    identity-metric step collapses and the first metric update at
+    transition 99 installs the Stan regularisation floor on every
+    coordinate; nutpie escapes through its gradient-scaled initial metric
+    alone (oWALNUTS with that initial metric: 1/240 against 8/480). Three
+    candidates took the rate to 0/480 with unfired cells bit-identical; the
+    WP67 restart rule at ratio 0.01 at transition 99 (`guard-0.01-0`) is
+    proposed for a default-flip confirmation (WP90: v7 posteriors x fresh
+    seeds against the defaults, bit-identity on unfired cells, funnel and
+    the SV model). Open after that: a gradient-scaled initial metric as a
+    second, independent fix (it addresses the cause rather than the
+    symptom), and whether CmdStan-style uniform starts should be warned
+    against for stiff latent-path models. See items 12 and 19.
 
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the
