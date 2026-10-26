@@ -1917,14 +1917,28 @@ impl WarmupConfig {
         self.chain_rescue.as_ref()
     }
 
-    /// Restart a chain whose step collapsed by the end of the first slow
-    /// window; see [`TrappedChainRestartConfig`]. Research-only opt-in
-    /// (`STUDIES/trapped_chain_restart_v1`, WP67); off by default. Acts only
-    /// through the multi-chain diagonal facade and cannot be combined with
-    /// [`WarmupConfig::with_chain_rescue`].
-    #[cfg(feature = "research")]
+    /// Restart a chain whose step collapsed by the close of a slow window;
+    /// see [`TrappedChainRestartConfig`]. Off in `WarmupConfig::default()`
+    /// and `WarmupConfig::new`; the sampler's own adaptation modes install
+    /// `sampler::DEFAULT_TRAPPED_CHAIN_RESTART` (`TrappedChainRestartConfig::guard`,
+    /// WP90) on the identity and diagonal metrics, and
+    /// [`Self::without_trapped_chain_restart`] removes it. Acts only through
+    /// the multi-chain diagonal driver with at least
+    /// [`TrappedChainRestartConfig::minimum_chains`] chains; the dense and
+    /// structured facades reject it, and it cannot be combined with
+    /// [`WarmupConfig::with_chain_rescue`], the stable-metric stop or a
+    /// non-default diagonal metric estimator.
     pub fn with_trapped_chain_restart(mut self, restart: TrappedChainRestartConfig) -> Self {
         self.trapped_chain_restart = Some(restart);
+        self
+    }
+
+    /// Remove the trapped-chain restart (the opt-out from the WP90 default):
+    /// the chains never meet at a window close, no
+    /// [`RunTelemetry::trapped_chain_checks`] are recorded, and the run is
+    /// bit-identical to the pre-WP90 behaviour.
+    pub fn without_trapped_chain_restart(mut self) -> Self {
+        self.trapped_chain_restart = None;
         self
     }
 
@@ -1980,8 +1994,10 @@ fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
 /// independent of the start rule's and every original chain's streams.
 pub const TRAPPED_CHAIN_RESTART_SEED_TAG: u64 = 0x7472_6170_7065_6400_u64;
 
-/// Research-only warmup restart of a chain whose step collapsed early
-/// (`STUDIES/trapped_chain_restart_v1`, WP67).
+/// Warmup restart of a chain whose step collapsed early
+/// (`STUDIES/trapped_chain_restart_v1`, WP67; the default of the sampler's
+/// own adaptation modes since WP90, `STUDIES/trap_guard_confirmation_v1`,
+/// as [`Self::guard`]).
 ///
 /// The multi-chain diagonal driver runs every chain to the end of the first
 /// non-empty slow metric window (transition 100 of Stan's 1,000-transition
@@ -1990,7 +2006,8 @@ pub const TRAPPED_CHAIN_RESTART_SEED_TAG: u64 = 0x7472_6170_7065_6400_u64;
 /// `s_c`, the step of the window's last transition (the step that
 /// transition used, [`TransitionDiagnostics::step_size`]), and the median
 /// `m` of the `s_c` over chains. Chain `c` is flagged when
-/// `s_c < step_ratio * m` (default 0.1, the WP33/WP44 step rule). The check
+/// `s_c < step_ratio * m` (0.1 in [`Self::step_rule`], the WP33/WP44 step
+/// rule; 0.01 in [`Self::guard`], the sampler default). The check
 /// is skipped when fewer than `minimum_chains` chains run (default 3), when
 /// the window has fewer than `minimum_window_transitions` (default 10), or
 /// when any `s_c` is not finite and positive.
@@ -2047,6 +2064,20 @@ impl TrappedChainRestartConfig {
             radius: 2.0,
             max_attempts: 100,
             check_window: 0,
+        }
+    }
+
+    /// The trapped-chain guard confirmed as the sampler default by WP90
+    /// (`STUDIES/trap_guard_confirmation_v1`; mechanism WP89,
+    /// `STUDIES/sv_stuck_chains_v1`): [`Self::step_rule`] with step ratio
+    /// 0.01, scored at the close of the first non-empty slow window
+    /// (`check_window` 0). A chain whose step at that transition is below
+    /// 0.01x the chain median restarts from an independent best-of-16 start.
+    /// `sampler::DEFAULT_TRAPPED_CHAIN_RESTART` is this value.
+    pub const fn guard() -> Self {
+        Self {
+            step_ratio: 0.01,
+            ..Self::step_rule()
         }
     }
 
@@ -5549,10 +5580,19 @@ impl RunConfig {
             .unwrap_or(0)
             .checked_mul(chain_count.get())
             .ok_or_else(Error::overflow)?;
+        // The restart driver is entered only with at least
+        // `minimum_chains` chains; below that the configuration is inert and
+        // the bound is the plain run's. A chain fires when its step is
+        // strictly below `step_ratio < 1` times the chain median, and fewer
+        // than half of the chains can be strictly below their median (for an
+        // even count the upper middle value is at least the median, so it
+        // cannot fire either), so at most `chains / 2` chains repeat the
+        // abandoned transitions, each at most once.
         let restart_extra = match self
             .warmup
             .as_ref()
             .and_then(|warmup| warmup.trapped_chain_restart.as_ref())
+            .filter(|restart| chain_count.get() >= restart.minimum_chains)
         {
             Some(restart) => {
                 let boundary_end = schedule
@@ -5566,7 +5606,7 @@ impl RunConfig {
                         value.checked_add(restart.candidates.checked_mul(restart.max_attempts)?)
                     })
                     .and_then(|value| value.checked_add(per_chain_searches))
-                    .and_then(|value| value.checked_mul(chain_count.get()))
+                    .and_then(|value| value.checked_mul(chain_count.get() / 2))
                     .ok_or_else(Error::overflow)?
             }
             None => 0,
@@ -6136,8 +6176,12 @@ impl RunTelemetry {
         &self.chain_rescues
     }
     /// Trapped-chain restart check records (at most one per chain); empty
-    /// unless [`WarmupConfig::with_trapped_chain_restart`] was used on a run
-    /// with enough chains.
+    /// unless the warmup carried a [`TrappedChainRestartConfig`] (the
+    /// sampler's own adaptation modes install
+    /// `sampler::DEFAULT_TRAPPED_CHAIN_RESTART`; see
+    /// [`WarmupConfig::with_trapped_chain_restart`]) on a run with enough
+    /// chains. A record with [`TrappedChainCheck::restarted`] marks a chain
+    /// that reran from an independent start.
     pub fn trapped_chain_checks(&self) -> &[TrappedChainCheck] {
         &self.trapped_chain_checks
     }

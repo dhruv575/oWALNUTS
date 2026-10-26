@@ -463,6 +463,13 @@ def test_default_tuning_matches_rust_sampler_defaults():
     assert (t.u_turn_rule, t.exhaustion_rule) == (None, None)
     a = owalnuts.Adaptation()
     assert (a.target_accept, a.adapt_mass, a.metric_regularization) == (d["target_accept"], d["adapt_mass"], None)
+    assert a.trapped_chain_restart is True
+    # The WP90 trapped-chain guard: the WP67 step rule at ratio 0.01 scored
+    # at the close of the first slow window.
+    assert d["trapped_chain_restart"] == {
+        "step_ratio": 0.01, "check_window": 0, "minimum_chains": 3, "minimum_window_transitions": 10,
+        "candidates": 16, "radius": 2.0, "max_attempts": 100,
+    }
     # The post-WP31 sampler defaults, as documented in CHANGELOG 0.2.0.
     assert d["u_turn_rule"] == "momentum_sum"
     assert d["metric_regularization"] == "stan"
@@ -757,8 +764,17 @@ def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
     assert not any(line.startswith("warning: chain") for line in str(quiet).splitlines())
     for chain in quiet.chains:
         assert chain["warmup_end"]["end"] <= 500 and chain["sampling_end"]["start"] == 500
+        # The WP90 guard checked every chain at the first slow-window close and fired on none.
+        (check,) = chain["trapped_chain_checks"]
+        assert check["transition"] == 99 and check["restarted"] is False
+        assert check["threshold"] == 0.01 * check["median_step"] and check["replacement_start"] is None
+    # A chain in the sd-0.3 spike keeps a healthy step (ratio about 0.25 at the
+    # window close), so the WP90 guard does not fire and the warnings name it.
     init = np.array([[-0.75, 0.75], [-0.25, 0.25], [0.25, -0.25], [15.0, 15.0]])
     trapped = owalnuts.sample(_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init)
+    for chain in trapped.chains:
+        (check,) = chain["trapped_chain_checks"]
+        assert check["restarted"] is False and check["step"] >= check["threshold"]
     warnings = trapped.chain_warnings()
     older = [w for w in warnings if w["check"] != "rhat_cluster"]
     assert older and {w["chain"] for w in older} == {3}
@@ -770,6 +786,51 @@ def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
     assert cluster == {0: [1, 2], 3: [1, 2]}
     lines = [line for line in str(trapped).splitlines() if line.startswith("warning: chain")]
     assert [line.split(" disagrees")[0] for line in lines] == ["warning: chain 0", "warning: chain 3"]
+    # Without the guard (the pre-WP90 default) the run is the same, draw for draw.
+    no_guard = owalnuts.Adaptation(trapped_chain_restart=False)
+    plain = owalnuts.sample(_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init, adaptation=no_guard)
+    np.testing.assert_array_equal(trapped.samples, plain.samples)
+    for guarded_chain, plain_chain in zip(trapped.chains, plain.chains):
+        assert plain_chain["trapped_chain_checks"] == []
+        assert guarded_chain["work_total"] == plain_chain["work_total"]
+    assert plain.chain_warnings() == warnings
+
+
+def _narrow_trap(q: np.ndarray) -> tuple[float, np.ndarray]:
+    # The Rust tests/trapped_chain_restart.rs trap: a spike 100x narrower than
+    # the main mode, so a chain started inside adapts a step about 0.003x the
+    # other chains' and the WP90 guard (ratio 0.01) fires on it.
+    main = -0.5 * float(q @ q)
+    sd, centre, weight = 0.003, 15.0, -14.0
+    spike = weight - 2.0 * np.log(sd) - 0.5 * float(((q - centre) / sd) @ ((q - centre) / sd))
+    top = max(main, spike)
+    value = top + np.log(np.exp(main - top) + np.exp(spike - top))
+    w_main, w_spike = np.exp(main - value), np.exp(spike - value)
+    return float(value), w_main * (-q) + w_spike * (-(q - centre) / sd**2)
+
+
+def test_default_trapped_chain_guard_restarts_a_step_collapsed_chain_and_can_be_opted_out():
+    init = np.array([[-0.75, 0.75], [-0.25, 0.25], [0.25, -0.25], [15.0, 15.0]])
+    guarded = owalnuts.sample(_narrow_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init)
+    (check,) = guarded.chains[3]["trapped_chain_checks"]
+    assert check["transition"] == 99 and check["restarted"] is True
+    assert check["step"] < check["threshold"] == 0.01 * check["median_step"]
+    assert check["abandoned_target_calls"] > 0 and np.isfinite(check["abandoned_log_density"])
+    assert np.all(np.abs(check["replacement_start"]) <= 2.0) and np.isfinite(check["replacement_start_log_density"])
+    assert check["replacement_seed"] == guarded.chains[3]["metadata"]["effective_seed"]
+    assert abs(float(guarded.samples[3].mean())) < 1.0
+    assert [w["chain"] for w in guarded.chain_warnings() if w["check"] != "rhat_cluster"] == []
+    # Opted out, chain 3 stays in the spike; the untouched chains are bit-identical.
+    plain = owalnuts.sample(_narrow_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init,
+                            adaptation=owalnuts.Adaptation(trapped_chain_restart=False))
+    assert all(chain["trapped_chain_checks"] == [] for chain in plain.chains)
+    assert float(plain.samples[3].mean()) > 10.0
+    for c in range(3):
+        assert guarded.chains[c]["trapped_chain_checks"][0]["restarted"] is False
+        np.testing.assert_array_equal(guarded.samples[c], plain.samples[c])
+    # Below three chains the guard is inert: no check records.
+    two = owalnuts.sample(_narrow_trap, dim=2, warmup=500, draws=50, seed=5, chains=2, init=init[:2])
+    assert all(chain["trapped_chain_checks"] == [] for chain in two.chains)
 
 
 def _two_modes(q: np.ndarray) -> tuple[float, np.ndarray]:

@@ -23,8 +23,9 @@ use numpy::{
 use owalnuts::diagnostics::{ChainDisagreement, ChainWarning, ParameterSummary};
 use owalnuts::sampler::{
     Adaptation, CandidateStarts, DEFAULT_CHAIN_RESCUE, DEFAULT_INIT_CANDIDATES,
-    DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric, Posterior,
-    Sampler, StartSelection, Tuning, WarmChain, WarmState, candidate_starts, uniform_starts,
+    DEFAULT_METRIC_REGULARIZATION, DEFAULT_TRAPPED_CHAIN_RESTART, DEFAULT_WARMUP_EXHAUSTION, Init,
+    Limits, Metric, Posterior, Sampler, StartSelection, Tuning, WarmChain, WarmState,
+    candidate_starts, uniform_starts,
 };
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput, ChainWindowSummary,
@@ -589,10 +590,14 @@ fn parse_paper(cfg: &Bound<'_, PyDict>) -> PyResult<Option<PaperAdaptationConfig
 
 /// The sampler's own adaptation modes (`DualAveraging`, `Paper`) whenever the
 /// configuration is expressible through them; `Adaptation::Custom` only for
-/// `adapt_step_size=False` or an explicit `metric_regularization`, built with
-/// the same `DEFAULT_WARMUP_EXHAUSTION` / `DEFAULT_METRIC_REGULARIZATION` the
-/// sampler applies to its own modes.
-fn parse_adaptation(cfg: &Bound<'_, PyDict>) -> PyResult<Adaptation> {
+/// `adapt_step_size=False`, an explicit `metric_regularization` or
+/// `trapped_chain_restart=False`, built with the same
+/// `DEFAULT_WARMUP_EXHAUSTION` / `DEFAULT_METRIC_REGULARIZATION` the sampler
+/// applies to its own modes and, when `trapped_chain_restart` is on and the
+/// metric is diagonal (`supports_restart`), the same
+/// `DEFAULT_TRAPPED_CHAIN_RESTART`; a structured mass never carries it, as
+/// in the sampler.
+fn parse_adaptation(cfg: &Bound<'_, PyDict>, supports_restart: bool) -> PyResult<Adaptation> {
     let adapt: bool = get(cfg, "adapt")?.unwrap_or(true);
     if !adapt {
         return Ok(Adaptation::None);
@@ -603,8 +608,9 @@ fn parse_adaptation(cfg: &Bound<'_, PyDict>) -> PyResult<Adaptation> {
     };
     let adapt_step: bool = get(cfg, "adapt_step_size")?.unwrap_or(true);
     let regularization: Option<String> = get(cfg, "metric_regularization")?;
+    let trapped_chain_restart: bool = get(cfg, "trapped_chain_restart")?.unwrap_or(true);
     let paper = parse_paper(cfg)?;
-    if adapt_step && regularization.is_none() {
+    if adapt_step && regularization.is_none() && trapped_chain_restart {
         return Ok(match paper {
             Some(paper) => Adaptation::Paper(paper),
             None => Adaptation::DualAveraging { target_accept },
@@ -619,11 +625,16 @@ fn parse_adaptation(cfg: &Bound<'_, PyDict>) -> PyResult<Adaptation> {
         .map(parse_regularization)
         .transpose()?
         .unwrap_or(DEFAULT_METRIC_REGULARIZATION);
+    let warmup = warmup
+        .with_step_size_adaptation(adapt_step)
+        .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+        .with_metric_regularization(regularization);
     Ok(Adaptation::Custom(
-        warmup
-            .with_step_size_adaptation(adapt_step)
-            .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-            .with_metric_regularization(regularization),
+        if trapped_chain_restart && supports_restart {
+            warmup.with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART)
+        } else {
+            warmup
+        },
     ))
 }
 
@@ -820,7 +831,7 @@ fn parse_run(cfg: &Bound<'_, PyDict>, refresh: Option<Refresh>) -> PyResult<Run>
         .draws(draws)
         .seed(seed)
         .tuning(parse_tuning(cfg)?)
-        .adaptation(parse_adaptation(cfg)?)
+        .adaptation(parse_adaptation(cfg, !structured)?)
         .metric(metric)
         .limits(parse_limits(cfg)?);
     if let Some(threads) = get::<usize>(cfg, "threads")? {
@@ -1022,6 +1033,30 @@ fn chain_dict<'py>(py: Python<'py>, chain: &ChainOutput) -> PyResult<Bound<'py, 
         paper.append(u)?;
     }
     d.set_item("paper_adaptation_updates", paper)?;
+    let checks = PyList::empty(py);
+    for check in telemetry.trapped_chain_checks() {
+        let c = PyDict::new(py);
+        c.set_item("transition", check.transition())?;
+        c.set_item("step", check.step())?;
+        c.set_item("median_step", check.median_step())?;
+        c.set_item("threshold", check.threshold())?;
+        c.set_item("restarted", check.restarted())?;
+        c.set_item("abandoned_target_calls", check.abandoned_target_calls())?;
+        c.set_item("abandoned_log_density", check.abandoned_log_density())?;
+        c.set_item(
+            "replacement_start",
+            check
+                .replacement_start()
+                .map(|start| start.to_vec().into_pyarray(py)),
+        )?;
+        c.set_item(
+            "replacement_start_log_density",
+            check.replacement_start_log_density(),
+        )?;
+        c.set_item("replacement_seed", check.replacement_seed())?;
+        checks.append(c)?;
+    }
+    d.set_item("trapped_chain_checks", checks)?;
     d.set_item("warmup_end", window_dict(py, telemetry.warmup_end())?)?;
     d.set_item("sampling_end", window_dict(py, telemetry.sampling_end())?)?;
 
@@ -1772,6 +1807,23 @@ fn defaults<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
             ));
         }
     }
+    // The WP90 trapped-chain guard the sampler installs on the diagonal
+    // metrics; `Adaptation(trapped_chain_restart=False)` removes it.
+    let guard = PyDict::new(py);
+    guard.set_item("step_ratio", DEFAULT_TRAPPED_CHAIN_RESTART.step_ratio())?;
+    guard.set_item("check_window", DEFAULT_TRAPPED_CHAIN_RESTART.check_window())?;
+    guard.set_item(
+        "minimum_chains",
+        DEFAULT_TRAPPED_CHAIN_RESTART.minimum_chains(),
+    )?;
+    guard.set_item(
+        "minimum_window_transitions",
+        DEFAULT_TRAPPED_CHAIN_RESTART.minimum_window_transitions(),
+    )?;
+    guard.set_item("candidates", DEFAULT_TRAPPED_CHAIN_RESTART.candidates())?;
+    guard.set_item("radius", DEFAULT_TRAPPED_CHAIN_RESTART.radius())?;
+    guard.set_item("max_attempts", DEFAULT_TRAPPED_CHAIN_RESTART.max_attempts())?;
+    d.set_item("trapped_chain_restart", guard)?;
     d.set_item("target_accept", default_target_accept()?)?;
     d.set_item(
         "adapt_mass",

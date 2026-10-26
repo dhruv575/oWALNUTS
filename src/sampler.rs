@@ -54,10 +54,11 @@
 //! rules (`WarmupConfig::default().with_paper_adaptation(..)`), or none. The
 //! metric decides `WarmupConfig::with_mass_adaptation`. The sampler's own
 //! modes apply [`DEFAULT_WARMUP_EXHAUSTION`],
-//! [`DEFAULT_METRIC_REGULARIZATION`], and the disabled
-//! [`DEFAULT_CHAIN_RESCUE`] to the configuration they build;
-//! [`Adaptation::Custom`] is used as given and is the explicit chain-rescue
-//! opt-in.
+//! [`DEFAULT_METRIC_REGULARIZATION`], the disabled
+//! [`DEFAULT_CHAIN_RESCUE`] and, on the identity and diagonal metrics, the
+//! trapped-chain guard [`DEFAULT_TRAPPED_CHAIN_RESTART`] to the
+//! configuration they build; [`Adaptation::Custom`] is used as given and is
+//! the explicit chain-rescue opt-in and the trapped-chain-guard opt-out.
 //!
 //! [`TargetEvaluationBudget`]: crate::walnutpie::TargetEvaluationBudget
 
@@ -87,7 +88,7 @@ use crate::walnutpie::{
     ChainRescueConfig, DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass,
     DiagonalMetricRegularization, ExhaustionRule, KernelOptions, KernelTuning, MultiChainOutput,
     ResourceLimits, RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget,
-    UTurnRule, preflight_chains, preflight_chains_with_target_budget,
+    TrappedChainRestartConfig, UTurnRule, preflight_chains, preflight_chains_with_target_budget,
     sample_chains_dense_with_control, sample_chains_dense_with_target_budget_and_control,
     sample_chains_structured_refresh, sample_chains_structured_with_control,
     sample_chains_with_control, sample_chains_with_target_budget_and_control, with_scoped_pool,
@@ -197,7 +198,8 @@ impl Metric {
     }
 
     /// Only the identity and diagonal metrics use the multi-chain driver that
-    /// supports an optional warmup-time chain rescue.
+    /// supports an optional warmup-time chain rescue and the trapped-chain
+    /// restart ([`DEFAULT_TRAPPED_CHAIN_RESTART`] is installed only here).
     fn supports_chain_rescue(&self) -> bool {
         matches!(self, Self::Identity | Self::Diagonal { .. })
     }
@@ -240,8 +242,10 @@ impl fmt::Debug for Metric {
 /// The default is dual averaging (`WarmupConfig::new(target)`) with the
 /// sampler's warmup exhaustion rule ([`DEFAULT_WARMUP_EXHAUSTION`]),
 /// diagonal-metric regularisation ([`DEFAULT_METRIC_REGULARIZATION`], Stan's
-/// prior since the post-WP31 default change), and no automatic warmup-time
-/// chain rescue ([`DEFAULT_CHAIN_RESCUE`], the post-WP36 decision). The
+/// prior since the post-WP31 default change), no automatic warmup-time
+/// chain rescue ([`DEFAULT_CHAIN_RESCUE`], the post-WP36 decision), and the
+/// trapped-chain guard ([`DEFAULT_TRAPPED_CHAIN_RESTART`], the WP90
+/// decision) on the identity and diagonal metrics. The
 /// Stan-parity warmup (`WarmupConfig::stan_style`) is opt-in through
 /// [`Adaptation::Custom`]: in `STUDIES/adaptation_parity_v1` it reached a
 /// 2.0x geometric-mean ESS-per-gradient gain over the default on nine
@@ -271,7 +275,9 @@ pub enum Adaptation {
     /// metrics.
     Paper(PaperAdaptationConfig),
     /// Any `walnutpie::WarmupConfig`; its mass-adaptation flag is replaced by
-    /// what the metric requires. This is also where the opt-in warmup-time
+    /// what the metric requires and nothing else is added: a `Custom`
+    /// configuration carries no [`DEFAULT_TRAPPED_CHAIN_RESTART`] unless it
+    /// says so. This is also where the opt-in warmup-time
     /// chain rescue lives (`WarmupConfig::with_chain_rescue`,
     /// `STUDIES/chain_rescue_v1` and `chain_rescue_v2`): on the diagonal and identity metrics with
     /// at least two chains it synchronises warmup at slow-window boundaries
@@ -347,6 +353,48 @@ pub const DEFAULT_U_TURN_RULE: UTurnRule = UTurnRule::MomentumSum;
 /// its fingerprints, so it does not advance `ALGORITHM_REVISION`.
 pub const DEFAULT_CHAIN_RESCUE: Option<ChainRescueConfig> = None;
 
+/// The trapped-chain restart the sampler's own adaptation modes
+/// ([`Adaptation::DualAveraging`], [`Adaptation::Paper`]) install on the
+/// identity and diagonal metrics: [`TrappedChainRestartConfig::guard`], the
+/// WP67 step rule at ratio 0.01 checked at the close of the first non-empty
+/// slow window (transition 99 of Stan's 1,000-transition schedule).
+///
+/// **Default decision after `STUDIES/trap_guard_confirmation_v1` (WP90)**,
+/// the preregistered confirmation of WP89's mechanism
+/// (`STUDIES/sv_stuck_chains_v1`: a stiff start freezes the identity-metric
+/// step before the first metric update). A chain whose step at that
+/// transition is below 0.01x the chain median abandons its work and reruns
+/// the whole schedule from an independent best-of-16 uniform(-2, 2) start
+/// with a fresh RNG stream; nothing is copied from another chain, so the
+/// restarted chain is an independent start and independent-chain R-hat
+/// remains valid. Every rule of WP90 held: posteriordb passes 92 = 92,
+/// 282/282 cell pairs bit-identical where no chain fired, headline ESS per
+/// gradient 1.000, funnel 0 firings, SV trapped chains 8/480 to 0/480; two
+/// `kilpisjarvi` firings on chains that would have recovered, at no cost.
+///
+/// Precedence, in the order the library already applies it: the guard is
+/// installed only where [`DEFAULT_CHAIN_RESCUE`] would be
+/// (`Metric::supports_chain_rescue`: identity and diagonal; the dense and
+/// structured facades reject the option, so it is never offered there);
+/// it is inert below [`TrappedChainRestartConfig::minimum_chains`] (three)
+/// chains, so one- and two-chain runs are the plain run with no check
+/// records and the same admission bound; [`Adaptation::None`] has no warmup;
+/// and [`Adaptation::Custom`] is used exactly as given, so a custom
+/// configuration with chain rescue, the stable-metric stop or a non-default
+/// diagonal metric estimator keeps those (they cannot be combined with the
+/// restart) and never gains the guard. Opt out with
+/// `Adaptation::Custom(WarmupConfig::new(0.8)?.with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION))`
+/// (the pre-WP90 default) or by `WarmupConfig::without_trapped_chain_restart`.
+///
+/// A run in which no chain fires produces the draws, target calls and
+/// diagnostics of the opted-out run; only
+/// [`RunTelemetry::trapped_chain_checks`] is added. The retained kernel,
+/// `walnutpie::WarmupConfig::default()`, `RunConfig` runs, the kernel
+/// fingerprints and `ALGORITHM_REVISION` are unchanged, as for the
+/// MomentumSum, RejectLeaf and best-of-16 flips.
+pub const DEFAULT_TRAPPED_CHAIN_RESTART: TrappedChainRestartConfig =
+    TrappedChainRestartConfig::guard();
+
 impl Adaptation {
     fn warmup_config(
         &self,
@@ -358,9 +406,14 @@ impl Adaptation {
                 .with_mass_adaptation(adapt_mass)
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
                 .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION);
-            match (supports_chain_rescue, DEFAULT_CHAIN_RESCUE) {
+            let warmup = match (supports_chain_rescue, DEFAULT_CHAIN_RESCUE) {
                 (true, Some(rescue)) => warmup.with_chain_rescue(rescue),
                 _ => warmup,
+            };
+            if supports_chain_rescue {
+                warmup.with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART)
+            } else {
+                warmup
             }
         };
         Ok(match self {

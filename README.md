@@ -14,10 +14,10 @@ public API is a small builder, `owalnuts::sampler`, over a complete
 facade, `owalnuts::walnutpie`. Version `0.3.0`; kernel revision
 `walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10`.
 
-> **Defaults changed since 0.2.0** (released in 0.3.0; see
-> [`CHANGELOG.md`](CHANGELOG.md)). The kernel, `ALGORITHM_REVISION` and the
-> kernel fingerprints are unchanged; each old behaviour is one builder call
-> away.
+> **Defaults changed since 0.2.0** (released in 0.3.0, the trapped-chain
+> guard on `main` after it; see [`CHANGELOG.md`](CHANGELOG.md)). The kernel,
+> `ALGORITHM_REVISION` and the kernel fingerprints are unchanged; each old
+> behaviour is one builder call away.
 >
 > - **Best-of-16 starts.** `Init::default()` and `run_from_random_starts` keep
 >   the highest-log-density of 16 evaluable uniform(-2, 2) starts per chain,
@@ -34,6 +34,14 @@ facade, `owalnuts::walnutpie`. Version `0.3.0`; kernel revision
 >   engineering decision after `STUDIES/dense_metric_confirmation_v1` (WP51:
 >   3.21x the diagonal per gradient against 0.055x for the old dense
 >   defaults), whose own frozen rule failed (40 vs 43 gates) [E19].
+> - **Trapped-chain guard** (`DEFAULT_TRAPPED_CHAIN_RESTART`, after 0.3.0).
+>   With three or more chains on the identity or diagonal metric, a chain
+>   whose step at the close of the first slow warmup window is below 0.01x
+>   the chain median restarts from an independent best-of-16 start; draws
+>   are unchanged unless a chain fires. Decided by the preregistered
+>   confirmation `STUDIES/trap_guard_confirmation_v1` (WP90: SV trapped
+>   chains 8/480 to 0/480, 282/282 unfired cell pairs bit-identical, 92 = 92
+>   gates) [E54]. `WarmupConfig::without_trapped_chain_restart()` opts out.
 
 ## Quick start
 
@@ -113,6 +121,12 @@ One line each for the other front doors:
 `Summary` (and `posterior.chain_warnings()`) also prints observe-only
 `warning: chain k ...` lines; computing them never changes a draw.
 
+- **A restarted chain** (WP90): a chain whose step at the close of the
+  first slow warmup window was below 0.01x the chain median reran from an
+  independent best-of-16 start; `RunTelemetry::trapped_chain_checks` (Python
+  `trapped_chain_checks`) records every chain's check and the restart.
+  Nothing is copied from another chain, so the chains remain independent
+  starts and independent-chain R-hat stays valid [E54].
 - **A chain that disagrees with the others** (WP44, WP74): a collapsed
   end-of-warmup step, a median log density far below the other chains' at
   the end of warmup or over the draws, or a chain whose removal alone brings
@@ -390,6 +404,7 @@ regression that CmdStan already samples cleanly still costs oWALNUTS
 | `Adaptation` | dual averaging to acceptance 0.8 | 75 / 25, 50, 100, ... / 50 windows (`gamma` 0.05, `t_0` 10, `kappa` 0.75); warmup exhaustion rule `AcceptUnlessDivergent` [E10] |
 | `Metric` | adapted diagonal | Welford, regularised with Stan's prior (`DiagonalMetricRegularization::Stan`, **post-hoc default change after WP31**; the `v10` `TowardUnit` prior floors small variances at 0.01 and collapsed the step on `sblrc` / `arma11`) [E14, E15] |
 | warmup chain rescue | none (`DEFAULT_CHAIN_RESCUE = None`) | `two_hit` failed its conjunctive gates; `current` then hit registered red lines in four origin-overwrite cells (five events) plus unknown HMM/92104 run history, selecting the WP36 fallback; default telemetry has no rescue records [E18] |
+| trapped-chain guard | `DEFAULT_TRAPPED_CHAIN_RESTART` (`TrappedChainRestartConfig::guard()`: step ratio 0.01 at the close of the first slow window, three or more chains, identity and diagonal metrics only; an independent best-of-16 restart, at most once per chain) | WP90 default-flip confirmation on WP89's mechanism: SV trapped chains 8/480 to 0/480, posteriordb 92 = 92 gates at ESS per gradient 1.000, funnel 0 firings, 282/282 unfired pairs bit-identical; two `kilpisjarvi` firings on recovering chains at no cost; `ALGORITHM_REVISION` unchanged [E53, E54] |
 | starts (`Init::default()`, `run_from_random_starts`) | `Init::best_of(16)`: highest log density of 16 evaluable uniform(-2, 2) starts per chain | WP52 default-flip confirmation: 1.254x ESS per gradient, 42 vs 42 gates; the gain is the `arma11` / `lotka_volterra` start lottery, the other 14 models are 0.862x [E20] |
 | `Tuning::nonfinite_position` | `NonfinitePositionPolicy::RejectLeaf` | WP54: bit-identical wherever `Abort` completed (73/73), 75 vs 73 runs completed; `KernelTuning::default()` keeps `Abort` [E21] |
 | initial evaluation | cached | one gradient per transition saved, draws bit-identical [E6] |
@@ -404,6 +419,10 @@ Opt-ins, each one builder call:
   funnel tuning [E8]; on posteriordb it is at parity with dual averaging
   (geomean 0.995) and robust on the cells that froze under its v3 defaults
   [E4, E9]. See `examples/funnel_paper_adaptation.rs`.
+- `Adaptation::Custom(WarmupConfig::new(0.8)?.with_warmup_exhaustion_rule(
+  DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION))`,
+  or `.without_trapped_chain_restart()` on any custom warmup: the pre-WP90
+  default without the trapped-chain guard, bit for bit [E54].
 - `Adaptation::Custom(WarmupConfig::stan_style(0.8))`: Stan's acceptance
   statistic, `init_stepsize`, metric prior and restart reference. 2.0x the
   default's ESS per gradient on correlated regressions but 12–16 % worse on

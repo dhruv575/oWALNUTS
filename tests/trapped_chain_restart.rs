@@ -1,18 +1,20 @@
-//! Research-only trapped-chain restart (`WarmupConfig::with_trapped_chain_restart`,
-//! `STUDIES/trapped_chain_restart_v1`, WP67): silence and bit-identity on a
+//! Trapped-chain restart (`WarmupConfig::with_trapped_chain_restart`,
+//! `STUDIES/trapped_chain_restart_v1`, WP67; the sampler default
+//! `DEFAULT_TRAPPED_CHAIN_RESTART` since WP90,
+//! `STUDIES/trap_guard_confirmation_v1`): silence and bit-identity on a
 //! Gaussian, restart of a chain started in a narrow trap, independence of the
-//! untouched chains, determinism, validation and admission accounting.
-#![cfg(feature = "research")]
+//! untouched chains, determinism, validation and admission accounting, and
+//! the sampler default with its opt-out.
 
 use std::num::NonZeroUsize;
 
 use owalnuts::sampler::{
-    Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Limits, Metric, Sampler,
-    WarmupConfig,
+    Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_TRAPPED_CHAIN_RESTART,
+    DEFAULT_WARMUP_EXHAUSTION, Limits, Metric, Sampler, WarmupConfig,
 };
 use owalnuts::walnutpie::{
-    ChainRescueConfig, DiagonalMass, ErrorKind, KernelTuning, RunConfig, Target, TargetError,
-    TrappedChainRestartConfig, sample_chains,
+    ChainRescueConfig, DiagonalMass, ErrorKind, KernelTuning, PaperAdaptationConfig, RunConfig,
+    Target, TargetError, TrappedChainRestartConfig, sample_chains,
 };
 
 struct Gaussian(usize);
@@ -359,4 +361,204 @@ fn validation_combination_and_facades() {
         .run(&target, &starts4)
         .unwrap_err();
     assert_eq!(dense.kind(), ErrorKind::Configuration);
+}
+
+/// The pre-WP90 sampler default, spelled out: the sampler constants without
+/// the trapped-chain guard.
+fn pre_flip_warmup() -> WarmupConfig {
+    WarmupConfig::new(0.8)
+        .unwrap()
+        .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+        .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+}
+
+fn facade_sampler(chains: usize) -> Sampler {
+    Sampler::new()
+        .warmup(300)
+        .draws(100)
+        .chains(chains)
+        .seed(11)
+        .threads(chains)
+        .limits(Limits::new().admit_worst_case())
+}
+
+/// `DEFAULT_TRAPPED_CHAIN_RESTART` is `TrappedChainRestartConfig::guard()`:
+/// the WP67 step rule at ratio 0.01 scored at the first slow-window close.
+/// The sampler's own modes (dual averaging, paper) install it on the
+/// diagonal and identity metrics: a four-chain default run records one
+/// check per chain at threshold 0.01x the chain median. `Custom` stays as
+/// given, the dense facade gets no guard (and no error), and below three
+/// chains the guard is inert.
+#[test]
+fn the_sampler_default_carries_the_guard() {
+    assert_eq!(
+        DEFAULT_TRAPPED_CHAIN_RESTART,
+        TrappedChainRestartConfig::guard()
+    );
+    let guard = TrappedChainRestartConfig::guard();
+    assert_eq!(guard.step_ratio(), 0.01);
+    assert_eq!(guard.check_window(), 0);
+    assert_eq!(guard.minimum_chains(), 3);
+    assert_eq!(guard.minimum_window_transitions(), 10);
+    assert_eq!(guard.candidates(), 16);
+    assert_eq!(guard.radius(), 2.0);
+    assert_eq!(guard.max_attempts(), 100);
+    assert_eq!(
+        guard,
+        TrappedChainRestartConfig::step_rule()
+            .with_step_ratio(0.01)
+            .unwrap()
+    );
+    assert_ne!(guard, TrappedChainRestartConfig::default());
+
+    let target = Gaussian(3);
+    let starts4 = starts(4, 3, 2.0);
+    for (name, adaptation) in [
+        ("dual averaging", Adaptation::default()),
+        ("paper", Adaptation::Paper(PaperAdaptationConfig::default())),
+    ] {
+        for metric in [Metric::diagonal(), Metric::Identity] {
+            let posterior = facade_sampler(4)
+                .adaptation(adaptation.clone())
+                .metric(metric)
+                .run(&target, &starts4)
+                .unwrap();
+            for (chain, output) in posterior.chains().iter().enumerate() {
+                let checks = output.telemetry().trapped_chain_checks();
+                assert_eq!(checks.len(), 1, "{name}: one check on chain {chain}");
+                assert_eq!(checks[0].transition(), 99);
+                assert!(!checks[0].restarted());
+                assert_eq!(checks[0].threshold(), 0.01 * checks[0].median_step());
+            }
+        }
+    }
+    let custom = facade_sampler(4)
+        .adaptation(Adaptation::Custom(pre_flip_warmup()))
+        .run(&target, &starts4)
+        .unwrap();
+    assert!(
+        custom
+            .telemetry()
+            .all(|telemetry| telemetry.trapped_chain_checks().is_empty()),
+        "Custom is used as given"
+    );
+    let dense = facade_sampler(4)
+        .metric(Metric::dense())
+        .run(&target, &starts4)
+        .unwrap();
+    assert!(
+        dense
+            .telemetry()
+            .all(|telemetry| telemetry.trapped_chain_checks().is_empty())
+    );
+    for chains in [1, 2] {
+        let few = facade_sampler(chains)
+            .run(&target, &starts(chains, 3, 2.0))
+            .unwrap();
+        assert!(
+            few.telemetry()
+                .all(|telemetry| telemetry.trapped_chain_checks().is_empty()),
+            "{chains} chains: inert"
+        );
+        assert_eq!(
+            facade_sampler(chains)
+                .worst_case_target_evaluations(chains)
+                .unwrap(),
+            facade_sampler(chains)
+                .adaptation(Adaptation::Custom(pre_flip_warmup()))
+                .worst_case_target_evaluations(chains)
+                .unwrap(),
+            "{chains} chains: the admission bound is the plain run's"
+        );
+    }
+    assert!(
+        facade_sampler(4).worst_case_target_evaluations(4).unwrap()
+            > facade_sampler(4)
+                .adaptation(Adaptation::Custom(pre_flip_warmup()))
+                .worst_case_target_evaluations(4)
+                .unwrap(),
+        "four chains: the bound accounts for a restart"
+    );
+}
+
+/// `without_trapped_chain_restart` is the opt-out: a configuration that
+/// carried the guard and dropped it again is the pre-WP90 default bit for
+/// bit (draws, diagnostics, telemetry, metadata), and a default run in which
+/// no chain fires has the draws, diagnostics and work of the opted-out run.
+#[test]
+fn opt_out_restores_the_pre_flip_default_bit_for_bit() {
+    let target = Gaussian(3);
+    let starts4 = starts(4, 3, 2.0);
+    let pre_flip = facade_sampler(4)
+        .adaptation(Adaptation::Custom(pre_flip_warmup()))
+        .run(&target, &starts4)
+        .unwrap();
+    let opted_out = facade_sampler(4)
+        .adaptation(Adaptation::Custom(
+            pre_flip_warmup()
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART)
+                .without_trapped_chain_restart(),
+        ))
+        .run(&target, &starts4)
+        .unwrap();
+    assert_eq!(pre_flip, opted_out, "the opt-out is the pre-flip default");
+    assert!(
+        pre_flip_warmup()
+            .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART)
+            .without_trapped_chain_restart()
+            .trapped_chain_restart()
+            .is_none()
+    );
+
+    let default = facade_sampler(4).run(&target, &starts4).unwrap();
+    for (chain, (a, b)) in default.chains().iter().zip(opted_out.chains()).enumerate() {
+        assert_eq!(a.samples(), b.samples(), "chain {chain} draws");
+        assert_eq!(
+            a.diagnostics(),
+            b.diagnostics(),
+            "chain {chain} diagnostics"
+        );
+        assert_eq!(
+            a.telemetry().total(),
+            b.telemetry().total(),
+            "chain {chain} work"
+        );
+        assert_eq!(a.telemetry().trapped_chain_checks().len(), 1);
+        assert!(b.telemetry().trapped_chain_checks().is_empty());
+    }
+}
+
+/// On the trap target the default restarts the chain started in the spike
+/// (step ratio about 0.003, below the 0.01 guard); the opt-out leaves it
+/// there; the other chains are bit-identical between the two runs.
+#[test]
+fn the_default_restarts_a_trapped_chain_and_the_opt_out_does_not() {
+    let target = Trap;
+    let mut starts4 = starts(4, 2, 1.0);
+    starts4[3] = vec![TRAP_CENTER, TRAP_CENTER];
+    let sampler = || facade_sampler(4).warmup(500).draws(300);
+    let default = sampler().run(&target, &starts4).unwrap();
+    let opted_out = sampler()
+        .adaptation(Adaptation::Custom(pre_flip_warmup()))
+        .run(&target, &starts4)
+        .unwrap();
+    let check = &default.chains()[3].telemetry().trapped_chain_checks()[0];
+    assert!(check.restarted(), "chain 3 is flagged: {check:?}");
+    assert!(check.step() < 0.01 * check.median_step());
+    let mean = |samples: &[f64]| samples.iter().sum::<f64>() / samples.len() as f64;
+    assert!(mean(default.chains()[3].samples()).abs() < 1.0);
+    assert!(
+        opted_out.chains()[3]
+            .telemetry()
+            .trapped_chain_checks()
+            .is_empty()
+    );
+    assert!(mean(opted_out.chains()[3].samples()) > 10.0);
+    for chain in 0..3 {
+        assert_eq!(
+            default.chains()[chain].samples(),
+            opted_out.chains()[chain].samples(),
+            "untouched chain {chain}"
+        );
+    }
 }

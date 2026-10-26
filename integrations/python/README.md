@@ -109,8 +109,16 @@ post-WP31 default change (`STUDIES/joint_default_v1`,
 `STUDIES/posteriordb_bench_v5`), the cached initial evaluation, dual
 averaging toward acceptance 0.8 with an adapted diagonal metric, and
 worst-case admission. Warmup chain rescue is disabled by default after WP36.
+The trapped-chain guard is on by default since WP90
+(`STUDIES/trap_guard_confirmation_v1`): with at least three chains, a
+chain whose step size at the close of the first slow warmup window is below
+0.01x the chain median restarts from an independent best-of-16 start; the
+other chains are untouched, a run in which no chain fires has the same
+draws as one without the guard, and each chain's `trapped_chain_checks`
+records the check. `Adaptation(trapped_chain_restart=False)` removes it.
 `owalnuts.DEFAULTS` is that set, read from the Rust constants at import
-(read-only), including `chain_rescue=None`; `Tuning()` and `Adaptation()`
+(read-only), including `chain_rescue=None` and the guard's rule under
+`trapped_chain_restart`; `Tuning()` and `Adaptation()`
 default from it, and the test suite checks that `sample` with explicit arguments equal to
 `DEFAULTS` reproduces a Rust `Sampler` run bit for bit. Pass
 `tuning=owalnuts.Tuning(step_size=0.1, max_depth=8)` for the 0.1 package's

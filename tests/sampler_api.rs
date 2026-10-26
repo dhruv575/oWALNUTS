@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use owalnuts::sampler::{
     Adaptation, Cancellation, ChainOutput, DEFAULT_CHAIN_RESCUE, DEFAULT_METRIC_REGULARIZATION,
-    DEFAULT_RANDOM_START_CHAINS, DEFAULT_U_TURN_RULE, DEFAULT_WARMUP_EXHAUSTION, Error, ErrorKind,
-    Init, Limits, Metric, Sampler, StartSelection, StructuredBlockMass, StructuredCovarianceBlock,
-    StructuredRefreshConfig, Target, TargetError, Tuning, WindowSummary, candidate_starts,
-    uniform_starts,
+    DEFAULT_RANDOM_START_CHAINS, DEFAULT_TRAPPED_CHAIN_RESTART, DEFAULT_U_TURN_RULE,
+    DEFAULT_WARMUP_EXHAUSTION, Error, ErrorKind, Init, Limits, Metric, Sampler, StartSelection,
+    StructuredBlockMass, StructuredCovarianceBlock, StructuredRefreshConfig, Target, TargetError,
+    Tuning, WindowSummary, candidate_starts, uniform_starts,
 };
 use owalnuts::walnutpie::{
     DenseMass, DiagonalMass, KernelOptions, KernelTuning, NonfinitePositionPolicy,
@@ -170,6 +170,7 @@ fn identity_metric_matches_the_diagonal_facade_without_mass_adaptation() {
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
                 .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART)
                 .with_mass_adaptation(false),
         )),
         nz(1),
@@ -206,7 +207,8 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART),
         )),
         nz(1),
     )
@@ -245,7 +247,8 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
             WarmupConfig::new(0.9)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART),
         )),
         nz(1),
     )
@@ -253,18 +256,30 @@ fn adaptive_and_fixed_diagonal_metrics_match_the_diagonal_facade() {
     assert_eq!(started.chains(), direct.chains());
 }
 
+/// The sampler's default warmup is the explicit custom configuration with
+/// the sampler constants: no chain rescue (WP36) and the trapped-chain
+/// guard (WP90, `DEFAULT_TRAPPED_CHAIN_RESTART`). With the guard removed
+/// the draws are the same (no chain fires on a Gaussian) and only the
+/// check records differ.
 #[test]
-fn default_multi_chain_warmup_is_explicit_no_rescue_bit_for_bit() {
+fn default_multi_chain_warmup_is_explicit_no_rescue_with_guard_bit_for_bit() {
     let target = Gaussian(3);
     let starts = starts(3);
     let default = sampler().run(&target, &starts).unwrap();
+    let pre_flip = WarmupConfig::new(0.8)
+        .unwrap()
+        .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
+        .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION);
     let explicit = sampler()
         .adaptation(Adaptation::Custom(
-            WarmupConfig::new(0.8)
-                .unwrap()
-                .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+            pre_flip
+                .clone()
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART),
         ))
+        .run(&target, &starts)
+        .unwrap();
+    let opted_out = sampler()
+        .adaptation(Adaptation::Custom(pre_flip))
         .run(&target, &starts)
         .unwrap();
 
@@ -275,6 +290,16 @@ fn default_multi_chain_warmup_is_explicit_no_rescue_bit_for_bit() {
             .all(|telemetry| telemetry.chain_rescues().is_empty())
     );
     assert_eq!(default, explicit);
+    assert!(
+        opted_out
+            .telemetry()
+            .all(|telemetry| telemetry.trapped_chain_checks().is_empty())
+    );
+    for (a, b) in default.chains().iter().zip(opted_out.chains()) {
+        assert_eq!(a.samples(), b.samples());
+        assert_eq!(a.diagnostics(), b.diagnostics());
+        assert_eq!(a.telemetry().total(), b.telemetry().total());
+    }
 }
 
 #[test]
@@ -400,7 +425,8 @@ fn paper_adaptation_matches_the_paper_warmup_configuration() {
                 .with_mass_adaptation(false)
                 .with_paper_adaptation(paper)
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART),
         );
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
     let posterior = sampler()
@@ -441,6 +467,7 @@ fn evaluation_budget_matches_the_budgeted_facade() {
             .unwrap()
             .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
             .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+            .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART)
             .with_mass_adaptation(false),
     ));
     let worst = base.worst_case_target_evaluations(nz(3)).unwrap();
@@ -533,7 +560,8 @@ fn cancellation_and_timeout_match_run_control() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART),
         )),
         nz(1),
         &RunControl::new().with_cancellation(&*flag),
@@ -555,7 +583,8 @@ fn cancellation_and_timeout_match_run_control() {
             WarmupConfig::new(0.8)
                 .unwrap()
                 .with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION)
-                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION),
+                .with_metric_regularization(DEFAULT_METRIC_REGULARIZATION)
+                .with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART),
         )),
         nz(1),
         &RunControl::new().with_timeout(Duration::ZERO).unwrap(),
@@ -833,7 +862,13 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
         .run_with_init(&target, &Init::Given(starts.clone()))
         .unwrap();
     assert_eq!(given.chains(), direct.chains());
-    let random = sampler()
+    // Four chains at depth 10 with the trapped-chain guard
+    // (`DEFAULT_TRAPPED_CHAIN_RESTART`, whose admission bound counts the
+    // abandoned transitions of up to two restarted chains) exceed the
+    // conservative facade ceiling even at 60 / 8, so these runs admit the
+    // exact worst case, as `Sampler` does by default.
+    let four = || sampler().limits(Limits::new().admit_worst_case());
+    let random = four()
         .metric(Metric::Identity)
         .run_from_random_starts(&target)
         .unwrap();
@@ -849,12 +884,12 @@ fn run_with_init_matches_run_from_the_drawn_starts() {
         StartSelection::HighestDensity,
     )
     .unwrap();
-    let from_default_starts = sampler()
+    let from_default_starts = four()
         .metric(Metric::Identity)
         .run(&target, &chosen.starts)
         .unwrap();
     assert_eq!(random.chains(), from_default_starts.chains());
-    let again = sampler()
+    let again = four()
         .metric(Metric::Identity)
         .run_from_random_starts(&target)
         .unwrap();
