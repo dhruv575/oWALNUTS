@@ -68,6 +68,7 @@ def main():
                             truth_covered=bool(ql <= truth <= qh),
                             straddle_rel_err=e["straddle"] / ref["straddle"] - 1))
         thr = 0.4 if N == 250 else 2.0
+        ref_ok = len(refs[N]) > 0  # A1: a failed reference makes validity n/a, not 0
         w = np.array([p["wall"] if p["wall"] is not None else np.inf for p in per])
         okp = [p for p in per if p["ok"]]
         row = dict(id=c["id"], arm=c["arm"] + str(c.get("K", "")), N=N, seed=c["seed"], ticks_ok=len(okp),
@@ -78,7 +79,11 @@ def main():
                    rhat_pass=float(np.mean([p.get("rhat", 9) <= 1.01 for p in per])),
                    div_free=float(np.mean([p.get("div", 1) == 0 for p in per])),
                    truth_cov90=float(np.mean([p.get("truth_covered", False) for p in per])),
+                   ref_available=ref_ok,
                    straddle_abs_rel_err_median=float(np.median([abs(p["straddle_rel_err"]) for p in okp])) if okp else None)
+        if c["arm"] == "warm":
+            t0 = records(cell).get(0, {})
+            row["tick0_wall_s"] = t0.get("wall_seconds")
         if c["arm"] == "warm" and okp:
             ins = np.array([p.get("inside_ref90", np.nan) for p in per])
             row.update(drift_mean=float(np.nanmean(ins)), drift_early=float(np.nanmean(ins[:25])),
@@ -110,10 +115,11 @@ def main():
             rs = [r for r in rows if r.get("arm") == arm and r["N"] == N]
             if not rs:
                 continue
-            f = lambda k: np.mean([r[k] for r in rs])
+            f = lambda k: float(np.mean([r[k] for r in rs])) if all(r.get("ref_available") and k in r for r in rs) else float("nan")
             d = (f"{f('drift_mean'):.3f} ({f('drift_early'):.3f}/{f('drift_late'):.3f})" if arm.startswith("warm") else "")
+            g = lambda k: float(np.mean([r[k] for r in rs]))
             lines.append(f"| {arm} | {N} | {np.median([r['median_s'] for r in rs]):.3f} | {max(r['p95_s'] for r in rs):.3f} | "
-                         f"{f('frac_lt_0p4'):.2f} | {f('frac_lt_2'):.2f} | {f('valid1'):.2f} | {f('valid2'):.2f} | "
+                         f"{g('frac_lt_0p4'):.2f} | {g('frac_lt_2'):.2f} | {f('valid1'):.2f} | {f('valid2'):.2f} | "
                          f"{f('rhat_pass'):.2f} | {f('div_free'):.2f} | {d} |")
     (out / "results-table.md").write_text("\n".join(lines) + "\n\n" + json.dumps(verdict, indent=1) + "\n")
     print("\n".join(lines))

@@ -1,0 +1,7 @@
+### WP84-ONLINE-SV-QUOTE-V1 — warm continuation refreshes an SV posterior in 20–80 ms, but does not pass the frozen accuracy bar; "real-time" not claimed
+
+- Ordered time: 2026-10-26, `wt/online-sv` (base `fa04c5b9`); prereg `72987d97` before any cell. Lane 4 (cores 12-15) of the shared box, pinned, co-tenanted. Seeds 84001–84003, reference 849000+N, data 84084 (simulated).
+- Design: market_uncertainty_v1 SV model (t5, AR(1) log-vol rho 0.95, intercept), N in {250, 1000}, 100 ticks of one return; quantiles of next-period log-vol vs a 4 x 2,000/20,000 oWALNUTS reference; arms warm K=50/200 (harness-level retarget, frozen step and metric), oWALNUTS refit, CmdStan 2.39.0, nutpie 0.16.8; 32 cells, all exit 0.
+- Outcome: N=250 median latency warm50 0.020 s, warm200 0.080 s, nutpie 1.09 s, oWALNUTS refit 3.07 s, CmdStan 6.50 s; primary validity 0–14 % everywhere (warm limited by R-hat: 3 % / 56 %); secondary validity refits 82–96 %, warm200 52 %; warm drift 0.901–0.903 inside the reference 90 % interval, bound met 6/6. N=1000: reference failed every tick (result-size limit), validity n/a; latency warm50 0.27 s, warm200 1.07 s, nutpie 4.5 s, refit 16.7 s, CmdStan 42 s.
+- Predictions: held P4; partial P1, P3 (nutpie held, CmdStan missed), P5, P6; missed P2.
+- Decision: real-time rule not met (N=250 valid-and-fast 0 % / 1.7 %; N=1000 unassessable). The session API has no retarget; the warm path is a study-harness construction.
