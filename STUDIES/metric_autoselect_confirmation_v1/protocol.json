@@ -1,0 +1,214 @@
+{
+ "schema": "metric-autoselect-confirmation-v1",
+ "ledger_id": "WP85",
+ "status": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+ "frozen_utc": "2026-10-26",
+ "question": "Does WP79's Hessian-fit dense / diagonal auto-selection, unchanged, qualify as the default on all 22 v7 posteriors x 6 fresh seeds and a 30-seed funnel?",
+ "library_under_test": "wt/metric-autoselect-confirmation: main fa04c5b9 (WP79 merged) plus one scope commit. Statistic, thresholds and decision code unchanged from WP79: DenseAutoSelectConfig::hessian_fit(2, 5.0, 0.5). The one change, made before any cell and disclosed here: two of the five hard posteriors exceed DenseMass::MAX_DIMENSION (radon_hierarchical_intercept_centered d = 391, grsm_latent_reg_irt d = 408), where WP79's code returns a configuration error. For d > 256 the flag is now ineligible: the run is the unflagged diagonal run, with no decision recorded ('diag-cap'). A default cannot error where the diagonal runs, and no dense branch exists there. tests/metric_autoselect_hessian.rs gains the bit-identity test for this path.",
+ "selection": {
+  "select_window": 2,
+  "threshold": 5.0,
+  "min_linearity": 0.5,
+  "rule": "From every chain's slow windows 1+2 (150 draws per chain, 600 pooled): pooled within-chain covariance C of z = (x, g), x the unconstrained position and g the log-density gradient at each selected draw. B = C_gx C_xx^-1; linearity = min_i R^2_i, R^2_i = (C_gx C_xx^-1 C_xg)_ii / (C_gg)_ii; P = -(B + B^T)/2; if P is positive definite, Sigma = P^-1 and G_H = kappa_diag / kappa_dense of Sigma whitened by its Stan-regularised (n = 500) diagonal and dense estimates (the population version of WP48's k, so WP75's threshold 5 keeps its WP48/WP51 justification). Dense iff P is SPD, G_H >= 5 and linearity >= 0.5. The WP75 window-whitening G is recorded too (descriptive).",
+  "dimension_cap": 256
+ },
+ "machine": "AWS c7a.4xlarge owalnuts-bench, lane 3: every build and cell under taskset -c 8-11, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, files under ~/lanes/metric_autoselect_confirmation_v1/ only; co-tenanted, walls 'pinned, co-tenanted' and not used in any rule.",
+ "dispatch": "owalnuts_bridgestan::ReplicatedStanTarget with 4 replicas (WP65 ReplicatedConcurrent, recorded per cell); 4 threads for 4 chains.",
+ "arms": {
+  "diag": "Sampler::new() defaults",
+  "auto": "Sampler::new().adaptation(Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(DEFAULT_METRIC_REGULARIZATION).with_dense_auto_select(DenseAutoSelectConfig::hessian_fit(2, 5.0, 0.5)))) with the default diagonal metric; funnel: Metric::diagonal() and the same adaptation."
+ },
+ "models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp",
+  "GLMM_Poisson_data-GLMM_Poisson_model",
+  "seeds_data-seeds_centered_model",
+  "kilpisjarvi_mod-kilpisjarvi",
+  "science_irt-grsm_latent_reg_irt",
+  "radon_all-radon_hierarchical_intercept_centered"
+ ],
+ "house_models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "hard_models": [
+  "GLMM_Poisson_data-GLMM_Poisson_model",
+  "seeds_data-seeds_centered_model",
+  "kilpisjarvi_mod-kilpisjarvi",
+  "science_irt-grsm_latent_reg_irt",
+  "radon_all-radon_hierarchical_intercept_centered"
+ ],
+ "gates_only_models": [
+  "GLMM_Poisson_data-GLMM_Poisson_model",
+  "seeds_data-seeds_centered_model",
+  "science_irt-grsm_latent_reg_irt",
+  "radon_all-radon_hierarchical_intercept_centered"
+ ],
+ "parameter_set": {
+  "reference_posteriors": "columns of the posteriordb reference draws (18 posteriors: the 17 house models and kilpisjarvi); oWALNUTS draws constrained through BridgeStan with transformed parameters included (v6 rule)",
+  "gates_only_posteriors": "the four posteriors without posteriordb reference draws (GLMM_Poisson, seeds_centered, grsm_latent_reg_irt, radon hierarchical_intercept_centered): every constrained parameter-block coordinate, transformed parameters and generated quantities excluded (WP46 rule); no z statistic; coordinates with undefined ArviZ statistics are listed and ignored by the nan-ignoring minima, as in v6/WP46"
+ },
+ "predicted_branch": {
+  "eight_schools-eight_schools_noncentered": "diag",
+  "eight_schools-eight_schools_centered": "diag",
+  "diamonds-diamonds": "dense",
+  "earnings-logearn_interaction": "diag",
+  "mesquite-logmesquite_logvash": "dense",
+  "kidiq-kidscore_momhsiq": "diag",
+  "sblrc-blr": "diag",
+  "nes2000-nes": "dense",
+  "arK-arK": "dense",
+  "arma-arma11": "diag",
+  "garch-garch11": "diag",
+  "gp_pois_regr-gp_pois_regr": "diag",
+  "hmm_example-hmm_example": "dense",
+  "bball_drive_event_0-hmm_drive_0": "diag",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs": "diag",
+  "hudson_lynx_hare-lotka_volterra": "dense",
+  "mcycle_gp-accel_gp": "diag",
+  "GLMM_Poisson_data-GLMM_Poisson_model": "diag",
+  "seeds_data-seeds_centered_model": "diag",
+  "kilpisjarvi_mod-kilpisjarvi": "dense",
+  "science_irt-grsm_latent_reg_irt": "diag-cap",
+  "radon_all-radon_hierarchical_intercept_centered": "diag-cap"
+ },
+ "predicted_branch_basis": "House models: WP79's observed branches (earnings and kidiq diagonal, accepted). Hard models, no calibration draws: kilpisjarvi (d 3, a linear trend regression with strongly correlated intercept and slope, near-Gaussian) dense; GLMM_Poisson (d 45) and seeds_centered (d 26), hierarchical with centred group effects, funnel-like, low linearity, diag; radon and grsm_irt diag-cap.",
+ "posteriordb": {
+  "path": "~/infra/posteriordb/posterior_database (read-only)",
+  "commit": "28f8d3d",
+  "reader": "files read directly; no posteriordb package"
+ },
+ "bridgestan": "BridgeStan 2.9.0 source (sha256 b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c) in the lane directory; Python bridgestan 2.9.0 and ArviZ 0.23.4 from ~/venv (read-only).",
+ "seeds": {
+  "P": [
+   868501,
+   868502,
+   868503,
+   868504,
+   868505,
+   868506
+  ],
+  "F": [
+   868401,
+   868402,
+   868403,
+   868404,
+   868405,
+   868406,
+   868407,
+   868408,
+   868409,
+   868410,
+   868411,
+   868412,
+   868413,
+   868414,
+   868415,
+   868416,
+   868417,
+   868418,
+   868419,
+   868420,
+   868421,
+   868422,
+   868423,
+   868424,
+   868425,
+   868426,
+   868427,
+   868428,
+   868429,
+   868430
+  ]
+ },
+ "seed_check": "git grep -lowE over fa04c5b9 for 8685(0[1-6]), 8684[0-3][0-9] and the pipeline seed 990685: no hit; no hit in protocol.json / PREREGISTRATION.md of C:/dev/owalnuts-wt/*/STUDIES; box lanes checked before the first cell (environment.json).",
+ "blocks": {
+  "P": {
+   "kind": "posteriordb",
+   "arms": [
+    "diag",
+    "auto"
+   ],
+   "warmup": 1000,
+   "draws": 1000,
+   "seeds": "P"
+  },
+  "F": {
+   "kind": "funnel",
+   "arms": [
+    "diag",
+    "auto"
+   ],
+   "warmup": 2000,
+   "draws": 20000,
+   "seeds": "F"
+  }
+ },
+ "run_order": "P (models in v7 order; seeds ascending; arms diag, auto), then F (seeds ascending; diag, auto). One process per cell, sequential, 4 threads, timeout 2,700 s; an errored or timed-out cell is a failed cell. Never rerun.",
+ "harness": "STUDIES/metric_autoselect_v2 pdb.rs / funnel.rs unchanged except names; run_study.py adds the v7 gates-only rule (parameter-block coordinates, no z) for the four posteriors without reference draws.",
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "finite_draws": true,
+  "no_sampler_error": true
+ },
+ "cell_timeout_seconds": 2700,
+ "statistics": {
+  "headline": "WP72 form (c): per model, the per-seed ratio auto / diag of min bulk ESS per gradient on seeds where both cells are ok, median across seeds; geomean over models with at least 5 of 6 paired seeds.",
+  "trapped": "a trapped-chain cell has max rank R-hat > 1.1 (WP75's lotka_volterra stuck chain: 1.53)."
+ },
+ "decision_rules": {
+  "R1": "auto passes >= diag passes over all 132 cells.",
+  "R2": "headline auto / diag >= 1.5.",
+  "R3": "no model below 0.9x on the headline per-model ratio (a model without 5 paired ok seeds counts as below).",
+  "R4": "0 new divergences: per model, auto retained divergences over 6 seeds <= diag's.",
+  "R5": "max |z| over passing reference-tier auto cells <= 4.",
+  "R6": "every diagonal-branch (and diag-cap) auto cell, posteriordb and funnel, has the diag arm's per-chain draws hashes and total gradient count.",
+  "R7": "branch identical across the 6 seeds on at least 20 of 22 models.",
+  "R8": "funnel, 30 seeds x 4 x 2,000/20,000: |pooled P5(auto) - 0.0477903522728147| <= its between-seed s.e. Recorded as the diagonal's result by construction (every funnel run is predicted diagonal and then bit-identical).",
+  "R9": "lotka_volterra trapped-chain cells auto <= diag (out of 6).",
+  "D": "git diff fa04c5b9 of src, tests, Cargo.* touches only src/walnutpie.rs and tests/metric_autoselect_hessian.rs; kernel_fingerprint passes without and with research; tests/metric_autoselect.rs and tests/metric_autoselect_hessian.rs pass.",
+  "verdict": "FLIP QUALIFIES iff R1-R9 and D all hold; the flip is the coordinator's."
+ },
+ "reported": "wall per gradient auto / diag (pinned, co-tenanted; the observer's cost), overall and by branch, and on the funnel; dense-branch warmup gradients auto / diag (median over dense cells); branch vs prediction.",
+ "predictions": {
+  "branches": "At least 120 of 132 auto runs as predicted_branch (24 + 3 kilpisjarvi dense models x 6 = 54 dense; 78 diag / diag-cap).",
+  "rules": "All hold. R2 about 2.2 (WP79 2.20 over 17; kilpisjarvi adds a gain, the hard diag models 1.0). R7 holds unless garch11 (G_H 7, linearity 0.40) or one_comp crosses 0.5 on a seed. R8 holds with probability about 0.68 (the diagonal's own coin). R9 holds (identical first 250 transitions; dense branch was 3/3 in WP79).",
+  "wall": "diag-branch wall per gradient within 1.05x (observer cost small); dense-branch higher per gradient (dense leapfrog).",
+  "verdict": "FLIP QUALIFIES, conditional on R8."
+ },
+ "proposed_flip": "If every rule holds: (1) Adaptation::default() for Metric::Diagonal with mass adaptation and at least two chains adds with_dense_auto_select(DenseAutoSelectConfig::hessian_fit(2, 5.0, 0.5)) in Adaptation::warmup_config's defaults (new constant DEFAULT_DENSE_AUTO_SELECT); with_dense_auto_select and hessian_fit leave the research gate; Adaptation::Custom stays as given (opt-out: Custom without the flag, or Metric::diagonal() with a new .auto_metric(false)). (2) Not a new kernel: ALGORITHM_REVISION and kernel_fingerprint pin walnutpie::KernelTuning and do not move (WP68 refinement_levels10_v1 note, as with the MomentumSum, RejectLeaf and best-of-16 flips); sampler-level draws change only on dense-branch runs. (3) Python: no signature change; draws follow the Rust default; add keyword auto_metric=True (False restores the plain diagonal) to the config dict, DEFAULTS, README table and CHANGELOG.",
+ "pre_freeze_runs": "Local Windows unit tests only. After the freeze: the pipeline check on seed 990685 (kidiq diag/auto, a GLMM gates-only diag cell, a plain-feature diag cell, one funnel cell per arm) in the lane scratch directory, not committed."
+}

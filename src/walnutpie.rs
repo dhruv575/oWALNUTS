@@ -12595,6 +12595,34 @@ fn sample_chains_validated<T: Target>(
     if threads > config.limits.max_chains {
         return Err(Error::resource("thread count exceeds its resource limit"));
     }
+    // Above `DenseMass::MAX_DIMENSION` no dense branch exists: the flag is
+    // ineligible and the run is the unflagged diagonal run (no decision is
+    // recorded). WP85 scope rule.
+    if dimension > DenseMass::MAX_DIMENSION
+        && config.warmup.as_ref().is_some_and(|warmup| {
+            warmup
+                .dense_auto_select
+                .is_some_and(|auto| auto.min_linearity.is_some())
+        })
+    {
+        let mut base = config.clone();
+        if let Some(warmup) = base.warmup.as_mut() {
+            warmup.dense_auto_select = None;
+        }
+        let mut output = sample_chains_validated(
+            target,
+            initial_positions,
+            mass,
+            &base,
+            max_threads,
+            run_control,
+            dimension,
+        )?;
+        for chain in &mut output.chains {
+            chain.metadata.warmup = config.warmup.clone();
+        }
+        return Ok(output);
+    }
     let failed_chain = AtomicUsize::new(usize::MAX);
     let shared_initial_step_search = if let Some((warmup, search)) =
         config.warmup.as_ref().and_then(|warmup| {
@@ -12658,11 +12686,10 @@ fn sample_chains_validated<T: Target>(
             || warmup.stable_metric_stop.is_some()
             || warmup.paper_adaptation.is_some()
             || warmup.diagonal_metric_estimator != DiagonalMetricEstimator::DrawVariance
-            || !warmup.adapt_mass
-            || dimension > DenseMass::MAX_DIMENSION)
+            || !warmup.adapt_mass)
     {
         return Err(Error::configuration(
-            "Hessian-fit dense auto-selection needs mass adaptation, the default diagonal estimator, at most DenseMass::MAX_DIMENSION coordinates, and no chain rescue, trapped-chain restart, stable-metric stop or paper adaptation",
+            "Hessian-fit dense auto-selection needs mass adaptation, the default diagonal estimator, and no chain rescue, trapped-chain restart, stable-metric stop or paper adaptation",
         ));
     }
     if let Some(auto) = config
