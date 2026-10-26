@@ -26,5 +26,4 @@ Copied with only the study path changed: `build_harness.sh` (from WP64) and
 
 ## Amendments after the freeze
 
-None yet. Any amendment covers only cells not yet run and is committed
-before them.
+None. All 384 cells ran as frozen at `0e42b648`; no rerun, no amendment.
