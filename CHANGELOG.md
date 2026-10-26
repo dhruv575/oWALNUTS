@@ -65,6 +65,19 @@ architecture and operating system (see the `walnutpie` module documentation).
   `pair_max_rhat` and `agreement_clusters`. Python `chain_warnings()` reports
   it as `check == "rhat_cluster"` with `reference_chains`.
 
+### Fixed
+
+- `from_pymc(model, gil_free=True)` now compiles PyMC's numba function under
+  `pytensor.config.change_flags(numba__fastmath=False)` (WP86,
+  `STUDIES/pymc_gil_free_determinism_v1`). Under PyTensor's default fastmath
+  the numba code differs between a fresh compile and a load from numba's
+  file cache, so the first process to compile a model drew differently from
+  later processes on 3 of 5 models; the cfunc wrapper itself was bit-identical
+  to its function in 310/310 processes. Draws are now the same in cold and
+  warm processes; wall per gradient is unchanged; PyTensor keys its cache on
+  the flag. gil_free draws no longer equal those of a `mode="NUMBA"` callable,
+  which keeps fastmath.
+
 ### Documented
 
 - Python guidance rewritten from WP78 (Linux): `from_pymc(model, gil_free=True)`
@@ -94,7 +107,8 @@ architecture and operating system (see the `walnutpie` module documentation).
   gates, 0.13–0.46x wall per gradient and 0/150 four-thread faults, but
   draws not reproducible against the numba control on 3 of 10 model kinds
   (first-compile processes) and the returned target is not callable. It
-  stays the documented opt-in; a cache-determinism study is the next step.
+  stays the documented opt-in; a cache-determinism study is the next step
+  (WP86, see Fixed).
 - Warmup schedule confirmation (WP77): neither the 500-transition warmup nor
   the 25-transition initial phase confirms on fresh seeds; the defaults stay.
 - Python call paths on Linux (WP78): compiled paths cost what the Rust target

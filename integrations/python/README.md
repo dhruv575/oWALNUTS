@@ -314,7 +314,11 @@ Keep the data unchanged while constructing a target. Shared graph inputs that
 the official transform cannot freeze, such as an unregistered
 `pytensor.shared` used directly in a potential, are explicitly rejected; use
 `pm.Data` or the callable `gil_free=False` path instead. Unsupported snapshot
-transforms or changed parameter layouts also fail before sampling.
+transforms or changed parameter layouts also fail before sampling. The
+function is compiled with PyTensor's numba fastmath off, so draws are the
+same whether the process compiled the model fresh or loaded it from numba's
+file cache (WP86); they differ in the last bits from a `mode="NUMBA"`
+callable, which keeps fastmath.
 Nonfinite densities or gradients during proposals
 become recoverable zero-density evaluations, matching the callable adapter's
 default; an invalid initial point still fails verification.

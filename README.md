@@ -1008,3 +1008,15 @@ provenance.
   funnel within one s.e., fingerprints held. `Stan` stays:
   [`STUDIES/diagonal_metric_shrinkage_v1`](STUDIES/diagonal_metric_shrinkage_v1/README.md)
   (WP81).
+- [E50] `from_pymc(gil_free=True)` determinism (Linux, 5 PyMC models, 310
+  processes alternating a purged and a warm numba cache): the wrapper is
+  bit-identical to the PyTensor function it wraps in 310/310 processes
+  (draws, and gradients at 50 probe points); threads 1 and 4 agree 60/60.
+  The WP83 mismatches are PyTensor's own numba code under its default
+  fastmath, which draws differently when compiled fresh than when loaded
+  from numba's file cache (two hashes per affected model, one cold, one
+  warm; the plain callable splits the same way). Fastmath off or the file
+  cache off each give one hash per model at unchanged wall per gradient.
+  Fixed: gil_free now compiles under `numba__fastmath=False`:
+  [`STUDIES/pymc_gil_free_determinism_v1`](STUDIES/pymc_gil_free_determinism_v1/README.md)
+  (WP86).

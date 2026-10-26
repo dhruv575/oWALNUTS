@@ -1102,6 +1102,7 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
     import ctypes
 
     import numba
+    import pytensor
     from pytensor.compile import SharedVariable
     try:
         from pytensor.graph.traversal import graph_inputs
@@ -1161,10 +1162,16 @@ def _from_pymc_gil_free(model) -> tuple[CFuncTarget, int, np.ndarray, list[str],
             "freezing PyMC data changed the unconstrained layout or initial values; "
             "use gil_free=False"
         )
-    fn = frozen_model.logp_dlogp_function(
-        grad_vars=[frozen_values[name] for name in names],
-        initial_point=frozen_initial, ravel_inputs=True, mode="NUMBA",
-    )
+    # numba fastmath off: with PyTensor's default fastmath the numba code
+    # differs between a fresh compile and a load from numba's file cache, so
+    # the first process to compile a model draws differently from later ones
+    # (WP86, STUDIES/pymc_gil_free_determinism_v1). Wall per gradient is
+    # unchanged and PyTensor keys its cache on the flag.
+    with pytensor.config.change_flags(numba__fastmath=False):
+        fn = frozen_model.logp_dlogp_function(
+            grad_vars=[frozen_values[name] for name in names],
+            initial_point=frozen_initial, ravel_inputs=True, mode="NUMBA",
+        )
     fn.set_extra_values({})
     compiled_inputs = fn._pytensor_function.maker.fgraph.inputs
     if len(compiled_inputs) != 1 or any(isinstance(var, SharedVariable) for var in compiled_inputs):
