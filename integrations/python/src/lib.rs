@@ -2018,6 +2018,17 @@ fn chain_warnings<'py>(
                 d.set_item("value", *max_rhat_without)?;
                 d.set_item("reference", *max_rhat)?;
             }
+            ChainWarning::RHatCluster {
+                reference,
+                max_rhat,
+                min_pair_rhat,
+                ..
+            } => {
+                d.set_item("check", "rhat_cluster")?;
+                d.set_item("value", *min_pair_rhat)?;
+                d.set_item("reference", *max_rhat)?;
+                d.set_item("reference_chains", reference.clone())?;
+            }
             ChainWarning::NonfinitePositions {
                 warmup, sampling, ..
             } => {

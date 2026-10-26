@@ -107,12 +107,18 @@ One line each for the other front doors:
 `Summary` (and `posterior.chain_warnings()`) also prints observe-only
 `warning: chain k ...` lines; computing them never changes a draw.
 
-- **A chain that disagrees with the others** (WP44): a collapsed
+- **A chain that disagrees with the others** (WP44, WP74): a collapsed
   end-of-warmup step, a median log density far below the other chains' at
   the end of warmup or over the draws, or a chain whose removal alone brings
-  R-hat under 1.01. It covers one-wrong-chain failures only (frozen,
-  crawling or second-mode chains), needs at least three chains, and does not
-  replace the R-hat / ESS gates [E22].
+  R-hat under 1.01 [E22]. When R-hat fails and no single chain explains it,
+  a pairwise check groups chains whose pair R-hat is at most 1.01 and flags
+  every chain outside the largest group (if that group has two or more
+  chains). That reports mode splits with two chains per mode or a chain
+  caught crossing between modes: 5/5 split cells in WP74, against 1/5
+  without it, and no finding on 43 healthy posteriordb cells [E40]. It needs
+  at least three chains, misses a split in which no two chains agree, and
+  does not replace the R-hat / ESS gates. The older step and warmup-density
+  checks fired on 3 of those 43 healthy cells (transient warmup dips).
 - **Rejected nonfinite positions**: `warning: chain k rejected n nonfinite
   positions during warmup`. The default `RejectLeaf` rescue records no
   divergence, so this line (or `WorkTotals::nonfinite_position_rejections`)
@@ -875,7 +881,8 @@ provenance.
   that pass every gate; 0/26 replayed WP44/WP55 warnings lost. Caveats: K
   misses a split where crossings leave no two chains agreeing (WP69 cell
   6903202; R-hat still flags it), and the shipped check itself fired on 3
-  passing cells. **Proposed to ship** as an added observe-only check:
+  passing cells. **Shipped** as the added observe-only check
+  `ChainWarning::RHatCluster`:
   [`STUDIES/chain_disagreement_splits_v1`](STUDIES/chain_disagreement_splits_v1/README.md)
   (WP74).
 - [E41] Per-run dense / diagonal auto-selection (research flag

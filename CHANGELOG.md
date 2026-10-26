@@ -35,6 +35,22 @@ architecture and operating system (see the `walnutpie` module documentation).
   in `sampler::Tuning::default()` for WP68. Not qualified as a default; eight
   levels stay.
 
+### Changed
+
+- `diagnostics::ChainWarning` gains an observe-only pairwise-agreement
+  cluster check, `ChainWarning::RHatCluster` (WP74,
+  `STUDIES/chain_disagreement_splits_v1`). When the all-chain max rank R-hat
+  exceeds 1.01, two chains agree if the max R-hat of that pair alone is at
+  most 1.01; every chain outside the largest group of agreeing chains (size
+  tie: the higher retained-draw median log density) is flagged, provided the
+  group has at least two chains. Same coordinates, R-hat and threshold as the
+  leave-one-out check. It reports two-versus-two mode splits and splits with a
+  crossing chain, which no single-chain check sees (5/5 fresh split cells
+  against 1/5; no finding on 43 gate-passing posteriordb cells). Existing
+  checks are unchanged and draws are unchanged. `ChainDisagreement` gains
+  `pair_max_rhat` and `agreement_clusters`. Python `chain_warnings()` reports
+  it as `check == "rhat_cluster"` with `reference_chains`.
+
 ### Documented
 
 - Linux BridgeStan: the concurrent-replica dispatch is qualified on x86_64

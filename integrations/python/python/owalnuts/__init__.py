@@ -199,12 +199,22 @@ class SampleResult:
         (``owalnuts::diagnostics::ChainWarning``; the draws are unchanged).
 
         One dict per finding with ``chain``, ``check`` (``warmup_step``,
-        ``warmup_log_density``, ``sampled_log_density`` or ``rhat``), the
-        chain's ``value``, the ``reference`` it is compared with, the
-        ``threshold`` (density checks) and the printed ``text``. Inputs are
-        each chain's ``warmup_end`` / ``sampling_end`` window (step, median
-        and IQR of the selected-state log density) and the leave-one-chain-out
-        R-hat of the retained draws. These checks need at least three chains.
+        ``warmup_log_density``, ``sampled_log_density``, ``rhat`` or
+        ``rhat_cluster``), the chain's ``value``, the ``reference`` it is
+        compared with, the ``threshold`` (density checks) and the printed
+        ``text``. Inputs are each chain's ``warmup_end`` / ``sampling_end``
+        window (step, median and IQR of the selected-state log density) and
+        the leave-one-chain-out and pairwise R-hat of the retained draws. These
+        checks need at least three chains.
+
+        ``rhat_cluster`` (WP74) fires when R-hat exceeds 1.01: two chains agree
+        when the maximum R-hat of that pair alone is at most 1.01, and every
+        chain outside the largest group of agreeing chains (size tie: the
+        higher retained log density) is flagged, provided that group has at
+        least two chains. Its dict adds ``reference_chains`` (that group);
+        ``value`` is the chain's lowest pair R-hat with the group and
+        ``reference`` the all-chain R-hat. It reports mode splits that no
+        single chain explains (two chains per mode, a chain crossing modes).
         A warning is a reason to inspect the chain, not a verdict; the R-hat
         and ESS gates still apply.
 

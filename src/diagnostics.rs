@@ -656,6 +656,12 @@ pub const RHAT_DISAGREEMENT_THRESHOLD: f64 = 1.01;
 /// second mode, a chain that never left its start). Empty when no single
 /// chain explains the failure (two chains in a second mode, or every chain
 /// mixing poorly) — the field says which case a failed run is in.
+///
+/// The same R-hat is also computed for every pair of chains alone
+/// ([`Self::pair_max_rhat`]); two chains *agree* when their pair's maximum is
+/// at most the threshold, and [`Self::agreement_clusters`] groups chains
+/// connected by agreeing pairs. [`ChainWarning::RHatCluster`] reads them
+/// (`STUDIES/chain_disagreement_splits_v1`, WP74).
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct ChainDisagreement {
@@ -666,6 +672,13 @@ pub struct ChainDisagreement {
     /// Chains whose removal alone brings the maximum R-hat below the
     /// threshold, in chain order.
     pub chains: Vec<usize>,
+    /// Maximum rank R-hat over parameters on chains `i` and `j` alone, for
+    /// `i != j` (symmetric; `NaN` on the diagonal).
+    pub pair_max_rhat: Vec<Vec<f64>>,
+    /// Connected components of the graph whose edges are the agreeing pairs
+    /// (pair maximum at most [`RHAT_DISAGREEMENT_THRESHOLD`]): each component
+    /// in chain order, components ordered by their lowest chain.
+    pub agreement_clusters: Vec<Vec<usize>>,
 }
 
 impl ChainDisagreement {
@@ -707,12 +720,95 @@ impl ChainDisagreement {
             .filter(|(_, value)| **value <= RHAT_DISAGREEMENT_THRESHOLD)
             .map(|(index, _)| index)
             .collect();
+        let mut pair_max_rhat = vec![vec![f64::NAN; chains]; chains];
+        for a in 0..chains {
+            for b in a + 1..chains {
+                let value = parameters
+                    .iter()
+                    .map(|columns| rhat(&[columns[a], columns[b]]))
+                    .fold(f64::NAN, f64::max);
+                pair_max_rhat[a][b] = value;
+                pair_max_rhat[b][a] = value;
+            }
+        }
+        let agreement_clusters = agreement_clusters(&pair_max_rhat);
         Some(Self {
             max_rhat,
             max_rhat_without,
             chains: disagreeing,
+            pair_max_rhat,
+            agreement_clusters,
         })
     }
+}
+
+/// Connected components of the agreeing-pair graph (`pair_max_rhat[a][b] <=`
+/// [`RHAT_DISAGREEMENT_THRESHOLD`]; `NaN` never agrees), each in chain order,
+/// ordered by their lowest chain.
+fn agreement_clusters(pair_max_rhat: &[Vec<f64>]) -> Vec<Vec<usize>> {
+    let chains = pair_max_rhat.len();
+    let mut parent: Vec<usize> = (0..chains).collect();
+    fn root(parent: &[usize], mut x: usize) -> usize {
+        while parent[x] != x {
+            x = parent[x];
+        }
+        x
+    }
+    for (a, row) in pair_max_rhat.iter().enumerate() {
+        for (b, &value) in row.iter().enumerate().skip(a + 1) {
+            if value <= RHAT_DISAGREEMENT_THRESHOLD {
+                let (ra, rb) = (root(&parent, a), root(&parent, b));
+                if ra != rb {
+                    parent[ra.max(rb)] = ra.min(rb);
+                }
+            }
+        }
+    }
+    let mut roots: Vec<usize> = Vec::new();
+    let mut clusters: Vec<Vec<usize>> = Vec::new();
+    for chain in 0..chains {
+        let r = root(&parent, chain);
+        match roots.iter().position(|&x| x == r) {
+            Some(i) => clusters[i].push(chain),
+            None => {
+                roots.push(r);
+                clusters.push(vec![chain]);
+            }
+        }
+    }
+    clusters
+}
+
+/// Index of the reference cluster of [`ChainWarning::RHatCluster`]: the
+/// largest; on a size tie the one with the higher mean retained-draw median
+/// log density (`sampled_medians`, `None` or non-finite = undefined); on a
+/// tie or when undefined, the earlier (lower lowest chain).
+fn reference_cluster(clusters: &[Vec<usize>], sampled_medians: &[Option<f64>]) -> usize {
+    let mean_density = |cluster: &[usize]| -> Option<f64> {
+        let values: Option<Vec<f64>> = cluster
+            .iter()
+            .map(|&chain| sampled_medians.get(chain).copied().flatten())
+            .collect();
+        values
+            .filter(|v| v.iter().all(|x| x.is_finite()))
+            .map(|v| v.iter().sum::<f64>() / v.len() as f64)
+    };
+    let mut reference = 0;
+    for index in 1..clusters.len() {
+        let (size, best) = (clusters[index].len(), clusters[reference].len());
+        if size > best {
+            reference = index;
+        } else if size == best
+            && let (Some(a), Some(b)) = (
+                mean_density(&clusters[index]),
+                mean_density(&clusters[reference]),
+            )
+            && a > b
+        {
+            reference = index;
+        }
+    }
+    reference
 }
 
 /// Step ratio below which [`ChainWarning::WarmupStep`] flags a chain (the
@@ -748,6 +844,17 @@ const CHECK_MIN_CHAINS: usize = 3;
 ///   still in transit). See `walnutpie::ChainWindowSummary`.
 /// * [`Self::RHat`]: [`ChainDisagreement`] names the chain (the maximum rank
 ///   R-hat exceeds 1.01 and drops to at most 1.01 without this chain).
+/// * [`Self::RHatCluster`] (WP74, `STUDIES/chain_disagreement_splits_v1`):
+///   the maximum rank R-hat exceeds 1.01; two chains agree when the maximum
+///   R-hat of that pair alone is at most 1.01, and the chains connected by
+///   agreeing pairs form groups ([`ChainDisagreement::agreement_clusters`]).
+///   The reference group is the largest (size tie: the higher mean
+///   retained-draw median log density, then the lower chain). When the
+///   reference holds at least two chains, every chain outside it is
+///   flagged. Same columns, R-hat and threshold as [`Self::RHat`]. It adds
+///   the splits [`Self::RHat`] cannot see: two chains in each of two modes,
+///   or a chain caught crossing between modes. It needs two agreeing chains,
+///   so it stays silent when every chain disagrees with every other.
 ///
 /// A warning is a reason to look at the chain, not a verdict: a genuinely
 /// multimodal target produces it legitimately, and a run without warnings
@@ -755,10 +862,15 @@ const CHECK_MIN_CHAINS: usize = 3;
 /// at the defaults (WP44, 60 cells) the step and log-density checks never
 /// fired on a healthy run; the R-hat check named a chain twice on runs whose
 /// R-hat was barely above 1.01 and whose chains were all close to the
-/// reference. The warnings cover one-wrong-chain failures only (frozen,
-/// crawling or second-mode chains); runs that fail on ESS, divergences or
-/// all-chain R-hat produce none. Their sensitivity rests on one wrong-chain
-/// run and is not established.
+/// reference. The warnings cover one-wrong-chain failures (frozen,
+/// crawling or second-mode chains) and, through [`Self::RHatCluster`], mode
+/// splits with at least two agreeing chains; runs that fail on ESS,
+/// divergences or all-chain R-hat produce none. In WP74 (96 cells) the
+/// cluster check reported 5/5 fresh split cells against 1/5 for the other
+/// checks and fired on none of 43 gate-passing posteriordb cells; it missed
+/// one two-versus-two split in which crossings left no two chains agreeing.
+/// The step and log-density checks fired on 3 of those 43 healthy cells
+/// (transient warmup dips under the best-of-16 starts).
 ///
 /// One further variant is not a disagreement check:
 /// [`Self::NonfinitePositions`] reports a chain whose integrator produced a
@@ -809,6 +921,18 @@ pub enum ChainWarning {
         /// Maximum rank R-hat over parameters without this chain.
         max_rhat_without: f64,
     },
+    /// R-hat fails and the chain lies outside the largest group of chains
+    /// whose pairs agree ([`ChainDisagreement::agreement_clusters`]).
+    RHatCluster {
+        chain: usize,
+        /// The reference group (at least two chains), in chain order.
+        reference: Vec<usize>,
+        /// Maximum rank R-hat over parameters with every chain.
+        max_rhat: f64,
+        /// Lowest pair maximum R-hat between this chain and a reference
+        /// chain (above the threshold, or `NaN` if undefined).
+        min_pair_rhat: f64,
+    },
     /// The chain rejected nonfinite integrator positions as zero-density
     /// leaves (`WorkTotals::nonfinite_position_rejections`, split into the
     /// discarded warmup and the retained transitions). At least one count is
@@ -830,6 +954,7 @@ impl ChainWarning {
             | Self::WarmupLogDensity { chain, .. }
             | Self::SampledLogDensity { chain, .. }
             | Self::RHat { chain, .. }
+            | Self::RHatCluster { chain, .. }
             | Self::NonfinitePositions { chain, .. } => *chain,
         }
     }
@@ -859,8 +984,8 @@ impl ChainWarning {
     /// the end-of-warmup and retained-draw telemetry of each chain plus
     /// [`ChainDisagreement`] on the retained draws, then each chain's
     /// nonfinite-position rejections. Ordered by check (warmup step, warmup
-    /// log density, sampled log density, R-hat, nonfinite positions), then
-    /// chain. Empty when chains disagree on shape.
+    /// log density, sampled log density, R-hat, R-hat cluster, nonfinite
+    /// positions), then chain. Empty when chains disagree on shape.
     pub fn from_chains(chains: &[ChainOutput]) -> Vec<Self> {
         let Some(first) = chains.first() else {
             return Vec::new();
@@ -951,8 +1076,50 @@ impl ChainWarning {
                     max_rhat_without: d.max_rhat_without[chain],
                 });
             }
+            warnings.extend(Self::clusters(d, sampling_end));
         }
         warnings
+    }
+
+    /// The [`Self::RHatCluster`] findings of `d`, using the retained-draw
+    /// windows' median log density for a size tie.
+    fn clusters(d: &ChainDisagreement, sampling_end: &[Option<&ChainWindowSummary>]) -> Vec<Self> {
+        let clusters = &d.agreement_clusters;
+        if clusters.len() < 2 {
+            return Vec::new();
+        }
+        let medians: Vec<Option<f64>> = (0..d.pair_max_rhat.len())
+            .map(|chain| {
+                sampling_end
+                    .get(chain)
+                    .copied()
+                    .flatten()
+                    .map(ChainWindowSummary::median_log_density)
+            })
+            .collect();
+        let reference = &clusters[reference_cluster(clusters, &medians)];
+        if reference.len() < 2 {
+            return Vec::new();
+        }
+        let mut flagged: Vec<usize> = clusters
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|chain| !reference.contains(chain))
+            .collect();
+        flagged.sort_unstable();
+        flagged
+            .into_iter()
+            .map(|chain| Self::RHatCluster {
+                chain,
+                reference: reference.clone(),
+                max_rhat: d.max_rhat,
+                min_pair_rhat: reference
+                    .iter()
+                    .map(|&r| d.pair_max_rhat[chain][r])
+                    .fold(f64::NAN, f64::min),
+            })
+            .collect()
     }
 }
 
@@ -1005,6 +1172,23 @@ impl fmt::Display for ChainWarning {
                 fmt_num(*max_rhat),
                 fmt_num(*max_rhat_without)
             ),
+            Self::RHatCluster {
+                reference,
+                max_rhat,
+                min_pair_rhat,
+                ..
+            } => {
+                let chains: Vec<String> = reference.iter().map(ToString::to_string).collect();
+                write!(
+                    f,
+                    "max R-hat {} with every chain; chains {} agree in pairs (pair max R-hat <= \
+                     {RHAT_DISAGREEMENT_THRESHOLD}) and this chain's lowest pair max R-hat with \
+                     them is {}",
+                    fmt_num(*max_rhat),
+                    chains.join(", "),
+                    fmt_num(*min_pair_rhat)
+                )
+            }
             Self::NonfinitePositions {
                 warmup, sampling, ..
             } => {
@@ -1428,5 +1612,217 @@ mod tests {
         assert!(ess_bulk(&[&b]).is_nan());
         assert!(ess_bulk(&[]).is_nan());
         assert!(mean(&[]).is_nan());
+    }
+
+    /// A deterministic, well-mixing chain of `n` draws around `offset`;
+    /// distinct `phase` values give chains that agree with each other.
+    fn mixing_chain(n: usize, phase: f64, offset: f64) -> Vec<f64> {
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64 ^ phase.to_bits();
+        (0..n)
+            .map(|_| {
+                // xorshift64*, mapped to a centred uniform: i.i.d.-like noise.
+                state ^= state >> 12;
+                state ^= state << 25;
+                state ^= state >> 27;
+                let u =
+                    (state.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 11) as f64 / (1u64 << 53) as f64;
+                offset + (u - 0.5) * 3.0
+            })
+            .collect()
+    }
+
+    fn cluster_warnings(chains: &[Vec<f64>], medians: &[f64]) -> Vec<ChainWarning> {
+        let views = [chains.iter().map(Vec::as_slice).collect::<Vec<_>>()];
+        let windows: Vec<ChainWindowSummary> = medians
+            .iter()
+            .map(|&m| ChainWindowSummary::new(1000, 2000, 1.0, m, 1.0).expect("window"))
+            .collect();
+        let sampling: Vec<Option<&ChainWindowSummary>> = windows.iter().map(Some).collect();
+        ChainDisagreement::compute(&views)
+            .map(|d| ChainWarning::clusters(&d, &sampling))
+            .unwrap_or_default()
+    }
+
+    fn flagged(warnings: &[ChainWarning]) -> Vec<usize> {
+        warnings.iter().map(ChainWarning::chain).collect()
+    }
+
+    #[test]
+    fn cluster_check_names_the_lower_density_half_of_a_two_two_split() {
+        let n = 1000;
+        let chains = [
+            mixing_chain(n, 0.0, 0.0),
+            mixing_chain(n, 1.0, 8.0),
+            mixing_chain(n, 2.0, 0.0),
+            mixing_chain(n, 3.0, 8.0),
+        ];
+        let views = [chains.iter().map(Vec::as_slice).collect::<Vec<_>>()];
+        let d = ChainDisagreement::compute(&views).expect("R-hat fails");
+        // No single chain explains it, so the leave-one-out check is silent.
+        assert!(d.chains.is_empty());
+        assert_eq!(d.agreement_clusters, vec![vec![0, 2], vec![1, 3]]);
+        assert!(d.pair_max_rhat[0][2] <= RHAT_DISAGREEMENT_THRESHOLD);
+        assert!(d.pair_max_rhat[0][0].is_nan());
+        // Size tie: the group with the higher retained log density (chains
+        // 1, 3) is the reference; chains 0 and 2 are flagged.
+        let warnings = cluster_warnings(&chains, &[-10.0, -9.0, -10.0, -9.0]);
+        assert_eq!(flagged(&warnings), vec![0, 2]);
+        match &warnings[0] {
+            ChainWarning::RHatCluster {
+                reference,
+                max_rhat,
+                min_pair_rhat,
+                ..
+            } => {
+                assert_eq!(reference, &vec![1, 3]);
+                assert!(*max_rhat > RHAT_DISAGREEMENT_THRESHOLD);
+                assert!(*min_pair_rhat > RHAT_DISAGREEMENT_THRESHOLD);
+            }
+            other => panic!("unexpected warning {other:?}"),
+        }
+        // Equal densities: the earlier group (chains 0, 2) is the reference.
+        assert_eq!(flagged(&cluster_warnings(&chains, &[1.0; 4])), vec![1, 3]);
+        // Through `detect` and the printed line.
+        let windows: Vec<ChainWindowSummary> = [-10.0, -9.0, -10.0, -9.0]
+            .iter()
+            .map(|&m| ChainWindowSummary::new(1000, 2000, 1.0, m, 1.0).expect("window"))
+            .collect();
+        let sampling: Vec<Option<&ChainWindowSummary>> = windows.iter().map(Some).collect();
+        let all = ChainWarning::detect(&[], &sampling, Some(&d));
+        assert_eq!(flagged(&all), vec![0, 2]);
+        let lines = ChainWarning::lines(&all);
+        assert_eq!(lines.len(), 2);
+        assert!(
+            lines[0].starts_with("warning: chain 0 disagrees with the other chains: max R-hat ")
+        );
+        assert!(
+            lines[0]
+                .contains("with every chain; chains 1, 3 agree in pairs (pair max R-hat <= 1.01)")
+        );
+    }
+
+    #[test]
+    fn cluster_check_flags_a_minority_chain_and_a_crossing_chain() {
+        let n = 1000;
+        // Chains 0 and 2 sit in one mode, chain 1 in the other, and chain 3
+        // crosses from the first mode to the second halfway through.
+        let mut crossing = mixing_chain(n / 2, 4.0, 0.0);
+        crossing.extend(mixing_chain(n / 2, 5.0, 8.0));
+        let chains = [
+            mixing_chain(n, 0.0, 0.0),
+            mixing_chain(n, 1.0, 8.0),
+            mixing_chain(n, 2.0, 0.0),
+            crossing,
+        ];
+        let views = [chains.iter().map(Vec::as_slice).collect::<Vec<_>>()];
+        let d = ChainDisagreement::compute(&views).expect("R-hat fails");
+        // Removing chain 1 still leaves the crossing chain: no single chain
+        // explains R-hat.
+        assert!(d.chains.is_empty());
+        assert_eq!(d.agreement_clusters, vec![vec![0, 2], vec![1], vec![3]]);
+        assert_eq!(flagged(&cluster_warnings(&chains, &[0.0; 4])), vec![1, 3]);
+    }
+
+    #[test]
+    fn cluster_check_is_silent_without_a_failed_rhat_or_two_agreeing_chains() {
+        let n = 1000;
+        // Every chain agrees: R-hat <= 1.01, no diagnostic, no warning.
+        let agree: Vec<Vec<f64>> = (0..4).map(|i| mixing_chain(n, i as f64, 0.0)).collect();
+        let views = [agree.iter().map(Vec::as_slice).collect::<Vec<_>>()];
+        assert!(ChainDisagreement::compute(&views).is_none());
+        assert!(cluster_warnings(&agree, &[0.0; 4]).is_empty());
+        // Every chain in its own mode: the reference holds one chain, so the
+        // cluster check stays silent (R-hat still fails).
+        let apart: Vec<Vec<f64>> = (0..4)
+            .map(|i| mixing_chain(n, i as f64, 8.0 * i as f64))
+            .collect();
+        let views = [apart.iter().map(Vec::as_slice).collect::<Vec<_>>()];
+        let d = ChainDisagreement::compute(&views).expect("R-hat fails");
+        assert_eq!(d.agreement_clusters.len(), 4);
+        assert!(cluster_warnings(&apart, &[0.0, 1.0, 2.0, 3.0]).is_empty());
+        // A 3-1 split is flagged by both the leave-one-out check and the
+        // cluster check, on the same chain.
+        let mut three_one = agree.clone();
+        three_one[2] = mixing_chain(n, 9.0, 8.0);
+        let views = [three_one.iter().map(Vec::as_slice).collect::<Vec<_>>()];
+        let d = ChainDisagreement::compute(&views).expect("R-hat fails");
+        assert_eq!(d.chains, vec![2]);
+        assert_eq!(flagged(&ChainWarning::clusters(&d, &[])), vec![2]);
+    }
+
+    /// The WP74 study's recorded per-cell inputs (pair maximum R-hats and
+    /// retained-draw median log densities) through this implementation give
+    /// the study's frozen-rule output on all 96 cells: 5/5 fresh split cells
+    /// reported and no finding on the 43 gate-passing posteriordb cells.
+    #[test]
+    fn cluster_check_reproduces_the_wp74_cells() {
+        let parse = |field: &str| -> Vec<f64> {
+            if field == "-" {
+                Vec::new()
+            } else {
+                field
+                    .split(',')
+                    .map(|v| v.parse().expect("number"))
+                    .collect()
+            }
+        };
+        let (mut cells, mut split_reported, mut passing_fired) = (0, 0, 0);
+        let (mut splits, mut passing) = (0, 0);
+        for line in include_str!("../tests/data/wp74_cluster_cells.txt").lines() {
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+            let fields: Vec<&str> = line.split(';').collect();
+            let (id, tag, max_rhat) =
+                (fields[0], fields[1], fields[2].parse::<f64>().expect("max"));
+            let (pairs, medians) = (parse(fields[3]), parse(fields[4]));
+            let expected: Vec<usize> = if fields[5] == "-" {
+                Vec::new()
+            } else {
+                fields[5]
+                    .split(',')
+                    .map(|v| v.parse().expect("chain"))
+                    .collect()
+            };
+            let got = if max_rhat <= RHAT_DISAGREEMENT_THRESHOLD {
+                Vec::new()
+            } else {
+                let mut pair_max_rhat = vec![vec![f64::NAN; 4]; 4];
+                let order = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
+                assert_eq!(pairs.len(), order.len(), "{id}");
+                for (&(a, b), &v) in order.iter().zip(&pairs) {
+                    pair_max_rhat[a][b] = v;
+                    pair_max_rhat[b][a] = v;
+                }
+                let d = ChainDisagreement {
+                    max_rhat,
+                    max_rhat_without: vec![f64::NAN; 4],
+                    chains: Vec::new(),
+                    agreement_clusters: agreement_clusters(&pair_max_rhat),
+                    pair_max_rhat,
+                };
+                let windows: Vec<ChainWindowSummary> = medians
+                    .iter()
+                    .map(|&m| ChainWindowSummary::new(1000, 2000, 1.0, m, 1.0).expect("window"))
+                    .collect();
+                let sampling: Vec<Option<&ChainWindowSummary>> = windows.iter().map(Some).collect();
+                flagged(&ChainWarning::clusters(&d, &sampling))
+            };
+            assert_eq!(got, expected, "{id}");
+            cells += 1;
+            match tag {
+                "fresh_split" => {
+                    splits += 1;
+                    split_reported += usize::from(!got.is_empty());
+                }
+                "passing" => {
+                    passing += 1;
+                    passing_fired += usize::from(!got.is_empty());
+                }
+                _ => {}
+            }
+        }
+        assert_eq!((cells, splits, split_reported), (96, 5, 5));
+        assert_eq!((passing, passing_fired), (43, 0));
     }
 }
