@@ -360,8 +360,19 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     of ticks and >= 90 % per seed under the latency threshold, stuck-chain
     ticks counted as failures; on WP84's data the 200-draw warm refresh
     passes, the 50-draw one fails, nutpie passes, and the oWALNUTS and
-    CmdStan refits fail as sampled. The library side now has a warm API in
-    progress (WP87).
+    CmdStan refits fail as sampled. WP87 shipped the warm API
+    (`WarmState`, `run_warm`, `sample_warm`) and WP88
+    (`STUDIES/online_sv_quote_v2`) ran the rule on it: K = 200 passes on
+    simulated data at N = 250 (78 ms) and N = 1,000 (1.06 s) and fails on
+    real BTC bar-close returns (83 %, precision-bound: own P50 MCSE 1.25 %
+    against 0.9 % simulated), calibrated and drift-free throughout. Open:
+    (a) the draws per quote needed on real returns, by pooling the last H
+    ticks' draws (WP93) rather than raising K; (b) a Rao-Blackwellised P95
+    (the risk quote runs 0.4 pp low from the sample upper quantile); (c)
+    a resident session so per-call overhead stops dominating K = 50 (WP91);
+    (d) metric drift over thousands of ticks and across a regime change
+    (WP96); (e) a fixed-lag window so the gradient cost stops growing with
+    history.
 23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
     250-return SV model from scratch at every tick, with best-of-16 starts,
     left one chain frozen (warmup step collapsed to about 1e-6, log density

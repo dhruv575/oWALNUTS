@@ -1126,3 +1126,23 @@ provenance.
   on fired chains; `ALGORITHM_REVISION` and fingerprints unchanged):
   [`STUDIES/trap_guard_confirmation_v1`](STUDIES/trap_guard_confirmation_v1/README.md)
   (WP90).
+- [E55] Online SV quote benchmark v2 on the library warm API (Linux, 3
+  parallel lanes, 58 cells in 95 minutes; simulated series at N = 250 and
+  1,000 and the archived real BTC-perpetual 30-minute bar-close returns at
+  N = 250; 3 seeds; gated 4 x 2,000/20,000 reference on 173 ticks, 1 of
+  which needed its second seed): at K = 200 transitions per chain the warm
+  refresh keeps the next-period sigma P50 within 2 % and P95 within 5 %
+  of the reference on 96.7 % of ticks at both simulated sizes (median 78 ms
+  at N = 250, 1.06 s at N = 1,000, 100 % under the 2 s threshold) and
+  **passes the frozen rule there**, but on the real series on 83.3 % of
+  ticks (two seeds below 90 %, median 309 ms), so no "real-time quote
+  refresh" sentence is made. Latency never bound: the pass rate tracks
+  the arm's own P50 MCSE (0.9 % simulated, 1.25 % real at K = 200; K = 100
+  60–83 %, K = 50 39–58 %). All 27 warm cells calibrated (0.896–0.907 of
+  draws inside the reference 90 % interval), no stuck chain or divergence,
+  no drift with a common sign. Baselines: nutpie refits 100 % accurate at
+  0.9–4.2 s; oWALNUTS and CmdStan refits 90–97 % as sampled because of
+  stuck chains (every oWALNUTS one flagged; gated 100 %). Python
+  `sample_warm` on a C-ABI target: 71 ms against 77 ms for the Rust cell:
+  [`STUDIES/online_sv_quote_v2`](STUDIES/online_sv_quote_v2/README.md)
+  (WP88).

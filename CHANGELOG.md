@@ -157,6 +157,12 @@ architecture and operating system (see the `walnutpie` module documentation).
 - nutpie gap decomposition (WP80): the lead is sampling gradients per draw
   from a smaller effective step (installed inverse mass far from the
   posterior variance on some coordinates), not warmup and not ESS per draw.
+- Online SV quote benchmark v2 (WP88, on the warm API): K = 200 passes the
+  2 % / 5 % quote rule on simulated data at N = 250 (78 ms median) and
+  N = 1,000 (1.06 s), fails it on real BTC returns (83 % of ticks) on
+  precision, not latency; calibrated, no stuck chains, no drift. "Real-time
+  quote refresh" is not claimed. Next: more draws per quote (pooling across
+  ticks) and a Rao-Blackwellised P95.
 - Frozen warmup chains on the SV model (WP89): a chain that starts at
   log_sigma above 1.3 has its first transitions rejected, its step collapses
   under the identity metric, and the first metric update installs the
