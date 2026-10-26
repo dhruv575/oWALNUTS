@@ -1136,7 +1136,7 @@ fn dense_per_transition_seeding_is_the_default_and_recovers_the_precision() {
     assert!(kappa < 1.5, "{installed:?} kappa {kappa}");
 }
 
-/// WP67 (`STUDIES/refinement_levels10_v1`): the study-only feature
+/// WP68 (`STUDIES/refinement_levels10_v1`): the study-only feature
 /// `candidate-levels10` changes `Tuning::default()` from eight to ten
 /// refinement levels and nothing else.
 #[test]

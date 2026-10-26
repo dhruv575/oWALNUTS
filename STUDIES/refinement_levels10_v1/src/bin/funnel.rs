@@ -1,4 +1,4 @@
-//! WP67 `refinement_levels10_v1`: Neal's 10-D funnel at the pure sampler
+//! WP68 `refinement_levels10_v1`: Neal's 10-D funnel at the pure sampler
 //! defaults, built twice: the plain build (`default`, eight levels) and the
 //! `levels10` build (`--features levels10`, i.e. the library's study-only
 //! `candidate-levels10`, `Tuning::default()` at ten levels). The arm argument

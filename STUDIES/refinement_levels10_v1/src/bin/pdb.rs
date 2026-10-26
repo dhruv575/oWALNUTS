@@ -1,4 +1,4 @@
-//! WP67 `refinement_levels10_v1`, posteriordb arm: one (model, arm, seed) cell.
+//! WP68 `refinement_levels10_v1`, posteriordb arm: one (model, arm, seed) cell.
 //!
 //! Usage: `pdb <model.so> <data.json> <default|levels10> <seed> <out.json> [threads]`
 //!

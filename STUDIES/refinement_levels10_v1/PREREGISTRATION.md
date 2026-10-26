@@ -1,11 +1,15 @@
-# WP67 `refinement_levels10_v1`: preregistration
+# WP68 `refinement_levels10_v1`: preregistration
 
 Frozen 2026-10-26 and committed before the first evidence cell.
 `protocol.json` is the machine-readable copy and takes precedence if the two
 disagree.
 
-**WP number.** This study uses **WP67** on the coordinator's instruction. Lanes
-1, 2 and 4 hold WP64, WP65 and WP68, and WP67 avoids a collision.
+**WP number.** This study is **WP68**, following the coordinator's
+correction. The coordinator first assigned WP67, but lane 4
+(`trapped_chain_restart_v1`) had already taken it. The preregistration
+committed in `b34bdf60` said WP67. It was renamed to WP68 in the next commit,
+before any evidence cell had run (only the disclosed pipeline checks had), so
+no amendment file is needed. Nothing else in the frozen design changed.
 
 ## Question
 

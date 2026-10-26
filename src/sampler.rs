@@ -741,7 +741,7 @@ pub fn candidate_starts<T: Target + ?Sized>(
 
 /// Refinement levels of [`Tuning::default`]: eight (micro-steps down to
 /// `h / 128`). The study-only Cargo feature `candidate-levels10` makes it ten
-/// (`h / 512`) for `STUDIES/refinement_levels10_v1` (WP67); it is off by
+/// (`h / 512`) for `STUDIES/refinement_levels10_v1` (WP68); it is off by
 /// default and is not a default change. Ten levels differ from eight only on
 /// a leaf whose energy error exceeds `max_error` at all eight coarser levels,
 /// so a run in which no leaf exhausts eight levels is bit-identical.
