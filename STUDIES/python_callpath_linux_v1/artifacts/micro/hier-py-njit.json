@@ -1,0 +1,49 @@
+{
+ "target": "hier",
+ "path": "py-njit",
+ "construct_seconds": 0.5588820220000343,
+ "components": {
+  "adapter_call": {
+   "median_us": 2.44,
+   "p10_us": 2.41,
+   "p90_us": 2.47,
+   "mean_us": 2.4668324999999998,
+   "calls": 10000
+  },
+  "wrap_callable(adapter)": {
+   "median_us": 2.61,
+   "p10_us": 2.58,
+   "p90_us": 2.65,
+   "mean_us": 2.6398636,
+   "calls": 10000
+  },
+  "njit_core_from_python": {
+   "median_us": 1.91,
+   "p10_us": 1.89,
+   "p90_us": 1.95,
+   "mean_us": 1.9399216000000001,
+   "calls": 10000
+  },
+  "njit_loop_mean": {
+   "median_us": 1.6339645,
+   "note": "median over 5 repeats of the mean of 10^4 calls inside one njit loop"
+  }
+ },
+ "status": "ok",
+ "packages": {
+  "python": "3.12.3",
+  "executable": "/home/ubuntu/lanes/python_callpath_linux_v1/venv/bin/python",
+  "numpy": "2.4.6",
+  "numba": "0.67.0",
+  "llvmlite": "0.49.0",
+  "owalnuts": "0.3.0",
+  "owalnuts_file": "/home/ubuntu/lanes/python_callpath_linux_v1/repo/integrations/python/python/owalnuts/__init__.py",
+  "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+  "affinity": [
+   12,
+   13,
+   14,
+   15
+  ]
+ }
+}
