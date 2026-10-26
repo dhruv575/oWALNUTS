@@ -1,0 +1,31 @@
+[package]
+name = "chain-disagreement-splits-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP74: can a split-aware chain-disagreement check report every multi-modal split without new false positives?"
+
+[dependencies]
+# `research`: needed only because pdb_cell.rs / two_mode.rs keep WP69's
+# (unused here) restart arm and TrappedChainCheck records; it changes no default
+# and no draw (WP67/WP69 fingerprint).
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "pdb-cell"
+path = "src/bin/pdb_cell.rs"
+
+[[bin]]
+name = "two-mode"
+path = "src/bin/two_mode.rs"
+
+[[bin]]
+name = "replay-cell"
+path = "src/bin/replay_cell.rs"
+
+[profile.release]
+debug = false
+
+[workspace]
