@@ -161,5 +161,13 @@ with the size of the bias, and the pf variant tests whether the stale draws can 
 
 ## Pre-freeze disclosures (not evidence)
 
-PLACEHOLDER (filled before the freeze commit: build, smoke at diagnostic seeds through every code path, analysis on the
-smoke output).
+* Build: `box/build.sh` on the box at the draft commit `ae52d8a1` (release, LTO); the study crate passes
+  `cargo clippy --all-targets -- -D warnings` on 1.88 (Windows GNU) and builds on the box's 1.88.0.
+* Smoke (`run_cells.py smoke`, diagnostic seeds 993901 / 993902 / 993960, never scored): three gated reference ticks
+  (0, 1, 2) all passed the gate at attempt 0 (4 chains kept, R-hat(h_next) <= 1.0001, min ESS 98,631, relative MCSE P50
+  0.09 %, P95 0.20-0.23 %, 8.5 s median wall); a 3-tick K = 5 warm cell (tick-0 fit 2.16 s, no flagged chain, one
+  attempt; 2.3 ms median per tick, 624 gradient calls per tick) and a 3-tick K = 200 cell (tick-0 2.14 s, no flag;
+  65 ms median per tick); `analyze.py` scored all 120 configurations on the smoke output and wrote the three tables
+  (every K = 5 configuration at 0 % on 3 ticks, as 20 draws at P95 must; the two-pair smoke lag curve read 4.3 % and
+  8.8 % P50 change at lags 1 and 2, in line with the WP88 reading). No code changed after the smoke.
+* Disk: the box had 4.3 GB free at the freeze (another lane's artifacts); this study writes about 150 MB of f32 draws.
