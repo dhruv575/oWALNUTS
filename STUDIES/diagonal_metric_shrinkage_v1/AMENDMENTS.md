@@ -39,4 +39,7 @@ The cell code, gates and metrics are unchanged.
 
 ## Amendments after the freeze
 
-None so far.
+- **A-1 (analysis performance, no rule change).** The first `analyze` run
+  re-read every cell file inside the 10,000-resample bootstrap and was
+  stopped after about 10 minutes, before it wrote any output. `cell()` now
+  caches each file. No statistic, threshold or input changed.

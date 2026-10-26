@@ -41,8 +41,15 @@ def jload(p: Path):
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
 
+_CELLS: dict = {}
+
+
 def cell(m, a, s):
-    return jload(ART / "cells" / f"{short(m)}-{a}-{s}.json")
+    """Cached read of one cell (WP81 amendment A-1: performance only)."""
+    k = (m, a, s)
+    if k not in _CELLS:
+        _CELLS[k] = jload(ART / "cells" / f"{short(m)}-{a}-{s}.json")
+    return _CELLS[k]
 
 
 def ok(c, key="min_bulk_ess_per_gradient") -> bool:
