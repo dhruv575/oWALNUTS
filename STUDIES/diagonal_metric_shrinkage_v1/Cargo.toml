@@ -1,0 +1,21 @@
+[package]
+name = "diagonal-metric-shrinkage-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP81: installed diagonal metric vs posterior variance, and two research-only regularisations (StanLowAnchor, StanCoordinateCap) against the default on the house 17 and Neal's funnel"
+
+[dependencies]
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = "1"
+
+[[bin]]
+name = "posteriordb-cell"
+path = "src/main.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[workspace]

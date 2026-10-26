@@ -1,0 +1,133 @@
+{
+ "schema": "diagonal-metric-shrinkage-v1",
+ "ledger_id": "WP81",
+ "status": "FROZEN_BEFORE_EXECUTION",
+ "frozen_utc": "2026-10-26",
+ "question": "Does oWALNUTS's installed diagonal inverse mass (Stan's regularisation, (n/(n+5)) var + 1e-3 * 5/(n+5)) over-state the posterior variance on a subset of coordinates where nutpie's does not, on the house 17; and does either of two research-only regularisations that lower Stan's absolute 1e-3 anchor only where a window variance is below it meet the frozen promotion rule against the default?",
+ "output": "Descriptive ratios and a verdict per candidate against the frozen rule. No default flip in this study whatever the outcome.",
+ "commit": {
+  "full": "f52537a1e221bebe62d4441edcba8a228fd4abe4",
+  "short": "f52537a1",
+  "note": "main 64c9c0d6 (WP80 merged) plus the research-only variants DiagonalMetricRegularization::StanLowAnchor and StanCoordinateCap; the default path is unchanged (kernel fingerprints pass with the research feature off and on)"
+ },
+ "models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "seeds": [
+  810101,
+  810102,
+  810103
+ ],
+ "seeds_note": "fresh: git grep -w finds none of 810101-810103 or 810111-810120 before the freeze",
+ "arms": {
+  "owalnuts": "the shipped default (Sampler::new(), Adaptation::default(): DiagonalMetricRegularization::Stan), v7 cell; the decision baseline",
+  "owalnuts-lowanchor": "Adaptation::Custom(WarmupConfig::new(0.8).with_warmup_exhaustion_rule(DEFAULT_WARMUP_EXHAUSTION).with_metric_regularization(StanLowAnchor)): (n/(n+5)) var_i + (5/(n+5)) min(1e-3, v_min), v_min the smallest finite positive window variance; a coordinate with non-positive window variance keeps 1e-3",
+  "owalnuts-coordcap": "the same with StanCoordinateCap: (n/(n+5)) var_i + (5/(n+5)) min(1e-3, var_i); a coordinate with non-positive window variance keeps 1e-3",
+  "nutpie": "nutpie 0.16.8 at defaults (descriptive only), store_mass_matrix and store_unconstrained (storage flags), WP80's cell code",
+  "shared": "4 chains x 1,000 warmup / 1,000 retained; oWALNUTS through ReplicatedStanTarget with 4 replicas (replicated dispatch, as WP64/WP72/WP80); v7 gates and cell code; both candidate rules are identical to Stan for any window whose variances are all >= 1e-3"
+ },
+ "run_order": "models in v7's house order; arms owalnuts, owalnuts-lowanchor, owalnuts-coordcap, nutpie; seeds ascending; one child per cell; strictly sequential; then the funnel (arm-major, seeds ascending); then refscales; no reruns",
+ "funnel": {
+  "seeds": [
+   810111,
+   810112,
+   810113,
+   810114,
+   810115,
+   810116,
+   810117,
+   810118,
+   810119,
+   810120
+  ],
+  "exact": 0.047790352272814,
+  "design": "v7's funnel binary with the arm switch: Neal's 10-D funnel, starts omega in {-3,-1,1,3}, 4 x 2,000 warmup / 20,000 retained, P(omega < -5)"
+ },
+ "descriptive": {
+  "ratio": "per cell and unconstrained coordinate i: median over chains of installed inverse mass (oWALNUTS 1/mass_diagonal, K = 0.5 sum p^2/M_i; nutpie mass_matrix_inv at the last retained draw) divided by the variance of that cell's retained unconstrained draws pooled over chains (ddof 1); also divided by the posteriordb reference variance on the unconstrained scale (reference draws mapped with BridgeStan param_unconstrain; models whose reference lacks a parameter are skipped). Per model: per coordinate the median over seeds; reported: min, max, number of coordinates outside the band, SD of log ratio; adapted step (median over chains, then seeds)",
+  "band": [
+   0.5,
+   2.0
+  ],
+  "step_gap_models": [
+   "sblrc-blr",
+   "bball_drive_event_0-hmm_drive_0",
+   "eight_schools-eight_schools_centered",
+   "diamonds-diamonds"
+  ]
+ },
+ "rule": {
+  "R1": "cells passing the v7 gates (51 = 17 x 3) not lower than the default on the same seeds",
+  "R2": "WP72-form (c) headline: per model the median over seeds of the paired ratio candidate / default of min bulk ESS per gradient (seeds with both cells status ok; a model enters with >= ceil(5n/6) = 3 of 3), geomean over models >= 1.10",
+  "R3": "median over models of the per-model ratio >= 1.05",
+  "R4": "leave-one-model-out geomean minimum >= 1.00",
+  "R5": "no new divergences: no (model, seed) where the candidate has retained divergences and the default has none",
+  "R6": "funnel: the mean of the ten per-seed P(omega < -5) estimates within 1 s.e. (sd over seeds / sqrt(10)) of 0.0478",
+  "R7": "kernel fingerprint test (tests/kernel_fingerprint.rs) passing with the research flags off, on the box at the commit under test (artifacts/fingerprint-test.txt); also run with the feature on (reported)",
+  "min_ok_fraction": 0.8333333333333334,
+  "headline_min": 1.1,
+  "per_model_median_min": 1.05,
+  "lomo_min": 1.0,
+  "funnel_se_multiple": 1.0,
+  "bootstrap": {
+   "unit": "seed",
+   "resamples": 10000,
+   "rng_seed": 81,
+   "percentiles": [
+    2.5,
+    97.5
+   ],
+   "use": "reported only"
+  },
+  "verdict": "a candidate meets the rule only if R1-R7 all hold; meeting it would make it eligible for a separate default-flip decision, not flip anything here"
+ },
+ "predictions": {
+  "D1": {
+   "source": "coordinator",
+   "text": "on each WP80 step-gap model (sblrc, hmm_drive_0, eight_schools_centered, diamonds) oWALNUTS's default has >= 1 coordinate with own-draw ratio outside [0.5, 2] and nutpie has none"
+  },
+  "D1b": {
+   "source": "this study (WP41: sblrc 9.8-11.9x on five coordinates, diamonds up to 4.27x)",
+   "text": "oWALNUTS's default has >= 5 coordinates outside the band on sblrc and >= 1 on diamonds; on hmm_drive_0 and eight_schools_centered every coordinate is inside the band (their step gap is not the regularisation)",
+   "owalnuts_outside_at_least": {
+    "sblrc-blr": 5,
+    "diamonds-diamonds": 1
+   },
+   "owalnuts_all_inside": [
+    "bball_drive_event_0-hmm_drive_0",
+    "eight_schools-eight_schools_centered"
+   ]
+  },
+  "C1": "both candidates fail R2 (geomean >= 1.10): they change only models with window variances below 1e-3; WP41's sblrc gain of ~2x is worth ~1.04 over 17 models",
+  "C2": "both candidates fail R3 (median over models >= 1.05): most models are unchanged or within noise",
+  "C3": "both candidates reach >= 1.5x on sblrc",
+  "C4": {
+   "text": "each candidate is bit-identical to the default (status, gradients_total, min bulk ESS) on >= 24 of 51 cells",
+   "at_least": 24
+  },
+  "C5": "R1, R5 and R6 hold for both candidates",
+  "expectation": "neither candidate meets the rule; verdict 'not supported, keep Stan'"
+ },
+ "platform": {
+  "machine": "AWS EC2 c7a.4xlarge (AMD EPYC 9R14), Ubuntu 24.04, lane 1: taskset -c 0-3, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, files under ~/lanes/diagonal_metric_shrinkage_v1/",
+  "wall_label_note": "Linux, core-pinned to 4 dedicated cores (taskset -c 0-3) on a shared box with other pinned lanes active (shared L3 and memory bandwidth): walls are 'pinned, co-tenanted'. Pass counts, gradient counts and ESS per gradient are unaffected by co-tenancy. No statistic of this study uses a wall.",
+  "software": "lane venv on Python 3.12.3: nutpie 0.16.8, bridgestan 2.9.0, arviz 0.23.4, numpy 2.4.6, scipy 1.17.1, xarray 2026.9.0, posteriordb 0.2.0, pandas 3.1.0, cmdstanpy 1.3.0; oWALNUTS harness built with Rust 1.88.0 on the box (as WP64/WP72), --release --locked -j4"
+ },
+ "rules": "Freeze PREREGISTRATION.md and protocol.json in a commit before the first evidence cell. Sequential cells; failures, crashes and timeouts are results; no reruns, no tuning after results. A driver crash may be relaunched; only an interrupted cell without a completed artifact may be rerun from scratch with the same seed, recorded in AMENDMENTS.md. Raw draws and telemetry are checksummed and not committed."
+}
