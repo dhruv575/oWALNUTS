@@ -372,7 +372,7 @@ def tables(groups, verdict, ref_stats, rows):
                      f"{g['stuck_ticks']} | {drift} | {tol} | {'PASS' if g['rule_pass'] else 'FAIL'} |")
     L += ["", "Verdict: " + json.dumps(verdict), ""]
     L += ["## Full-refit baselines (20 ticks per seed; scored at the reference ticks within them)", "",
-          "| arm | variant | dataset-N | scored | accurate | pass (acc. and < thr) | stuck ticks / 60 | flagged ticks (oWALNUTS) | "
+          "| arm | variant | dataset-N | scored | accurate | pass (acc. and < thr) | stuck ticks (of scored) | flagged ticks (oWALNUTS, of all 60) | "
           "median s | p95 s | max s | < thr | |P50 err| med | |P95 err| med |", "|" + "---|" * 14]
     for arm in ("refit", "cmdstan", "nutpie"):
         for variant in (("as_sampled", "gated") if arm == "refit" else ("as_sampled",)):

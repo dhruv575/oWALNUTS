@@ -1,0 +1,46 @@
+{"N":250,"dimension":254,"identical":true,"k":50,"per_chain":[true,true,true,true],"seed":880101,"tick0_flagged":[],"tick0_wall_seconds":2.166341776,"tick_seed":880103640319}
+18:43:24 - cmdstanpy - INFO - CmdStan start processing
+18:43:24 - cmdstanpy - INFO - Chain [1] start processing
+18:43:24 - cmdstanpy - INFO - Chain [2] start processing
+18:43:24 - cmdstanpy - INFO - Chain [3] start processing
+18:43:24 - cmdstanpy - INFO - Chain [4] start processing
+18:43:28 - cmdstanpy - INFO - Chain [2] done processing
+18:43:28 - cmdstanpy - INFO - Chain [4] done processing
+18:43:28 - cmdstanpy - INFO - Chain [3] done processing
+18:43:28 - cmdstanpy - INFO - Chain [1] done processing
+18:43:28 - cmdstanpy - WARNING - Non-fatal error during sampling:
+Exception: student_t_lpdf: Scale parameter[1] is inf, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Exception: student_t_lpdf: Scale parameter[1] is 0, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Exception: student_t_lpdf: Scale parameter[1] is inf, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Exception: student_t_lpdf: Scale parameter[1] is inf, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Consider re-running with show_console=True if the above output is unclear!
+18:43:29 - cmdstanpy - INFO - CmdStan start processing
+18:43:29 - cmdstanpy - INFO - Chain [1] start processing
+18:43:29 - cmdstanpy - INFO - Chain [2] start processing
+18:43:29 - cmdstanpy - INFO - Chain [3] start processing
+18:43:29 - cmdstanpy - INFO - Chain [4] start processing
+18:43:33 - cmdstanpy - INFO - Chain [2] done processing
+18:43:33 - cmdstanpy - INFO - Chain [4] done processing
+18:43:33 - cmdstanpy - INFO - Chain [3] done processing
+18:43:33 - cmdstanpy - INFO - Chain [1] done processing
+18:43:33 - cmdstanpy - WARNING - Non-fatal error during sampling:
+Exception: student_t_lpdf: Scale parameter[1] is 0, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Exception: student_t_lpdf: Scale parameter[1] is inf, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Exception: student_t_lpdf: Scale parameter[1] is inf, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Exception: student_t_lpdf: Scale parameter[1] is inf, but must be positive finite! (in 'sv.stan', line 25, column 2 to column 38)
+Consider re-running with show_console=True if the above output is unclear!
+18:47:32 ref sim 250 tick 0 ok ['pass']
+18:47:46 ref sim 250 tick 1 ok ['pass']
+18:48:01 ref sim 250 tick 2 ok ['pass']
+Traceback (most recent call last):
+  File "/home/ubuntu/lanes/online_sv_quote_v2/prefreeze/smoke-study/analyze.py", line 431, in <module>
+    main()
+  File "/home/ubuntu/lanes/online_sv_quote_v2/prefreeze/smoke-study/analyze.py", line 330, in main
+    (OUT / "results-table.md").write_text(tables(groups, verdict, ref_stats, rows))
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/online_sv_quote_v2/prefreeze/smoke-study/analyze.py", line 366, in tables
+    drift = ", ".join("n/a" if d is None else f"{100 * d:+.2f}" for d in g["drift"])
+                                                                         ~^^^^^^^^^
+KeyError: 'drift'
+{"calls":6525446,"chain_warnings":[],"chains":4,"divergences":[0,0,0,0],"draws":20000,"flagged":[],"n":1000,"seed":990001,"status":"ok","steps":[0.07513232961707356,0.07607463200165908,0.07471094211685965,0.06748675487939468],"wall_seconds":68.993920962,"warmup":2000}
+prefreeze-done
