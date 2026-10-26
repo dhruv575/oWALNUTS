@@ -1985,7 +1985,8 @@ pub const TRAPPED_CHAIN_RESTART_SEED_TAG: u64 = 0x7472_6170_7065_6400_u64;
 ///
 /// The multi-chain diagonal driver runs every chain to the end of the first
 /// non-empty slow metric window (transition 100 of Stan's 1,000-transition
-/// schedule) and stops them there together. For each chain `c` it reads
+/// schedule; [`Self::with_check_window`] selects a later window, WP89
+/// `STUDIES/sv_stuck_chains_v1`) and stops them there together. For each chain `c` it reads
 /// `s_c`, the step of the window's last transition (the step that
 /// transition used, [`TransitionDiagnostics::step_size`]), and the median
 /// `m` of the `s_c` over chains. Chain `c` is flagged when
@@ -2024,6 +2025,7 @@ pub struct TrappedChainRestartConfig {
     candidates: usize,
     radius: f64,
     max_attempts: usize,
+    check_window: usize,
 }
 
 impl Default for TrappedChainRestartConfig {
@@ -2044,7 +2046,19 @@ impl TrappedChainRestartConfig {
             candidates: 16,
             radius: 2.0,
             max_attempts: 100,
+            check_window: 0,
         }
+    }
+
+    /// Score the chains at the end of the `window`-th non-empty slow window
+    /// (0, the default, is the first: WP67's rule). When the schedule has no
+    /// such window inside warmup the check is skipped, as when the first
+    /// window is too short. Research candidate of WP89
+    /// (`STUDIES/sv_stuck_chains_v1`): a later boundary lets a step that
+    /// only dips early recover before it is scored.
+    pub const fn with_check_window(mut self, window: usize) -> Self {
+        self.check_window = window;
+        self
     }
 
     /// Flag a chain whose step is below `ratio` times the median step.
@@ -2096,6 +2110,10 @@ impl TrappedChainRestartConfig {
     }
     pub fn max_attempts(&self) -> usize {
         self.max_attempts
+    }
+    /// Index of the non-empty slow window whose end is scored (0 = the first).
+    pub fn check_window(&self) -> usize {
+        self.check_window
     }
 }
 
@@ -13664,14 +13682,19 @@ fn sample_chains_rescued<'a, T: Target>(
     }
 }
 
-/// End of the window the trapped-chain check scores: the first non-empty
-/// slow window, if it lies inside warmup and has enough transitions.
+/// End of the window the trapped-chain check scores: the `check_window`-th
+/// non-empty slow window (the first by default), if it lies inside warmup
+/// and has enough transitions.
 fn trapped_chain_boundary(
     schedule: &WarmupScheduleMetadata,
     discarded: usize,
     restart: &TrappedChainRestartConfig,
 ) -> Option<usize> {
-    let window = schedule.windows.iter().find(|window| !window.is_empty())?;
+    let window = schedule
+        .windows
+        .iter()
+        .filter(|window| !window.is_empty())
+        .nth(restart.check_window)?;
     (window.end <= discarded && window.len() >= restart.minimum_window_transitions)
         .then_some(window.end)
 }

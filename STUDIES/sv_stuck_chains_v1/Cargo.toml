@@ -1,0 +1,31 @@
+[package]
+name = "sv-stuck-chains-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP89: why one chain freezes in warmup on the WP84 stochastic-volatility model, and whether a candidate closes the gap"
+
+[dependencies]
+# `research` for the observe-only comparison observer (per-transition telemetry) and the
+# research-only warmup options under test (trapped-chain restart, gradient-informed metric).
+# It changes no default.
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bin]]
+name = "sv-cell"
+path = "src/bin/sv_cell.rs"
+
+[[bin]]
+name = "pdb-cell"
+path = "src/bin/pdb_cell.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[profile.release]
+debug = false
+
+[workspace]
