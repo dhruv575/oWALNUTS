@@ -1,0 +1,30 @@
+### WP74-CHAIN-DISAGREEMENT-SPLITS-V1: a pairwise-agreement-cluster check (K) added to ChainWarning reports 5/5 fresh splits (shipped 1/5) with 0 warnings on 43 gate-passing cells and 0 regressions on 26 replays; PROPOSE K, documented as covering splits with at least two agreeing chains (it misses 1 of WP69's 3 two-versus-two cells)
+
+- **When.** 2026-10-26 UTC (2026-10-25 local).
+  - Preregistration, protocol and harness were frozen at `b0a1cfe9` before the first cell, after the non-evidence smoke drafts `a4da1eb5` / `69a2e067`.
+  - 96 one-shot cells ran in manifest order, 03:00–03:58 UTC, on lane 4 of the shared Linux box (`taskset -c 12-15`, pinned and co-tenanted). All completed; none was rerun.
+- **Protocol.** `STUDIES/chain_disagreement_splits_v1/{PREREGISTRATION.md,protocol.json}`.
+  - **No library change.** The candidates are in `src/split_rules.rs`, read finished runs only, and are additive to the shipped D1–D4.
+  - **K (primary):** runs when the all-chain max rank R-hat is > 1.01. Pairs agree when their pair max R-hat is <= 1.01. The connected components are the clusters, and the largest is the reference (size tie: the higher retained log density). K fires iff there are >= 2 clusters and the reference has >= 2 chains. It names the chains outside the reference.
+    - K was added after the smoke showed S missing a 2-2 split that contained a crossing chain. This is disclosed.
+  - **S:** both groups of some complementary partition must agree.
+  - **G:** two-sided clusters of the chains' median log densities at D2/D3's 3-IQR scale.
+  - **Arms:**
+    - (i) two-mode target 7401201–06 and `hmm_drive_0` 7401101–06;
+    - (ii) 17 house models x 7402001–03, at 4 x 1,000/1,000 through `ReplicatedStanTarget`;
+    - (iii) replays: WP55's 12 silent-funnel positives plus `hmm_drive_0` / `arma11` 731401, WP44's targeted `hmm_drive_0` / `lotka_volterra` 97464–68 (`Init::uniform()`), and the WP67 trapped seeds 5701103 / 5701106;
+    - IV: WP69's motivating cells, reported but not part of the decision.
+- **Outcome.**
+  - **(i) K holds.** K reports 5/5 fresh split cells (one 2-2, four 3-1). The shipped warning reports 1/5: it missed all four two-mode splits, three of which were 3-1 splits with a crossing chain. S reports 2/5 and G 1/5.
+  - **(ii) K and S hold; G fails.** K and S fire on 0 of the 43 gate-passing cells, G on 2. The **shipped warning itself fires on 3 gate-passing cells**: transient D1/D2 warmup dips on `hmm_drive_0` 7402001 / 7402003 and `lotka_volterra` 7402001.
+  - **(iii) all hold.** 0 of 26 cells regress, by construction. The shipped warning fired on 9 replays. K adds chain 3 on `eight_schools_centered` 731402 (no chain more than 3 SD off) and chain 1 on radon 731401.
+  - **Hashes:** 9/9 reproduce (the WP67 seeds and WP69's block-IV cells). The implementation check holds on 96/96 cells.
+  - **Block IV:** K reports 5 of 6 splits. It misses 6903202, where two chains crossed and no pair agrees (best pair R-hat 1.025). R-hat > 1.01 still flags that cell.
+  - **Predictions:** P1, P1b, P2, P4, P5 and P7 held. P3 held for K and S but not for G or the shipped warning. P6 failed (2/3).
+- **Decision.** PROPOSE K: (i), (ii) and (iii) all hold.
+  - K is a warning change only (a new observe-only `ChainWarning` variant). Draws are unchanged, so there is no `ALGORITHM_REVISION` bump.
+  - The fresh 2-2 evidence is a single cell.
+- **Next.**
+  - Implement K as a `ChainWarning` variant. Document that it covers splits with >= 2 agreeing chains and can name a crossing chain.
+  - Record two things under open question 7: the residual miss (all chains mutually disagreeing after crossings), and the shipped warmup-window checks firing on 3/43 healthy cells at best-of-16 starts.
+  - A cross-mode-aware variant (for example, pairwise R-hat on retained half-windows) is untested.
