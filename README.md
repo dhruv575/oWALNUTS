@@ -860,3 +860,15 @@ provenance.
   `stablestop` (flag `WarmupConfig::with_stable_metric_stop`, off) 40 /
   1.12x. No default changed; WP77 is the fresh-seed confirmation:
   [`STUDIES/warmup_spend_v1`](STUDIES/warmup_spend_v1/README.md) (WP73).
+- [E40] Chain-disagreement warning on mode splits (Linux): a
+  pairwise-agreement-cluster rule K (when all-chain R-hat > 1.01, the
+  largest group of chains whose pairwise R-hat <= 1.01 is the reference and
+  every chain outside it is reported, provided the reference has at least
+  two chains) reported 5/5 fresh two-mode splits (one 2-2, four 3-1) where
+  the shipped leave-one-out check reported 1/5; 0 warnings added on 43 cells
+  that pass every gate; 0/26 replayed WP44/WP55 warnings lost. Caveats: K
+  misses a split where crossings leave no two chains agreeing (WP69 cell
+  6903202; R-hat still flags it), and the shipped check itself fired on 3
+  passing cells. **Proposed to ship** as an added observe-only check:
+  [`STUDIES/chain_disagreement_splits_v1`](STUDIES/chain_disagreement_splits_v1/README.md)
+  (WP74).
