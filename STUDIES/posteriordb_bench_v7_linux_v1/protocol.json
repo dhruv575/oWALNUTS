@@ -1,0 +1,94 @@
+{
+ "schema": "posteriordb-bench-v7-linux-v1",
+ "ledger_id": "WP64",
+ "status": "FROZEN_BEFORE_EXECUTION",
+ "frozen_utc": "2026-10-26",
+ "question": "Do the E26 (WP56, posteriordb v7) and E28 (WP62, v7 seed extension) results reproduce on Linux with identical commits, seeds, models, gates and analysis, and what are the core-pinned Linux timings?",
+ "reproduces": {
+  "E26": {"study": "STUDIES/posteriordb_bench_v7", "ledger_id": "WP56", "protocol_sha256": "d3e67a1ec899e79ce7cd97c0af1195e061d12c1522e03308701db9f797b7ec4c"},
+  "E28": {"study": "STUDIES/posteriordb_bench_v7_seed_extension", "ledger_id": "WP62", "protocol_sha256": "c5bc16101c106c9ec622de644ad1b55ca85f717f00b4962ff45885d86e8200b6"},
+  "rule": "Models, seeds, chains, warmup/retained, threads, gates, gate parameter sets, cell timeout, funnel row, dense arm, statistics and run order are read at run time from the two frozen protocol.json files above, unchanged. This file adds only the platform, the commits, the software pins and the reproduction predictions."
+ },
+ "commits": {
+  "v7": {"full": "f097391cd956246e3fbd5a6593622bc424b65f9e", "use": "every E26 cell: owalnuts arm, funnel row, owalnuts-dense arm (v7 AMENDMENT-1)"},
+  "ext": {"full": "c5c6012287fb99bea3ee73dd1abe01e7369c5d6f", "use": "every E28 owalnuts cell (WP62 protocol)"},
+  "how": "Each harness is built from a clean git worktree of its commit with this study's Cargo.toml, Cargo.lock and src/ (byte-identical to posteriordb_bench_v7's) copied into STUDIES/posteriordb_bench_v7_linux_v1/ of that worktree. The drivers refuse to run an oWALNUTS cell unless OWALNUTS_SOURCE_TREE is a clean checkout of the commit and PREREGISTRATION.md and protocol.json are committed and unmodified in the study repository. The E28 harness is built with --bin posteriordb-bench-v7 only (WP62 had no funnel binary)."
+ },
+ "platform": {
+  "machine": "AWS EC2 c7a.4xlarge (16 dedicated AMD EPYC Zen 4 cores, no SMT, 32 GB), Ubuntu 24.04, us-east-2, instance i-05c712c79c74ae7f8",
+  "lane": "lane 1 of four core-pinned lanes; every process (builds, drivers, cells, children) under taskset -c 0-3; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1",
+  "co_tenancy": "three other lanes (cores 4-15) run other studies concurrently; L3 cache and memory bandwidth are shared",
+  "wall_label": "pinned, co-tenanted",
+  "wall_label_note": "Linux, core-pinned to 4 dedicated cores (taskset -c 0-3) on a shared box with three other pinned lanes active (shared L3 and memory bandwidth): walls are 'pinned, co-tenanted'. Pass counts and ESS per gradient are unaffected by co-tenancy.",
+  "windows_record": "Windows 11, Intel Family 6 Model 197, 16 hybrid cores, up to seven agents concurrently (contended); oWALNUTS through the owned BridgeStan worker (Execution::OwnedSerialised, one effective replica)",
+  "expected_linux_execution": "ReplicatedConcurrent with four replicas (the non-Windows BridgeStan path at f097391c / c5c60122); WP50C found dispatch does not change draws"
+ },
+ "software": {
+  "rust": "1.88.0 x86_64-unknown-linux-gnu (Windows record: 1.88.0-x86_64-pc-windows-gnu)",
+  "python": "a lane venv (~/lanes/posteriordb_bench_v7_linux_v1/venv) on the system Python 3.12 (Windows record: 3.11.16)",
+  "pins": {"cmdstanpy": "1.3.0", "nutpie": "0.16.8", "bridgestan": "2.9.0", "arviz": "0.23.4", "numpy": "2.4.6", "scipy": "1.17.1", "xarray": "2026.9.0", "posteriordb": "0.2.0"},
+  "unpinned": "pandas and transitive dependencies resolve to whatever pip selects; `pip freeze` is committed as artifacts/pip-freeze.txt",
+  "cmdstan": "CmdStan 2.39.0 installed by cmdstanpy.install_cmdstan under ~/infra/cmdstan (read-only for this lane), Linux g++ toolchain",
+  "bridgestan_source": "BridgeStan 2.9.0 C++ source in the lane directory (env BRIDGESTAN), compiled with the system g++",
+  "posteriordb": "~/infra/posteriordb at 28f8d3d6e975315f42aa274a8399f21e07a43b30 (verified before the first cell)"
+ },
+ "binaries": {
+  "owalnuts_libraries": "all 22 compiled here by prepare_competitors.py with bridgestan.compile_model(stan, make_args=[]) (no STAN_THREADS), the WP46/WP48 recipe that produced v7's copied libraries; data JSON written as json.dumps(posterior.data.values())",
+  "cmdstan_executables": "all 22 compiled here (v7 copied three from WP48)",
+  "nutpie_libraries": "all 22 compiled here with nutpie.compile_stan_model's call bridgestan.compile_model(..., make_args=['STAN_THREADS=true'])",
+  "compilation": "before the first cell, four worker processes pinned to cores 0-3; infrastructure, not evidence; excluded from wall as in v7"
+ },
+ "legitimate_differences": [
+  "libm: Rust f64 transcendental functions and the Stan model code call the platform C math library (glibc on Linux, mingw-w64/msvcrt on Windows); a one-ulp difference in any exp/log/lgamma evaluation changes a trajectory, after which HMC paths diverge chaotically and draws differ although seeds are identical",
+  "compiler and code generation: the BridgeStan and CmdStan model code is compiled by Linux g++ rather than mingw-w64 g++ (different versions, different inlining and instruction selection, the same -O3 and no -march)",
+  "BLAS/LAPACK: numpy's bundled OpenBLAS differs by platform build; it is not on the gate statistics' path (ArviZ uses FFTs and sorting), but is listed",
+  "CmdStan and nutpie builds: different toolchains and TBB builds; their RNG streams are seed-determined, so the same libm caveat applies",
+  "Python 3.12 vs 3.11 and pandas version: not on the numerical path"
+ ],
+ "run_order": [
+  "A. prepare_competitors.py 4 (all 66 binaries), then run_posteriordb.py run --arms=cmdstan,nutpie (v7 Phase 1 order: models, arms cmdstan then nutpie, seeds ascending)",
+  "B. run_posteriordb.py run --arms=owalnuts (f097391c harness), then run_posteriordb.py checks (funnel seeds 560571-560573), then run_posteriordb.py run --arms=owalnuts-dense (v7 Phase 2 order)",
+  "C. run_extension.py run (c5c60122 harness; models in order, owalnuts then cmdstan, seeds 620601-620603)",
+  "D. run_posteriordb.py analyze; run_extension.py analyze (pooled over this study's Linux v7 and extension cells); compare_windows.py",
+  "Strictly sequential within the lane: one sampling process at a time."
+ ],
+ "analysis": {
+  "v7": "run_posteriordb.py analyze, v7's code unchanged: pass counts, P1-P8, head-to-head geomeans, release rules, dense table",
+  "ext": "run_extension.py analyze, WP62's code unchanged except that its pooled analysis reads this study's Linux v7 cells",
+  "comparison": "compare_windows.py: per cell, Linux vs Windows pass/fail, bit-identity indicators and wall per gradient; per arm and block, pass counts, same-pass cells, bit-identical cells and the geomean over models of the Linux/Windows seed-median wall-per-gradient ratio",
+  "bit_identity": {
+   "relative_tolerance": 1e-12,
+   "definition": "A cell is bit-identical to its Windows counterpart if both are status ok, gradients_total is equal, every per-chain final step size is equal, every gate-parameter posterior mean is equal (to the relative tolerance, which absorbs only summation-order differences), and for oWALNUTS the 16-candidate start log densities and chosen candidates are equal. A funnel seed is bit-identical if target_calls_total and the tail-mass estimate are equal."
+  }
+ },
+ "predictions": {
+  "L1": {
+   "text": "oWALNUTS pass counts reproduce exactly: 43/51 house and 6/15 new-five on the v7 seeds (E26), 40/48 on the extension seeds (E28). Unevaluable unless all 114 oWALNUTS cells are recorded.",
+   "expected": {"house": 43, "new": 6, "ext": 40}
+  },
+  "L2": {
+   "text": "CmdStan and nutpie pass counts are each within 3 of the Windows record: CmdStan 34/51, 7/15, 30/48; nutpie 26/51, 3/15",
+   "tolerance": 3
+  },
+  "L3": {
+   "text": "the Linux six-seed pooled fixed-16 oWALNUTS / CmdStan min-bulk-ESS-per-gradient geomean (WP62's statistic and inclusion rule over this study's v7-seed and extension-seed cells) lies in the E28 leave-one-seed-out interval [0.740, 0.822]",
+   "interval": [0.740, 0.822]
+  },
+  "L4": {
+   "text": "on Linux, where oWALNUTS dispatches to four BridgeStan replicas instead of the serialised Windows owned worker, v7's P4 holds: fixed-16 geomean wall per gradient vs CmdStan <= 1.0 (Windows: 1.849, serialised and contended). Unevaluable under v7's rule if a fixed-16 model is incomplete; the value over complete models is then reported.",
+   "threshold": 1.0
+  },
+  "R1": {
+   "text": "reported, not a prediction: the number of oWALNUTS cells and funnel seeds that are bit-identical to Windows",
+   "expectation": "Stated before running: bit-identity across platforms is not guaranteed and is the main risk to L1. If libm or code generation differs anywhere on a cell's path, that cell's draws are a different realisation at the same seed, and its pass/fail is then a fresh draw from the same sampler. We expect the funnel (pure Rust, few transcendental calls per gradient) and some low-dimensional models to be bit-identical, and some cells, especially ODE and HMM models, not to be."
+  },
+  "reported": "v7's P1-P8 and release rules on Linux beside Windows; WP62's Q1-Q4, single-seed and leave-one-seed-out values on Linux beside Windows; per-arm Linux/Windows wall-per-gradient ratios; ESS per second vs CmdStan and nutpie; the dense-arm table"
+ },
+ "interpretation": {
+  "L1_fails_with_divergent_cells": "If L1 fails, every differing cell is classified by its bit-identity indicators. A difference on a non-identical cell is attributed to platform floating point (a different realisation at the same seed) and read against E28's seed variation (oWALNUTS 40/48 on both Windows seed sets). A difference on a bit-identical cell would be an analysis-stack defect and is reported as such.",
+  "walls": "Linux walls are 'pinned, co-tenanted' and Windows walls 'contended'; neither drives a sampler conclusion. L4 tests only the serialisation explanation preregistered in v7."
+ },
+ "seeds_note": "The seeds are E26's (560561-560563, funnel 560571-560573) and E28's (620601-620603), reused on purpose: this is a reproduction. No cell of this study has been run before the freeze.",
+ "cell_timeout_seconds": 2700,
+ "rules": "Freeze PREREGISTRATION.md and protocol.json in a commit before the first cell. Sequential cells; failures and timeouts are results; no reruns, no tuning after results. A driver crash may be relaunched; only an interrupted cell without a completed artifact may be rerun from scratch with the same seed, with the deviation recorded in AMENDMENTS.md. Raw draws and CmdStan output are checksummed and not committed; cell metrics, summaries, tables, logs and manifests are committed."
+}
