@@ -42,7 +42,7 @@ BLOCKS = PROTOCOL["blocks"]
 HOUSE = PROTOCOL["house_models"]
 GATES = PROTOCOL["gates"]
 TIMEOUT = PROTOCOL["cell_timeout_seconds"]
-THRESHOLD = PROTOCOL["selection"]["threshold"]
+THRESHOLD = PROTOCOL["change_B"]["threshold"]
 EXACT_P5 = 0.0477903522728147
 
 
