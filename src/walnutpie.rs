@@ -589,6 +589,33 @@ pub enum DiagonalMetricRegularization {
     ScaleFreeStanMedian,
 }
 
+/// Which windowed statistic the diagonal warmup turns into the inverse
+/// metric. Research-only (`STUDIES/gradient_metric_v1`, WP71). Diagonal
+/// driver only. Off by default: [`Self::DrawVariance`] is the shipped
+/// estimator and leaves every run bit-identical.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DiagonalMetricEstimator {
+    /// The windowed variance of the selected positions (the shipped rule).
+    #[default]
+    DrawVariance,
+    /// The gradient-informed estimate of nutpie (WP58): per coordinate,
+    /// `s_i = sqrt(var(x_i) / var(g_i))`, where `x` are the selected
+    /// positions and `g` the log-density gradients at them over the current
+    /// slow window. `s_i` replaces the draw variance in the configured
+    /// [`DiagonalMetricRegularization`] (with the window count `n`), and the
+    /// result is floored and inverted exactly as for [`Self::DrawVariance`].
+    /// A coordinate whose `var(x_i)` or `var(g_i)` is not finite and
+    /// positive, or whose ratio is not finite and positive, keeps its draw
+    /// variance.
+    GradientInformed,
+    /// [`Self::GradientInformed`] on the exact (Chan) merge of the previous
+    /// slow window's and the current window's position and gradient
+    /// statistics, so consecutive estimates overlap by one window; the first
+    /// slow window uses its own statistics only. `n` is the merged count.
+    GradientInformedOverlap,
+}
+
 /// How the windowed dense covariance estimate is regularised before it is
 /// inverted and installed as the dense metric (dense facade only).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1300,6 +1327,7 @@ pub struct WarmupConfig {
     dual_averaging_acceptance: DualAveragingAcceptance,
     paper_adaptation: Option<PaperAdaptationConfig>,
     metric_regularization: DiagonalMetricRegularization,
+    diagonal_metric_estimator: DiagonalMetricEstimator,
     dense_metric_regularization: DenseMetricRegularization,
     dense_warmup_seeding: DenseWarmupSeeding,
     dense_symmetrize_precision: bool,
@@ -1331,6 +1359,7 @@ impl Default for WarmupConfig {
             dual_averaging_acceptance: DualAveragingAcceptance::CurrentCoarseEndpoint,
             paper_adaptation: None,
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
+            diagonal_metric_estimator: DiagonalMetricEstimator::DrawVariance,
             dense_metric_regularization: DenseMetricRegularization::Stan,
             dense_warmup_seeding: DenseWarmupSeeding::PerTransition,
             dense_symmetrize_precision: true,
@@ -1450,6 +1479,18 @@ impl WarmupConfig {
     }
     pub fn metric_regularization(&self) -> DiagonalMetricRegularization {
         self.metric_regularization
+    }
+    /// Select the windowed statistic behind the diagonal metric; see
+    /// [`DiagonalMetricEstimator`]. Research-only (`STUDIES/gradient_metric_v1`,
+    /// WP71). Diagonal driver only. Off by default. Cannot be combined with
+    /// [`WarmupConfig::with_chain_rescue`] or trapped-chain restart.
+    #[cfg(feature = "research")]
+    pub fn with_diagonal_metric_estimator(mut self, estimator: DiagonalMetricEstimator) -> Self {
+        self.diagonal_metric_estimator = estimator;
+        self
+    }
+    pub fn diagonal_metric_estimator(&self) -> DiagonalMetricEstimator {
+        self.diagonal_metric_estimator
     }
     /// Select how the windowed dense covariance is regularised (dense
     /// adaptive facade only; ignored by every other facade).
@@ -1818,6 +1859,13 @@ fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
     {
         return Err(Error::configuration(format!(
             "trapped-chain restart is not supported by the {facade} facade"
+        )));
+    }
+    if config.warmup.as_ref().is_some_and(|warmup| {
+        warmup.diagonal_metric_estimator != DiagonalMetricEstimator::DrawVariance
+    }) {
+        return Err(Error::configuration(format!(
+            "a non-default diagonal metric estimator is not supported by the {facade} facade"
         )));
     }
     Ok(())
@@ -6548,6 +6596,76 @@ impl DiagonalVariance {
                 .collect(),
         )
     }
+
+    /// The gradient-informed mass of [`DiagonalMetricEstimator::GradientInformed`]
+    /// (WP71): `self` accumulates the selected positions and `gradients` the
+    /// log-density gradients at the same transitions. Per coordinate the
+    /// estimate `sqrt(var(x_i) / var(g_i))` (the draw variance where that is
+    /// not finite and positive) goes through the same regularisation, floor
+    /// and inversion as [`Self::regularized_mass`]; the scale-free anchors
+    /// use the median of the estimates.
+    fn gradient_informed_mass(
+        &self,
+        gradients: &DiagonalVariance,
+        regularization: DiagonalMetricRegularization,
+    ) -> Option<Vec<f64>> {
+        if self.count < 2 || gradients.count != self.count {
+            return None;
+        }
+        let n = self.count as f64;
+        let estimates: Vec<f64> = self
+            .m2
+            .iter()
+            .zip(&gradients.m2)
+            .map(|(m2_x, m2_g)| {
+                let var_x = m2_x / (n - 1.0);
+                let var_g = m2_g / (n - 1.0);
+                if var_x.is_finite() && var_x > 0.0 && var_g.is_finite() && var_g > 0.0 {
+                    let ratio = (var_x / var_g).sqrt();
+                    if ratio.is_finite() && ratio > 0.0 {
+                        return ratio;
+                    }
+                }
+                var_x
+            })
+            .collect();
+        let anchor = || {
+            let mut sorted = estimates.clone();
+            if sorted.is_empty() {
+                return 1.0;
+            }
+            sorted.sort_by(f64::total_cmp);
+            let mid = sorted.len() / 2;
+            let median = if sorted.len() % 2 == 1 {
+                sorted[mid]
+            } else {
+                0.5 * (sorted[mid - 1] + sorted[mid])
+            };
+            if median.is_finite() && median > 0.0 {
+                median
+            } else {
+                1.0
+            }
+        };
+        let prior = match regularization {
+            DiagonalMetricRegularization::TowardUnit => 5.0 / (n + 5.0),
+            DiagonalMetricRegularization::Stan => 1.0e-3 * (5.0 / (n + 5.0)),
+            DiagonalMetricRegularization::ScaleFreeMedian => anchor() * (5.0 / (n + 5.0)),
+            DiagonalMetricRegularization::ScaleFreeStanMedian => {
+                1.0e-3 * anchor() * (5.0 / (n + 5.0))
+            }
+        };
+        Some(
+            estimates
+                .iter()
+                .map(|estimate| {
+                    ((n / (n + 5.0)) * estimate + prior)
+                        .max(MIN_ADAPTATION_VARIANCE)
+                        .recip()
+                })
+                .collect(),
+        )
+    }
 }
 
 fn inverse_mass(mass: &DiagonalMass) -> Result<Vec<f64>, Error> {
@@ -7758,6 +7876,12 @@ struct ChainRun<'a, T: Target> {
     search_step: Option<f64>,
     stream_step: f64,
     variance: DiagonalVariance,
+    /// Window gradient statistics of a non-default
+    /// [`DiagonalMetricEstimator`]; `None` (no work) for the shipped one.
+    gradient_variance: Option<DiagonalVariance>,
+    /// The previous slow window's (position, gradient) statistics, kept for
+    /// [`DiagonalMetricEstimator::GradientInformedOverlap`] only.
+    previous_window: Option<(DiagonalVariance, DiagonalVariance)>,
     paper_window: PaperWindow,
     samples: Vec<f64>,
     diagnostics: Vec<TransitionDiagnostics>,
@@ -7883,6 +8007,13 @@ impl<'a, T: Target> ChainRun<'a, T> {
             .map(|search| search.selected_step);
         let stream_step = active_tuning.step_size;
         let variance = DiagonalVariance::new(dimension);
+        let gradient_variance = config
+            .warmup
+            .as_ref()
+            .filter(|warmup| {
+                warmup.diagonal_metric_estimator != DiagonalMetricEstimator::DrawVariance
+            })
+            .map(|_| DiagonalVariance::new(dimension));
         let paper_window = PaperWindow::new();
         let sample_len = config
             .retained
@@ -7965,6 +8096,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
             search_step,
             stream_step,
             variance,
+            gradient_variance,
+            previous_window: None,
             paper_window,
             samples,
             diagnostics,
@@ -8001,6 +8134,8 @@ impl<'a, T: Target> ChainRun<'a, T> {
             ref mut search_step,
             ref mut stream_step,
             ref mut variance,
+            ref mut gradient_variance,
+            ref mut previous_window,
             ref mut paper_window,
             ref mut samples,
             ref mut diagnostics,
@@ -8466,6 +8601,9 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 *cached_state = Some(result.selected.clone());
             }
             let selected_log_density = result.selected.log_prob;
+            let selected_gradient = gradient_variance
+                .is_some()
+                .then(|| result.selected.grad.clone());
             *position = result.selected.theta;
             let internal = result.diagnostics;
             let public = TransitionDiagnostics {
@@ -8576,6 +8714,11 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 });
                 if warmup.adapt_mass && window_index.is_some() {
                     variance.update(position);
+                    if let (Some(gradients), Some(gradient)) =
+                        (gradient_variance.as_mut(), selected_gradient.as_deref())
+                    {
+                        gradients.update(gradient);
+                    }
                 }
                 if let Some(record) = rescue_record.as_mut()
                     && window_index.is_some()
@@ -8652,8 +8795,29 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         restart_reference_multiplier: None,
                         dual_averaging_after_restart: None,
                     };
-                    if let Some(diagonal) = variance.regularized_mass(warmup.metric_regularization)
-                    {
+                    let estimated =
+                        match (warmup.diagonal_metric_estimator, gradient_variance.as_ref()) {
+                            (DiagonalMetricEstimator::GradientInformed, Some(gradients)) => {
+                                variance
+                                    .gradient_informed_mass(gradients, warmup.metric_regularization)
+                            }
+                            (DiagonalMetricEstimator::GradientInformedOverlap, Some(gradients)) => {
+                                match previous_window.as_ref() {
+                                    Some((previous_x, previous_g)) => {
+                                        merge_variance(previous_x, variance).gradient_informed_mass(
+                                            &merge_variance(previous_g, gradients),
+                                            warmup.metric_regularization,
+                                        )
+                                    }
+                                    None => variance.gradient_informed_mass(
+                                        gradients,
+                                        warmup.metric_regularization,
+                                    ),
+                                }
+                            }
+                            _ => variance.regularized_mass(warmup.metric_regularization),
+                        };
+                    if let Some(diagonal) = estimated {
                         // Build and validate both candidates before changing either
                         // half of the active metric pair.
                         let candidate_mass = DiagonalMass::from_diagonal(diagonal)?;
@@ -8703,6 +8867,15 @@ impl<'a, T: Target> ChainRun<'a, T> {
                     telemetry.metric_updates.push(update);
                     if let Some(record) = rescue_record.as_mut() {
                         record.last_variance = Some(variance.clone());
+                    }
+                    if let Some(gradients) = gradient_variance.as_mut() {
+                        let finished =
+                            std::mem::replace(gradients, DiagonalVariance::new(dimension));
+                        if warmup.diagonal_metric_estimator
+                            == DiagonalMetricEstimator::GradientInformedOverlap
+                        {
+                            *previous_window = Some((variance.clone(), finished));
+                        }
                     }
                     *variance = DiagonalVariance::new(dimension);
                 }
@@ -11217,6 +11390,14 @@ fn sample_chains_validated<T: Target>(
     }) {
         return Err(Error::configuration(
             "trapped-chain restart cannot be combined with chain rescue",
+        ));
+    }
+    if config.warmup.as_ref().is_some_and(|warmup| {
+        warmup.diagonal_metric_estimator != DiagonalMetricEstimator::DrawVariance
+            && (warmup.chain_rescue.is_some() || warmup.trapped_chain_restart.is_some())
+    }) {
+        return Err(Error::configuration(
+            "a non-default diagonal metric estimator cannot be combined with chain rescue or trapped-chain restart",
         ));
     }
     if let Some(rescue) = config
