@@ -24,4 +24,4 @@ and `.gitignore`.
 
 ## Amendments after the freeze
 
-None yet.
+None. All 288 cells ran as frozen at `c7e39bb2`; no rerun, no amendment.
