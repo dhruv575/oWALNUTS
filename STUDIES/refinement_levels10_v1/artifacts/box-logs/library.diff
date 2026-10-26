@@ -1,0 +1,70 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index ee05383f7..eca967e82 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -33,6 +33,11 @@ path = "src/lib.rs"
+ [features]
+ # Research-only facades and controls (see the `walnutpie` module docs).
+ research = []
++# Study-only candidate default (WP68, `STUDIES/refinement_levels10_v1`):
++# `sampler::Tuning::default()` uses ten refinement levels (finest micro step
++# h / 512) instead of eight. Off by default; with the feature off every run is
++# unchanged. Not a default flip.
++candidate-levels10 = []
+ 
+ [dependencies]
+ rand = { version = "0.9", features = ["small_rng"] }
+diff --git a/src/sampler.rs b/src/sampler.rs
+index f94820d6f..744cedee8 100644
+--- a/src/sampler.rs
++++ b/src/sampler.rs
+@@ -739,6 +739,18 @@ pub fn candidate_starts<T: Target + ?Sized>(
+     Ok(out)
+ }
+ 
++/// Refinement levels of [`Tuning::default`]: eight (micro-steps down to
++/// `h / 128`). The study-only Cargo feature `candidate-levels10` makes it ten
++/// (`h / 512`) for `STUDIES/refinement_levels10_v1` (WP68); it is off by
++/// default and is not a default change. Ten levels differ from eight only on
++/// a leaf whose energy error exceeds `max_error` at all eight coarser levels,
++/// so a run in which no leaf exhausts eight levels is bit-identical.
++pub const DEFAULT_MAX_REFINEMENT_LEVELS: usize = if cfg!(feature = "candidate-levels10") {
++    10
++} else {
++    8
++};
++
+ /// Kernel tuning: the macro step, tree depth, refinement, and error
+ /// threshold. Values are validated when the run starts.
+ ///
+@@ -779,7 +791,7 @@ impl Default for Tuning {
+             step_size: 0.5,
+             max_depth: 10,
+             min_micro_steps: 1,
+-            max_refinement_levels: 8,
++            max_refinement_levels: DEFAULT_MAX_REFINEMENT_LEVELS,
+             max_error: 1.0,
+             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
+             kernel_options: KernelOptions {
+diff --git a/tests/sampler_api.rs b/tests/sampler_api.rs
+index c44b47b73..9b132e8ac 100644
+--- a/tests/sampler_api.rs
++++ b/tests/sampler_api.rs
+@@ -1135,3 +1135,17 @@ fn dense_per_transition_seeding_is_the_default_and_recovers_the_precision() {
+     let kappa = (trace / 2.0 + root) / (trace / 2.0 - root);
+     assert!(kappa < 1.5, "{installed:?} kappa {kappa}");
+ }
++
++/// WP68 (`STUDIES/refinement_levels10_v1`): the study-only feature
++/// `candidate-levels10` changes `Tuning::default()` from eight to ten
++/// refinement levels and nothing else.
++#[test]
++fn default_refinement_levels_follow_the_candidate_feature() {
++    let expected = if cfg!(feature = "candidate-levels10") { 10 } else { 8 };
++    assert_eq!(owalnuts::sampler::DEFAULT_MAX_REFINEMENT_LEVELS, expected);
++    let tuning = owalnuts::sampler::Tuning::default();
++    assert_eq!(tuning.to_kernel().unwrap().max_refinement_levels(), expected);
++    let eight = owalnuts::sampler::Tuning::default().max_refinement_levels(8);
++    let ten = owalnuts::sampler::Tuning::default().max_refinement_levels(10);
++    assert_eq!(tuning, if expected == 10 { ten } else { eight });
++}
