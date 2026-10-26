@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Writes protocol.json (the frozen WP88 protocol and cell order). Run once before the freeze."""
+import json
+from pathlib import Path
+
+SEEDS = [880101, 880102, 880103]
+REF_TICKS = {"sim-N250": list(range(0, 101)), "real-N250": list(range(0, 101, 2)),
+             "sim-N1000": [0, 5, 10, 15, 20] + list(range(30, 101, 10))}
+P = {
+    "wp": "WP88", "ledger_id": "WP88-ONLINE-SV-QUOTE-V2", "base": "main 5027bc1e (WP87 warm-continuation API)",
+    "model": {"source": "market_uncertainty_v1 sv_prototype Target, P=1 intercept, K=0 flow (WP84 target, unchanged)",
+              "rho": 0.95, "nu": 5, "coordinates": "[mu, log_sigma, beta, z[n]]",
+              "priors": "WP84 ILLUSTRATIVE_PRIORS: mu~N(2 log 0.005,1), log_sigma~N(log 0.2,0.5), beta~N(0,0.002), z~N(0,1)"},
+    "datasets": {
+        "sim": "models/data-sim.json = WP84 models/data.json byte-identical (simulate.py seed 84084, 1,100 returns + truth h)",
+        "real": "models/data-real.json: 682 BTC-PERPETUAL 30-minute bar-close log returns reconstructed by real_data.py from the 72 "
+                "overlapping rolling windows in STUDIES/market_uncertainty_v1/artifacts/sv-historical-rolling-v1/evidence.zip "
+                "(September development acquisition); same priors and scale as sim (sd 0.0029 vs prior centre 0.005, no "
+                "rescaling); bar-close, not midpoint (the only archived midpoint series has 24 rows); N=250 only (682 < 1,100)"},
+    "stream": {"N": {"sim": [250, 1000], "real": [250]}, "warm_ticks": 100, "refit_ticks": 20, "obs_per_tick": 1,
+               "posterior_at_tick_t": "first N+t returns"},
+    "quantities": {
+        "h_next": "mu + rho (h_last - mu) + exp(log_sigma) eps, eps[c,j] = default_rng(eps_seed_base+tick).normal(size=(4,20000))[c,j] "
+                  "(chain index c of the arm or reference)",
+        "eps_seed_base": 840000, "sigma_next": "exp(h_next/2)", "gated": ["P50 (half-spread)", "P95 (risk quote)"],
+        "reported": ["P5", "mean", "straddle E[exp(h_next/2)] Rao-Blackwellised",
+                     "arm's own quantile MCSE (arviz) of P50/P95 relative", "bulk ESS of h_next", "R-hat(h_next)"]},
+    "reference": {
+        "arm": "oWALNUTS defaults 4 x 2000/20000 per tick, best-of-16 starts, Limits::admit_worst_case + "
+               "Limits::max_result_bytes_unchecked(2 GiB) (both N; no thinning)",
+        "gate": "drop chains named by a WarmupStep or SampledLogDensity chain warning; pass iff >= min_chains remain AND rank "
+                "R-hat(h_next) over the remaining chains <= max_rhat (arviz 0.23.4)",
+        "min_chains": 3, "max_rhat": 1.01, "attempts": 2, "attempt_seed_step": 200,
+        "seed_base": {"sim-N250": 889450, "sim-N1000": 890200, "real-N250": 889500},
+        "seed_rule": "attempt a at tick t: seed_base*1000 + t + 200*a; attempt 1 only when attempt 0 fails the gate (part of the "
+                     "cell definition, not a rerun)",
+        "gate_failed": "a tick failing both attempts is unscored and counts as a FAILED tick for every arm scored there",
+        "ticks": REF_TICKS,
+        "mcse_expectation": "WP84 posthoc floor: relative MCSE of P50 0.08 % median / 0.29 % worst, P95 0.20 % / 0.34 %, with "
+                            "4 x 20,000 gated draws; 3 chains raise it by sqrt(4/3)"},
+    "arms": {
+        "warm": "LIBRARY path: tick-0 default fit 4x1000/1000 (seed = arm seed; reported, outside latency), chain gate on the "
+                "tick-0 fit (flagged chains dropped from Posterior::warm_state(); < 2 remaining = cell failed), then per tick "
+                "WarmState::extend_to(3+n, 0.0, 1.0) and Sampler::run_warm with draws(K), seed = seed*1000003 + 16*tick (chain c "
+                "on seed+c, the WP84 chain seeds), threads 4, Limits::admit_worst_case; the result's warm_state() is the next "
+                "state; no re-adaptation",
+        "K": [50, 100, 200],
+        "refit": "oWALNUTS defaults 4x1000/1000, best-of-16 starts, seed = seed*1000+tick; reported as-sampled AND gated (chains "
+                 "named by WarmupStep/SampledLogDensity dropped; < 2 remaining = failed tick)",
+        "cmdstan": "CmdStan 2.39.0 defaults via cmdstanpy 1.3.0, 4 parallel chains, seed = seed*1000+tick (as sampled; stuck "
+                   "census reported)",
+        "nutpie": "nutpie 0.16.8 defaults, cores=4, seed = seed*1000+tick (as sampled; stuck census reported)",
+        "pyextra": "owalnuts.sample_warm (Python wheel built on the box from this branch) on a C-ABI translation of the same "
+                   "density (models/sv.c, from_cfunc, threads 4), one seed, sim N=250, K=200, 100 ticks; tick-0 via "
+                   "owalnuts.sample defaults; reported only (latency and accuracy vs the same reference)"},
+    "seeds": {"arms": SEEDS, "data_sim": 84084,
+              "fresh": "880101-880103, 889450, 890200, 889500 grep-verified unused before the freeze; 84084 reused on purpose "
+                       "(same WP84 series)"},
+    "latency": {
+        "definition": "wall per tick from new-target construction (Sv::new / extend_to / data dict) to draws in memory "
+                      "(Posterior returned, warm_state taken); draw file writing and quantile computation excluded; Stan arms "
+                      "include data JSON, process spawn and CSV read (CmdStan) or with_data (nutpie); compilation excluded",
+        "threshold_s": {"250": 0.4, "1000": 2.0}, "also_reported_s": [0.1, 0.5]},
+    "accuracy": {
+        "tolerance_p50": 0.02, "tolerance_p95": 0.05,
+        "rule": "a scored tick passes iff |P50 sigma_next rel. error| <= 0.02 AND |P95 rel. error| <= 0.05 vs the gated "
+                "reference AND no stuck chain AND wall < threshold",
+        "stuck_chain": "a chain is stuck when the median of its log_sigma draws is > 1.0 from the gated reference's median "
+                       "log_sigma, or the median of its h_last draws > 2.0 from the reference's median h_last (WP84 posthoc "
+                       "census rule; applied to every arm, oWALNUTS flags also recorded)",
+        "scored_ticks": "reference ticks >= 1 within the arm's tick range (warm: 100 at sim-N250, 50 at real-N250, 12 at "
+                        "sim-N1000 per seed; refits: 20 / 10 / 4 per seed); tick 0 of the warm arm scored separately (full "
+                        "fit, reported)",
+        "pass": "an arm passes at (K, dataset, N) iff the passing share is >= 0.95 over the three seeds pooled AND >= 0.90 in "
+                "every seed AND drift is within bound in every seed; integer form: sim-N250 >= 285/300 and >= 90/100; "
+                "real-N250 >= 143/150 and >= 45/50; sim-N1000 >= 35/36 and >= 11/12"},
+    "drift": {
+        "statistic": "per seed: mean signed P50 relative error over late scored ticks (tick >= 70) minus over early scored "
+                     "ticks (1 <= tick <= 30)",
+        "bound": 0.005, "windows": "sim-N250 30 early / 31 late ticks; real-N250 15 / 16; sim-N1000 5 / 4",
+        "noise_note": "with a per-tick P50 error sd of about 0.9 % (K=200) to 1.8 % (K=50) the statistic's sd is ~0.23 % "
+                      "(sim-N250), ~0.33 % (real), ~0.6 % (sim-N1000) at K=200, so the N=1000 drift test is underpowered: a "
+                      "miss there without a common sign across seeds is reported as noise-compatible but still counts against "
+                      "the pass"},
+    "decision_rule": "The README may say 'real-time quote refresh at K = k' only for a K that passes on all seeds, both N "
+                     "(sim-N250, sim-N1000) and every dataset run (sim, real). Otherwise it states the measured latency, "
+                     "accuracy and the largest tolerance met (over the grid P50 in {1,2,5,10} % x P95 in {2,5,10,20} %) per "
+                     "K, N and dataset.",
+    "predictions": {
+        "P1": "sim-N250: K=200 passes (pooled >= 95 %, every seed >= 90 %, drift within 0.5 % on 3/3); K=50 fails (pooled "
+              "70-80 %); K=100 fails narrowly (85-95 % pooled)",
+        "P2": "sim-N1000: no K passes. K=200 median latency 0.5-1.2 s with < 2 s on 65-90 % of ticks (fails on latency); "
+              "K=100 median 0.3-0.6 s, < 2 s on 85-97 %, accuracy 85-95 %; K=50 under 2 s on >= 97 % but accuracy 70-80 %",
+        "P3": "real-N250: same ordering as sim; K=200 passes with a smaller margin (92-98 % pooled) or fails on one seed; "
+              "K=50 fails; stuck-chain ticks in the refit baselines more frequent than on sim",
+        "P4": "latency medians (4 pinned cores): sim-N250 K=50 15-30 ms, K=100 30-60 ms, K=200 60-120 ms; sim-N1000 4-10x "
+              "those; the 0.1 s share at sim-N250 >= 0.95 for K=50/100 and 0.3-0.8 for K=200",
+        "P5": "reference gate: 1-5 of the 165 reference ticks drop a flagged chain; 0-2 need the second seed; 0 fail both",
+        "P6": "refit baselines (20 ticks x 3 seeds per dataset/N): stuck-chain ticks oWALNUTS 2-8/60, CmdStan 4-12/60, "
+              "nutpie 0-1/60 at sim-N250; as-sampled accuracy share nutpie >= 95 %, oWALNUTS and CmdStan 85-95 % (gated "
+              "oWALNUTS >= 95 %); none under 0.4 s at N=250; nutpie median 1-1.5 s (N=250) / 4-6 s (N=1000)",
+        "P7": "Python sample_warm path at sim-N250 K=200: median latency 1.0-2.0x the Rust warm200 cell of the same seed "
+              "(70-200 ms), accuracy share within 5 points of it",
+        "P8": "bit-identity: run_warm reproduces the WP84 harness construction bit-for-bit on the SV target for tick 1 (all "
+              "4 chains)"},
+    "budget": "about 255 lane-minutes: references 42 (sim-N250, 101 ticks) + 20 (real, 51 ticks) + 45-50 (sim-N1000, 13 "
+              "ticks at ~200 s); warm 27 cells ~20; oWALNUTS refits ~30; CmdStan ~90; nutpie ~8; pyextra ~3; builds ~6. "
+              "Three queues of 80-95 min each; about 1.5 h wall. Based on WP84 walls on the same box.",
+    "software": {"cmdstan_path": "/home/ubuntu/infra/cmdstan/cmdstan-2.39.0", "nutpie": "0.16.8", "cmdstanpy": "1.3.0",
+                 "arviz": "0.23.4", "rust": "1.88.0", "bridgestan": "2.9.0"},
+    "execution": "lanes 2-4 (cores 4-7 = queue A, 8-11 = queue B, 12-15 = queue C) of the shared c7a.4xlarge, "
+                 "taskset-pinned, RAYON_NUM_THREADS=4 OMP_NUM_THREADS=1, co-tenanted with lane 1 (WP89) and with each other: "
+                 "walls are 'pinned, co-tenanted'; accuracy and gradient counts unaffected",
+    "discipline": "three queues run in parallel, cells sequential within a queue in this order; a started cell is never "
+                  "rerun; failures are results; the reference's second attempt is part of the cell",
+    "cells": [],
+}
+cells = P["cells"]
+
+
+def add(q, **c):
+    c["queue"] = q
+    cells.append(c)
+
+
+add("A", id="ref-sim-N1000", arm="ref", ds="sim", N=1000)
+for s in SEEDS:
+    for K in (50, 100, 200):
+        add("A", id=f"warm{K}-sim-N1000-s{s}", arm="warm", ds="sim", N=1000, K=K, seed=s, ticks=100)
+for s in SEEDS:
+    add("A", id=f"refit-sim-N1000-s{s}", arm="refit", ds="sim", N=1000, seed=s, ticks=20)
+for s in SEEDS:
+    add("A", id=f"nutpie-sim-N1000-s{s}", arm="nutpie", ds="sim", N=1000, seed=s, ticks=20)
+add("B", id="ref-sim-N250", arm="ref", ds="sim", N=250)
+add("B", id="ref-real-N250", arm="ref", ds="real", N=250)
+for s in SEEDS:
+    add("B", id=f"cmdstan-sim-N250-s{s}", arm="cmdstan", ds="sim", N=250, seed=s, ticks=20)
+for s in SEEDS:
+    add("B", id=f"refit-sim-N250-s{s}", arm="refit", ds="sim", N=250, seed=s, ticks=20)
+for s in SEEDS:
+    add("B", id=f"nutpie-sim-N250-s{s}", arm="nutpie", ds="sim", N=250, seed=s, ticks=20)
+add("B", id="pyextra-sim-N250-K200-s880101", arm="pyextra", ds="sim", N=250, K=200, seed=880101, ticks=100)
+for s in SEEDS:
+    for K in (50, 100, 200):
+        add("C", id=f"warm{K}-sim-N250-s{s}", arm="warm", ds="sim", N=250, K=K, seed=s, ticks=100)
+for s in SEEDS:
+    for K in (50, 100, 200):
+        add("C", id=f"warm{K}-real-N250-s{s}", arm="warm", ds="real", N=250, K=K, seed=s, ticks=100)
+for s in SEEDS:
+    add("C", id=f"cmdstan-sim-N1000-s{s}", arm="cmdstan", ds="sim", N=1000, seed=s, ticks=20)
+for s in SEEDS:
+    add("C", id=f"cmdstan-real-N250-s{s}", arm="cmdstan", ds="real", N=250, seed=s, ticks=20)
+for s in SEEDS:
+    add("C", id=f"refit-real-N250-s{s}", arm="refit", ds="real", N=250, seed=s, ticks=20)
+for s in SEEDS:
+    add("C", id=f"nutpie-real-N250-s{s}", arm="nutpie", ds="real", N=250, seed=s, ticks=20)
+Path(__file__).resolve().parent.joinpath("protocol.json").write_text(json.dumps(P, indent=1) + "\n", encoding="utf-8")
+print(len(cells), "cells; reference ticks", {k: len(v) for k, v in REF_TICKS.items()}, sum(map(len, REF_TICKS.values())))
