@@ -79,6 +79,10 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Three-sampler table over 18 Linux seeds (WP76): gates 239 / 198 / 163 of
   288 for oWALNUTS / CmdStan / nutpie; per gradient 0.83x CmdStan and 0.70x
   nutpie; per second 0.89x and 0.93x with both intervals reaching 1.
+- Centred Eight Schools refinement spend (WP82): the neck is paid in
+  refinement at a bulk-set step (72 % of sampling gradients in a quarter of
+  transitions); no candidate qualifies. Research flag
+  `DualAveragingAcceptance::CostWeightedCoarseEndpoint` (off) added.
 - `from_pymc(gil_free=True)` as the default (WP83): not proposed. Equal
   gates, 0.13–0.46x wall per gradient and 0/150 four-thread faults, but
   draws not reproducible against the numba control on 3 of 10 model kinds

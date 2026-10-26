@@ -977,3 +977,19 @@ provenance.
   break the API. gil_free stays the documented opt-in:
   [`STUDIES/pymc_gil_free_default_v1`](STUDIES/pymc_gil_free_default_v1/README.md)
   (WP83).
+- [E48] Centred Eight Schools refinement spend (Linux, 6 fresh seeds vs
+  CmdStan 2.39.0): 71 % of refined transitions start in the lowest log-tau
+  quartile (18x the top quartile's refined fraction); a quarter of
+  transitions are refined and take 72 % of sampling gradients (184 per neck
+  transition against CmdStan's 13 leapfrogs, where CmdStan shortens its
+  trajectories at acceptance 0.48 and diverges on 11 % of those draws); the
+  adapted step is 1.18x CmdStan's, so the step is set by the bulk; the
+  default is 0.269x CmdStan per total gradient here. No candidate qualifies:
+  cost-weighted acceptance statistic (research flag
+  `DualAveragingAcceptance::CostWeightedCoarseEndpoint`, off) 0.577x and
+  0.909 on the control set; Stan's acceptance statistic 0.929x but funnel
+  0.0524 ± 0.0039 and control 0.618; two refinement levels 0.799x but 256 vs
+  12 divergences and funnel 0.0075. Each beats the default 1.6–2.5x on the
+  centred model alone and pays elsewhere:
+  [`STUDIES/centered_eight_schools_refinement_v1`](STUDIES/centered_eight_schools_refinement_v1/README.md)
+  (WP82).
