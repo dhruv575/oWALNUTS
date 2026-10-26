@@ -33,8 +33,13 @@ architecture and operating system (see the `walnutpie` module documentation).
   diagonal path unless a gradient-vs-position fit over the first slow
   windows says a dense metric will pay (gain >= 5, worst R² >= 0.5). Passed
   every rule on 17 models x 3 seeds (44 = 44 gates, 2.20x geomean, no model
-  below 0.9x); a default-flip confirmation on 22 models x 6 fresh seeds
-  (WP85) decides.
+  below 0.9x). The default-flip confirmation on 22 models x 6 fresh seeds
+  (WP85, `STUDIES/metric_autoselect_confirmation_v1`) did not qualify it:
+  every efficiency and safety rule held (105 = 105 gates, 2.01x, 122/122
+  diagonal-branch cells bit-identical) but the branch choice differed
+  between seeds on 3 of 22 models against an allowed 2. It stays research
+  opt-in. Above `DenseMass::MAX_DIMENSION` (256) the flag is now the plain
+  diagonal run with no decision recorded, instead of a configuration error.
 - Research flag `walnutpie::DiagonalMetricEstimator` (off): nutpie's
   gradient-informed diagonal metric estimator (WP71). Not supported as a
   default (0.98x geomean, three fewer gates); kept for reference.
@@ -117,6 +122,11 @@ architecture and operating system (see the `walnutpie` module documentation).
 - nutpie gap decomposition (WP80): the lead is sampling gradients per draw
   from a smaller effective step (installed inverse mass far from the
   posterior variance on some coordinates), not warmup and not ESS per draw.
+- Dense auto-selection default-flip confirmation (WP85): not qualified. The
+  rule is safe and 2.0x faster per gradient where it goes dense, but on
+  kidiq, garch11 and lotka_volterra the seed decides the branch (linearity
+  R² or gain near the thresholds). A stabler decision statistic is the next
+  step before any flip.
 - Diagonal metric shrinkage (WP81): Stan's `1e-3` anchor over-states the
   variance only on sblrc (five coordinates, up to 12x) and diamonds (one,
   4x); elsewhere the installed metric is 0.9–1.1x the posterior variance,

@@ -961,7 +961,8 @@ provenance.
   model); **every rule held**: passes 44 vs 44, geomean 2.20x, no model
   below 0.9x, 0 new divergences, 43/43 diagonal-branch cells bit-identical
   to the default, funnel P5 0.0482 ± 0.0019, flag-off integrity. Proposed
-  for a default-flip confirmation (WP85):
+  for a default-flip confirmation (WP85, E51: not qualified, branch choice
+  seed-dependent on 3 of 22 models):
   [`STUDIES/metric_autoselect_v2`](STUDIES/metric_autoselect_v2/README.md)
   (WP79).
 - [E47] `from_pymc(gil_free=True)` as a default (Linux, 10 PyMC model
@@ -1020,3 +1021,18 @@ provenance.
   Fixed: gil_free now compiles under `numba__fastmath=False`:
   [`STUDIES/pymc_gil_free_determinism_v1`](STUDIES/pymc_gil_free_determinism_v1/README.md)
   (WP86).
+- [E51] Hessian-fit dense auto-selection as the default (Linux, 22 v7
+  posteriors x 6 fresh seeds x {diagonal, auto} at 4 x 1,000/1,000, funnel
+  30 seeds): **not qualified**. Passes 105 vs 105, headline 2.01x the
+  diagonal, no model below 0.9x, 0 new divergences, 122/122 diagonal-branch
+  cells bit-identical to the default, funnel P5 0.0492 ± 0.0017, 0
+  lotka_volterra trapped cells; but the branch choice was the same on all
+  six seeds for only 19 of 22 models against the required 20 (kidiq dense
+  on 4/6, garch11 2/6, lotka_volterra 4/6, each near the linearity bound or
+  the gain threshold; both branches pass every gate there). Observer cost
+  1.026x wall per gradient on diagonal-branch models; dense-branch warmup
+  used 0.49x the diagonal's warmup gradients. Above 256 dimensions the flag
+  is now the plain diagonal run (radon, grsm_irt). The flag stays research
+  opt-in:
+  [`STUDIES/metric_autoselect_confirmation_v1`](STUDIES/metric_autoselect_confirmation_v1/README.md)
+  (WP85).

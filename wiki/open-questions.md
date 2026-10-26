@@ -323,6 +323,21 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     seeds, or a seed interval, before a per-gradient threshold is used as a
     release gate. Also open: the v7 per-model losses on `accel_gp` (0.35x
     CmdStan), `one_comp` (0.50x) and `hmm_drive_0` (0.66x).
+21. **Automatic dense metric selection** (WP75, WP79, WP85). The Hessian-fit
+    rule (`WarmupConfig::with_dense_auto_select`, research opt-in) chooses
+    dense or diagonal from a gradient-vs-position fit over the first slow
+    windows. WP79 passed every rule on 17 models x 3 seeds (2.20x, 44 = 44
+    gates). The default-flip confirmation WP85
+    (`STUDIES/metric_autoselect_confirmation_v1`, 22 posteriors x 6 fresh
+    seeds) held every safety and efficiency rule (105 = 105 gates, 2.01x,
+    122/122 diagonal-branch cells bit-identical, funnel 0.0492 ± 0.0017)
+    but failed branch consistency: kidiq (dense 4/6), garch11 (2/6) and
+    lotka_volterra (4/6) sit near the linearity bound 0.5 or the gain
+    threshold 5, so the seed decides the branch; both branches pass every
+    gate there. Open: a decision statistic that is stable across seeds on
+    those three models (more windows, a margin around the thresholds, or a
+    chain-pooled fit) before a second confirmation. Above 256 dimensions
+    the flag is the plain diagonal run.
 
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the
