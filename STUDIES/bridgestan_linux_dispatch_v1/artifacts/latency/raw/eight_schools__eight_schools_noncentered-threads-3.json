@@ -1,0 +1,87 @@
+{
+  "build": "threads",
+  "calibration_raw_us_per_call": 0.8703775,
+  "callers": 4,
+  "calls_per_caller": 1148927,
+  "cpus_allowed_list": "4-7",
+  "dimension": 10,
+  "direct": {
+    "compiled_threading": "Concurrent",
+    "execution": "DirectConcurrent",
+    "model_info": "BridgeStan version: 2.9.0\nStan version: 2.39.0\nStan C++ Defines:\n\tSTAN_THREADS=true\n\tSTAN_MPI=false\n\tSTAN_OPENCL=false\n\tSTAN_NO_RANGE_CHECKS=false\n\tBRIDGESTAN_AD_HESSIAN=false\nStan Compiler Details:\n\tstanc_version = stanc3 v2.39.0\n\tstancflags = \n",
+    "threading": "Concurrent"
+  },
+  "model_library": "/home/ubuntu/lanes/bridgestan_linux_dispatch_v1/repo/STUDIES/bridgestan_linux_dispatch_v1/models/threads/eight_schools__eight_schools_noncentered_model.so",
+  "paths": [
+    {
+      "aggregate_us_per_gradient": 0.7936268387808799,
+      "callers": 1,
+      "calls_per_caller": 1148927,
+      "elapsed_seconds": 0.911819303,
+      "execution": "raw_function_pointer",
+      "gradients_per_second": 1260038.031899397,
+      "path": "raw1",
+      "recoverable_failures": 0,
+      "us_per_call_per_caller": 0.7936268387808799,
+      "value_checksum": -51076205.271365926
+    },
+    {
+      "aggregate_us_per_gradient": 0.8089527332894083,
+      "callers": 1,
+      "calls_per_caller": 1148927,
+      "elapsed_seconds": 0.929427637,
+      "execution": "DirectConcurrent",
+      "gradients_per_second": 1236166.1675012147,
+      "path": "direct1",
+      "recoverable_failures": 0,
+      "us_per_call_per_caller": 0.8089527332894083,
+      "value_checksum": -51076205.271365926
+    },
+    {
+      "aggregate_us_per_gradient": 0.23538230453283804,
+      "callers": 4,
+      "calls_per_caller": 1148927,
+      "elapsed_seconds": 1.08174834,
+      "execution": "DirectConcurrent",
+      "gradients_per_second": 4248407.721152592,
+      "path": "direct4",
+      "recoverable_failures": 0,
+      "us_per_call_per_caller": 0.9415292181313522,
+      "value_checksum": -204304819.65768725
+    },
+    {
+      "aggregate_us_per_gradient": 0.8244584051031962,
+      "callers": 1,
+      "calls_per_caller": 1148927,
+      "elapsed_seconds": 0.947242522,
+      "execution": "ReplicatedConcurrent",
+      "gradients_per_second": 1212917.4665577353,
+      "path": "replicated1",
+      "recoverable_failures": 0,
+      "us_per_call_per_caller": 0.8244584051031962,
+      "value_checksum": -51076205.271365926
+    },
+    {
+      "aggregate_us_per_gradient": 0.20711809235921863,
+      "callers": 4,
+      "calls_per_caller": 1148927,
+      "elapsed_seconds": 0.951854274,
+      "execution": "ReplicatedConcurrent",
+      "gradients_per_second": 4828163.433765283,
+      "path": "replicated4",
+      "recoverable_failures": 0,
+      "us_per_call_per_caller": 0.8284723694368745,
+      "value_checksum": -204304819.65768725
+    }
+  ],
+  "position_seed": 65299001,
+  "positions": 64,
+  "repeat": "3",
+  "replicated": {
+    "effective_replicas": 4,
+    "execution": "ReplicatedConcurrent",
+    "requested_replicas": 4,
+    "threading": "Concurrent"
+  },
+  "schema": "bridgestan-linux-dispatch-v1-latency"
+}

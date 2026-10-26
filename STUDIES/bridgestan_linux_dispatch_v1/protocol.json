@@ -1,0 +1,159 @@
+{
+  "schema": "bridgestan-linux-dispatch-v1",
+  "ledger_id": "WP65",
+  "ledger_title": "WP65-BRIDGESTAN-LINUX-DISPATCH-V1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-26",
+  "purpose": "On Linux (native TLS, one C runtime) measure what the BridgeStan path costs per gradient call on each dispatch path the shipped crate exposes, the fault rate of each path over 500 child processes, and oWALNUTS-via-BridgeStan wall per gradient against CmdStan 2.39.0 on the fixed-16 posteriordb models; decide under a frozen rule whether the off-Windows concurrent-replica dispatch (and the STAN_THREADS single-module dispatch) is qualified in the README.",
+  "wp_number_rule": "Highest WP in README evidence list and wiki ledger at freeze: WP63. Lane 1 takes WP64; this study is WP65.",
+  "source_commit_under_test": "a49df80070a2b9b53946ab61327a3aef77916bc6",
+  "source_commit_note": "main at freeze (a49df800). The study adds files only under STUDIES/bridgestan_linux_dispatch_v1; run_bench.py refuses oWALNUTS cells if src/, integrations/, tests/ or Cargo.toml differ from this commit.",
+  "dispatch_paths_exposed_off_windows": {
+    "DirectSerialised": "StanTarget on a library built without STAN_THREADS: one module, every native call under one module mutex. The Linux analogue of the Windows owned-worker serialisation (the owned worker itself and the process-global native-call lock are cfg(windows) only).",
+    "DirectConcurrent": "StanTarget on a STAN_THREADS=true library: one module called concurrently by every sampler thread.",
+    "ReplicatedConcurrent": "ReplicatedStanTarget::load(.., n > 1): replica 0 at the original path, replicas 1..n-1 as byte copies in the temp dir, free-replica try_lock dispatch. This is what ReplicatedStanTarget::load does off Windows by default, and what posteriordb v7's harness loads.",
+    "not_exposed": "There is no Linux owned-worker path and no separate multi-worker owned path; 'multi-worker' on Linux is ReplicatedConcurrent."
+  },
+  "environment": {
+    "host": "AWS EC2 c7a.4xlarge (16 dedicated AMD EPYC 9R14 cores, no SMT, 32 GB, two L3 instances of 32 MB), Ubuntu 24.04, instance i-05c712c79c74ae7f8, us-east-2",
+    "lane": "lane 2, cores 4-7; every process (builds, drivers, children, CmdStan) runs under taskset -c 4-7; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, TMPDIR=~/lanes/bridgestan_linux_dispatch_v1/tmp (replica copies are written there)",
+    "timing_label": "pinned, co-tenanted: the box runs three other core-pinned lanes at the same time (lane 1 on cores 0-3 shares this lane's L3 instance; all lanes share memory bandwidth). Wall-clock and latency numbers are pinned, co-tenanted figures; ESS per gradient, pass counts, fault counts and bit-identity are unaffected by co-tenancy.",
+    "toolchain": "Rust 1.88.0 (x86_64-unknown-linux-gnu, ~/.cargo from bootstrap), cargo build --release -j4 under taskset; g++ 13.3.0 (Ubuntu 24.04), GNU make",
+    "bridgestan": "BridgeStan 2.9.0 source release tarball (sha256 b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c), extracted twice in the lane: bs-nothreads/ and bs-threads/, so the two builds share no objects; default flags (O=3); the shared ~/.bridgestan is not used",
+    "cmdstan": "CmdStan 2.39.0: a byte copy (cp -a) of ~/infra/cmdstan/cmdstan-2.39.0 in the lane, so model compiles cannot write into the shared tree; cmdstanpy 1.3.0 defaults",
+    "python": "lane venv: the exact package set of ~/venv (pip freeze; arviz 0.23.4, bridgestan 2.9.0, cmdstanpy 1.3.0, numpy 2.5.4) plus posteriordb 0.2.0, which ~/venv lacks",
+    "posteriordb": "~/infra/posteriordb at 28f8d3d6e975315f42aa274a8399f21e07a43b30 (read-only)"
+  },
+  "posteriordb": {
+    "repository": "https://github.com/stan-dev/posteriordb",
+    "commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30",
+    "path": "posterior_database"
+  },
+  "fixed_non_arma_models": [
+    "eight_schools-eight_schools_noncentered",
+    "eight_schools-eight_schools_centered",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "mesquite-logmesquite_logvash",
+    "kidiq-kidscore_momhsiq",
+    "sblrc-blr",
+    "nes2000-nes",
+    "arK-arK",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "bball_drive_event_0-hmm_drive_0",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp"
+  ],
+  "gates_only_models": [],
+  "gates": {
+    "max_rank_rhat": 1.01,
+    "min_bulk_ess": 400,
+    "min_tail_ess": 400,
+    "sampling_divergences": 0,
+    "finite_draws": true,
+    "no_sampler_error": true
+  },
+  "builds": {
+    "nothreads": "make -C bs-nothreads/bridgestan-2.9.0 <abs>/models/nothreads/<model>_model.so (no STAN_THREADS; the v7 build)",
+    "threads": "make -C bs-threads/bridgestan-2.9.0 STAN_THREADS=true <abs>/models/threads/<model>_model.so"
+  },
+  "seeds": {
+    "part_b_children": [65201001, 65201500],
+    "part_c_cells": [652651],
+    "latency_positions": 65299001,
+    "probe": 65299002,
+    "verified_unused": "git grep -n -w -E '65201[0-9]{3}|652651|6529900[0-9]' over every tracked file of the worktree at a49df800 found no occurrence before freezing."
+  },
+  "part_a_latency": {
+    "binary": "src/bin/latency.rs (derived from integrations/bridgestan/src/bin/wallgap.rs)",
+    "models": ["eight_schools-eight_schools_noncentered", "arK-arK", "diamonds-diamonds"],
+    "builds": ["nothreads", "threads"],
+    "repeats": 5,
+    "process_timeout_seconds": 900,
+    "order": "repeat-major: for repeat 1..5, for model in the listed order, for build nothreads then threads; one process at a time",
+    "paths_per_process": {
+      "raw1": "raw bs_log_density_gradient function pointer on a model constructed in the process, one caller",
+      "direct1": "StanTarget, one caller",
+      "direct4": "the same StanTarget, four callers (DirectSerialised for nothreads, DirectConcurrent for threads)",
+      "replicated1": "ReplicatedStanTarget with four replicas, one caller",
+      "replicated4": "the same, four callers (ReplicatedConcurrent)"
+    },
+    "calls": "every caller makes the same number of calls, calibrated once per process from 400 raw calls so that a one-caller path takes about 1 s (clamped to 2,000..4,000,000), over a fixed cycle of 64 positions uniform(-0.5, 0.5) from seed 65299001; caller k starts at position 16k; callers start together at a barrier",
+    "statistics": "per (model, build, path): median over the 5 processes of wall per call per caller (us), aggregate wall per gradient (us) and gradients per second; ratios are ratios of those medians",
+    "predictions": {
+      "A1": {"statement": "STAN_THREADS costs little on Linux: raw1 latency threads / nothreads <= 1.25 on each of the three models (Windows mingw: 9-16x). Point predictions: eight schools 1.15, arK 1.05, diamonds 1.05.", "threshold": 1.25},
+      "A2": {"statement": "Replicas scale: nothreads replicated4 / direct4 gradient throughput >= 3.0 on each model. Point: 3.7 on each.", "threshold": 3.0},
+      "A3": {"statement": "One STAN_THREADS module scales: threads direct4 / nothreads direct4 throughput >= 2.5 on each model. Point: 3.4.", "threshold": 2.5},
+      "A4": {"statement": "The Rust wrapper and the replica dispatch are cheap: direct1 / raw1 and replicated1 / direct1 latency <= 1.15 on every model and build. Point: <= 1.05.", "threshold": 1.15}
+    }
+  },
+  "part_b_fault_rate": {
+    "binary": "src/bin/stress_child.rs (adapted from the WP50D child, STUDIES/bridgestan_windows_root_cause_v4/child)",
+    "model": "sblrc-blr",
+    "run_shape": "4 chains, 4 sampler threads, 1,000 warmup / 1,000 retained, Init::uniform() starts, Metric::diagonal(), Adaptation::default(), Tuning::default(), Limits::new().admit_worst_case(); the model seed passed to BridgeStan is the child seed",
+    "arms": {
+      "serialised": {"target": "StanTarget", "build": "nothreads", "expected_execution": "DirectSerialised", "expected_effective_replicas": 1},
+      "replicated": {"target": "ReplicatedStanTarget, 4 replicas", "build": "nothreads", "expected_execution": "ReplicatedConcurrent", "expected_effective_replicas": 4},
+      "threaded_direct": {"target": "StanTarget", "build": "threads", "expected_execution": "DirectConcurrent", "expected_effective_replicas": 1}
+    },
+    "seeds": [65201001, 65201500],
+    "children_per_path": 500,
+    "order": "paired seeds; for the i-th seed (0-based) the three arms run in the order rotated by i mod 3 (serialised, replicated, threaded_direct); strictly one child at a time",
+    "child_timeout_seconds": 300,
+    "launch_rule": "an exclusive launch marker is created before each child; a launched child is never relaunched; a marker without a process record counts as a fault (interruption)",
+    "manipulation_check": "run_stress.py probe loads each arm at seed 65299002 without sampling and must report the expected execution and effective replica count before the matrix may run",
+    "fault_definition": "a child is a fault if any of: return code != 0 (including death by signal, e.g. SIGSEGV or SIGABRT from glibc heap checks); timeout; missing or unparsable output; output status != ok; execution label or effective replica count not as expected; any non-finite retained value; retained draw count != 4,000; heartbeat sequence not exactly the twelve expected boundaries; stderr containing any registered marker",
+    "stderr_fault_markers": ["corrupted", "double free", "free(): invalid", "malloc():", "malloc_consolidate", "munmap_chunk", "stack smashing", "segmentation fault", "aborted", "panicked"],
+    "statistics": "per path: faults / children, exact one-sided 95% Clopper-Pearson upper bound (0/500 gives 0.597%), fault kinds; FNV-1a draw fingerprint and target-call parity serialised vs replicated per seed (same library bytes); serialised vs threaded_direct parity reported (different build); median sampling wall per child reported (descriptive, pinned co-tenanted)",
+    "predictions": {
+      "B1": {"statement": "0 faults on every path: serialised 0/500, replicated 0/500, threaded_direct 0/500 (the Windows record had STATUS_HEAP_CORRUPTION at drop on the unserialised dynamic-runtime path, 2/120 and 4/300; Linux has native TLS and one C runtime)."},
+      "B2": {"statement": "serialised and replicated give bit-identical draw fingerprints and identical target-call counts on all 500 seeds."},
+      "reported": {"statement": "serialised vs threaded_direct parity (different library build) is reported, not gated; expected identical."}
+    }
+  },
+  "part_c_wall_per_gradient": {
+    "driver": "run_bench.py (a copy of STUDIES/posteriordb_bench_v7/run_posteriordb.py, parametrised); harness src/main.rs (a copy of the v7 harness with a dispatch argument)",
+    "models": "fixed_non_arma_models (the v7 fixed-16)",
+    "seeds": [652651],
+    "chains": 4,
+    "warmup": 1000,
+    "retained": 1000,
+    "threads": 4,
+    "cell_timeout_seconds": 2700,
+    "owalnuts_arms": {
+      "owalnuts": {"mode": "defaults", "dispatch": "replicated", "build": "nothreads", "role": "the Linux default path and v7's exact target call: ReplicatedStanTarget::load(.., 4) -> ReplicatedConcurrent"},
+      "owalnuts-serialised": {"mode": "defaults", "dispatch": "direct", "build": "nothreads", "role": "StanTarget shared by four sampler threads -> DirectSerialised; the Linux analogue of v7's Windows OwnedSerialised path"},
+      "owalnuts-threaded": {"mode": "defaults", "dispatch": "direct", "build": "threads", "role": "StanTarget on the STAN_THREADS=true library -> DirectConcurrent"}
+    },
+    "cmdstan": "CmdStan 2.39.0 via cmdstanpy 1.3.0 defaults (adapt_delta 0.8, max_treedepth 10, diag_e, uniform(-2,2) inits, four chains, four parallel chains, no STAN_THREADS), as v7",
+    "sampler_settings": "owalnuts::sampler::Sampler::new() with only warmup 1000, draws 1000, chains 4, seed, threads 4 and Limits::new().admit_worst_case(): the commit's default metric, adaptation, tuning and Init (best_of(16)), as v7",
+    "run_order": "models in the listed order; per model cmdstan, owalnuts, owalnuts-serialised, owalnuts-threaded; strictly sequential, one sampling process (CmdStan: its four chain processes) at a time",
+    "metrics": {
+      "gradients_total": "oWALNUTS target calls including start search, warmup and sampling; CmdStan sum n_leapfrog__ including warmup (v7)",
+      "wall": "seconds around one sampler call, warmup included, compilation excluded, oWALNUTS start search excluded; CmdStan process launch and CSV I/O included (v7)",
+      "wall_per_gradient_us": "1e6 * wall / gradients_total (v7)",
+      "geomeans": "geometric mean over models of per-model ratios, over models whose cells are status ok on both sides (v7 ratio_geomean with one seed)",
+      "gates_and_ess": "v7 metrics(): ArviZ 0.23.4 rank R-hat, bulk and tail ESS, reference z; reported, not decisive here (one seed)"
+    },
+    "predictions": {
+      "C1": {"statement": "On the Linux default (replicated) path the Windows gap disappears: fixed-16 geomean wall per gradient owalnuts / CmdStan <= 1.0 (Windows serialised v7: 1.85x; Windows unserialised v6: 0.825x). Point prediction 0.85.", "threshold": 1.0},
+      "C2": {"statement": "The serialised Linux path keeps a gap: owalnuts-serialised / CmdStan >= 1.5. Point prediction 2.3 (larger than Windows' contended 1.85x, because pinned CmdStan gets four uncontended cores while serialised gradients use one).", "threshold": 1.5},
+      "C3": {"statement": "Serialisation costs 1.8x-4.0x sampling wall per gradient: owalnuts-serialised / owalnuts geomean in [1.8, 4.0]. Point 2.7.", "range": [1.8, 4.0]},
+      "C4": {"statement": "owalnuts and owalnuts-serialised are bit-identical (unconstrained draws SHA-256 and gradient count) on all 16 models."},
+      "C5": {"statement": "No oWALNUTS cell errors or times out in any of the three arms (48/48 ok)."},
+      "C6": {"statement": "One STAN_THREADS module is a viable alternative: owalnuts-threaded / owalnuts wall per gradient geomean <= 1.25. Point 1.05.", "threshold": 1.25},
+      "reported": "threaded vs replicated bit-identity (different build; expected identical), min bulk ESS per gradient vs CmdStan (one seed), pass counts /16 per arm"
+    }
+  },
+  "decision_rule": {
+    "replicated_qualified_on_linux": "ReplicatedConcurrent (ReplicatedStanTarget::load with more than one replica off Windows) is QUALIFIED on Linux x86_64 glibc if all hold: Q1 part (b) replicated 0 faults in 500 counted children; Q2 part (b) serialised-replicated parity 500/500 and part (c) C4 16/16; Q3 faster: part (a) nothreads replicated4/direct4 throughput >= 2.0 on every one of the three models and part (c) owalnuts-serialised/owalnuts wall per gradient geomean >= 1.5; Q4 part (c) owalnuts arm 16/16 cells ok. Otherwise it stays UNQUALIFIED and the README names the failed clause.",
+    "threaded_direct_qualified_on_linux": "DirectConcurrent (StanTarget on a STAN_THREADS=true library) is QUALIFIED on Linux if: T1 part (b) threaded_direct 0 faults in 500; T2 part (a) threads direct4 / nothreads direct4 throughput >= 2.0 on every model; T3 part (c) owalnuts-threaded 16/16 ok and owalnuts-threaded/owalnuts wall per gradient geomean <= 1.25. Otherwise UNQUALIFIED with the failed clause.",
+    "readme_text_if_qualified": "Linux (x86_64, glibc, GCC 13.3, BridgeStan 2.9.0): the default concurrent-replica dispatch is qualified (WP65): 0/500 child faults, draws bit-identical to the serialised path, <A2 range>x gradient throughput at four callers, wall per gradient <C1>x CmdStan's on the fixed-16 (pinned, co-tenanted, one seed).",
+    "scope": "The qualification covers the measured host class, toolchain, BridgeStan version and run shapes. It says nothing about macOS, aarch64, musl, or Windows; nothing in this study changes a default or library code.",
+    "not_gates": "A1, A4 and the threaded predictions are predictions, not qualification clauses beyond those named above. Predictions are printed beside the values whether they hold or not."
+  },
+  "rules": "Preregistration and protocol committed before the first cell. Builds, the manipulation probe and binary smoke runs on a BridgeStan test model (not a study model, no study seed) are infrastructure. Parts run sequentially in the order (a), (b), (c), one process at a time. Report every cell; failures, faults and timeouts are results; no reruns; no tuning after seeing results. A driver killed by the host may be relaunched; launched-but-unrecorded children stay faults/interruptions and are not relaunched; an interrupted (c) cell without an artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for parts not yet run, committed before them."
+}
