@@ -1,0 +1,238 @@
+{
+ "schema": "trap-guard-confirmation-v1-summary",
+ "ledger_id": "WP90-TRAP-GUARD-CONFIRMATION-V1",
+ "environment": {
+  "smoke": true
+ },
+ "verdict": "DOES NOT QUALIFY (failed: R5, R8); stays research",
+ "rules": {
+  "R1_passes": {
+   "defaults": 1,
+   "guard": 1,
+   "cells_per_arm": 2,
+   "held": true
+  },
+  "R2_bit_identity": {
+   "pairs_checked": 4,
+   "pairs_failed": [],
+   "errors": [],
+   "held": true
+  },
+  "R3_no_new_divergences": {
+   "models_with_more_guard_divergences": [],
+   "passing_cells_with_new_divergences": [],
+   "held": true
+  },
+  "R4_headline_ge_0.98": {
+   "geomean": 1.0,
+   "models": 2,
+   "models_without_5_paired_seeds": [],
+   "paired_per_seed": {
+    "pairs": 2,
+    "median": 1.0,
+    "bootstrap_95_interval_of_median": [
+     1.0,
+     1.0
+    ],
+    "min": 1.0,
+    "max": 1.0,
+    "pairs_not_equal_to_1": 0
+   },
+   "held": true
+  },
+  "R5_funnel": {
+   "cells": 1,
+   "p5": 0.0580125,
+   "se": null,
+   "abs_error": 0.010222147727185299,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_99": 0.05506311956119479,
+   "exact": 0.0477903522728147,
+   "diag_p5": 0.0580125,
+   "held": false
+  },
+  "R6_sv_guard_zero_trapped": {
+   "guard_trapped_chains": 0,
+   "guard_chains": 4,
+   "defaults_trapped_chains": 0,
+   "defaults_chains": 4,
+   "held": true
+  },
+  "R7_false_firings": {
+   "firings_parts_1_2": [],
+   "false_firings": [],
+   "count_false": 0,
+   "held": true
+  },
+  "R8_library_integrity": {
+   "library_diff_empty": null,
+   "kernel_fingerprint_default_passed": null,
+   "kernel_fingerprint_research_passed": null,
+   "trapped_chain_restart_tests_passed": null,
+   "clippy_library_clean": null,
+   "clippy_study_clean": null,
+   "held": false
+  }
+ },
+ "reported": {
+  "max_abs_z_passing_guard": 0.7386071003852804,
+  "models_below_0.9": [],
+  "wall_per_gradient_guard_over_defaults_geomean": 1.0640204360947645,
+  "part1_firings": 0,
+  "part2_firings": 0,
+  "part3_firings": 0,
+  "sv_median_wall": {
+   "defaults": 2.2011822739999998,
+   "guard": 2.359986972
+  },
+  "funnel_diag": {
+   "cells": 1,
+   "p5": 0.0580125,
+   "se": null,
+   "abs_error": 0.010222147727185299,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_99": null
+  }
+ },
+ "per_model": {
+  "kidiq-kidscore_momhsiq": {
+   "passes_defaults": 1,
+   "passes_guard": 1,
+   "paired_ratios": [
+    1.0
+   ],
+   "headline_ratio": 1.0,
+   "divergences_defaults": 0,
+   "divergences_guard": 0,
+   "fired_cells": [],
+   "min_step_ratio_99_defaults": 0.9767920651418008,
+   "warned_cells_defaults": [],
+   "shifted_cells_defaults": [],
+   "max_rank_rhat_defaults": [
+    1.002859170510026
+   ],
+   "max_abs_z_passing_guard": 0.7386071003852804,
+   "wall_per_gradient_ratio": 1.013987962297939
+  },
+  "GLMM_Poisson_data-GLMM_Poisson_model": {
+   "passes_defaults": 0,
+   "passes_guard": 0,
+   "paired_ratios": [
+    1.0
+   ],
+   "headline_ratio": 1.0,
+   "divergences_defaults": 0,
+   "divergences_guard": 0,
+   "fired_cells": [],
+   "min_step_ratio_99_defaults": 0.6638360515161641,
+   "warned_cells_defaults": [],
+   "shifted_cells_defaults": [],
+   "max_rank_rhat_defaults": [
+    1.087386135297541
+   ],
+   "max_abs_z_passing_guard": null,
+   "wall_per_gradient_ratio": 1.116521626017723
+  }
+ },
+ "funnel": {
+  "diag": {
+   "cells": 1,
+   "p5": 0.0580125,
+   "se": null,
+   "abs_error": 0.010222147727185299,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_99": null
+  },
+  "guard": {
+   "cells": 1,
+   "p5": 0.0580125,
+   "se": null,
+   "abs_error": 0.010222147727185299,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_99": 0.05506311956119479
+  }
+ },
+ "sv": {
+  "defaults": {
+   "cells": 1,
+   "chains": 4,
+   "trapped_chains": 0,
+   "trapped_cells": 0,
+   "trapped": [],
+   "warned_chains": 0,
+   "median_wall": 2.2011822739999998
+  },
+  "guard": {
+   "cells": 1,
+   "chains": 4,
+   "trapped_chains": 0,
+   "trapped_cells": 0,
+   "trapped": [],
+   "warned_chains": 0,
+   "fired": [],
+   "median_wall": 2.359986972
+  }
+ },
+ "predictions": {
+  "P1_part1_firings_0_to_2_only_lotka_or_GLMM_all_trapped": {
+   "text": "Part 1 firings: 0 (tolerance 0-2). If any, on hudson_lynx_hare-lotka_volterra (WP69: a real trap at ratio 0.111 and near-traps at 0.024/0.027 on 240+204 chains; WP67: traps at 0.0023/0.025) or GLMM_Poisson_data-GLMM_Poisson_model (WP85: 2 of 6 defaults cells had max rank R-hat > 1.1), and every one on a chain trapped at the defaults (T1 or T3). No firing on earnings (WP69 minimum 0.031, 3x above 0.01), accel_gp (0.143) or any other model.",
+   "observed": {
+    "firings": 0,
+    "models": [],
+    "all_trapped": true
+   },
+   "held": true
+  },
+  "P2_part1_passes": {
+   "text": "Part 1 passes: defaults 98-112 of 132 (WP85: 105 on seeds 868501-868506 with the same models, gates and harness), guard = defaults unless a lotka_volterra or GLMM cell that fails at the defaults passes after a true firing (then guard > defaults).",
+   "observed": {
+    "defaults": 1,
+    "guard": 1
+   },
+   "held": false
+  },
+  "P3_headline": {
+   "text": "R4 headline exactly 1.0000 if no Part 1 chain fires (every unfired cell is bit-identical, every ratio 1); within [0.99, 1.02] otherwise; the paired per-seed median 1.0000 with a degenerate interval.",
+   "observed": 1.0,
+   "held": true
+  },
+  "P4_funnel": {
+   "text": "Part 2: 0 firings on the funnel (WP89: 0 at ratio 0.01 over 120 chains, healthy minimum 0.076; at 2,000 warmup the window closes at transition 199 with every chain adapted); all 30 guard cells bit-identical to diag; P5 within 2 s.e. with probability about 0.95 (WP85 diag 0.0492 +- 0.0017, WP89 diag 0.0503 +- 0.0012).",
+   "observed": {
+    "fired_chains": 0,
+    "within_2se": false
+   },
+   "held": false
+  },
+  "P5_sv": {
+   "text": "Part 3: defaults trapped chains 3-16 of 480 (WP89: 8; WP84: 1.75 %), guard 0; guard firings 6-16 (WP89: 10 on 120 seeds: 8 traps + 2 near-traps), each on a chain the census calls trapped at the defaults or that carries the WP89 signature (T3); every restarted chain ends at the mode (guard census 0).",
+   "observed": {
+    "defaults_trapped": 0,
+    "guard_trapped": 0,
+    "guard_firings": 0,
+    "firings_trapped_or_signature": 0
+   },
+   "held": false
+  },
+  "P6_bit_identity": {
+   "text": "R2 holds everywhere (WP89: 110/110 unfired SV cells, 30/30 funnel, 9/9 house; 31/31 fired cells with untouched chains identical; WP69: 123/123).",
+   "held": true
+  },
+  "P7_library": {
+   "text": "R8 holds; no library change is needed.",
+   "held": false
+  }
+ }
+}
