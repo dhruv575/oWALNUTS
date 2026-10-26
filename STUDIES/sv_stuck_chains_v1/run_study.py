@@ -129,6 +129,8 @@ def gzip_telemetry(cid: str, raw: Path) -> None:
 
 
 def run_sv_owalnuts(cid: str, arm: str, seed: int) -> None:
+    if cell_path(cid).exists():
+        return
     WORK.mkdir(parents=True, exist_ok=True)
     out, raw = cell_path(cid), WORK / f"{cid}.telemetry.json"
     CELLS.mkdir(parents=True, exist_ok=True)
@@ -161,6 +163,8 @@ def rhat_stats(mu, ls, hl):
 
 
 def run_sv_cmdstan(cid: str, seed: int) -> None:
+    if cell_path(cid).exists():
+        return
     import cmdstanpy
     cmdstanpy.set_cmdstan_path(os.path.expanduser(PROTOCOL["software"]["cmdstan_path"]))
     exe_dir = WORK / "cmdstan-exe"
@@ -220,6 +224,8 @@ def nutpie_model():
 
 
 def run_sv_nutpie(cid: str, seed: int) -> None:
+    if cell_path(cid).exists():
+        return
     import nutpie
     compiled = nutpie_model()
     rec = {"id": cid, "kind": "sv-nutpie", "arm": "nutpie", "seed": seed, "n": N,
@@ -265,6 +271,8 @@ def run_sv_nutpie(cid: str, seed: int) -> None:
 
 
 def run_funnel(cid: str, arm: str, seed: int) -> None:
+    if cell_path(cid).exists():
+        return
     CELLS.mkdir(parents=True, exist_ok=True)
     out = cell_path(cid)
     t0 = time.time()
@@ -356,6 +364,8 @@ def score(model: str, draws: np.ndarray, grads_total: int, divergences: int) -> 
 
 
 def run_pdb(cid: str, model: str, arm: str, seed: int) -> None:
+    if cell_path(cid).exists():
+        return
     CELLS.mkdir(parents=True, exist_ok=True)
     WORK.mkdir(parents=True, exist_ok=True)
     raw = WORK / f"{cid}.raw.json"

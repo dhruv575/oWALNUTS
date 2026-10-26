@@ -20,11 +20,18 @@
 //! - `uniform`: `Init::uniform()` (CmdStan's rule, one candidate).
 //! - `median16`: `Init::median_of(16)`.
 //! - `normal`: standard-normal starts (nutpie's rule), seed `splitmix64(seed ^ NORMAL_TAG)`.
-//! - `stan_reg`: `custom` with `DiagonalMetricRegularization::Stan`.
+//! - `unit_reg`: `custom` with `DiagonalMetricRegularization::TowardUnit` (the default is
+//!   Stan's, whose variance floor is 1e-3 x 5/(n+5); TowardUnit floors at 5/(n+5)).
 //! - `grad_metric`: `custom` with `DiagonalMetricEstimator::GradientInformed` (research, WP71).
 //! - `early_windows`: `custom` with `WarmupWindowConfig::new(10, 10, 50)`.
 //! - `stan_search`: `custom` with `InitialStepSearchConfig::stan()`.
 //! - `small_step`: `defaults` with `Tuning::step_size(0.05)` (initial macro step).
+//! - `nutpie_init`: `custom` through the low-level entry point with nutpie's initial mass matrix,
+//!   per chain mass_i = clamp(|g_i(start)|, 1e-20, 1e20) (see `LowLevel`); each chain is its own
+//!   single-chain run with base seed `seed + c` (the same RNG stream as chain `c` of the
+//!   four-chain run); chain warnings are computed over the four outputs.
+//! - `lowlevel_noop` (smoke only): `custom` through the low-level entry point, identity initial
+//!   metric; must equal `defaults` bit for bit.
 //! - `restart`: `custom` with `TrappedChainRestartConfig::step_rule()` (WP67, research).
 //! - `guard-<ratio>-<window>`: `custom` with `step_rule().with_step_ratio(ratio)
 //!   .with_check_window(window)` (the WP89 candidate; `window` is the index of the slow
@@ -43,11 +50,14 @@ use owalnuts::sampler::{
     Adaptation, DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric,
     Sampler, StartSelection, Target, TargetError, Tuning, WarmupConfig, candidate_starts,
 };
+use owalnuts::diagnostics::ChainWarning;
 use owalnuts::walnutpie::{
-    ALGORITHM_REVISION, ComparisonObserver, ComparisonTransitionObservation,
-    DiagonalMetricEstimator, DiagonalMetricRegularization, InitialStepSearchConfig,
-    MetricUpdateOutcome, ProposalObservation, ProposalObservationControl, ProposalObserver,
-    TrappedChainCheck, TrappedChainRestartConfig, WarmupPhase, WarmupWindowConfig,
+    ALGORITHM_REVISION, ChainOutput, ComparisonObserver, ComparisonTransitionObservation,
+    DiagonalMass, DiagonalMetricEstimator, DiagonalMetricRegularization,
+    InitialStepSearchConfig, MetricUpdateOutcome, ProposalObservation,
+    ProposalObservationControl, ProposalObserver, RunConfig, TargetEvaluationAdmissionLimit,
+    TargetEvaluationBudget, TrappedChainCheck, TrappedChainRestartConfig, WarmupPhase,
+    WarmupWindowConfig, sample_chains_with_target_budget,
 };
 use serde_json::{Value, json};
 use std::num::NonZeroUsize;
@@ -335,10 +345,26 @@ enum Starts {
     Normal,
 }
 
+/// Arms that go through `walnutpie::sample_chains_with_target_budget` instead of the
+/// `Sampler` facade (no comparison observer there: the telemetry rows carry the
+/// per-transition diagnostics only, log density / log_sigma / gradient are NaN).
+#[derive(Clone, Copy, PartialEq)]
+enum LowLevel {
+    /// Smoke only: the facade's own configuration through the low-level entry point, four
+    /// chains, identity initial metric; must equal `defaults` bit for bit.
+    Noop,
+    /// nutpie's initial mass matrix: per chain, mass_i = clamp(|g_i(start)|, 1e-20, 1e20)
+    /// (nuts-rs `update_diag_grad`, variance 1/|g|), then the default adaptation. Each chain
+    /// runs as its own single-chain run with base seed `seed + c`, which gives chain `c`
+    /// exactly the RNG stream it has in the four-chain run (`chain_seed = splitmix64(seed + c)`).
+    NutpieInit,
+}
+
 struct Arm {
     starts: Starts,
     adaptation: Adaptation,
     tuning: Tuning,
+    low_level: Option<LowLevel>,
 }
 
 fn custom() -> Result<WarmupConfig, Box<dyn Error>> {
@@ -353,11 +379,20 @@ fn arm(name: &str) -> Result<Arm, Box<dyn Error>> {
         starts,
         adaptation,
         tuning: Tuning::default(),
+        low_level: None,
     };
     let c = Adaptation::Custom;
     Ok(match name {
         "defaults" => plain(best16(), Adaptation::default()),
         "custom_noop" => plain(best16(), c(custom()?)),
+        "lowlevel_noop" => Arm {
+            low_level: Some(LowLevel::Noop),
+            ..plain(best16(), c(custom()?))
+        },
+        "nutpie_init" => Arm {
+            low_level: Some(LowLevel::NutpieInit),
+            ..plain(best16(), c(custom()?))
+        },
         "uniform" => plain(
             Starts::Candidates(1, StartSelection::HighestDensity),
             Adaptation::default(),
@@ -367,9 +402,9 @@ fn arm(name: &str) -> Result<Arm, Box<dyn Error>> {
             Adaptation::default(),
         ),
         "normal" => plain(Starts::Normal, Adaptation::default()),
-        "stan_reg" => plain(
+        "unit_reg" => plain(
             best16(),
-            c(custom()?.with_metric_regularization(DiagonalMetricRegularization::Stan)),
+            c(custom()?.with_metric_regularization(DiagonalMetricRegularization::TowardUnit)),
         ),
         "grad_metric" => plain(
             best16(),
@@ -392,6 +427,7 @@ fn arm(name: &str) -> Result<Arm, Box<dyn Error>> {
             starts: best16(),
             adaptation: Adaptation::default(),
             tuning: Tuning::default().step_size(0.05),
+            low_level: None,
         },
         "restart" => plain(
             best16(),
@@ -535,6 +571,38 @@ fn run(
         "telemetry_fields": FIELDS, "stop_reasons": STOPS,
     });
     let o = v.as_object_mut().unwrap();
+    if let Some(kind) = arm.low_level {
+        let Adaptation::Custom(warmup) = &arm.adaptation else {
+            return Err("low-level arms need a Custom adaptation".into());
+        };
+        let begin = Instant::now();
+        let result = run_low_level(kind, &target, &starts, warmup.clone(), &arm.tuning, seed, threads);
+        let wall = begin.elapsed().as_secs_f64();
+        o.insert("wall_seconds_pinned_cotenanted".into(), json!(wall));
+        o.insert(
+            "target_calls_total".into(),
+            json!(target.calls.load(Ordering::Relaxed)),
+        );
+        let (chains, rows, initial) = match result {
+            Ok(x) => x,
+            Err(e) => {
+                o.insert("status".into(), json!("error"));
+                o.insert("error".into(), json!(e.to_string()));
+                fs::write(out, serde_json::to_vec(&v)?)?;
+                eprintln!("{arm_name} seed {seed}: error after {wall:.1}s: {e}");
+                return Ok(());
+            }
+        };
+        fs::write(
+            telemetry_out,
+            serde_json::to_vec(&json!({
+                "arm": arm_name, "seed": seed, "fields": FIELDS, "stop_reasons": STOPS,
+                "rows": rows, "installed_metrics": initial,
+                "note": "low-level path: no observer; log_density, log_sigma, mu, max_abs_gradient are NaN; installed_metrics holds the initial diagonals only",
+            }))?,
+        )?;
+        return finish(o, &chains, &target, arm_name, seed, out, wall);
+    }
     let recorder = Recorder {
         rows: Mutex::new(vec![Vec::new(); CHAINS]),
         metrics: Mutex::new(Vec::new()),
@@ -558,8 +626,8 @@ fn run(
             "installed_metrics": *recorder.metrics.lock().unwrap(),
         }))?,
     )?;
-    let posterior = match result {
-        Ok(p) => p,
+    let chain_outputs: Vec<ChainOutput> = match result {
+        Ok(p) => p.chains().to_vec(),
         Err(e) => {
             o.insert("status".into(), json!("error"));
             o.insert("error_kind".into(), json!(format!("{:?}", e.kind())));
@@ -572,50 +640,190 @@ fn run(
             return Ok(());
         }
     };
-    let mut all = Fnv::new();
-    let chains = posterior
-        .chains()
+    finish(o, &chain_outputs, &target, arm_name, seed, out, wall)
+}
+
+/// Per-chain output record and the pooled draw hash.
+fn chain_json(chain: &ChainOutput, target: &Sv, all: &mut Fnv) -> Value {
+    let t = chain.telemetry();
+    let (retained, discarded, total) = (t.retained(), t.discarded(), t.total());
+    let mut h = Fnv::new();
+    let mut draws: Vec<[f64; 3]> = Vec::with_capacity(RETAINED);
+    for i in 0..RETAINED {
+        let s = chain.sample(i).unwrap();
+        for &x in s {
+            h.f64(x);
+            all.f64(x);
+        }
+        draws.push([s[0], s[1], target.h_last(s)]);
+    }
+    let diags = chain.diagnostics();
+    let step_at = |t: usize| diags.get(t).map(|d| d.step_size());
+    json!({
+        "draws_mu_logsigma_hlast": draws, "draw_hash": h.hex(),
+        "divergences": retained.divergences(),
+        "warmup_divergences": discarded.divergences(),
+        "recoverable_target_failures": total.recoverable_target_failures(),
+        "maximum_depth_stops": retained.maximum_depth_stops(),
+        "warmup_maximum_depth_stops": discarded.maximum_depth_stops(),
+        "refinement_exhaustions": retained.refinement_exhaustion_stops(),
+        "retained_target_calls": retained.target_calls_total(),
+        "warmup_target_calls": discarded.target_calls_total(),
+        "total_target_calls": total.target_calls_total(),
+        "final_step_size": chain.metadata().tuning().step_size(),
+        "mass_diagonal": chain.metadata().mass_diagonal(),
+        "step_at_transition": {"74": step_at(74), "99": step_at(99), "149": step_at(149),
+                               "249": step_at(249), "449": step_at(449), "949": step_at(949),
+                               "999": step_at(999)},
+        "effective_seed": format!("{:016x}", chain.metadata().effective_seed()),
+        "trapped_chain_checks": t.trapped_chain_checks().iter().map(check_json).collect::<Vec<_>>(),
+        "initial_step_search": t.initial_step_search().map(|s| json!({
+            "initial_step": s.initial_step(), "selected_step": s.selected_step(),
+            "target_calls": s.target_calls()})),
+    })
+}
+
+/// Telemetry rows from the diagnostics alone (the low-level arms, which have no observer).
+fn diagnostics_rows(chain: &ChainOutput) -> Vec<[f64; 19]> {
+    chain
+        .diagnostics()
         .iter()
-        .map(|chain| {
-            let t = chain.telemetry();
-            let (retained, discarded, total) = (t.retained(), t.discarded(), t.total());
-            let mut h = Fnv::new();
-            let mut draws: Vec<[f64; 3]> = Vec::with_capacity(RETAINED);
-            for i in 0..RETAINED {
-                let s = chain.sample(i).unwrap();
-                for &x in s {
-                    h.f64(x);
-                    all.f64(x);
-                }
-                draws.push([s[0], s[1], target.h_last(s)]);
-            }
-            let diags = chain.diagnostics();
-            let step_at = |t: usize| diags.get(t).map(|d| d.step_size());
-            json!({
-                "draws_mu_logsigma_hlast": draws, "draw_hash": h.hex(),
-                "divergences": retained.divergences(),
-                "warmup_divergences": discarded.divergences(),
-                "recoverable_target_failures": total.recoverable_target_failures(),
-                "maximum_depth_stops": retained.maximum_depth_stops(),
-                "warmup_maximum_depth_stops": discarded.maximum_depth_stops(),
-                "refinement_exhaustions": retained.refinement_exhaustion_stops(),
-                "retained_target_calls": retained.target_calls_total(),
-                "warmup_target_calls": discarded.target_calls_total(),
-                "total_target_calls": total.target_calls_total(),
-                "final_step_size": chain.metadata().tuning().step_size(),
-                "mass_diagonal": chain.metadata().mass_diagonal(),
-                "step_at_transition": {"74": step_at(74), "99": step_at(99), "149": step_at(149),
-                                       "249": step_at(249), "449": step_at(449), "949": step_at(949),
-                                       "999": step_at(999)},
-                "effective_seed": format!("{:016x}", chain.metadata().effective_seed()),
-                "trapped_chain_checks": t.trapped_chain_checks().iter().map(check_json).collect::<Vec<_>>(),
-                "initial_step_search": t.initial_step_search().map(|s| json!({
-                    "initial_step": s.initial_step(), "selected_step": s.selected_step(),
-                    "target_calls": s.target_calls()})),
-            })
+        .enumerate()
+        .map(|(t, d)| {
+            let stop = format!("{:?}", d.stop());
+            let stop = STOPS
+                .iter()
+                .position(|x| *x == stop)
+                .map_or(-1.0, |i| i as f64);
+            [
+                t as f64,
+                f64::from(u8::from(t < WARMUP)),
+                -1.0,
+                -1.0,
+                d.step_size(),
+                d.depth() as f64,
+                stop,
+                d.target_evaluations() as f64,
+                f64::from(u8::from(d.divergent())),
+                f64::NAN,
+                d.acceptance_statistic().unwrap_or(f64::NAN),
+                d.maximum_absolute_energy_error(),
+                d.zero_density_evaluations() as f64,
+                d.recoverable_target_failures() as f64,
+                f64::from(u8::from(d.position_changed())),
+                f64::NAN,
+                f64::NAN,
+                f64::NAN,
+                0.0,
+            ]
         })
+        .collect()
+}
+
+/// Chains, telemetry rows per chain and the initial metric records of a low-level run.
+type LowLevelRun = (Vec<ChainOutput>, Vec<Vec<[f64; 19]>>, Vec<Value>);
+
+/// The low-level arms: the facade's configuration through
+/// `sample_chains_with_target_budget` (worst-case admission, as `Limits::admit_worst_case`).
+fn run_low_level(
+    kind: LowLevel,
+    target: &Sv,
+    starts: &[Vec<f64>],
+    warmup: WarmupConfig,
+    tuning: &Tuning,
+    seed: u64,
+    threads: usize,
+) -> Result<LowLevelRun, Box<dyn Error>> {
+    let nz = |v: usize| NonZeroUsize::new(v).expect("nonzero");
+    let config = |base_seed: u64| -> Result<RunConfig, Box<dyn Error>> {
+        Ok(RunConfig::new(WARMUP, nz(RETAINED), base_seed)
+            .with_tuning(tuning.to_kernel()?)
+            .with_cached_initial_evaluation(true)
+            .with_warmup(warmup.clone()))
+    };
+    let run = |positions: &[Vec<f64>], mass: DiagonalMass, base_seed: u64, threads: usize| {
+        let cfg = config(base_seed)?;
+        let worst = cfg.worst_case_target_evaluations(nz(positions.len()))?;
+        let out = sample_chains_with_target_budget(
+            target,
+            positions,
+            &mass,
+            &cfg,
+            nz(threads),
+            TargetEvaluationAdmissionLimit::new(nz(worst)),
+            &TargetEvaluationBudget::new(nz(worst)),
+        )?;
+        Ok::<_, Box<dyn Error>>(out.chains().to_vec())
+    };
+    let dimension = target.dimension();
+    match kind {
+        LowLevel::Noop => {
+            let chains = run(starts, DiagonalMass::identity(nz(dimension)), seed, threads)?;
+            let rows = chains.iter().map(diagnostics_rows).collect();
+            Ok((chains, rows, Vec::new()))
+        }
+        LowLevel::NutpieInit => {
+            let mut masses = Vec::with_capacity(starts.len());
+            let mut initial = Vec::new();
+            for (c, s) in starts.iter().enumerate() {
+                let mut g = vec![0.0; dimension];
+                target.log_density_gradient(s, &mut g)?;
+                let mass: Vec<f64> = g.iter().map(|x| x.abs().clamp(1e-20, 1e20)).collect();
+                initial.push(json!({"chain": c, "transition": -1, "epoch": 0, "window": null,
+                    "step_after": null, "diagonal": mass}));
+                masses.push(mass);
+            }
+            let results: Vec<Result<Vec<ChainOutput>, String>> = std::thread::scope(|s| {
+                let handles: Vec<_> = starts
+                    .iter()
+                    .zip(&masses)
+                    .enumerate()
+                    .map(|(c, (start, mass))| {
+                        let run = &run;
+                        s.spawn(move || {
+                            let mass = DiagonalMass::from_diagonal(mass.clone())
+                                .map_err(|e| e.to_string())?;
+                            run(
+                                std::slice::from_ref(start),
+                                mass,
+                                seed.wrapping_add(c as u64),
+                                1,
+                            )
+                            .map_err(|e| e.to_string())
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("chain thread panicked"))
+                    .collect()
+            });
+            let mut chains = Vec::with_capacity(starts.len());
+            for r in results {
+                chains.extend(r?);
+            }
+            let rows = chains.iter().map(diagnostics_rows).collect();
+            Ok((chains, rows, initial))
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish(
+    o: &mut serde_json::Map<String, Value>,
+    chain_outputs: &[ChainOutput],
+    target: &Sv,
+    arm_name: &str,
+    seed: u64,
+    out: &Path,
+    wall: f64,
+) -> Result<(), Box<dyn Error>> {
+    let mut all = Fnv::new();
+    let chains = chain_outputs
+        .iter()
+        .map(|chain| chain_json(chain, target, &mut all))
         .collect::<Vec<_>>();
-    let warnings = posterior.chain_warnings();
+    let warnings = ChainWarning::from_chains(chain_outputs);
     o.insert("status".into(), json!("ok"));
     o.insert("draw_hash".into(), json!(all.hex()));
     o.insert("chains_data".into(), json!(chains));
@@ -632,12 +840,9 @@ fn run(
         "chain_warning_chains".into(),
         json!(warnings.iter().map(|w| w.chain()).collect::<Vec<_>>()),
     );
-    o.insert(
-        "algorithm_revision".into(),
-        json!(posterior.algorithm_revision()),
-    );
-    o.insert("timing_estimand".into(), json!("wall around Sampler::run_with_comparison_observers; core-pinned on a shared box (pinned, co-tenanted)"));
-    fs::write(out, serde_json::to_vec(&v)?)?;
+    o.insert("algorithm_revision".into(), json!(ALGORITHM_REVISION));
+    o.insert("timing_estimand".into(), json!("wall around the sampling call; core-pinned on a shared box (pinned, co-tenanted)"));
+    fs::write(out, serde_json::to_vec(&Value::Object(o.clone()))?)?;
     eprintln!(
         "{arm_name} seed {seed}: ok wall {wall:.2}s hash {} warnings {}",
         all.hex(),
