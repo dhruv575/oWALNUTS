@@ -1,0 +1,115 @@
+{
+ "decision_rules": {
+  "gradmetric": {
+   "R1_geomean_ess_per_gradient_ge_1.10": {
+    "value": 0.9830430757303908,
+    "models": 17,
+    "held": false
+   },
+   "R2_pass_count_not_lower": {
+    "default": 43,
+    "gradmetric": 40,
+    "held": false
+   },
+   "R3_no_new_divergences": {
+    "models_with_more_divergences": [
+     "eight_schools-eight_schools_centered"
+    ],
+    "total_default": 0,
+    "total_gradmetric": 3,
+    "held": false
+   },
+   "F_funnel_p5_within_1se": {
+    "pooled": 0.048045,
+    "se": 0.002599928684919389,
+    "abs_error": 0.0002546477271852948,
+    "held": true
+   },
+   "D_flag_off_integrity": {
+    "library_diff_scoped": true,
+    "kernel_fingerprint_test_passed": true,
+    "flag_off_test_passed": true,
+    "held": true
+   },
+   "verdict": "NOT SUPPORTED (failed: R1, R2, R3)"
+  },
+  "gradmetric-overlap": {
+   "R1_geomean_ess_per_gradient_ge_1.10": {
+    "value": 1.0253347721740975,
+    "models": 17,
+    "held": false
+   },
+   "R2_pass_count_not_lower": {
+    "default": 43,
+    "gradmetric-overlap": 38,
+    "held": false
+   },
+   "R3_no_new_divergences": {
+    "models_with_more_divergences": [],
+    "total_default": 0,
+    "total_gradmetric-overlap": 0,
+    "held": true
+   },
+   "F_funnel_p5_within_1se": {
+    "pooled": 0.047595,
+    "se": 0.002971976872012596,
+    "abs_error": 0.0001953522728147042,
+    "held": true
+   },
+   "D_flag_off_integrity": {
+    "library_diff_scoped": true,
+    "kernel_fingerprint_test_passed": true,
+    "flag_off_test_passed": true,
+    "held": true
+   },
+   "verdict": "NOT SUPPORTED (failed: R1, R2)"
+  }
+ },
+ "predictions": {
+  "Pa_predicted_gainers_gain_more": {
+   "observed": [
+    0.8387711697112694,
+    1.0322419108092713
+   ],
+   "held": false
+  },
+  "Pb_at_least_3_predicted_in_top6": {
+   "observed": 1,
+   "top6": [
+    "bball_drive_event_0-hmm_drive_0",
+    "eight_schools-eight_schools_centered",
+    "gp_pois_regr-gp_pois_regr",
+    "eight_schools-eight_schools_noncentered",
+    "arma-arma11",
+    "sblrc-blr"
+   ],
+   "held": false
+  },
+  "Pc_warmup_share_lower_with_gradmetric": {
+   "observed": [
+    0.4808920984811304,
+    0.5101173934745326
+   ],
+   "held": false
+  },
+  "Pd_warmup_share_change_under_5_points": {
+   "observed": 0.02922529499340215,
+   "held": true
+  },
+  "Pe_overlap_within_5pct_of_primary": {
+   "observed": [
+    1.0253347721740975,
+    0.9830430757303908
+   ],
+   "held": true
+  },
+  "Pf_lost_passes_only_on_gp_pois_regr_or_lotka_volterra": {
+   "observed": [
+    "diamonds-diamonds",
+    "gp_pois_regr-gp_pois_regr",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs"
+   ],
+   "held": false
+  }
+ }
+}

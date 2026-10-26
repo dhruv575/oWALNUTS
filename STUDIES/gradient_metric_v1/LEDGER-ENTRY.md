@@ -1,0 +1,40 @@
+### WP71-GRADIENT-METRIC-V1 — nutpie's gradient-informed diagonal estimator inside the Stan windows is NOT SUPPORTED: geomean ESS/gradient 0.983 (0.844 without hmm_drive_0) vs the >= 1.10 rule, passes 43 -> 40, 3 new divergences (eight_schools_centered); the predicted regression gainers lost most (0.84); funnel sound (P5 0.0480 ± 0.0026, divergences 9 -> 5)
+- **Ordered time:** 2026-10-26 on `wt/gradient-metric`.
+  - Library commit `5cfbd199` adds the research flag `walnutpie::DiagonalMetricEstimator` (off by default; builder behind `research`).
+  - `PREREGISTRATION.md` and `protocol.json` were frozen in `7cab386b` before any evidence cell.
+  - Disclosed non-evidence work: three local funnel smoke runs, the BridgeStan compile, and box pipeline checks on seed 990671.
+  - Block P ran 153 cells and block F ran 30, with no errors or timeouts.
+  - Everything ran on AWS `owalnuts-bench` lane 3, pinned `taskset -c 8-11` and co-tenanted. Dispatch was WP65 `ReplicatedConcurrent` x 4.
+- **Protocol/config:**
+  - **Estimator.** `s_i = sqrt(var(x_i)/var(g_i))` over each slow window, using the selected state's cached gradient. It goes through Stan's regularisation, the floor and the inversion.
+    - Windows are the Stan schedule, unchanged: 25/50/100/200/500.
+    - The overlap variant merges the previous window's statistics with the current window's (Chan merge).
+  - **Arms.** default, gradmetric (primary), gradmetric-overlap (secondary).
+  - **Block P.** 17 house models x 3 seeds at 4 x 1,000/1,000, v7 gates.
+  - **Block F.** Funnel, 10 seeds at 4 x 2,000/20,000.
+  - **Rules.** SUPPORTED iff all of:
+    - R1: geomean >= 1.10;
+    - R2: pass count not lower;
+    - R3: no model with more divergences;
+    - F: funnel P5 within 1 s.e. of 0.0478;
+    - D: flag-off integrity.
+- **Seeds:** P 717501–717503, F 717401–717410. No repository hit; no box-lane hit.
+- **Outcome, gradmetric:**
+  - Geomean **0.983** over 17 models, 5 up. hmm_drive_0 is 11.3x on its second-mode lottery.
+  - Passes **40 vs 43**: lost on diamonds, gp_pois_regr and one_comp (2).
+  - Divergences 0 -> 3 on eight_schools_centered.
+  - R1, R2 and R3 fail; F holds (0.0480 ± 0.0026); D holds (kernel fingerprints pass with and without `research`, and flag-off bit-identity holds).
+- **Outcome, overlap arm (reported only):** geomean 1.025, passes 38, no new divergences.
+- **Predictions:**
+  - Fail:
+    - Pa: regressions 0.84 vs others 1.03;
+    - Pb: 1 of 4 in the top 6;
+    - Pc: the warmup share rises, 0.481 -> 0.510;
+    - Pf: lost passes beyond gp_pois_regr and lotka_volterra.
+  - Hold:
+    - Pd: +2.9 points;
+    - Pe: the overlap arm is within 5 %;
+    - Pg: funnel divergences 5 <= 9.
+- **Reading (not tested):** on correlated models the estimate sits below the marginal variance. Installed variances were 3–11x smaller, steps larger and gradients 0.7–0.9x, but min bulk ESS fell to 0.6–0.7x. nutpie's lead does not come from this estimator alone.
+- **Decision:** none needed. The flag stays research-only and off by default, with no default flip and no change to `ALGORITHM_REVISION` or the fingerprints.
+- **Files:** `STUDIES/gradient_metric_v1/` (README, cells, summary, draws manifest, CHECKSUMS.sha256).
