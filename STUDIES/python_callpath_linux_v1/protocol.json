@@ -1,0 +1,100 @@
+{
+ "study": "python_callpath_linux_v1",
+ "ledger_id": "WP78",
+ "frozen": "2026-10-25, before the first evidence cell (PREREGISTRATION.md)",
+ "base_commit": "55e5a0aa",
+ "question": "On Linux, with no Windows machine in the loop, what does each Python call path of the owalnuts package cost per gradient relative to a pure-Rust target on the WP47 models, and does the nutpie per-gradient gap on those PyMC models (WP47, WP58, measured on Windows) persist?",
+ "predecessors": {
+  "WP47": "STUDIES/python_callpath_v1 (Windows, contended, Python 3.11.16)",
+  "WP58": "STUDIES/nutpie_per_gradient_gap_v1 (Windows, contended; the gap on the same three PyMC models)"
+ },
+ "seeds": [7878101, 7878102, 7878103],
+ "seed_check": "exact-word git grep over main and every local wt/* branch, and grep -rw over ~/lanes on the box, found none of 7878101-7878103 or 7878501 (recorded in PREREGISTRATION.md)",
+ "micro_point_seed": 7878501,
+ "hier_data_seed": 4747900,
+ "targets": ["gauss100", "eight", "hier"],
+ "target_dims": {"gauss100": 100, "eight": 10, "hier": 157},
+ "model_source": "callpath_targets.py copied verbatim from STUDIES/python_callpath_v1 (identical in nutpie_per_gradient_gap_v1); models/hier_data.json copied verbatim from nutpie_per_gradient_gap_v1/models; the Rust arm's densities are WP58's native ones",
+ "owalnuts_arms": ["rust", "cfunc", "py-njit", "pymc-gilfree", "pymc", "jax"],
+ "nutpie_arms": ["nutpie"],
+ "arm_definitions": {
+  "rust": "pure-Rust reference: rust/ harness (wp78-rust), native densities, owalnuts::sampler::Sampler at its defaults configured as the Python package configures it, starts Init::default() (best-of-16) via candidate_starts; release profile = the extension's (opt 3, lto, codegen-units 1)",
+  "cfunc": "owalnuts.from_cfunc of the documented recipe: numba cfunc with error_model='numpy' and the nonfinite guard around the njit kernel (WP47 'cfunc-safe', callpath_targets.cfunc_safe_target)",
+  "py-njit": "plain Python callable around the same njit kernel (transport control; WP47 showed it bit-identical to cfunc-safe)",
+  "pymc-gilfree": "owalnuts.from_pymc(model, gil_free=True) (PyTensor NUMBA jit_fn in a numba cfunc)",
+  "pymc": "owalnuts.from_pymc(model): PyTensor C backend, a Python callable; thread_safe=False at threads=1, thread_safe=True at threads=4 (the documented rule)",
+  "jax": "owalnuts.from_jax(logp) (jit=True default; the post-WP47 numpy-argument dispatch)",
+  "nutpie": "nutpie 0.16.8: nutpie.compile_pymc_model(model) (numba backend), nutpie.sample(draws=1000, tune=1000, chains=4, cores=threads, seed, save_warmup=True), defaults otherwise"
+ },
+ "threads": [1, 4],
+ "threads_note": "owalnuts threads / nutpie cores; 4 chains in every cell; every process pinned to cores 12-15",
+ "micro_paths": ["rust", "py-njit", "cfunc", "jax", "pymc", "pymc-gilfree"],
+ "micro_calls": 10000,
+ "sampler": {"chains": 4, "warmup": 1000, "draws": 1000,
+             "settings": "owalnuts.sample at the package defaults (init=None = best-of-16); nutpie defaults"},
+ "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0},
+ "cell_timeout_seconds": 1800,
+ "order": "strictly sequential child processes; micro cells first (targets outer, micro_paths rotated by target index); then seeds outer, targets, the (arm x threads) list over owalnuts_arms + nutpie_arms rotated by (3 * seed index + target index)",
+ "metrics": {
+  "wall_per_gradient_us": "Rust-side sampling wall (SampleResult.wall_seconds; the harness's Sampler::run wall) / kernel target calls; at threads=4 this is throughput per gradient across the 4 chains. Python-arm walls exclude start selection; the Rust arm's run wall excludes it too",
+  "latency_vs_rust": "median over seeds of wall_per_gradient_us(path) / the same for rust at the same thread count; and the difference in us at threads=1",
+  "micro": "median of 10^4 individually timed calls through the Python surface (cfunc and pymc-gilfree through ctypes, labelled); rust: median of 10^4 Instant-timed native evaluations and a 10^4-call loop mean",
+  "functionals": "every unconstrained coordinate plus theta_1..theta_8 for eight (callpath_targets.functionals)",
+  "ess_per_second": "min bulk ESS / wall of the owalnuts.sample or nutpie.sample call (rust: start selection + Sampler::run); compilation excluded and reported as construct_seconds",
+  "ess_per_gradient": "min bulk ESS / total gradients: oWALNUTS kernel target calls + best-of-16 start-selection evaluations (Python arms: counted after the run from owalnuts.best_of_starts(return_details=True), untimed; rust: counted); nutpie: n_steps warmup + draws",
+  "nutpie_gap": "per model: geomean over seeds of nutpie ESS/gradient (cores=1 cells) / geomean over seeds of the arm's ESS/gradient (threads=1 cells); primary arm pymc (the WP58 Python path); pooled = geomean over the three models",
+  "ratio_aggregation": "ESS/s ratios are geometric means over seeds of per-seed ratios (same seed, matched threads/cores)",
+  "bit_identity": "sha256 of the (chains, draws, dim) retained float64 draws"
+ },
+ "windows_reference": {
+  "WP47_in_sampler_us_per_call_t1": {"cfunc-safe": [1.32, 0.59, 2.86], "pymc-gilfree": [4.21, 5.73, 24.15], "py-njit": [3.01, 1.84, 4.17], "pymc": [7.23, 11.94, 30.93], "jax_fixed": [22.07, 19.48, 32.26]},
+  "WP47_vs_nutpie_ess_per_second": {"pymc_t1": [0.209, 0.239, 0.174], "pymc-gilfree_t1": [0.541, 0.996, 0.505], "pymc-gilfree_t4": [0.925, 0.474, 0.547], "cfunc-safe_t1": [2.336, 9.037, 3.946], "cfunc-safe_t4": [3.984, 16.096, 5.754]},
+  "WP47_from_jax_fix_gain_t1": [2.05, 2.06, 2.59],
+  "WP47_nutpie_per_gradient_lead": [1.69, 1.63, 2.35],
+  "WP58_nutpie_gap_python_path": {"gauss100": 1.66, "eight": 1.42, "hier": 2.10, "pooled": 1.70},
+  "WP58_nutpie_gap_rust_path_pooled": 1.64,
+  "order": "gauss100, eight, hier"
+ },
+ "predictions": {
+  "P1": {"text": "in-sampler wall per gradient at threads=1 (us, every seed's median) lies in these ranges", "ranges_t1_us": {
+   "rust": {"gauss100": [0.3, 2.0], "eight": [0.15, 1.5], "hier": [1.5, 5.0]},
+   "cfunc": {"gauss100": [0.3, 2.0], "eight": [0.15, 1.5], "hier": [1.5, 5.0]},
+   "py-njit": {"gauss100": [1.0, 5.0], "eight": [0.8, 4.0], "hier": [2.5, 8.0]},
+   "pymc-gilfree": {"gauss100": [1.5, 8.0], "eight": [2.0, 10.0], "hier": [10.0, 40.0]},
+   "pymc": {"gauss100": [3.0, 15.0], "eight": [5.0, 20.0], "hier": [15.0, 50.0]},
+   "jax": {"gauss100": [8.0, 40.0], "eight": [8.0, 40.0], "hier": [12.0, 60.0]}}},
+  "P2": {"text": "cost relative to the pure-Rust target (median wall per gradient ratio, same threads)", "ratio_ranges": {
+   "cfunc_t1": [0.8, 1.5], "cfunc_t4": [0.8, 1.5],
+   "pymc-gilfree_t1": {"gauss100": [2.0, 8.0], "eight": [4.0, 20.0], "hier": [4.0, 15.0]},
+   "py-njit_minus_cfunc_t1_us": [0.5, 3.0]}},
+  "P3": {"text": "threads=4 vs threads=1 (geomean over seeds of per-seed ESS/s ratios)", "ranges": {
+   "rust": [2.0, 3.9], "cfunc": [2.0, 3.9], "pymc-gilfree": [2.0, 3.9],
+   "py-njit": [0.0, 1.0], "jax": [0.0, 1.0], "pymc": [0.15, 1.0]}, "every_model": true},
+  "P4": {"text": "bit identity: rust == cfunc == py-njit on every model, seed and thread count; every oWALNUTS arm identical at threads 1 and 4; nutpie identical at cores 1 and 4; pymc != pymc-gilfree on eight and hier (C vs NUMBA backend, WP47); the Python arms' best-of-16 chosen candidates and evaluation counts equal the Rust arm's"},
+  "P5": {"text": "ESS per gradient of every oWALNUTS arm within 0.8-1.25x of rust (geomean over seeds, threads=1 cells), every model", "range": [0.8, 1.25]},
+  "P6": {"text": "the nutpie per-gradient gap persists on Linux", "per_model_gap": [1.2, 2.6], "pooled_gap": [1.4, 2.1], "arm": "pymc"},
+  "P7": {"text": "ESS/s vs nutpie at matched threads/cores (geomean over seeds of per-seed ratios), every model", "ranges": {
+   "pymc_t1": [0.10, 0.40], "pymc_t4": [0.03, 0.25], "pymc-gilfree_t1": [0.35, 1.2], "pymc-gilfree_t4": [0.35, 1.2],
+   "jax_t1": [0.05, 0.6], "cfunc_t1": [1.5, 12.0], "cfunc_t4": [1.5, 16.0], "rust_t4": [1.5, 16.0]}},
+  "P8": {"text": "health and completion: every one of the 126 sampler cells and 18 micro cells completes with status ok and exit code 0 (including pymc thread_safe=True at threads=4: F6 on Linux / CPython 3.12, untested by WP47); every oWALNUTS arm passes the gates on >= 8 of its 9 (model, seed) cells at threads=1; nutpie fails the gates on eight in >= 2 of 3 seeds and passes gauss100 3/3 and hier >= 2/3"}
+ },
+ "decision_rule": {
+  "frozen": true,
+  "R1": "PyMC first choice. If pymc-gilfree at threads=4 has ESS/s >= 2.0x pymc at threads=1 (geomean over seeds of per-seed ratios) on every model, completes every cell, and passes at least as many gate cells as pymc threads=1 on each model, the README recommends from_pymc(model, gil_free=True) with threads=4 as the first choice for PyMC models on Linux. Otherwise from_pymc(model) at threads=1 stays first and gil_free is listed as an opt-in with its measured ratio.",
+  "R2": "PyMC vs nutpie, per model class (gauss100 = well-scaled smooth, eight = small funnel-shaped hierarchical, hier = larger hierarchical regression). If nutpie cores=4 ESS/s >= 1.25x the R1 path's ESS/s (geomean over seeds) and nutpie passes the gates on >= 2/3 seeds of that model, the README says nutpie is faster on that class by the measured ratio. If nutpie fails the gates on >= 2/3 seeds of a model, the README states the gate failure instead of a speed comparison. Otherwise the README says oWALNUTS's R1 path is at least competitive (ratio stated).",
+  "R3": "Hand-written kernels. If cfunc threads=4 ESS/s >= 2.0x py-njit threads=1 ESS/s on every model, the README recommends from_cfunc (error_model='numpy' + guard) for speed. If cfunc's wall per gradient at threads=4 is <= 1.5x rust's on every model, the README says from_cfunc runs within 1.5x of a native Rust target; otherwise it states the measured ratio.",
+  "R4": "Threads for Python callables. For each of py-njit, jax and pymc: if its threads=4 / threads=1 ESS/s ratio is < 1.0 on >= 2 of 3 models, the README keeps 'use threads=1' for that path on Linux; if it is >= 1.2 on every model, the README says threads=4 helps that path on Linux; otherwise it says threads makes little difference.",
+  "R5": "The nutpie per-gradient sentence. If the pooled pymc gap is in [1.4, 2.1] and every model's gap is > 1.2: 'persists on Linux' with the Linux numbers. If the pooled gap is < 1.25: the README says it did not reproduce on Linux. Otherwise: 'smaller on Linux' with the numbers.",
+  "R6": "JAX. If jax threads=1 ESS/s >= 0.5x py-njit threads=1 ESS/s on every model, the README says from_jax is competitive with a compiled callable; otherwise it states that JAX's per-call dispatch dominates small models, with the measured us per gradient.",
+  "scope": "The rule decides documentation only. No library code or default is changed by this study; failures are results and are not rerun."
+ },
+ "smoke": {"targets": ["eight"], "warmup": 50, "draws": 50, "micro_calls": 200,
+           "note": "after the freeze, before the first evidence cell: plumbing only, seed 1, WP78_ART outside artifacts/, outputs deleted; not evidence"},
+ "environment": {
+  "box": "AWS EC2 c7a.4xlarge, 16 dedicated AMD EPYC cores (no SMT), 32 GB, Ubuntu 24.04; lane 4 = cores 12-15; three other lanes active (shared L3 and memory bandwidth): walls are pinned, co-tenanted",
+  "python": "CPython 3.12.3 (Ubuntu system interpreter), lane venv ~/lanes/python_callpath_linux_v1/venv",
+  "packages_requested": "numpy 2.4.6, numba 0.67.0, jax[cpu] 0.10.2, pymc 5.28.5, pytensor 2.38.2, nutpie 0.16.8, arviz 0.23.4, maturin 1.15.0 (WP47's versions); exact freeze in artifacts/build-manifest.json",
+  "extension": "maturin develop --release in integrations/python of this branch's clone on the box, Rust 1.88.0, taskset -c 12-15, 4 build jobs",
+  "env": "RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, JAX_PLATFORMS=cpu, PYTENSOR_FLAGS=compiledir=<lane cache>, NUMBA_CACHE_DIR=<lane cache>"
+ }
+}
