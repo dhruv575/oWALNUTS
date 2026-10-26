@@ -1,0 +1,100 @@
+{
+ "schema": "metric-autoselect-v1",
+ "ledger_id": "WP75",
+ "status": "DRAFT",
+ "house_models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "arma-arma11",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "selection": {
+  "select_window": 2,
+  "threshold": 5.0
+ },
+ "predicted_branch": {
+  "eight_schools-eight_schools_noncentered": "?",
+  "eight_schools-eight_schools_centered": "?",
+  "diamonds-diamonds": "?",
+  "earnings-logearn_interaction": "?",
+  "mesquite-logmesquite_logvash": "?",
+  "kidiq-kidscore_momhsiq": "?",
+  "sblrc-blr": "?",
+  "nes2000-nes": "?",
+  "arK-arK": "?",
+  "arma-arma11": "?",
+  "garch-garch11": "?",
+  "gp_pois_regr-gp_pois_regr": "?",
+  "hmm_example-hmm_example": "?",
+  "bball_drive_event_0-hmm_drive_0": "?",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs": "?",
+  "hudson_lynx_hare-lotka_volterra": "?",
+  "mcycle_gp-accel_gp": "?"
+ },
+ "seeds": {
+  "P": [
+   757501,
+   757502,
+   757503
+  ],
+  "F": [
+   757401,
+   757402,
+   757403,
+   757404,
+   757405,
+   757406,
+   757407,
+   757408,
+   757409,
+   757410
+  ]
+ },
+ "blocks": {
+  "P": {
+   "kind": "posteriordb",
+   "arms": [
+    "diag",
+    "dense",
+    "auto"
+   ],
+   "warmup": 1000,
+   "draws": 1000,
+   "seeds": "P"
+  },
+  "F": {
+   "kind": "funnel",
+   "arms": [
+    "diag",
+    "dense",
+    "auto"
+   ],
+   "warmup": 2000,
+   "draws": 20000,
+   "seeds": "F"
+  }
+ },
+ "gates": {
+  "max_rank_rhat": 1.01,
+  "min_bulk_ess": 400,
+  "min_tail_ess": 400,
+  "sampling_divergences": 0,
+  "finite_draws": true,
+  "no_sampler_error": true
+ },
+ "cell_timeout_seconds": 2700,
+ "predictions": {}
+}
