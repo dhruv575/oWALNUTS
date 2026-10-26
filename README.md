@@ -822,3 +822,13 @@ provenance.
   R-hat > 1.01 reported:
   [`STUDIES/trapped_chain_restart_confirmation_v1`](STUDIES/trapped_chain_restart_confirmation_v1/README.md)
   (WP69).
+- [E37] nutpie's gradient-informed diagonal metric estimator as a research
+  flag (`walnutpie::DiagonalMetricEstimator`, off; `s_i =
+  sqrt(var(x_i)/var(g_i))` per slow window with the shipped regularisation),
+  17 house models x 3 fresh seeds on Linux: **not supported**, geomean ESS
+  per gradient 0.983 (0.844 without `hmm_drive_0`), passes 40 vs 43, 3 new
+  divergences on centred Eight Schools; the overlapping-window variant 1.025
+  and 38 passes; funnel 1.57x with divergences 9 -> 5 and P5 0.0480 ±
+  0.0026; flag-off runs bit-identical and the fingerprint test passes:
+  [`STUDIES/gradient_metric_v1`](STUDIES/gradient_metric_v1/README.md)
+  (WP71).

@@ -200,7 +200,15 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     and faster early windows (non-rule follow-ups; the transplant lost gates
     on `gp_pois_regr` and `lotka_volterra`). The Python `init=None` default
     now follows the Rust best-of-16 rule, after `init=None` failed all 12
-    Python `lotka_volterra` cells in WP58.
+    Python `lotka_volterra` cells in WP58. WP71
+    (`STUDIES/gradient_metric_v1`, Linux) ported nutpie's gradient-informed
+    diagonal estimator (`s_i = sqrt(var(x_i)/var(g_i))` per slow window,
+    same regularisation, flag `DiagonalMetricEstimator`, off): **not
+    supported**, geomean 0.983 (0.844 without `hmm_drive_0`), passes 40 vs
+    43, 3 new divergences on centred Eight Schools; the installed variances
+    on correlated models came out 3–11x too small. The funnel improved
+    (1.57x, divergences 9 -> 5). So the metric estimator is not the gap;
+    nutpie's warmup schedule is the remaining candidate (WP73).
 14. **Fixed `delta = 2`** (WP34, WP37A, WP49, WP53): WP37A did not
     qualify it (funnel gates F3 and F4 failed). As WP49's control it is
     1.141x over posteriordb with 43 gates (1.067x without two seed
