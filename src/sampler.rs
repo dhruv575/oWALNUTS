@@ -739,6 +739,18 @@ pub fn candidate_starts<T: Target + ?Sized>(
     Ok(out)
 }
 
+/// Refinement levels of [`Tuning::default`]: eight (micro-steps down to
+/// `h / 128`). The study-only Cargo feature `candidate-levels10` makes it ten
+/// (`h / 512`) for `STUDIES/refinement_levels10_v1` (WP67); it is off by
+/// default and is not a default change. Ten levels differ from eight only on
+/// a leaf whose energy error exceeds `max_error` at all eight coarser levels,
+/// so a run in which no leaf exhausts eight levels is bit-identical.
+pub const DEFAULT_MAX_REFINEMENT_LEVELS: usize = if cfg!(feature = "candidate-levels10") {
+    10
+} else {
+    8
+};
+
 /// Kernel tuning: the macro step, tree depth, refinement, and error
 /// threshold. Values are validated when the run starts.
 ///
@@ -779,7 +791,7 @@ impl Default for Tuning {
             step_size: 0.5,
             max_depth: 10,
             min_micro_steps: 1,
-            max_refinement_levels: 8,
+            max_refinement_levels: DEFAULT_MAX_REFINEMENT_LEVELS,
             max_error: 1.0,
             divergence_threshold: DEFAULT_DIVERGENCE_THRESHOLD,
             kernel_options: KernelOptions {
