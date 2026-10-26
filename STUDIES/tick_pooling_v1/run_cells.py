@@ -111,6 +111,7 @@ def plan():
 
 def lane(which, workdir):
     cells = [c for c in PROTO["cells"] if c["lane"] == int(which)]
+    (HERE / "artifacts" / "cells").mkdir(parents=True, exist_ok=True)
     log = open(HERE / "artifacts" / f"lane-{which}.log", "a")
     for c in cells:
         out = HERE / "artifacts" / "cells" / c["id"]

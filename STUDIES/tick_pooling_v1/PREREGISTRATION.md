@@ -171,3 +171,9 @@ with the size of the bias, and the pf variant tests whether the stale draws can 
   (every K = 5 configuration at 0 % on 3 ticks, as 20 draws at P95 must; the two-pair smoke lag curve read 4.3 % and
   8.8 % P50 change at lags 1 and 2, in line with the WP88 reading). No code changed after the smoke.
 * Disk: the box had 4.3 GB free at the freeze (another lane's artifacts); this study writes about 150 MB of f32 draws.
+
+## Amendment 1 (pipeline only, before any evidence cell)
+
+The first lane launch at the freeze commit `446d0caa` crashed in the driver before starting any cell (`artifacts/` is not
+created by the checkout; `run_cells.py lane` now creates it). No cell, seed or rule changed; the Rust binary built at
+`ae52d8a1` is unchanged (the crate's sources are identical at the freeze and here).
