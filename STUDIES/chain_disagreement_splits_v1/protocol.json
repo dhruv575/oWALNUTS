@@ -35,9 +35,10 @@
   ],
   "rules": {
     "current": "ChainWarning::from_chains (shipped): D1 WarmupStep, D2 WarmupLogDensity, D3 SampledLogDensity, D4 RHat; NonfinitePositions recorded but is not a disagreement check",
-    "S_split_rhat": "primary candidate. >= 4 chains and all-chain max rank R-hat (diagnostics::rhat over every ChainOutput sample coordinate, NaN-ignoring max) > 1.01. Score every partition into two groups of >= 2 chains; a partition agrees iff max R-hat within each group <= 1.01. Fires iff some partition agrees; reports the agreeing partition with the smallest larger-group maximum and names its smaller group (equal groups: the lower mean retained-draw median log density; tie/undefined: the group without chain 0).",
-    "G_density_clusters": "secondary candidate. On the last slow warmup window and on the retained draws, with D2/D3 preconditions (>= 3 chains, windows >= 10 transitions, finite medians and IQRs): sort chain medians, cut where the neighbour gap > 3 x median within-chain IQR; with >= 2 clusters name every chain outside the reference cluster (largest; size tie: highest medians). Two-sided.",
-    "candidate_warning": "shipped disagreement checks plus the candidate check (additive). Candidate S warning chains = current disagreement chains U S named; candidate G = current U G named (either window)."
+    "K_pair_clusters": "primary candidate (added after the smoke, before freezing; see PREREGISTRATION.md). >= 3 chains and all-chain max rank R-hat (diagnostics::rhat over every ChainOutput sample coordinate, NaN-ignoring max) > 1.01. Two chains agree iff the max R-hat over parameters of that pair alone <= 1.01; clusters = connected components of the agreement graph; reference cluster = the largest (size tie: higher mean retained-draw median log density; tie/undefined: the cluster holding the lowest chain index). Fires iff >= 2 clusters and the reference cluster has >= 2 chains; names every chain outside it.",
+    "S_split_rhat": "secondary candidate. >= 4 chains and all-chain max rank R-hat (diagnostics::rhat over every ChainOutput sample coordinate, NaN-ignoring max) > 1.01. Score every partition into two groups of >= 2 chains; a partition agrees iff max R-hat within each group <= 1.01. Fires iff some partition agrees; reports the agreeing partition with the smallest larger-group maximum and names its smaller group (equal groups: the lower mean retained-draw median log density; tie/undefined: the group without chain 0).",
+    "G_density_clusters": "third candidate. On the last slow warmup window and on the retained draws, with D2/D3 preconditions (>= 3 chains, windows >= 10 transitions, finite medians and IQRs): sort chain medians, cut where the neighbour gap > 3 x median within-chain IQR; with >= 2 clusters name every chain outside the reference cluster (largest; size tie: highest medians). Two-sided.",
+    "candidate_warning": "shipped disagreement checks plus the candidate check (additive). Candidate K warning chains = current disagreement chains U K named; S and G likewise (G: either window)."
   },
   "sampler": {
     "pdb": "pdb-cell defaults arm (WP69 harness): owalnuts::sampler::Sampler::new() defaults, 4 chains x 1,000 warmup / 1,000 retained, 4 threads, Init::default() = best_of(16) starts, Limits::admit_worst_case(), owalnuts_bridgestan::ReplicatedStanTarget (replicated dispatch)",
@@ -73,7 +74,7 @@
     "split_two_mode": "a two-mode cell whose chains do not all end in the same mode (end mode = majority of retained draws, WP69 harness); 3-1 if one chain ends apart, 2-2 if two do",
     "split_hmm": "an hmm_drive_0 cell with at least one off chain; 3-1 if one, 2-2 if two",
     "reported": "the candidate warning (shipped disagreement checks plus the candidate check) names at least one chain on the cell",
-    "new_warning": "the candidate check itself (S or G) fires on the cell, whether or not the shipped checks also fire",
+    "new_warning": "the candidate check itself (K, S or G) fires on the cell, whether or not the shipped checks also fire",
     "false_positive": "a new_warning on an arm (ii) cell that passes every gate",
     "regression": "on an arm (iii) cell, a chain named by the shipped disagreement checks is not named by the candidate warning"
   },
@@ -81,7 +82,7 @@
     "i": "every fresh split cell of arm (i) (blocks I) is reported, and at least one fresh 2-2 split occurred (otherwise (i) is not tested and nothing is proposed)",
     "ii": "zero false positives over the 51 arm (ii) cells",
     "iii": "zero regressions over the 26 arm (iii) cells",
-    "propose": "PROPOSE S iff (i), (ii), (iii) hold for S; otherwise PROPOSE G iff they hold for G; otherwise DO NOT PROPOSE. A proposal is a ChainWarning change (a new observe-only variant), not a kernel change; draws are unchanged.",
+    "propose": "PROPOSE K iff (i), (ii), (iii) hold for K; otherwise PROPOSE S iff they hold for S; otherwise PROPOSE G iff they hold for G; otherwise DO NOT PROPOSE. A proposal is a ChainWarning change (a new observe-only variant), not a kernel change; draws are unchanged.",
     "implementation_check": "on every completed cell the harness's recorded shipped warnings equal Posterior::chain_warnings() / Summary::chain_warnings text for text; a mismatch means FAILED (implementation)"
   }
 }

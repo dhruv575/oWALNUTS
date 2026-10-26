@@ -312,11 +312,11 @@ def summarize_line(c: dict) -> str:
     if c["status"] != "ok":
         return f"{c['id']}: {c['status']} {str(c.get('error', ''))[:200]}"
     r = c["split_rules"]
-    s, g = r["split_rhat"], r["density_clusters"]
+    k, s, g = r["pair_clusters"], r["split_rhat"], r["density_clusters"]
     extra = (f"split {c['split_kind']} end_minor {c['chains_ending_minor']} rhat {c['max_split_rhat']:.3f}"
              if c["kind"] == "two_mode" else
              (f"passed {c['passed']} rhat {c['max_rank_rhat']:.4f} off {c['off_chains']}" if c.get("scored") else "unscored"))
-    return (f"{c['id']}: ok {extra} | current {r['current']['disagreement_chains']} S {s['named']} "
+    return (f"{c['id']}: ok {extra} | current {r['current']['disagreement_chains']} K {k['named']} S {s['named']} "
             f"(maxR {s.get('max_rhat', float('nan')):.3f}) G {g['named']} impl {c['implementation_check']} hash {c['draw_hash']}")
 
 

@@ -7,11 +7,12 @@ PREREGISTRATION.md, writes artifacts/summary.json and artifacts/results-table.md
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PROTOCOL = json.loads((HERE / "protocol.json").read_text(encoding="utf-8"))
-ART = HERE / "artifacts"
+ART = Path(os.environ["WP74_ART"]) if os.environ.get("WP74_ART") else HERE / "artifacts"
 STUDIES = HERE.parent
 
 
@@ -29,7 +30,8 @@ def ok(c: dict) -> bool:
 
 def named(c: dict, rule: str) -> list[int]:
     r = c["split_rules"]
-    return {"current": r["current"]["disagreement_chains"], "S": r["split_rhat"]["named"],
+    return {"current": r["current"]["disagreement_chains"], "K": r["pair_clusters"]["named"],
+            "cand_K": r["candidate_k"]["chains"], "S": r["split_rhat"]["named"],
             "G": r["density_clusters"]["named"], "cand_S": r["candidate_s"]["chains"],
             "cand_G": r["candidate_g"]["chains"]}[rule]
 
@@ -56,15 +58,19 @@ def split_row(c: dict) -> dict:
     is_split, kind, groups = sp
     row.update({"split": is_split, "split_kind": kind, "groups": groups,
                 "max_rhat": c.get("max_split_rhat", c.get("max_rank_rhat")),
-                "current": named(c, "current"), "S": named(c, "S"), "G": named(c, "G"),
-                "reported_current": bool(named(c, "current")), "reported_S": bool(named(c, "cand_S")),
+                "current": named(c, "current"), "K": named(c, "K"), "S": named(c, "S"), "G": named(c, "G"),
+                "reported_current": bool(named(c, "current")), "reported_K": bool(named(c, "cand_K")),
+                "reported_S": bool(named(c, "cand_S")),
                 "reported_G": bool(named(c, "cand_G")),
                 "S_max_rhat_unconstrained": c["split_rules"]["split_rhat"].get("max_rhat"),
+                "K_clusters": c["split_rules"]["pair_clusters"].get("clusters"),
+                "K_pairs": c["split_rules"]["pair_clusters"].get("pairs"),
                 "S_partitions": c["split_rules"]["split_rhat"].get("partitions"),
                 "G_max_gap_over_threshold": {w: c["split_rules"]["density_clusters"][w].get("max_gap_over_threshold")
                                              for w in ("warmup_end", "sampling_end")}})
     if is_split:
         gs = [sorted(g) for g in groups]
+        row["K_names_a_true_group"] = sorted(named(c, "K")) in gs if named(c, "K") else None
         row["S_names_a_true_group"] = sorted(named(c, "S")) in gs if named(c, "S") else None
         row["G_names_a_true_group"] = sorted(named(c, "G")) in gs if named(c, "G") else None
     return row
@@ -77,13 +83,14 @@ def arm_i(cells: list[dict], block: str) -> dict:
     res = {"cells": rows, "undefined_cells": undefined, "split_cells": [r["id"] for r in splits],
            "n_split": len(splits), "n_2_2": sum(r["split_kind"] == "2-2" for r in splits),
            "n_3_1": sum(r["split_kind"] == "3-1" for r in splits)}
-    for rule in ("current", "S", "G"):
+    for rule in ("current", "K", "S", "G"):
         rep = [r["id"] for r in splits if r[f"reported_{rule}"]]
         res[f"reported_{rule}"] = rep
         res[f"missed_{rule}"] = [r["id"] for r in splits if not r[f"reported_{rule}"]]
+    res["non_split_new_K"] = [r["id"] for r in rows if r.get("split") is False and r["K"]]
     res["non_split_new_S"] = [r["id"] for r in rows if r.get("split") is False and r["S"]]
     res["non_split_new_G"] = [r["id"] for r in rows if r.get("split") is False and r["G"]]
-    for rule in ("S", "G"):
+    for rule in ("K", "S", "G"):
         res[f"clause_i_{rule}"] = (not undefined and res["n_2_2"] >= 1 and not res[f"missed_{rule}"])
     res["tested"] = res["n_2_2"] >= 1
     return res
@@ -100,7 +107,7 @@ def arm_ii(cells: list[dict]) -> dict:
         rows.append({"id": c["id"], "model": c["model"], "seed": c["seed"], "status": "ok", "passed": c["passed"],
                      "max_rank_rhat": c["max_rank_rhat"], "off_chains": c["off_chains"],
                      "S_max_rhat_unconstrained": c["split_rules"]["split_rhat"].get("max_rhat"),
-                     "current": named(c, "current"), "S": named(c, "S"), "G": named(c, "G"),
+                     "current": named(c, "current"), "K": named(c, "K"), "S": named(c, "S"), "G": named(c, "G"),
                      "G_max_gap_over_threshold": {w: c["split_rules"]["density_clusters"][w].get("max_gap_over_threshold")
                                                   for w in ("warmup_end", "sampling_end")}})
     passing = [r for r in rows if r.get("passed")]
@@ -108,7 +115,7 @@ def arm_ii(cells: list[dict]) -> dict:
     res = {"cells": rows, "n": len(rows), "n_completed": sum(r.get("status") == "ok" for r in rows),
            "n_passing": len(passing), "n_failing_completed": len(failing),
            "not_completed": [r["id"] for r in rows if r.get("status") != "ok"]}
-    for rule in ("S", "G"):
+    for rule in ("K", "S", "G"):
         res[f"fp_{rule}"] = [r["id"] for r in passing if r[rule]]
         res[f"failing_new_{rule}"] = [{"id": r["id"], "named": r[rule], "off_chains": r["off_chains"],
                                        "named_off": bool(set(r[rule]) & set(r["off_chains"]))}
@@ -155,8 +162,9 @@ def arm_iii(cells: list[dict]) -> dict:
             continue
         row = {"id": c["id"], "status": c.get("status"), "recorded": recorded(c)}
         if ok(c):
-            cur, cs, cg = named(c, "current"), named(c, "cand_S"), named(c, "cand_G")
-            row.update({"current": cur, "S": named(c, "S"), "G": named(c, "G"), "cand_S": cs, "cand_G": cg,
+            cur, ck, cs, cg = named(c, "current"), named(c, "cand_K"), named(c, "cand_S"), named(c, "cand_G")
+            row.update({"current": cur, "K": named(c, "K"), "S": named(c, "S"), "G": named(c, "G"),
+                        "cand_K": ck, "cand_S": cs, "cand_G": cg, "regression_K": sorted(set(cur) - set(ck)),
                         "regression_S": sorted(set(cur) - set(cs)), "regression_G": sorted(set(cur) - set(cg)),
                         "scored": c.get("scored", False), "off_chains": c.get("off_chains"),
                         "passed": c.get("passed"), "max_rank_rhat": c.get("max_rank_rhat"),
@@ -174,7 +182,7 @@ def arm_iii(cells: list[dict]) -> dict:
            "not_completed": [r["id"] for r in rows if r["status"] != "ok"],
            "current_fired": [r["id"] for r in done if r["current"]],
            "recorded_fired": [r["id"] for r in rows if (r.get("recorded") or {}).get("chains")]}
-    for rule in ("S", "G"):
+    for rule in ("K", "S", "G"):
         res[f"regressions_{rule}"] = [r["id"] for r in done if r[f"regression_{rule}"]]
         res[f"new_{rule}"] = [{"id": r["id"], "named": r[rule], "off_chains": r["off_chains"]} for r in done if r[rule]]
         res[f"clause_iii_{rule}"] = not res[f"regressions_{rule}"]
@@ -197,9 +205,11 @@ def main() -> None:
     a1, a1m = arm_i(cells, "I"), arm_i(cells, "IV")
     a2, a3 = arm_ii(cells), arm_iii(cells)
     clauses = {rule: {"i": a1[f"clause_i_{rule}"], "ii": a2[f"clause_ii_{rule}"], "iii": a3[f"clause_iii_{rule}"]}
-               for rule in ("S", "G")}
+               for rule in ("K", "S", "G")}
     if impl:
         verdict = "FAILED (implementation)"
+    elif all(clauses["K"].values()):
+        verdict = "PROPOSE K"
     elif all(clauses["S"].values()):
         verdict = "PROPOSE S"
     elif all(clauses["G"].values()):
@@ -216,47 +226,50 @@ def main() -> None:
 
     L = [f"# WP74 results ({len(cells)} cells, {summary['n_ok']} ok)", "",
          f"**Verdict: {verdict}.** Implementation mismatches: {len(impl)}.", "",
-         "| clause | S | G |", "|---|---|---|"]
+         "| clause | K | S | G |", "|---|---|---|---|"]
     for k in ("i", "ii", "iii"):
-        L.append(f"| ({k}) | {clauses['S'][k]} | {clauses['G'][k]} |")
+        L.append(f"| ({k}) | {clauses['K'][k]} | {clauses['S'][k]} | {clauses['G'][k]} |")
     for title, a in (("Arm (i), fresh (block I)", a1), ("Motivating replay (block IV, not decision)", a1m)):
         L += ["", f"## {title}", "",
               f"splits {a['n_split']} (2-2: {a['n_2_2']}, 3-1: {a['n_3_1']}); undefined {a['undefined_cells']}; "
-              f"missed: current {a['missed_current']}, S {a['missed_S']}, G {a['missed_G']}; "
-              f"non-split firings S {a['non_split_new_S']} G {a['non_split_new_G']}", "",
-              "| cell | split | groups | max R-hat | current | S | G | S true group | G gap/thr (warm, samp) |",
-              "|---|---|---|---|---|---|---|---|---|"]
+              f"missed: current {a['missed_current']}, K {a['missed_K']}, S {a['missed_S']}, G {a['missed_G']}; "
+              f"non-split firings K {a['non_split_new_K']} S {a['non_split_new_S']} G {a['non_split_new_G']}", "",
+              "| cell | split | groups | max R-hat | current | K | S | G | K true group | K clusters | G gap/thr (warm, samp) |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in a["cells"]:
             if r.get("split") is None:
-                L.append(f"| {r['id']} | undefined ({r['status']}) | | | | | | | |")
+                L.append(f"| {r['id']} | undefined ({r['status']}) | | | | | | | | | |")
                 continue
             gg = r["G_max_gap_over_threshold"]
             fmt = lambda v: "-" if v is None else f"{v:.2f}"
             L.append(f"| {r['id']} | {r['split_kind'] or 'none'} | {r['groups']} | {r['max_rhat']:.3f} | {r['current']} | "
-                     f"{r['S']} | {r['G']} | {r.get('S_names_a_true_group')} | {fmt(gg['warmup_end'])}, {fmt(gg['sampling_end'])} |")
+                     f"{r['K']} | {r['S']} | {r['G']} | {r.get('K_names_a_true_group')} | {r['K_clusters']} | "
+                     f"{fmt(gg['warmup_end'])}, {fmt(gg['sampling_end'])} |")
     L += ["", "## Arm (ii), 17 house models x 3 fresh seeds", "",
           f"completed {a2['n_completed']}/{a2['n']}; passing {a2['n_passing']}; not completed {a2['not_completed']}; "
-          f"FP S {a2['fp_S']}; FP G {a2['fp_G']}; shipped warning on passing cells {a2['current_on_passing']}; "
+          f"FP K {a2['fp_K']}; FP S {a2['fp_S']}; FP G {a2['fp_G']}; shipped warning on passing cells {a2['current_on_passing']}; "
           f"max G gap/threshold on passing cells {a2['max_G_gap_over_threshold_passing']}", "",
+          f"New K firings on failing cells: {a2['failing_new_K']}", "",
           f"New S firings on failing cells: {a2['failing_new_S']}", "",
           f"New G firings on failing cells: {a2['failing_new_G']}", "",
-          "| cell | passed | R-hat | off | S max R (unc) | current | S | G |", "|---|---|---|---|---|---|---|---|"]
+          "| cell | passed | R-hat | off | max R (unc) | current | K | S | G |", "|---|---|---|---|---|---|---|---|---|"]
     for r in a2["cells"]:
         if r.get("status") != "ok":
-            L.append(f"| {r['id']} | {r.get('status')} | | | | | | |")
+            L.append(f"| {r['id']} | {r.get('status')} | | | | | | | |")
             continue
         sm = r["S_max_rhat_unconstrained"]
         L.append(f"| {r['id']} | {r['passed']} | {r['max_rank_rhat']:.4f} | {r['off_chains']} | "
-                 f"{'-' if sm is None else f'{sm:.4f}'} | {r['current']} | {r['S']} | {r['G']} |")
+                 f"{'-' if sm is None else f'{sm:.4f}'} | {r['current']} | {r['K']} | {r['S']} | {r['G']} |")
     L += ["", "## Arm (iii), replays", "",
-          f"completed {a3['n_completed']}/{a3['n']}; regressions S {a3['regressions_S']} G {a3['regressions_G']}; "
+          f"completed {a3['n_completed']}/{a3['n']}; regressions K {a3['regressions_K']} S {a3['regressions_S']} "
+          f"G {a3['regressions_G']}; "
           f"shipped warning fired on {a3['current_fired']}; source studies recorded it on {a3['recorded_fired']}", "",
-          "| cell | status | recorded (source) | current | S | G | off | passed | hash reproduced |",
-          "|---|---|---|---|---|---|---|---|---|"]
+          "| cell | status | recorded (source) | current | K | S | G | off | passed | hash reproduced |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
     for r in a3["cells"]:
         rec = r.get("recorded") or {}
         L.append(f"| {r['id']} | {r['status']} | {rec.get('chains', rec.get('status'))} | {r.get('current')} | "
-                 f"{r.get('S')} | {r.get('G')} | {r.get('off_chains')} | {r.get('passed')} | {r.get('hash_reproduced', '-')} |")
+                 f"{r.get('K')} | {r.get('S')} | {r.get('G')} | {r.get('off_chains')} | {r.get('passed')} | {r.get('hash_reproduced', '-')} |")
     L += ["", "## Replay hashes", ""]
     for k, v in summary["replay_hashes"].items():
         L.append(f"- {k}: expected {v['expected']}, observed {v['observed']}, equal {v['equal']}")
