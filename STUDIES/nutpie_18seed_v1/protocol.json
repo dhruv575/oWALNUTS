@@ -1,0 +1,137 @@
+{
+ "schema": "nutpie-18seed-v1",
+ "ledger_id": "WP76",
+ "status": "FROZEN_BEFORE_EXECUTION",
+ "frozen_utc": "2026-10-26",
+ "question": "How does oWALNUTS compare with nutpie 0.16.8 on the fixed-16 posteriordb models over the same 18 Linux seeds that fix the WP72 headline against CmdStan, on ESS per gradient and ESS per second, and on gates?",
+ "design": {
+  "arm_run": "nutpie 0.16.8 at defaults (bridgestan backend, target_accept 0.8, maxdepth 10, 4 chains, default init), 1,000 tune / 1,000 draws; v7's nutpie cell code (run_posteriordb.py nutpie_model / run_nutpie / metrics) unchanged",
+  "reused_not_rerun": "oWALNUTS and CmdStan cells are NOT rerun: they are read unchanged from WP64 (seeds 560561-560563 at f097391c, 620601-620603 at c5c60122; posteriordb_bench_v7_linux_v1/artifacts/{v7,ext}/cells) and WP72 (seeds 720701-720712 at c5c60122; posteriordb_ratio_robustness_v1/artifacts/cells). The comparison is same-seed. All were run on lane 1 (cores 0-3) of the same box.",
+  "nutpie_all_18_rerun": "nutpie runs on all 18 seeds here, including 560561-560563 where WP64 has nutpie cells; WP64's 48 fixed-16 nutpie cells are used only for a reported same-seed repeat check, not in any statistic",
+  "orchestration_change": "one child process per (model, seed) instead of v7's one per (model, all seeds), so a nutpie panic (v7/WP64 lotka_volterra: 'Failed to constrain', poisoned mutex) cannot mark later seeds as crashed without running them",
+  "gates": "v7's: rank R-hat <= 1.01, bulk and tail ESS >= 400 on the posteriordb reference columns, zero retained divergences, finite draws, no error; ArviZ 0.23.4",
+  "run_order": "models in WP62's fixed-16 order; seeds ascending (560561-3, 620601-3, 720701-12); strictly sequential; no reruns",
+  "timeout": "v7's 2,700 s per cell; each child is killed at 2,700 + 600 s and the cell recorded as timeout_or_crash",
+  "binaries": "the 16 nutpie libraries copied from WP64's Linux build (posteriordb_bench_v7_linux_v1/models/nutpie, bridgestan.compile_model with STAN_THREADS=true from posteriordb 28f8d3d, as nutpie.compile_stan_model does); their TBB runtime copied byte-identically into the lane (LD_LIBRARY_PATH) instead of loading it from WP64's lane"
+ },
+ "models": [
+  "eight_schools-eight_schools_noncentered",
+  "eight_schools-eight_schools_centered",
+  "diamonds-diamonds",
+  "earnings-logearn_interaction",
+  "mesquite-logmesquite_logvash",
+  "kidiq-kidscore_momhsiq",
+  "sblrc-blr",
+  "nes2000-nes",
+  "arK-arK",
+  "garch-garch11",
+  "gp_pois_regr-gp_pois_regr",
+  "hmm_example-hmm_example",
+  "bball_drive_event_0-hmm_drive_0",
+  "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+  "hudson_lynx_hare-lotka_volterra",
+  "mcycle_gp-accel_gp"
+ ],
+ "seeds": {
+  "wp64_v7": [
+   560561,
+   560562,
+   560563
+  ],
+  "wp64_ext": [
+   620601,
+   620602,
+   620603
+  ],
+  "wp72": [
+   720701,
+   720702,
+   720703,
+   720704,
+   720705,
+   720706,
+   720707,
+   720708,
+   720709,
+   720710,
+   720711,
+   720712
+  ],
+  "all": [
+   560561,
+   560562,
+   560563,
+   620601,
+   620602,
+   620603,
+   720701,
+   720702,
+   720703,
+   720704,
+   720705,
+   720706,
+   720707,
+   720708,
+   720709,
+   720710,
+   720711,
+   720712
+  ]
+ },
+ "platform": {
+  "machine": "AWS EC2 c7a.4xlarge (AMD EPYC 9R14), Ubuntu 24.04, lane 1: taskset -c 0-3, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, files under ~/lanes/nutpie_18seed_v1/",
+  "wall_label_note": "Linux, core-pinned to 4 dedicated cores (taskset -c 0-3) on a shared box with other pinned lanes active (shared L3 and memory bandwidth): walls are 'pinned, co-tenanted'. Pass counts and ESS per gradient are unaffected by co-tenancy.",
+  "per_second_caveat": "ESS per second compares walls taken at different times on the same lane (oWALNUTS/CmdStan in WP64 and WP72, nutpie here), each pinned, co-tenanted with whatever other lanes ran then. oWALNUTS wall excludes its start search (v7 rule); nutpie's wall includes its own initialisation; compilation excluded for both.",
+  "software": "lane venv on Python 3.12.3: nutpie 0.16.8, bridgestan 2.9.0, arviz 0.23.4, numpy 2.4.6, scipy 1.17.1, xarray 2026.9.0, posteriordb 0.2.0, pandas 3.1.0, cmdstanpy 1.3.0"
+ },
+ "analysis": {
+  "statistic": "WP72's (c): per model, the per-seed ratio (oWALNUTS / nutpie) on seeds where both cells are status ok, median across seeds, geomean over models; a model enters with at least ceil(5n/6) = 15 of 18 paired ok seeds",
+  "quantities": {
+   "per_gradient": "min_bulk_ess_per_gradient (min bulk ESS / gradients_total incl. warmup; nutpie: sum of n_steps)",
+   "per_second": "min_bulk_ess_per_second (min bulk ESS / wall)"
+  },
+  "min_ok_fraction": 0.8333333333333334,
+  "bootstrap": {
+   "unit": "seed",
+   "resamples": 10000,
+   "rng_seed": 76,
+   "percentiles": [
+    2.5,
+    97.5
+   ]
+  },
+  "single_model_sensitivity": "leave-one-model-out max |ln| influence, model named",
+  "also_reported": "(c) oWALNUTS vs CmdStan per gradient (WP72's 0.826, recomputed) and per second; nutpie vs CmdStan per gradient and per second; gates per arm /288 and per model; non-ok cells; stuck chains (WP72 rule: a chain whose mean is more than 5 reference sd from the posteriordb reference mean on some gate parameter) for nutpie on every model, per seed on hmm_drive_0, beside oWALNUTS and CmdStan; nutpie same-seed repeat against WP64's 48 Linux nutpie cells",
+  "stuck_chain": {
+   "threshold_ref_sd": 5
+  }
+ },
+ "predictions": {
+  "N1": {
+   "text": "per-gradient (c) oWALNUTS / nutpie lies in [1.0, 1.4] (coordinator's prediction, 'given WP58')",
+   "interval": [
+    1.0,
+    1.4
+   ]
+  },
+  "N1b": {
+   "text": "per-gradient (c) oWALNUTS / nutpie lies in [0.55, 0.95] (this study's own prediction; see expectation)",
+   "interval": [
+    0.55,
+    0.95
+   ]
+  },
+  "N2": {
+   "text": "per-second (c) oWALNUTS / nutpie lies in [1.2, 1.8] (from WP64's house17 ESS/s vs nutpie 1.454)",
+   "interval": [
+    1.2,
+    1.8
+   ]
+  },
+  "N3": {
+   "text": "nutpie passes fewer than oWALNUTS's 239 of 288 fixed-16 cells"
+  },
+  "expectation_stated_before_running": "N1 and N1b cannot both hold. WP58 found nutpie AHEAD per gradient (1.70x oWALNUTS, from warmup spend and its mass matrix), and v7's all-22 per-gradient geomean oWALNUTS / nutpie was 0.645 (Windows) and 0.837 (Linux, WP64). We therefore expect N1 to fail low and N1b to hold. N1 is registered as the coordinator stated it; if it was meant as nutpie / oWALNUTS, it is equivalent to oWALNUTS / nutpie in [0.714, 1.0], which is reported beside it."
+ },
+ "rules": "Freeze PREREGISTRATION.md and protocol.json in a commit before the first cell. Sequential cells; failures, crashes and timeouts are results; no reruns, no tuning after results. A driver crash may be relaunched; only an interrupted cell without a completed artifact may be rerun from scratch with the same seed, recorded in AMENDMENTS.md. Raw draws are checksummed and not committed."
+}
