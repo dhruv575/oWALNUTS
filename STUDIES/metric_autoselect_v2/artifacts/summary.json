@@ -1,0 +1,2101 @@
+{
+ "schema": "metric-autoselect-v2-summary",
+ "ledger_id": "WP79",
+ "protocol": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+ "environment": {
+  "commit": "6f888207f5ab4d820444ef58192fa001e4909292",
+  "library_diff_files": [
+   "src/walnutpie.rs",
+   "tests/metric_autoselect_hessian.rs"
+  ],
+  "library_diff_scoped": true,
+  "kernel_fingerprint_test_passed": true,
+  "kernel_fingerprint_exit_plain": 0,
+  "kernel_fingerprint_exit_research": 0,
+  "flag_off_test_passed": true,
+  "full_test_suite_exit_research": 0,
+  "full_test_suite_exit_plain": 0,
+  "metric_autoselect_test_exit": 0,
+  "box_seed_check": {
+   "files_checked": 26,
+   "hits": []
+  },
+  "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+  "uname": "Linux-7.0.0-1014-aws-x86_64-with-glibc2.39",
+  "cpu": "AMD EPYC 9R14",
+  "taskset": "8-11",
+  "lane": 3,
+  "cotenancy": "other lanes active on the remaining cores",
+  "bridgestan_source_sha256": "b6034f83fb2ffb71ce7be9525b7dded1a225e9a4eaf4b75d4c7e97e3ade05a4c",
+  "fingerprint_log_tail": "d v0.9.5\n   Compiling rand_distr v0.5.1\n   Compiling owalnuts v0.3.0 (/home/ubuntu/lanes/metric_autoselect_v2/repo)\n    Finished `release` profile [optimized] target(s) in 12.12s\n     Running tests/kernel_fingerprint.rs (/home/ubuntu/lanes/metric_autoselect_v2/target-tests/release/deps/kernel_fingerprint-94a6504522450390)\n\nrunning 3 tests\ntest default_start_rule_is_best_of_16 ... ok\ntest funnel_paper_tuning_four_chains_are_bit_exact ... ok\ntest eight_schools_adapted_four_chains_are_bit_exact ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s\n\n",
+  "metric_autoselect_test_log_tail": "nored; 0 measured; 0 filtered out; finished in 0.14s\n\n     Running tests/metric_autoselect_hessian.rs (/home/ubuntu/lanes/metric_autoselect_v2/target-tests-research/release/deps/metric_autoselect_hessian-4aa42d68831451aa)\n\nrunning 5 tests\ntest unflagged_custom_is_the_diagonal_default ... ok\ntest validation ... ok\ntest funnel_takes_the_diagonal_branch_bit_identically ... ok\ntest correlated_gaussian_takes_the_dense_branch ... ok\ntest diagonal_branch_is_bit_identical_to_the_default_diagonal_run ... ok\n\ntest result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s\n\n"
+ },
+ "decision_rules": {
+  "R1_auto_pass_count_ge_diag": {
+   "diag": 44,
+   "auto": 44,
+   "held": true
+  },
+  "R2_geomean_auto_over_diag_ge_1.5": {
+   "value": 2.2012892153489934,
+   "models": 17,
+   "held": true
+  },
+  "R3_no_model_below_0.9x_diag": {
+   "models_below": [],
+   "held": true
+  },
+  "R4_no_new_divergences": {
+   "models_with_more_divergences": [],
+   "total_diag": 0,
+   "total_auto": 0,
+   "held": true
+  },
+  "R5_diag_branch_bit_identical": {
+   "diag_branch_cells": 43,
+   "not_identical": [],
+   "held": true
+  },
+  "F_funnel_auto_p5_within_1se": {
+   "pooled": 0.04818625,
+   "se": 0.0018670334926026368,
+   "abs_error": 0.0003958977271852973,
+   "held": true
+  },
+  "D_flag_off_integrity": {
+   "library_diff_scoped": true,
+   "kernel_fingerprint_test_passed": true,
+   "flag_off_test_passed": true,
+   "held": true
+  }
+ },
+ "verdict": "PROPOSE: auto meets every preregistered rule for proposing a default (research flag; the flip is the coordinator's)",
+ "predictions": {
+  "Pa_branch_matches_prediction_ge_48_of_51": {
+   "observed": 45,
+   "runs": 51,
+   "held": false
+  },
+  "B1_gp_models_take_diag_6_of_6": {
+   "observed": [
+    "diag",
+    "diag",
+    "diag",
+    "diag",
+    "diag",
+    "diag"
+   ],
+   "held": true
+  },
+  "B2_earnings_kidiq_dense_6_of_6": {
+   "observed": [
+    "diag",
+    "diag",
+    "diag",
+    "diag",
+    "diag",
+    "diag"
+   ],
+   "held": false
+  },
+  "B3_diamonds_mesquite_dense_6_of_6": {
+   "observed": [
+    "dense",
+    "dense",
+    "dense",
+    "dense",
+    "dense",
+    "dense"
+   ],
+   "held": true
+  },
+  "B5_earnings_window_statistic_below_5_on_ge_2_of_3": {
+   "observed": [
+    0.279547544814318,
+    0.7316386858686993,
+    3.631394032474709
+   ],
+   "held": true
+  },
+  "Pb_rules_predicted": {
+   "predicted_failures": [],
+   "observed_failures": [],
+   "held": true
+  },
+  "A1_R5_holds": {
+   "held": true
+  },
+  "Pc_dense_replicates_wp51_geomean_ge_2": {
+   "observed": 2.986949918613091,
+   "held": true
+  },
+  "Pd_funnel_auto_takes_diag_on_all_10": {
+   "observed": 0,
+   "held": true
+  }
+ },
+ "funnel": {
+  "diag": {
+   "cells": 10,
+   "errors": [],
+   "pooled_p5": 0.04818625,
+   "se_p5": 0.0018670334926026368,
+   "t_p5": 0.2120463980715298,
+   "exceed": 0,
+   "divergences": 77,
+   "divergence_free_seeds": 5,
+   "exhaustions": 473,
+   "median_omega_tail_ess": 795.4142548001148,
+   "geomean_min_bulk_ess_per_gradient": 0.00012866652703022642,
+   "median_gradients": 4104276.0,
+   "auto_dense_seeds": null,
+   "auto_statistics": null,
+   "per_seed": {
+    "797401": {
+     "p5": 0.043275,
+     "z": -0.5484918608476514,
+     "divergences": 0
+    },
+    "797402": {
+     "p5": 0.0453,
+     "z": -0.3286114673009561,
+     "divergences": 0
+    },
+    "797403": {
+     "p5": 0.043275,
+     "z": -0.7214447464879347,
+     "divergences": 69
+    },
+    "797404": {
+     "p5": 0.0600875,
+     "z": 1.422593704034565,
+     "divergences": 0
+    },
+    "797405": {
+     "p5": 0.04665,
+     "z": -0.12879533678301908,
+     "divergences": 0
+    },
+    "797406": {
+     "p5": 0.0467375,
+     "z": -0.17163135349291214,
+     "divergences": 1
+    },
+    "797407": {
+     "p5": 0.0480375,
+     "z": 0.042036455733711495,
+     "divergences": 4
+    },
+    "797408": {
+     "p5": 0.055375,
+     "z": 0.9094505190453511,
+     "divergences": 2
+    },
+    "797409": {
+     "p5": 0.0517625,
+     "z": 0.48877736667500526,
+     "divergences": 0
+    },
+    "797410": {
+     "p5": 0.0413625,
+     "z": -1.1219327310038854,
+     "divergences": 1
+    }
+   }
+  },
+  "dense": {
+   "cells": 10,
+   "errors": [],
+   "pooled_p5": 0.04625125,
+   "se_p5": 0.0020082273917423903,
+   "t_p5": -0.7663984064470591,
+   "exceed": 0,
+   "divergences": 58,
+   "divergence_free_seeds": 2,
+   "exhaustions": 510,
+   "median_omega_tail_ess": 1106.815612059029,
+   "geomean_min_bulk_ess_per_gradient": 9.384043909087967e-05,
+   "median_gradients": 5227609.5,
+   "auto_dense_seeds": null,
+   "auto_statistics": null,
+   "per_seed": {
+    "797401": {
+     "p5": 0.0498375,
+     "z": 0.19853017167364903,
+     "divergences": 1
+    },
+    "797402": {
+     "p5": 0.0516875,
+     "z": 0.5876306679947053,
+     "divergences": 0
+    },
+    "797403": {
+     "p5": 0.0378625,
+     "z": -1.3946907737319358,
+     "divergences": 8
+    },
+    "797404": {
+     "p5": 0.055675,
+     "z": 0.9273990441513209,
+     "divergences": 2
+    },
+    "797405": {
+     "p5": 0.0381625,
+     "z": -1.7112842197541789,
+     "divergences": 3
+    },
+    "797406": {
+     "p5": 0.0417,
+     "z": -0.9774818591447225,
+     "divergences": 2
+    },
+    "797407": {
+     "p5": 0.0493625,
+     "z": 0.31001893832639343,
+     "divergences": 8
+    },
+    "797408": {
+     "p5": 0.0397,
+     "z": -1.8278936369457826,
+     "divergences": 0
+    },
+    "797409": {
+     "p5": 0.0507625,
+     "z": 0.48074076872263405,
+     "divergences": 28
+    },
+    "797410": {
+     "p5": 0.0477625,
+     "z": -0.004390391749930231,
+     "divergences": 6
+    }
+   }
+  },
+  "auto": {
+   "cells": 10,
+   "errors": [],
+   "pooled_p5": 0.04818625,
+   "se_p5": 0.0018670334926026368,
+   "t_p5": 0.2120463980715298,
+   "exceed": 0,
+   "divergences": 77,
+   "divergence_free_seeds": 5,
+   "exhaustions": 473,
+   "median_omega_tail_ess": 795.4142548001148,
+   "geomean_min_bulk_ess_per_gradient": 0.00012866652703022642,
+   "median_gradients": 4104276.0,
+   "auto_dense_seeds": 0,
+   "auto_statistics": [
+    0.6180839123754012,
+    0.4482059460114896,
+    0.3821715851922722,
+    0.48081719269928014,
+    0.45342845198723153,
+    0.409374621316022,
+    0.28764618995580776,
+    0.5978005703652522,
+    0.2985673619434986,
+    0.4043643177779737
+   ],
+   "per_seed": {
+    "797401": {
+     "p5": 0.043275,
+     "z": -0.5484918608476514,
+     "divergences": 0
+    },
+    "797402": {
+     "p5": 0.0453,
+     "z": -0.3286114673009561,
+     "divergences": 0
+    },
+    "797403": {
+     "p5": 0.043275,
+     "z": -0.7214447464879347,
+     "divergences": 69
+    },
+    "797404": {
+     "p5": 0.0600875,
+     "z": 1.422593704034565,
+     "divergences": 0
+    },
+    "797405": {
+     "p5": 0.04665,
+     "z": -0.12879533678301908,
+     "divergences": 0
+    },
+    "797406": {
+     "p5": 0.0467375,
+     "z": -0.17163135349291214,
+     "divergences": 1
+    },
+    "797407": {
+     "p5": 0.0480375,
+     "z": 0.042036455733711495,
+     "divergences": 4
+    },
+    "797408": {
+     "p5": 0.055375,
+     "z": 0.9094505190453511,
+     "divergences": 2
+    },
+    "797409": {
+     "p5": 0.0517625,
+     "z": 0.48877736667500526,
+     "divergences": 0
+    },
+    "797410": {
+     "p5": 0.0413625,
+     "z": -1.1219327310038854,
+     "divergences": 1
+    }
+   }
+  }
+ },
+ "posteriordb": {
+  "cells_per_arm": 51,
+  "passes": {
+   "diag": 44,
+   "dense": 39,
+   "auto": 44
+  },
+  "ok_cells": {
+   "diag": 51,
+   "dense": 51,
+   "auto": 51
+  },
+  "divergences": {
+   "diag": 0,
+   "dense": 0,
+   "auto": 0
+  },
+  "per_model": {
+   "eight_schools-eight_schools_noncentered": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.028822162480131752,
+     "divergences": 0,
+     "max_rhat": 1.002580463339959,
+     "min_bulk": 1783.1713257423069,
+     "median_gradients": 68701,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.025171090141984088,
+     "divergences": 0,
+     "max_rhat": 1.0030592124187647,
+     "min_bulk": 1788.5197607991422,
+     "median_gradients": 77231,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.028822162480131752,
+     "divergences": 0,
+     "max_rhat": 1.002580463339959,
+     "min_bulk": 1783.1713257423069,
+     "median_gradients": 68701,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      0.882886677773309,
+      0.64874671877101,
+      1.0722543747962836
+     ],
+     "hessian_gain": [
+      1.9006570346932607,
+      2.306924930211763,
+      1.8798113253105608
+     ],
+     "linearity": [
+      0.3613669040806257,
+      0.43941195137855793,
+      0.33122341815187833
+     ],
+     "decision_consistent": true
+    }
+   },
+   "eight_schools-eight_schools_centered": {
+    "diag": {
+     "passed": 0,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00048450675303250717,
+     "divergences": 0,
+     "max_rhat": 1.0650579603480095,
+     "min_bulk": 67.64209919103801,
+     "median_gradients": 211081,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 0,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00038716606934045746,
+     "divergences": 0,
+     "max_rhat": 1.0788423165789816,
+     "min_bulk": 61.81782902473091,
+     "median_gradients": 211143,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 0,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00048450675303250717,
+     "divergences": 0,
+     "max_rhat": 1.0650579603480095,
+     "min_bulk": 67.64209919103801,
+     "median_gradients": 211081,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      3.509512669379619,
+      4.056976655765991,
+      5.329772768812684
+     ],
+     "hessian_gain": [
+      22.287678518488566,
+      27.498287355644923,
+      30.269870893512046
+     ],
+     "linearity": [
+      0.170174631901933,
+      0.04228939425237657,
+      0.07306274708932887
+     ],
+     "decision_consistent": true
+    }
+   },
+   "diamonds-diamonds": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00018302117618972097,
+     "divergences": 0,
+     "max_rhat": 1.0090046812107631,
+     "min_bulk": 1139.4221147412798,
+     "median_gradients": 6753246,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.012840439618043285,
+     "divergences": 0,
+     "max_rhat": 1.0034477058849303,
+     "min_bulk": 3941.604068671511,
+     "median_gradients": 329283,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0067550763488455085,
+     "divergences": 0,
+     "max_rhat": 1.0049511191540117,
+     "min_bulk": 3917.4350097871275,
+     "median_gradients": 650118,
+     "failed_gates": [],
+     "branches": [
+      "dense",
+      "dense",
+      "dense"
+     ],
+     "statistics": [
+      5038.10641905138,
+      4580.282588743519,
+      4914.125998575679
+     ],
+     "hessian_gain": [
+      22766.09385379445,
+      22888.928745575162,
+      22757.183977150336
+     ],
+     "linearity": [
+      0.9958601002970995,
+      0.9952507553557801,
+      0.9952429998785882
+     ],
+     "decision_consistent": true
+    }
+   },
+   "earnings-logearn_interaction": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0006224115730663087,
+     "divergences": 0,
+     "max_rhat": 1.0049982368123997,
+     "min_bulk": 896.7237323549878,
+     "median_gradients": 1485046,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.004385574808178059,
+     "divergences": 0,
+     "max_rhat": 1.0032056028487157,
+     "min_bulk": 2042.4313113240496,
+     "median_gradients": 514613,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0006224115730663087,
+     "divergences": 0,
+     "max_rhat": 1.0049982368123997,
+     "min_bulk": 896.7237323549878,
+     "median_gradients": 1485046,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      0.279547544814318,
+      0.7316386858686993,
+      3.631394032474709
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      0.0021178491355898616,
+      0.008113035074222901,
+      0.002197543376033067
+     ],
+     "decision_consistent": true
+    }
+   },
+   "mesquite-logmesquite_logvash": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0037191491565483964,
+     "divergences": 0,
+     "max_rhat": 1.0043380376297106,
+     "min_bulk": 1271.738386782774,
+     "median_gradients": 394399,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.05378960300185589,
+     "divergences": 0,
+     "max_rhat": 1.0040414969784905,
+     "min_bulk": 3775.5468338066344,
+     "median_gradients": 73505,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.03720495035602725,
+     "divergences": 0,
+     "max_rhat": 1.0033365353520076,
+     "min_bulk": 3636.6807060465826,
+     "median_gradients": 99716,
+     "failed_gates": [],
+     "branches": [
+      "dense",
+      "dense",
+      "dense"
+     ],
+     "statistics": [
+      305.27061055373275,
+      190.51034076292046,
+      265.67208967865463
+     ],
+     "hessian_gain": [
+      526.3304896270774,
+      501.04464483581455,
+      524.9124524912185
+     ],
+     "linearity": [
+      0.860293650867546,
+      0.8297581875063302,
+      0.8761992743306183
+     ],
+     "decision_consistent": true
+    }
+   },
+   "kidiq-kidscore_momhsiq": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0037613536283867075,
+     "divergences": 0,
+     "max_rhat": 1.002911083286625,
+     "min_bulk": 1373.4469933445212,
+     "median_gradients": 389698,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.026099903482851763,
+     "divergences": 0,
+     "max_rhat": 1.0016541925486966,
+     "min_bulk": 3921.762364339285,
+     "median_gradients": 152919,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0037613536283867075,
+     "divergences": 0,
+     "max_rhat": 1.002911083286625,
+     "min_bulk": 1373.4469933445212,
+     "median_gradients": 389698,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      0.9834892977413267,
+      1.005167832009829,
+      1.7843290811745571
+     ],
+     "hessian_gain": [
+      null,
+      3.8132036578188564,
+      60.159957668520065
+     ],
+     "linearity": [
+      0.008917868386789903,
+      0.0487788933883858,
+      0.3171101058256848
+     ],
+     "decision_consistent": true
+    }
+   },
+   "sblrc-blr": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.005114201424896652,
+     "divergences": 0,
+     "max_rhat": 1.0060515036729332,
+     "min_bulk": 694.2768568947066,
+     "median_gradients": 155236,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 2,
+     "ok": 3,
+     "median_ess_per_gradient": 0.004613264330666051,
+     "divergences": 0,
+     "max_rhat": 1.0113219975545382,
+     "min_bulk": 698.9298807053929,
+     "median_gradients": 153911,
+     "failed_gates": [
+      "max_rank_rhat"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.005114201424896652,
+     "divergences": 0,
+     "max_rhat": 1.0060515036729332,
+     "min_bulk": 694.2768568947066,
+     "median_gradients": 155236,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      1.2428699497057867,
+      1.265540672705672,
+      1.2698727220950214
+     ],
+     "hessian_gain": [
+      1.125447771988748,
+      1.137971103512852,
+      1.102633397275983
+     ],
+     "linearity": [
+      0.7808209725323819,
+      0.6645925650478011,
+      0.79522712207441
+     ],
+     "decision_consistent": true
+    }
+   },
+   "nes2000-nes": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00429126255156823,
+     "divergences": 0,
+     "max_rhat": 1.003524550221777,
+     "min_bulk": 1568.1328224122115,
+     "median_gradients": 427096,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.05969936662216995,
+     "divergences": 0,
+     "max_rhat": 1.0030917289061065,
+     "min_bulk": 6413.535527297304,
+     "median_gradients": 108701,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.04448329345843747,
+     "divergences": 0,
+     "max_rhat": 1.0037343227232256,
+     "min_bulk": 6200.971108106183,
+     "median_gradients": 139400,
+     "failed_gates": [],
+     "branches": [
+      "dense",
+      "dense",
+      "dense"
+     ],
+     "statistics": [
+      112.7350126878027,
+      105.19101920153726,
+      186.03002177130963
+     ],
+     "hessian_gain": [
+      399.03710128659986,
+      392.3876505837507,
+      393.6459572997275
+     ],
+     "linearity": [
+      0.9822672328891987,
+      0.9856265977756892,
+      0.9784019159286386
+     ],
+     "decision_consistent": true
+    }
+   },
+   "arK-arK": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00960645477368747,
+     "divergences": 0,
+     "max_rhat": 1.0019700989087705,
+     "min_bulk": 2349.6602945832187,
+     "median_gradients": 270743,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.06601045243656867,
+     "divergences": 0,
+     "max_rhat": 1.0055453869875095,
+     "min_bulk": 4882.463299625137,
+     "median_gradients": 78326,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.057205858962536396,
+     "divergences": 0,
+     "max_rhat": 1.0025455640606318,
+     "min_bulk": 5418.9966078031475,
+     "median_gradients": 94728,
+     "failed_gates": [],
+     "branches": [
+      "dense",
+      "dense",
+      "dense"
+     ],
+     "statistics": [
+      49.083699576024635,
+      49.65768750679626,
+      40.805300657511864
+     ],
+     "hessian_gain": [
+      106.91560451812505,
+      107.13394649204983,
+      106.46483839958982
+     ],
+     "linearity": [
+      0.9631987890891496,
+      0.9649706437039957,
+      0.9693907976788281
+     ],
+     "decision_consistent": true
+    }
+   },
+   "arma-arma11": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.06941356684635204,
+     "divergences": 0,
+     "max_rhat": 1.0012658458754824,
+     "min_bulk": 3657.6525272121426,
+     "median_gradients": 54135,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.06379680856281708,
+     "divergences": 0,
+     "max_rhat": 1.0026550958740694,
+     "min_bulk": 3325.652735846962,
+     "median_gradients": 57175,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.06941356684635204,
+     "divergences": 0,
+     "max_rhat": 1.0012658458754824,
+     "min_bulk": 3657.6525272121426,
+     "median_gradients": 54135,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      1.031236607457387,
+      1.0045044419030642,
+      1.3159831585403217
+     ],
+     "hessian_gain": [
+      1.5835850957725786,
+      1.530981500487761,
+      1.5959503954220997
+     ],
+     "linearity": [
+      0.9706940749944145,
+      0.9697298368214532,
+      0.9738777171653394
+     ],
+     "decision_consistent": true
+    }
+   },
+   "garch-garch11": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.01937112632993984,
+     "divergences": 0,
+     "max_rhat": 1.003984076752094,
+     "min_bulk": 1536.62450692678,
+     "median_gradients": 93789,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.028565722668361195,
+     "divergences": 0,
+     "max_rhat": 1.0033690318776836,
+     "min_bulk": 1832.6659949359437,
+     "median_gradients": 69297,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.01937112632993984,
+     "divergences": 0,
+     "max_rhat": 1.003984076752094,
+     "min_bulk": 1536.62450692678,
+     "median_gradients": 93789,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      3.2387039193801708,
+      4.930533086159085,
+      4.102960373037614
+     ],
+     "hessian_gain": [
+      6.965329195971484,
+      7.695404022278663,
+      7.35186083496513
+     ],
+     "linearity": [
+      0.39697104991558313,
+      0.41757271068100565,
+      0.40172067857180516
+     ],
+     "decision_consistent": true
+    }
+   },
+   "gp_pois_regr-gp_pois_regr": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0007677324780755306,
+     "divergences": 0,
+     "max_rhat": 1.005173518662985,
+     "min_bulk": 719.549649667405,
+     "median_gradients": 1188409,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 1,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0012304299576630909,
+     "divergences": 0,
+     "max_rhat": 1.0217144071341873,
+     "min_bulk": 338.21960224523144,
+     "median_gradients": 336758,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.0007677324780755306,
+     "divergences": 0,
+     "max_rhat": 1.005173518662985,
+     "min_bulk": 719.549649667405,
+     "median_gradients": 1188409,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      99.09368271902838,
+      104.41540741760195,
+      99.31509916250451
+     ],
+     "hessian_gain": [
+      602.0943244588937,
+      695.826022208931,
+      764.5489084244111
+     ],
+     "linearity": [
+      0.10715689106117814,
+      0.12203493724166266,
+      0.13585194494415997
+     ],
+     "decision_consistent": true
+    }
+   },
+   "hmm_example-hmm_example": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.018012574909705696,
+     "divergences": 0,
+     "max_rhat": 1.0022400578606352,
+     "min_bulk": 1877.8720241560243,
+     "median_gradients": 113206,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.050937373731958994,
+     "divergences": 0,
+     "max_rhat": 1.00221862744823,
+     "min_bulk": 3354.5013205073196,
+     "median_gradients": 71135,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.04505404361255842,
+     "divergences": 0,
+     "max_rhat": 1.0033591907172696,
+     "min_bulk": 3093.343236851456,
+     "median_gradients": 74506,
+     "failed_gates": [],
+     "branches": [
+      "dense",
+      "dense",
+      "dense"
+     ],
+     "statistics": [
+      9.691315257454278,
+      8.797699945418499,
+      10.251558783056629
+     ],
+     "hessian_gain": [
+      17.329356737948135,
+      16.88639077344827,
+      17.276377503074777
+     ],
+     "linearity": [
+      0.9368521437502948,
+      0.9531641981125232,
+      0.9469812066574126
+     ],
+     "decision_consistent": true
+    }
+   },
+   "bball_drive_event_0-hmm_drive_0": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.043463000408494656,
+     "divergences": 0,
+     "max_rhat": 1.0035704843549789,
+     "min_bulk": 2426.7291742520833,
+     "median_gradients": 83051,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 2,
+     "ok": 3,
+     "median_ess_per_gradient": 0.025840188870481895,
+     "divergences": 0,
+     "max_rhat": 1.228394400223856,
+     "min_bulk": 14.682504938223602,
+     "median_gradients": 113783,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.043463000408494656,
+     "divergences": 0,
+     "max_rhat": 1.0035704843549789,
+     "min_bulk": 2426.7291742520833,
+     "median_gradients": 83051,
+     "failed_gates": [],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      0.6497610021683419,
+      1.022806133410806,
+      0.8805769998262188
+     ],
+     "hessian_gain": [
+      1.4715749248797243,
+      1.7051934635223385,
+      1.518944509580957
+     ],
+     "linearity": [
+      0.8547175423605096,
+      0.09022473928772759,
+      0.8533259065996003
+     ],
+     "decision_consistent": true
+    }
+   },
+   "one_comp_mm_elim_abs-one_comp_mm_elim_abs": {
+    "diag": {
+     "passed": 2,
+     "ok": 3,
+     "median_ess_per_gradient": 0.01286803543957746,
+     "divergences": 0,
+     "max_rhat": 1.0084560924012136,
+     "min_bulk": 474.94726913302566,
+     "median_gradients": 79186,
+     "failed_gates": [
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 1,
+     "ok": 3,
+     "median_ess_per_gradient": 0.01289656168634044,
+     "divergences": 0,
+     "max_rhat": 1.0042126741053414,
+     "min_bulk": 524.0220690048052,
+     "median_gradients": 68657,
+     "failed_gates": [
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 2,
+     "ok": 3,
+     "median_ess_per_gradient": 0.01286803543957746,
+     "divergences": 0,
+     "max_rhat": 1.0084560924012136,
+     "min_bulk": 474.94726913302566,
+     "median_gradients": 79186,
+     "failed_gates": [
+      "min_tail_ess"
+     ],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      1.7253102826241784,
+      2.2273626016375623,
+      1.6514854424807788
+     ],
+     "hessian_gain": [
+      5.2579943143355345,
+      5.725108082041527,
+      5.0141302957235645
+     ],
+     "linearity": [
+      0.3197710290052695,
+      0.34740927903930025,
+      0.31067139202754607
+     ],
+     "decision_consistent": true
+    }
+   },
+   "hudson_lynx_hare-lotka_volterra": {
+    "diag": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.003377151905938389,
+     "divergences": 0,
+     "max_rhat": 1.005140624314628,
+     "min_bulk": 950.7290502559634,
+     "median_gradients": 294566,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.04736449779004529,
+     "divergences": 0,
+     "max_rhat": 1.0049441933140586,
+     "min_bulk": 2799.0347284967734,
+     "median_gradients": 86164,
+     "failed_gates": [],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 3,
+     "ok": 3,
+     "median_ess_per_gradient": 0.03963949850641525,
+     "divergences": 0,
+     "max_rhat": 1.0024806627057437,
+     "min_bulk": 4023.7991010423734,
+     "median_gradients": 102205,
+     "failed_gates": [],
+     "branches": [
+      "dense",
+      "dense",
+      "dense"
+     ],
+     "statistics": [
+      110.6570968375321,
+      107.98521760655399,
+      61.11334020143747
+     ],
+     "hessian_gain": [
+      272.62996798336945,
+      261.02351842242456,
+      275.4350967594422
+     ],
+     "linearity": [
+      0.8030985123235507,
+      0.8543470920853391,
+      0.8497628790725713
+     ],
+     "decision_consistent": true
+    }
+   },
+   "mcycle_gp-accel_gp": {
+    "diag": {
+     "passed": 0,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00013312261997344466,
+     "divergences": 0,
+     "max_rhat": 1.0328039725411355,
+     "min_bulk": 203.63346322075304,
+     "median_gradients": 2891805,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "dense": {
+     "passed": 0,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00010416447955990898,
+     "divergences": 0,
+     "max_rhat": 1.0536709045001587,
+     "min_bulk": 72.52712271304978,
+     "median_gradients": 1036371,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "-",
+      "-",
+      "-"
+     ],
+     "statistics": [
+      null,
+      null,
+      null
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      null,
+      null,
+      null
+     ],
+     "decision_consistent": true
+    },
+    "auto": {
+     "passed": 0,
+     "ok": 3,
+     "median_ess_per_gradient": 0.00013312261997344466,
+     "divergences": 0,
+     "max_rhat": 1.0328039725411355,
+     "min_bulk": 203.63346322075304,
+     "median_gradients": 2891805,
+     "failed_gates": [
+      "max_rank_rhat",
+      "min_bulk_ess",
+      "min_tail_ess"
+     ],
+     "branches": [
+      "diag",
+      "diag",
+      "diag"
+     ],
+     "statistics": [
+      2.49587276385021,
+      7.6958883517663015,
+      14.71668675348247
+     ],
+     "hessian_gain": [
+      null,
+      null,
+      null
+     ],
+     "linearity": [
+      0.06479996077602049,
+      0.11238340033475,
+      0.13024830590650668
+     ],
+     "decision_consistent": true
+    }
+   }
+  },
+  "versus_diag": {
+   "dense": {
+    "ratios": {
+     "eight_schools-eight_schools_noncentered": 0.8733241358741041,
+     "eight_schools-eight_schools_centered": 0.799093236404243,
+     "diamonds-diamonds": 70.15821822023918,
+     "earnings-logearn_interaction": 7.046101001259565,
+     "mesquite-logmesquite_logvash": 14.462878668672706,
+     "kidiq-kidscore_momhsiq": 6.938965612240597,
+     "sblrc-blr": 0.9020497918224399,
+     "nes2000-nes": 13.911842005647728,
+     "arK-arK": 6.871468610602778,
+     "arma-arma11": 0.9190827018590222,
+     "garch-garch11": 1.4746547093758957,
+     "gp_pois_regr-gp_pois_regr": 1.602680611802956,
+     "hmm_example-hmm_example": 2.827878523048499,
+     "bball_drive_event_0-hmm_drive_0": 0.594533019525075,
+     "one_comp_mm_elim_abs-one_comp_mm_elim_abs": 1.0022168299813075,
+     "hudson_lynx_hare-lotka_volterra": 14.024982917339159,
+     "mcycle_gp-accel_gp": 0.7824701735939974
+    },
+    "geomean_ratio": 2.986949918613091,
+    "models_in_geomean": 17,
+    "models_below_0.9": [
+     "bball_drive_event_0-hmm_drive_0",
+     "eight_schools-eight_schools_centered",
+     "eight_schools-eight_schools_noncentered",
+     "mcycle_gp-accel_gp"
+    ],
+    "models_with_more_divergences": [],
+    "models_with_fewer_passes": [
+     "sblrc-blr",
+     "gp_pois_regr-gp_pois_regr",
+     "bball_drive_event_0-hmm_drive_0",
+     "one_comp_mm_elim_abs-one_comp_mm_elim_abs"
+    ]
+   },
+   "auto": {
+    "ratios": {
+     "eight_schools-eight_schools_noncentered": 1.0,
+     "eight_schools-eight_schools_centered": 1.0,
+     "diamonds-diamonds": 36.90871455138694,
+     "earnings-logearn_interaction": 1.0,
+     "mesquite-logmesquite_logvash": 10.003618782139885,
+     "kidiq-kidscore_momhsiq": 1.0,
+     "sblrc-blr": 1.0,
+     "nes2000-nes": 10.366015344873544,
+     "arK-arK": 5.954939705668102,
+     "arma-arma11": 1.0,
+     "garch-garch11": 1.0,
+     "gp_pois_regr-gp_pois_regr": 1.0,
+     "hmm_example-hmm_example": 2.501255030910767,
+     "bball_drive_event_0-hmm_drive_0": 1.0,
+     "one_comp_mm_elim_abs-one_comp_mm_elim_abs": 1.0,
+     "hudson_lynx_hare-lotka_volterra": 11.737552710232872,
+     "mcycle_gp-accel_gp": 1.0
+    },
+    "geomean_ratio": 2.2012892153489934,
+    "models_in_geomean": 17,
+    "models_below_0.9": [],
+    "models_with_more_divergences": [],
+    "models_with_fewer_passes": []
+   }
+  },
+  "branches": {
+   "dense_runs": 18,
+   "diag_runs": 33,
+   "match_prediction": 45,
+   "runs": 51,
+   "models_all_seeds_as_predicted": 15,
+   "decision_consistent_all_cells": true
+  }
+ }
+}
