@@ -943,3 +943,18 @@ provenance.
   alone (30 % of transitions refined, 4.3 gradients per refined leaf):
   [`STUDIES/nutpie_gap_decomposition_v1`](STUDIES/nutpie_gap_decomposition_v1/README.md)
   (WP80).
+- [E46] Metric auto-selection, round two (research flag, off): the diagonal
+  branch is now the diagonal driver itself with a passive observer, and the
+  run goes dense at window 2 only if a gradient-vs-position fit over windows
+  1+2 is positive definite, its whitening gain is at least 5 and its worst
+  coordinate R² at least 0.5 (bound set from WP75's recorded draws). 17
+  house models x 3 fresh seeds on Linux: branch as predicted 45/51 (dense on
+  diamonds, mesquite, nes2000, arK, hmm_example, lotka_volterra at 2.5–36.9x
+  the diagonal; gp_pois_regr and accel_gp kept diagonal 6/6; earnings and
+  kidiq went diagonal, their early windows not fitting a linear gradient
+  model); **every rule held**: passes 44 vs 44, geomean 2.20x, no model
+  below 0.9x, 0 new divergences, 43/43 diagonal-branch cells bit-identical
+  to the default, funnel P5 0.0482 ± 0.0019, flag-off integrity. Proposed
+  for a default-flip confirmation (WP85):
+  [`STUDIES/metric_autoselect_v2`](STUDIES/metric_autoselect_v2/README.md)
+  (WP79).

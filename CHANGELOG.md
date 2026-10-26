@@ -27,7 +27,14 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Research flag `WarmupConfig::with_dense_auto_select` (off, dense facade
   only): choose dense or diagonal once per run from a warmup-window
   condition-number statistic (WP75). Not proposed: 2.30x geomean but five
-  fewer gates; WP79 is the second round.
+  fewer gates.
+- Research flag for Hessian-fit dense auto-selection on the diagonal driver
+  (WP79, `tests/metric_autoselect_hessian.rs`): the run stays on the exact
+  diagonal path unless a gradient-vs-position fit over the first slow
+  windows says a dense metric will pay (gain >= 5, worst R² >= 0.5). Passed
+  every rule on 17 models x 3 seeds (44 = 44 gates, 2.20x geomean, no model
+  below 0.9x); a default-flip confirmation on 22 models x 6 fresh seeds
+  (WP85) decides.
 - Research flag `walnutpie::DiagonalMetricEstimator` (off): nutpie's
   gradient-informed diagonal metric estimator (WP71). Not supported as a
   default (0.98x geomean, three fewer gates); kept for reference.
