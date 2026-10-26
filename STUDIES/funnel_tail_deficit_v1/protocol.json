@@ -1,0 +1,95 @@
+{
+  "schema": "funnel-tail-deficit-v1",
+  "ledger_id": "WP66",
+  "wp_number_note": "Highest WP in README / wiki / ledger at main a49df800 is WP63; two concurrent lanes take WP64 and WP65, so this study is WP66.",
+  "status": "FROZEN_BEFORE_FIRST_EVIDENCE_CELL",
+  "frozen_utc": "2026-10-25",
+  "library_under_test": "main a49df800 (0.3.0 + docs), unchanged: Init::default() = best_of(16) (not used: explicit house starts), NonfinitePositionPolicy::RejectLeaf, UTurnRule::MomentumSum, DiagonalMetricRegularization::Stan, delta 1, eight refinement levels (h/128), depth 10, dual averaging 0.8. ALGORITHM_REVISION walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10. No library source is changed by this study; every arm is a public builder setting.",
+  "machine": "AWS EC2 c7a.4xlarge owalnuts-bench (Ubuntu 24.04, Rust 1.88), lane 3: every build and cell pinned with taskset -c 8-11, RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, three other lanes active on cores 0-7 and 12-15 (shared L3 and memory bandwidth). Wall-clock numbers are 'pinned, co-tenanted'; tail mass, ESS per gradient and pass counts are unaffected by co-tenancy.",
+  "question": [
+    "Q1: why is the shipped default's P(omega < -5) on Neal's 10-D funnel about 4 % low (WP53: pooled 0.0458 +/- 0.0014 vs exact 0.0478, mean z -0.42; delta 2 the same)?",
+    "Q2: does any single setting remove the deficit without hurting the posteriordb record?",
+    "Q3 (sanity arm): is the deficit a bias that persists at 4x the retained draws, or a finite-run effect?"
+  ],
+  "hypotheses": {
+    "H1_step_adaptation": {
+      "mechanism": "Dual averaging to acceptance 0.8 sizes the macro step h for the bulk; in the neck the leapfrog at that h is under-resolved, neck transitions are energy-error limited and short, and the chain enters and explores the neck too rarely within the run.",
+      "diagnostic": "Per retained transition, classified by the omega of its starting state (bulk >= -5, neck [-7,-5), deep < -7): mean energy-acceptance proxy min(1, exp(-max |dH|)), moved fraction, selected refinement level; per chain: Spearman correlation of per-chain P(omega < -5) with log adapted h over the 120 default chains.",
+      "signature_in_default_arm": "neck-class mean energy-acceptance proxy at least 0.10 below the bulk class's, OR |Spearman(per-chain P5, log h)| >= 0.20 over the 120 default chains.",
+      "candidate_arm": "accept0.9",
+      "candidate": "Adaptation::DualAveraging { target_accept: 0.9 }"
+    },
+    "H2_refinement_ceiling": {
+      "mechanism": "Eight levels (micro step h/128) are not enough in the deep neck at the adapted h: leaves there select the top level or exhaust, the two-sided Stop rule ends the orbit, and the deep neck becomes a region the chain enters too rarely.",
+      "diagnostic": "Per class: count of retained transitions whose selected refinement level is the top level (levels - 1), RefinementExhausted stops; the tail-mass profile P(omega < c) / exact for c = -1..-10.",
+      "signature_in_default_arm": "(top-level selected + RefinementExhausted stops) >= 1 % of deep-class retained transitions, AND the pooled relative deficit at c = -8 is larger than at c = -5.",
+      "candidate_arm": "levels10",
+      "candidate": "Tuning::default().max_refinement_levels(10) (micro step h/512)"
+    },
+    "H3_u_turn_rule": {
+      "mechanism": "The post-hoc default U-turn rule UTurnRule::MomentumSum (Stan's generalised criterion; one momentum per macro leaf, no walnutpie oracle) stops neck orbits early or interacts with variable refinement so that neck exploration is truncated.",
+      "diagnostic": "Per class: tree-depth histogram, mean depth, stop reasons (OuterUTurn / RecursiveUTurn / MaximumDepth / RefinementExhausted / ReverseCoarserAccepted / InvalidEvaluation), mean orbit macro length.",
+      "signature_in_default_arm": "neck-class share of U-turn stops (OuterUTurn + RecursiveUTurn) at depth <= 3 at least 1.5x the bulk class's, OR neck-class mean depth differs from the endpoint arm's by >= 0.5 doublings.",
+      "candidate_arm": "endpoint",
+      "candidate": "Tuning::default().kernel_options(KernelOptions::default()) (the frozen v10 endpoint rule, oracle-tested; exhaustion rule unchanged: Stop)"
+    },
+    "excluded": "Best-of-16 starts (the task's fourth example) cannot enter: the house funnel check passes explicit starts omega in {-3,-1,1,3}, x = 0, as WP53 did."
+  },
+  "arms": {
+    "default": "Tuning::default(), Adaptation::default() (control; the shipped default)",
+    "accept0.9": "Adaptation::DualAveraging { target_accept: 0.9 } (H1)",
+    "levels10": "Tuning::default().max_refinement_levels(10) (H2)",
+    "endpoint": "Tuning::default().kernel_options(KernelOptions::default()) (H3)"
+  },
+  "common": "Metric::diagonal(), Limits::new().admit_worst_case(), four chains, four threads, explicit starts omega in {-3,-1,1,3}, x = 0 (funnel); everything not named in an arm is the shipped default.",
+  "target": "Neal's 10-D funnel, omega ~ N(0, 3^2), x_i | omega ~ N(0, exp(omega)), the WP53 density code verbatim.",
+  "statistic": "P(omega < -5) pooled over the 4 chains of a cell, exact 0.0477903522728147; house z = (estimate - exact) / MCSE with MCSE = diagnostics::mcse_mean of the indicator (WP53's statistic). Per arm: pooled estimate = mean of the 30 per-seed estimates; between-seed s.e. = sd(per-seed estimates) / sqrt(30).",
+  "seeds": {
+    "A": [668101, 668102, 668103, 668104, 668105, 668106, 668107, 668108, 668109, 668110, 668111, 668112, 668113, 668114, 668115, 668116, 668117, 668118, 668119, 668120, 668121, 668122, 668123, 668124, 668125, 668126, 668127, 668128, 668129, 668130],
+    "S": [668201, 668202, 668203, 668204, 668205, 668206, 668207, 668208, 668209, 668210],
+    "C": [668301, 668302, 668303, 668304, 668305, 668306, 668307, 668308, 668309, 668310]
+  },
+  "seed_check": "git grep -lwE over every tracked file of main a49df800 (artifacts included) for 6681xx/6682xx/6683xx in the used ranges: no hit; the same regex over every protocol.json / PREREGISTRATION.md in C:/dev/owalnuts-wt/*/STUDIES: no hit. (6601xx was rejected: 660125 occurs inside a float; 6641xx-6671xx have hits.) Pipeline seed 990661: no hit.",
+  "blocks": {
+    "A": {"kind": "funnel", "arms": ["default", "accept0.9", "levels10", "endpoint"], "warmup": 2000, "draws": 20000, "seeds": "A", "role": "core: decides D1-D4 per candidate and the hypothesis signatures"},
+    "S": {"kind": "funnel", "arms": ["default"], "warmup": 2000, "draws": 80000, "seeds": "S", "role": "sanity arm: bias versus finite-run variance"},
+    "C": {"kind": "side", "targets": ["eight", "gauss100"], "arms": ["default", "accept0.9", "levels10", "endpoint"], "warmup": 1000, "draws": 1000, "seeds": "C", "role": "cost side check for E1 (WP28's two ordinary targets)"}
+  },
+  "run_order": "A: seeds ascending, within a seed arms default, accept0.9, levels10, endpoint. Then S: seeds ascending. Then C: seeds ascending, within a seed targets eight then gauss100, within a target arms in the A order. One process per cell, strictly sequential, taskset -c 8-11, four threads. A cell that errors is recorded as an error file and counts as a failure (|z| > 2, not removed); never rerun. A cell is rerun only if the host killed the driver mid-cell, recorded as a deviation.",
+  "changes_from_WP53_harness": [
+    "arms default / accept0.9 / levels10 / endpoint (src/lib.rs) instead of default / delta2 / delta0.5",
+    "per-transition diagnostics (ChainOutput::diagnostics) of retained transitions aggregated by starting-state omega class: depth histogram, stop reasons, selected level histogram, top-level count, exhaustion stops, moved fraction, energy-error mean / quantiles, energy-acceptance proxy, refinement attempts, reverse-coarser rejections, orbit length, target evaluations",
+    "warmup acceptance statistic means (all warmup, last slow window, last 50) and warmup top-level / exhaustion counts per chain",
+    "lower-tail profile P(omega < c), c = -1..-10, and upper-tail profile P(omega > c), c = 1..10, pooled and per chain",
+    "per-chain tail fraction by retained quarter, neck entries, excursion count / mean / max length, min / max omega, first retained omega",
+    "prefix estimate: P(omega < -5) over the first min(draws, 20,000) retained draws per chain",
+    "wall label 'pinned_cotenanted'; Linux binary path; side-check binary src/bin/side.rs (WP28 targets)",
+    "driver: blocks A / S / C, protocol-driven seeds and arms; analysis adds between-seed s.e., paired seed differences, the D/E rules and the hypothesis signatures"
+  ],
+  "calibration_tests": "As WP53 per arm over the 30 block-A z values: exceedance #{|z| > 2} with binomial tail, mean z (mean * sqrt(30) ~ N(0,1)), sd with chi-square variance test, KS against N(0,1).",
+  "decision_rules": {
+    "removes_deficit": "Candidate X (accept0.9, levels10, endpoint) REMOVES the deficit iff ALL of D1-D4.",
+    "D1": "|pooled P5(X) - 0.0477903522728147| <= between-seed s.e. of X (block A, 30 seeds).",
+    "D2": "mean house z of X in [-0.2, 0.2] (block A).",
+    "D3": "exceedance #{|z| > 2} of X <= 4 (WP53's default count) AND pooled retained divergence rate of X < 1e-3 (total retained divergences / (30 x 4 x 20,000)). Errored cells count as exceedances.",
+    "D4": "no library change: git diff a49df800 -- src/ Cargo.toml Cargo.lock of the repository root is empty at the build commit, and cargo test --release --test kernel_fingerprint passes on the box build. Every arm is a builder setting, so none is a kernel change; a passing candidate is labelled a candidate default change, never applied here.",
+    "recommend_for_posteriordb": "A candidate that removes the deficit is RECOMMENDED for a preregistered posteriordb confirmation iff E1 AND E2; otherwise it is reported as 'removes the deficit, not a default candidate'.",
+    "E1": "block C: for each of eight and gauss100, the geometric mean over the 10 seeds of (min-bulk-ESS-per-gradient of X / that of default, paired by seed) >= 0.95, and X's house-healthy cells >= default's - 1.",
+    "E2": "the ledger records no posteriordb geomean loss >= 4 % for the same setting or a weaker form of it. Pre-assessed at the freeze: accept0.9 FAILS E2 (WP40 sweep4: target 0.85 alone 0.958x over the 17 models, sampling-only 0.89-0.94x on every model); endpoint FAILS E2 (WP31/WP32: the shipped MomentumSum + Stan pair is 1.51x the endpoint pair; endpoint with Stan regularisation 0.08x on earnings); levels10 PASSES E2 (no posteriordb record; WP28: 4 -> 8 levels 1.05x / 1.00x on Eight Schools / 100-D Gaussian, levels a cap those targets do not reach).",
+    "hypothesis_support": "H_k is SUPPORTED iff (i) its candidate raises the pooled estimate over the paired default: mean over the 30 seeds of (P5(X, seed) - P5(default, seed)) > 0 with paired t >= 2.0, AND (ii) its signature (hypotheses.*.signature_in_default_arm) holds. (i) without (ii) = 'candidate helps, mechanism not shown'; (ii) without (i) = 'signature present, not causal at this budget'; neither = NOT SUPPORTED.",
+    "replication": "The deficit REPLICATES on fresh seeds iff the block-A default arm's pooled P5 is below exact by more than 1 between-seed s.e. If it does not replicate, D1-D4 are still evaluated and reported, and the verdict says so first.",
+    "sanity_arm_S": "r = 1 - pooled P5 / exact (relative deficit). FINITE-RUN reading iff r_S < r_A(default) / 2 AND |pooled P5(S) - exact| <= s.e.(S). PERSISTENT-BIAS reading iff r_S >= r_A(default) / 2 AND pooled P5(S) < exact - 1.5 s.e.(S). Otherwise INCONCLUSIVE (the expected s.e. at 10 seeds x 80,000 is about 0.0012, so the arm separates only a deficit that halves). Descriptive companion: per S seed, P5 over the first 20,000 retained draws versus the last 60,000.",
+    "no_flip": "No default changes in this study under any outcome."
+  },
+  "predictions": {
+    "P1_default_replicates": "block-A default pooled P5 in [0.0440, 0.0475] and mean z in [-0.6, -0.1]",
+    "P2_lower_tail_specific": "block-A default pooled P(omega > 5) within 1 between-seed s.e. of 0.0478 (the deficit is a neck effect, not omega-wide under-dispersion)",
+    "P3_levels10": "in the default arm (top-level + exhaustion stops) < 1 % of deep-class transitions, and levels10's pooled P5 within 1 paired s.e. of default's: H2 not supported",
+    "P4_accept0.9_step": "accept0.9 median adapted h 20-50 % below default's",
+    "P5_endpoint": "endpoint pooled P5 within 1 paired s.e. of default's: H3 not supported",
+    "P6_no_candidate_removes": "no candidate passes D1-D4",
+    "P7_sanity": "sanity arm S INCONCLUSIVE or FINITE-RUN"
+  },
+  "descriptive": "Everything else in the cells: P(omega < -6), omega variance, rank R-hat / bulk / tail ESS of all coordinates, divergences, depth caps, exhaustions, min ESS per gradient, chain_warnings, per-class tables, tail profiles, per-chain statistics. Wall seconds are pinned, co-tenanted and not used in any rule.",
+  "pre_freeze_runs": "Non-evidence, disclosed: (1) a post-hoc look at WP53's committed cells before the hypotheses were written (per-chain P5 vs warmup-end h: Spearman +0.156 default / -0.01 delta2; omega mean 0.0035 +/- 0.026; omega variance 8.82 +/- 0.07; omega bulk ESS median 522); (2) pipeline checks on seed 990661 after the predictions were written (outputs in the lane scratch directory, not committed)."
+}
