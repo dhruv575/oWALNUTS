@@ -114,7 +114,22 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
    rescue: not proposed (false positives on recovering chains at step ratios
    0.024–0.031, a real trap missed at 0.111). It also found the warning
    silent on three 2-vs-2 splits of a two-mode target that R-hat > 1.01
-   caught (6 of 12 split runs reported); WP74 tests a split-aware rule.
+   caught (6 of 12 split runs reported). WP74
+   (`STUDIES/chain_disagreement_splits_v1`) added the pairwise-agreement
+   cluster check (`ChainWarning::RHatCluster`, now shipped): 5/5 fresh split
+   cells reported against 1/5 for the older checks, no finding on 43
+   gate-passing posteriordb cells, no lost warning on 26 replays. Still
+   open:
+   - **Splits with no agreeing pair.** It misses WP69's 2-vs-2 cell 6903202:
+     two chains crossed modes, so no pair of chains agrees (best pair R-hat
+     1.025). Only R-hat > 1.01 reports it. A crossing-aware variant (pairwise
+     R-hat on retained half-windows) is untested.
+   - **Healthy-cell firings of the older checks.** Under the best-of-16
+     default the step and warmup-density checks fired on 3 of 43
+     gate-passing cells (`hmm_drive_0` 7402001 / 7402003, `lotka_volterra`
+     7402001): transient warmup dips on chains that end within 0.2 reference
+     SD. WP44 saw 0 of 60 under the old uniform starts. Their specificity at
+     the current defaults needs its own count.
 8. **Windows native root cause** (WP35A, `bridgestan_lifetime_v1`,
    `bridgestan_owned_worker_v1`, WP50–WP50E): the heap corruption
    reproduced only with the full WinLibs mingw runtime (3/60, WP50B), and

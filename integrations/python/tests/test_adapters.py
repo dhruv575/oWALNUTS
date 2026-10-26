@@ -760,10 +760,44 @@ def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
     init = np.array([[-0.75, 0.75], [-0.25, 0.25], [0.25, -0.25], [15.0, 15.0]])
     trapped = owalnuts.sample(_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init)
     warnings = trapped.chain_warnings()
-    assert warnings and {w["chain"] for w in warnings} == {3}
-    assert {"warmup_log_density", "sampled_log_density", "rhat"} <= {w["check"] for w in warnings}
+    older = [w for w in warnings if w["check"] != "rhat_cluster"]
+    assert older and {w["chain"] for w in older} == {3}
+    assert {"warmup_log_density", "sampled_log_density", "rhat"} <= {w["check"] for w in older}
+    # The pairwise cluster check (WP74) names chain 3 too. At 300 draws it
+    # also names chain 0, whose pair R-hats with chains 1 and 2 (1.011) sit
+    # just above 1.01: on a failing run it can name a healthy chain.
+    cluster = {w["chain"]: w["reference_chains"] for w in warnings if w["check"] == "rhat_cluster"}
+    assert cluster == {0: [1, 2], 3: [1, 2]}
     lines = [line for line in str(trapped).splitlines() if line.startswith("warning: chain")]
-    assert len(lines) == 1 and lines[0].startswith("warning: chain 3 disagrees with the other chains: ")
+    assert [line.split(" disagrees")[0] for line in lines] == ["warning: chain 0", "warning: chain 3"]
+
+
+def _two_modes(q: np.ndarray) -> tuple[float, np.ndarray]:
+    # 0.6 N(-8, 0.5^2) + 0.4 N(8, 0.5^2): two chains started in each mode
+    # never cross the 32-SD gap, a split no single chain explains.
+    x = float(q[0])
+    a = math.log(0.6) - 0.5 * ((x + 8.0) / 0.5) ** 2
+    b = math.log(0.4) - 0.5 * ((x - 8.0) / 0.5) ** 2
+    top = max(a, b)
+    value = top + math.log(math.exp(a - top) + math.exp(b - top))
+    w_a, w_b = math.exp(a - value), math.exp(b - value)
+    return value, np.array([-(w_a * (x + 8.0) + w_b * (x - 8.0)) / 0.25])
+
+
+def test_chain_warnings_report_a_two_two_mode_split():
+    init = np.array([[-8.0], [8.0], [-8.0], [8.0]])
+    result = owalnuts.sample(_two_modes, dim=1, warmup=300, draws=500, seed=3, chains=4, init=init)
+    warnings = result.chain_warnings()
+    # No single chain explains R-hat, so only the cluster check fires: the
+    # lower-density mode's chains, against the reference pair (0, 2).
+    assert [(w["chain"], w["check"], w["reference_chains"]) for w in warnings] == [
+        (1, "rhat_cluster", [0, 2]),
+        (3, "rhat_cluster", [0, 2]),
+    ]
+    assert all(w["reference"] > 1.01 and w["value"] > 1.01 for w in warnings)
+    lines = [line for line in str(result).splitlines() if line.startswith("warning: chain")]
+    assert len(lines) == 2 and lines[0].startswith("warning: chain 1 disagrees with the other chains: max R-hat ")
+    assert "chains 0, 2 agree in pairs" in lines[0]
 
 
 def _cliff(q: np.ndarray) -> tuple[float, np.ndarray]:
