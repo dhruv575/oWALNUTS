@@ -42,7 +42,11 @@ const DRAWS: usize = 200;
 
 fn starts() -> Vec<Vec<f64>> {
     (0..4)
-        .map(|c| (0..SCALES.len()).map(|i| 0.3 * (c as f64 - 1.5) + 0.1 * i as f64).collect())
+        .map(|c| {
+            (0..SCALES.len())
+                .map(|i| 0.3 * (c as f64 - 1.5) + 0.1 * i as f64)
+                .collect()
+        })
         .collect()
 }
 
@@ -72,7 +76,14 @@ fn draws(posterior: &Posterior) -> Vec<Vec<u64>> {
         .iter()
         .map(|chain| {
             (0..DRAWS)
-                .flat_map(|i| chain.sample(i).unwrap().iter().map(|v| v.to_bits()).collect::<Vec<_>>())
+                .flat_map(|i| {
+                    chain
+                        .sample(i)
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.to_bits())
+                        .collect::<Vec<_>>()
+                })
                 .collect()
         })
         .collect()
@@ -88,7 +99,10 @@ fn custom_house_warmup_is_the_default() {
 #[test]
 fn rule_that_never_fires_is_bit_identical() {
     let never = StableMetricStop::new(3, 0.9, 0.0, 0.0).unwrap();
-    let with_rule = run(1000, Adaptation::Custom(house_warmup().with_stable_metric_stop(never)));
+    let with_rule = run(
+        1000,
+        Adaptation::Custom(house_warmup().with_stable_metric_stop(never)),
+    );
     let without = run(1000, Adaptation::Custom(house_warmup()));
     assert_eq!(draws(&with_rule), draws(&without));
     for chain in with_rule.chains() {
@@ -110,16 +124,28 @@ fn rule_that_never_fires_is_bit_identical() {
 #[test]
 fn stopped_chain_is_the_short_warmup_run() {
     let always = StableMetricStop::new(3, 0.9, 1.0e6, 1.0e6).unwrap();
-    let stopped = run(1000, Adaptation::Custom(house_warmup().with_stable_metric_stop(always)));
+    let stopped = run(
+        1000,
+        Adaptation::Custom(house_warmup().with_stable_metric_stop(always)),
+    );
     let short = run(500, Adaptation::Custom(house_warmup()));
     assert_eq!(draws(&stopped), draws(&short));
     for (a, b) in stopped.chains().iter().zip(short.chains()) {
         assert_eq!(a.metadata().discarded(), 500);
         assert_eq!(a.diagnostics().len(), 500 + DRAWS);
-        assert_eq!(a.metadata().tuning().step_size().to_bits(), b.metadata().tuning().step_size().to_bits());
+        assert_eq!(
+            a.metadata().tuning().step_size().to_bits(),
+            b.metadata().tuning().step_size().to_bits()
+        );
         assert_eq!(a.metadata().mass_diagonal(), b.metadata().mass_diagonal());
-        assert_eq!(a.telemetry().total().target_calls_total(), b.telemetry().total().target_calls_total());
-        assert_eq!(a.telemetry().discarded().target_calls_total(), b.telemetry().discarded().target_calls_total());
+        assert_eq!(
+            a.telemetry().total().target_calls_total(),
+            b.telemetry().total().target_calls_total()
+        );
+        assert_eq!(
+            a.telemetry().discarded().target_calls_total(),
+            b.telemetry().discarded().target_calls_total()
+        );
         let schedule = a.metadata().warmup_schedule().unwrap();
         assert_eq!(schedule.terminal_fast_start(), 450);
         assert_eq!(schedule.windows().len(), 4);
@@ -141,7 +167,9 @@ fn rule_is_validated_and_rejected_elsewhere() {
         .chains(2)
         .seed(SEED)
         .metric(Metric::dense())
-        .adaptation(Adaptation::Custom(house_warmup().with_stable_metric_stop(rule)))
+        .adaptation(Adaptation::Custom(
+            house_warmup().with_stable_metric_stop(rule),
+        ))
         .run(&Scaled, &starts()[..2]);
     assert!(dense.is_err());
 }

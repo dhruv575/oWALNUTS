@@ -2560,8 +2560,10 @@ impl StableMetricStop {
                 "the stable-metric stop quantile must lie in (0, 1]",
             ));
         }
-        if !(metric_tolerance.is_finite() && metric_tolerance >= 0.0)
-            || !(step_tolerance.is_finite() && step_tolerance >= 0.0)
+        if !(metric_tolerance.is_finite()
+            && metric_tolerance >= 0.0
+            && step_tolerance.is_finite()
+            && step_tolerance >= 0.0)
         {
             return Err(Error::configuration(
                 "stable-metric stop tolerances must be finite and non-negative",
@@ -9035,10 +9037,13 @@ impl<'a, T: Target> ChainRun<'a, T> {
                                     _ => None,
                                 };
                                 let stable = metric_change <= rule.metric_tolerance
-                                    && step_change.is_some_and(|change| change <= rule.step_tolerance);
+                                    && step_change
+                                        .is_some_and(|change| change <= rule.step_tolerance);
                                 let shortened = transition_index
                                     .checked_add(1)
-                                    .and_then(|value| value.checked_add(warmup.windows.terminal_buffer))
+                                    .and_then(|value| {
+                                        value.checked_add(warmup.windows.terminal_buffer)
+                                    })
                                     .ok_or_else(Error::overflow)?;
                                 let stopped = stable && shortened < *discarded;
                                 if stopped {
