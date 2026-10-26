@@ -68,5 +68,5 @@ analysis.
 
 ## Amendments after the freeze
 
-None yet. Any later amendment covers only cells not yet run, is committed
-before them, and is listed here.
+None. All 312 sampling cells and the funnel row ran as frozen at `44546ec0`;
+no cell was rerun and no amendment was needed.
