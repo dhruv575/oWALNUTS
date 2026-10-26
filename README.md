@@ -1054,4 +1054,13 @@ provenance.
   reference (4 x 22,000 draws x 1,004 dimensions) failed every tick at the
   result-size limit and was not rerun:
   [`STUDIES/online_sv_quote_v1`](STUDIES/online_sv_quote_v1/README.md)
-  (WP84).
+  (WP84). A post-hoc, non-preregistered rescoring
+  ([`posthoc/README.md`](STUDIES/online_sv_quote_v1/posthoc/README.md))
+  against the quote itself: the 200-draw warm refresh keeps the P50 of
+  next-period sigma within 2 % and the P95 within 5 % of the reference on
+  97 % / 98 % of ticks (median 0.64 % / 1.27 %, no drift), the 50-draw
+  refresh on 74 % / 78 %; the reference floor is 0.08–0.3 % MCSE. As
+  sampled, the oWALNUTS and CmdStan full refits are *worse* than the
+  200-draw warm refresh at those tolerances because of stuck chains on
+  7 % / 13 % of ticks (nutpie 0 %), each named by the chain warnings;
+  the reference itself had a frozen chain on 4 of 100 ticks.

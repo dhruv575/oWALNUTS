@@ -352,7 +352,28 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     targets; (b) an accuracy bar suited to a warm refresh (the arm's own
     MCSE, or pooled chains) before any "real-time" claim; (c) the
     result-size limit, which the N = 1,000 reference (4 x 22,000 draws x
-    1,004 dimensions) exceeded.
+    1,004 dimensions) exceeded. The post-hoc rescoring
+    (`STUDIES/online_sv_quote_v1/posthoc`) proposes the bar for the next
+    study: gated reference (drop chains named by `WarmupStep` /
+    `SampledLogDensity`, rerun the tick below three chains or R-hat above
+    1.01), pass = |P50 sigma error| <= 2 % and |P95 error| <= 5 % on >= 95 %
+    of ticks and >= 90 % per seed under the latency threshold, stuck-chain
+    ticks counted as failures; on WP84's data the 200-draw warm refresh
+    passes, the 50-draw one fails, nutpie passes, and the oWALNUTS and
+    CmdStan refits fail as sampled. The library side now has a warm API in
+    progress (WP87).
+23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
+    250-return SV model from scratch at every tick, with best-of-16 starts,
+    left one chain frozen (warmup step collapsed to about 1e-6, log density
+    thousands below the others) on 21 of 300 oWALNUTS ticks and 39 of 300
+    CmdStan ticks, against 0 of 300 for nutpie; the 4 x 20,000 reference
+    had one on 4 of 100 ticks. Every oWALNUTS case was named by the chain
+    warnings, with zero divergences. This is a warmup / initialisation
+    result, not a WP84 claim: open is why nutpie's warmup never traps on
+    this model (its initial step search, its mass-matrix start, or its
+    early-window schedule) and whether the trapped-chain restart (WP67,
+    WP69) or a warmup-step collapse guard would close the gap. See items 12
+    and 19.
 
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the
