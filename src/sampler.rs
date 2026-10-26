@@ -86,11 +86,13 @@ pub use crate::walnutpie::{
 use crate::walnutpie::{
     ChainRescueConfig, DEFAULT_DIVERGENCE_THRESHOLD, DenseMass, DiagonalMass,
     DiagonalMetricRegularization, ExhaustionRule, KernelOptions, KernelTuning, MultiChainOutput,
-    RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget, UTurnRule,
+    ResourceLimits, RunConfig, RunControl, TargetEvaluationAdmissionLimit, TargetEvaluationBudget,
+    UTurnRule, preflight_chains, preflight_chains_with_target_budget,
     sample_chains_dense_with_control, sample_chains_dense_with_target_budget_and_control,
     sample_chains_structured_refresh, sample_chains_structured_with_control,
-    sample_chains_with_control, sample_chains_with_target_budget_and_control,
+    sample_chains_with_control, sample_chains_with_target_budget_and_control, with_scoped_pool,
 };
+use rayon::prelude::*;
 
 /// Momentum covariance `M` and whether warmup adapts it.
 ///
@@ -927,6 +929,7 @@ pub struct Limits {
     timeout: Option<Duration>,
     cancellation: Option<Arc<dyn Cancellation>>,
     max_depth_stops: Option<usize>,
+    max_result_bytes: Option<NonZeroUsize>,
 }
 
 impl Default for Limits {
@@ -940,6 +943,7 @@ impl Default for Limits {
             timeout: None,
             cancellation: None,
             max_depth_stops: None,
+            max_result_bytes: None,
         }
     }
 }
@@ -995,6 +999,32 @@ impl Limits {
         self.max_depth_stops = Some(stops);
         self
     }
+    /// Replace the result-size ceiling (`walnutpie::ResourceLimits::max_result_bytes`,
+    /// 512 MiB by default) with `bytes`, above or below the default. The
+    /// `walnutpie` constructor only lets that ceiling be tightened; this is
+    /// the explicit opt-in to raise it, in the spirit of
+    /// [`Limits::admit_worst_case`], for runs whose retained draws
+    /// legitimately exceed it (WP84's N = 1,000 reference, 4 chains x 22,000
+    /// draws x 1,004 coordinates, about 707 MB, failed at admission with
+    /// "result data exceeds its resource limit"). The run is still refused
+    /// before any target call when its exact accounted result size (draws,
+    /// mandatory diagnostics, telemetry, containers) exceeds the new value;
+    /// the working-memory, dimension, chain, transition and evaluation
+    /// ceilings are unchanged, and the default ceiling is unchanged for
+    /// every run that does not call this. Applies to [`Sampler::run`],
+    /// [`Sampler::run_warm`] and [`Sampler::start_session`].
+    pub fn max_result_bytes_unchecked(mut self, bytes: NonZeroUsize) -> Self {
+        self.max_result_bytes = Some(bytes);
+        self
+    }
+    /// The `walnutpie` resource limits this configures: the defaults, with
+    /// the result-size ceiling of [`Limits::max_result_bytes_unchecked`] if set.
+    pub fn resource_limits(&self) -> ResourceLimits {
+        match self.max_result_bytes {
+            Some(bytes) => ResourceLimits::default().with_max_result_bytes_unchecked(bytes),
+            None => ResourceLimits::default(),
+        }
+    }
 }
 
 impl fmt::Debug for Limits {
@@ -1006,6 +1036,7 @@ impl fmt::Debug for Limits {
             .field("timeout", &self.timeout)
             .field("cancellation", &self.cancellation.as_ref().map(|_| ".."))
             .field("max_depth_stops", &self.max_depth_stops)
+            .field("max_result_bytes", &self.max_result_bytes)
             .finish()
     }
 }
@@ -1121,17 +1152,31 @@ impl Sampler {
     }
 
     fn run_config(&self) -> Result<RunConfig, Error> {
-        let draws = NonZeroUsize::new(self.draws)
-            .ok_or_else(|| Error::configuration("draws must be nonzero"))?;
-        let mut config = RunConfig::new(self.warmup, draws, self.seed)
-            .with_tuning(self.tuning.to_kernel()?)
-            .with_cached_initial_evaluation(self.cache_initial_evaluation);
+        let mut config = self.base_run_config(self.warmup, self.seed, &self.tuning)?;
         if let Some(warmup) = self.adaptation.warmup_config(
             self.metric.adapts_mass(),
             self.metric.supports_chain_rescue(),
         )? {
             config = config.with_warmup(warmup);
         }
+        Ok(config)
+    }
+
+    /// The `RunConfig` shared by every path: `draws` retained transitions,
+    /// the given discarded count, seed and tuning, the cached initial
+    /// evaluation, the depth-stop limit and the resource limits; no warmup.
+    fn base_run_config(
+        &self,
+        discarded: usize,
+        seed: u64,
+        tuning: &Tuning,
+    ) -> Result<RunConfig, Error> {
+        let draws = NonZeroUsize::new(self.draws)
+            .ok_or_else(|| Error::configuration("draws must be nonzero"))?;
+        let mut config = RunConfig::new(discarded, draws, seed)
+            .with_tuning(tuning.to_kernel()?)
+            .with_cached_initial_evaluation(self.cache_initial_evaluation)
+            .with_limits(self.limits.resource_limits());
         if let Some(limit) = self.limits.max_depth_stops {
             config = config.with_maximum_depth_stop_limit(limit);
         }
@@ -1245,6 +1290,182 @@ impl Sampler {
     /// Errors are all-or-nothing: no draws are returned on failure.
     pub fn run<T: Target>(&self, target: &T, starts: &[Vec<f64>]) -> Result<Posterior, Error> {
         self.run_with_control_value(target, starts, RunControl::new())
+    }
+
+    /// Warm continuation: run `draws` retained transitions per chain from a
+    /// carried [`WarmState`], with no warmup and no adaptation, each chain on
+    /// its own carried step size and fixed diagonal mass.
+    ///
+    /// This is the WP84 (`STUDIES/online_sv_quote_v1`) warm path as a library
+    /// call: take [`Posterior::warm_state`] (or [`SessionChunk::warm_state`])
+    /// from a completed run, optionally [`WarmState::extend_to`] it onto a
+    /// target of larger dimension, and refresh the posterior on the new
+    /// target in `draws` transitions. The result is an ordinary [`Posterior`]
+    /// whose [`Posterior::warm_state`] is the next state.
+    ///
+    /// Chain `c` is run exactly as the single-chain
+    /// `Sampler::new().warmup(0).draws(draws).seed(seed + c).metric(Metric::fixed_diagonal(mass_c))
+    /// .adaptation(Adaptation::None).tuning(tuning.step_size(step_c)).run(target, &[position_c])`
+    /// with this sampler's tuning, limits and cached-initial-evaluation
+    /// setting, so its draws are bit-identical to that call. The chain seeds
+    /// are therefore `splitmix64(seed + c)` (the [`Sampler::seed`] rule), and
+    /// `run_warm` with one chain equals `run` with the same seed and
+    /// configuration; the per-chain metadata reports `seed` as the base
+    /// seed and `splitmix64(seed + c)` as the effective seed, as `run` does.
+    ///
+    /// Ignored settings: [`Sampler::warmup`] (there are no discarded
+    /// transitions), [`Sampler::metric`] and [`Sampler::adaptation`] (the
+    /// state supplies each chain's metric and step; nothing adapts).
+    /// [`Sampler::chains`], if set, must equal the state's chain count.
+    /// Chains run in parallel on up to [`Sampler::threads`] workers (default:
+    /// one per chain); output is independent of the thread count. The
+    /// resource and admission limits apply to the whole run as for
+    /// [`Sampler::run`]: the exact worst-case evaluation count of all chains
+    /// (or [`Limits::max_target_evaluations`]) is the shared runtime budget,
+    /// and the result-size, dimension, chain and transition ceilings are
+    /// checked for all chains before any target call.
+    ///
+    /// Not validated by the library: whether `draws` transitions on a frozen
+    /// step and metric are enough for the new target (WP84: 50–200 draws per
+    /// chain met its calibration bar on a 250-return SV model but not an
+    /// R-hat 1.01 bar), and whether the fill of appended coordinates is a
+    /// sensible start; both are the caller's decisions.
+    ///
+    /// Errors (`ErrorKind::Configuration`): the state's dimension differs
+    /// from `target.dimension()`, the chain count differs from
+    /// [`Sampler::chains`], `draws` is zero; plus every error `run` returns.
+    pub fn run_warm<T: Target>(&self, target: &T, state: &WarmState) -> Result<Posterior, Error> {
+        let chains = state.chain_count();
+        if let Some(configured) = self.chains
+            && configured != chains
+        {
+            return Err(Error::configuration(format!(
+                "chain count {configured} differs from the warm state's {chains} chains"
+            )));
+        }
+        let chains = NonZeroUsize::new(chains)
+            .ok_or_else(|| Error::configuration("warm state has no chains"))?;
+        let dimension = catch_unwind(AssertUnwindSafe(|| target.dimension()))
+            .map_err(|_| Error::new(ErrorKind::Panic, "target dimension callback panicked"))?;
+        if dimension != state.dimension() {
+            return Err(Error::configuration(format!(
+                "warm state dimension {} differs from the target dimension {dimension}",
+                state.dimension()
+            )));
+        }
+        let threads = NonZeroUsize::new(self.threads.unwrap_or(chains.get()))
+            .ok_or_else(|| Error::configuration("thread count must be nonzero"))?;
+        let threads = threads.get().min(chains.get());
+
+        // Per-chain configurations: seed `seed + c` (so the kernel RNG is
+        // `splitmix64(seed + c)`, the chain-`c` seed of `run`), the chain's
+        // step, and otherwise this sampler's configuration.
+        let mut configs = Vec::with_capacity(chains.get());
+        let mut masses = Vec::with_capacity(chains.get());
+        for (index, chain) in state.chains().iter().enumerate() {
+            let tuning = self.tuning.clone().step_size(chain.step_size);
+            configs.push(self.base_run_config(0, self.seed.wrapping_add(index as u64), &tuning)?);
+            masses.push(DiagonalMass::from_diagonal(chain.mass_diagonal.clone())?);
+        }
+        let starts: Vec<Vec<f64>> = state
+            .chains()
+            .iter()
+            .map(|chain| chain.position.clone())
+            .collect();
+
+        // Whole-run admission, as `run` admits it: the worst case of all
+        // chains (the step size does not enter it) and the result-size,
+        // dimension, chain and transition ceilings over every chain.
+        let whole_run = self.base_run_config(0, self.seed, &self.tuning)?;
+        let budget_size = match (
+            self.limits.max_target_evaluations,
+            self.limits.admit_worst_case,
+        ) {
+            (Some(evaluations), _) => Some(evaluations),
+            (None, true) => Some(
+                NonZeroUsize::new(whole_run.worst_case_target_evaluations(chains)?)
+                    .ok_or_else(|| Error::configuration("worst case is zero"))?,
+            ),
+            (None, false) => None,
+        };
+        // The shared runtime cap of `run`: one budget counted over every
+        // chain, wrapping the target once. The budgeted facade also needs a
+        // fresh budget per call, so each chain additionally gets its own
+        // (never binding before the shared one, which it cannot exceed).
+        let shared = budget_size.map(TargetEvaluationBudget::new);
+        match &shared {
+            Some(budget) => {
+                preflight_chains_with_target_budget(
+                    target,
+                    &starts,
+                    &masses[0],
+                    &whole_run,
+                    TargetEvaluationAdmissionLimit::new(budget_size.expect("budgeted")),
+                    budget,
+                )?;
+            }
+            None => {
+                preflight_chains(target, &starts, &masses[0], &whole_run)?;
+            }
+        }
+        let wrapped = shared.as_ref().map(|budget| budget.wrap(target));
+
+        let deadline = match self.limits.timeout {
+            Some(timeout) => Some(
+                Instant::now()
+                    .checked_add(timeout)
+                    .ok_or_else(|| Error::configuration("timeout overflows deadline"))?,
+            ),
+            None => self.limits.deadline,
+        };
+        let execute = |chain: usize| -> Result<MultiChainOutput, Error> {
+            let mut control = RunControl::new();
+            if let Some(cancellation) = &self.limits.cancellation {
+                control = control.with_cancellation(&**cancellation);
+            }
+            if let Some(deadline) = deadline {
+                control = control.with_deadline(deadline);
+            }
+            let start = std::slice::from_ref(&starts[chain]);
+            let output = match (&wrapped, budget_size) {
+                (Some(wrapped), Some(size)) => {
+                    let own = TargetEvaluationBudget::new(size);
+                    sample_chains_with_target_budget_and_control(
+                        wrapped,
+                        start,
+                        &masses[chain],
+                        &configs[chain],
+                        NonZeroUsize::MIN,
+                        TargetEvaluationAdmissionLimit::new(size),
+                        &own,
+                        &control,
+                    )
+                }
+                _ => sample_chains_with_control(
+                    target,
+                    start,
+                    &masses[chain],
+                    &configs[chain],
+                    NonZeroUsize::MIN,
+                    &control,
+                ),
+            };
+            output.map_err(|error| error.at_chain(chain))
+        };
+        let results: Vec<Result<MultiChainOutput, Error>> = if threads == 1 {
+            (0..chains.get()).map(execute).collect()
+        } else {
+            with_scoped_pool(threads, |pool| {
+                pool.install(|| (0..chains.get()).into_par_iter().map(execute).collect())
+            })?
+        };
+        let outputs = results.into_iter().collect::<Result<Vec<_>, Error>>()?;
+        Ok(Posterior {
+            output: MultiChainOutput::assemble(outputs, self.seed, threads),
+            metric_updates: Vec::new(),
+            final_masses: Vec::new(),
+            metric_kind: MetricKind::Diagonal,
+        })
     }
 
     /// Start an owned continuation session with bounded parallel chains. `draws` is the lifetime
@@ -1455,15 +1676,35 @@ impl Sampler {
                     output,
                     metric_updates,
                     final_masses,
+                    metric_kind: MetricKind::Structured,
                 });
             }
+        };
+        let metric_kind = match &self.metric {
+            Metric::Identity | Metric::Diagonal { .. } => MetricKind::Diagonal,
+            Metric::Dense { .. } => MetricKind::Dense,
+            Metric::Structured(_) | Metric::StructuredRefresh { .. } => MetricKind::Structured,
         };
         Ok(Posterior {
             output,
             metric_updates: Vec::new(),
             final_masses: Vec::new(),
+            metric_kind,
         })
     }
+}
+
+/// Which kind of metric produced a [`Posterior`]; decides whether
+/// [`Posterior::warm_state`] can carry it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MetricKind {
+    /// Identity or diagonal: the chain metadata's `mass_diagonal` is the
+    /// chain's full metric.
+    Diagonal,
+    /// Dense: the metadata's diagonal is not the metric.
+    Dense,
+    /// Structured or structured-refresh block operators.
+    Structured,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1502,9 +1743,54 @@ pub struct Posterior {
     output: MultiChainOutput,
     metric_updates: Vec<Vec<StructuredRefreshUpdate>>,
     final_masses: Vec<StructuredBlockMass>,
+    metric_kind: MetricKind,
 }
 
 impl Posterior {
+    /// The state a warm continuation ([`Sampler::run_warm`]) starts from:
+    /// per chain, its last retained draw, its final step size
+    /// (`metadata().tuning().step_size()`) and its final diagonal mass
+    /// (`metadata().mass_diagonal()`, the momentum covariance `M`), in
+    /// chain-index order.
+    ///
+    /// Errors with `ErrorKind::Configuration` when the run used a dense
+    /// ([`Metric::Dense`]) or structured metric, whose metadata diagonal is
+    /// not the metric, or when a chain has no retained draw.
+    pub fn warm_state(&self) -> Result<WarmState, Error> {
+        match self.metric_kind {
+            MetricKind::Diagonal => {}
+            MetricKind::Dense => {
+                return Err(Error::configuration(
+                    "warm continuation carries identity or diagonal metrics only; this run used a dense metric",
+                ));
+            }
+            MetricKind::Structured => {
+                return Err(Error::configuration(
+                    "warm continuation carries identity or diagonal metrics only; this run used a structured metric",
+                ));
+            }
+        }
+        let chains = self
+            .chains()
+            .iter()
+            .enumerate()
+            .map(|(index, chain)| {
+                let last = chain
+                    .retained()
+                    .checked_sub(1)
+                    .and_then(|draw| chain.sample(draw));
+                let position = last.ok_or_else(|| {
+                    Error::configuration(format!("chain {index} has no retained draw"))
+                })?;
+                Ok(WarmChain {
+                    position: position.to_vec(),
+                    step_size: chain.metadata().tuning().step_size(),
+                    mass_diagonal: chain.metadata().mass_diagonal().to_vec(),
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        WarmState::new(chains)
+    }
     /// Per-chain output, in chain-index order.
     pub fn chains(&self) -> &[ChainOutput] {
         self.output.chains()
@@ -1599,5 +1885,182 @@ impl Posterior {
     /// The underlying `walnutpie` output.
     pub fn into_inner(self) -> MultiChainOutput {
         self.output
+    }
+}
+
+/// One chain's carried state in a [`WarmState`].
+///
+/// `mass_diagonal` is the chain's diagonal momentum covariance `M` in the
+/// library's convention (`walnutpie::DiagonalMass`: `p_i ~ Normal(0, M_i)`,
+/// the kernel integrates with `M_i^-1`; warmup sets `M_i` to a regularised
+/// reciprocal posterior variance). It is what `metadata().mass_diagonal()`
+/// reports and what [`Metric::fixed_diagonal`] takes, so a carried metric is
+/// passed through unchanged.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WarmChain {
+    /// The chain's current position (its last retained draw).
+    pub position: Vec<f64>,
+    /// The chain's macro step `h`; finite and positive.
+    pub step_size: f64,
+    /// The chain's diagonal mass `M`; finite and positive entries.
+    pub mass_diagonal: Vec<f64>,
+}
+
+/// Carried sampler state for a warm continuation ([`Sampler::run_warm`]):
+/// per chain, a position, a step size and a diagonal mass, all of one
+/// dimension.
+///
+/// Obtained from a completed run by [`Posterior::warm_state`] or
+/// [`SessionChunk::warm_state`], or built from parts with
+/// [`WarmState::new`]; grown onto a larger target with
+/// [`WarmState::extend_to`] / [`WarmState::extend_with`]. A plain owned
+/// value: it holds no target, no RNG and no kernel state, so the next run
+/// is fully described by the state, the sampler's seed and its tuning.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WarmState {
+    dimension: usize,
+    chains: Vec<WarmChain>,
+}
+
+impl WarmState {
+    /// Validate and wrap per-chain states: at least one chain, every
+    /// position and mass of the same nonzero length, finite positions,
+    /// finite positive steps and masses (`ErrorKind::Configuration`
+    /// otherwise). The mass is validated again, more strictly, when a run
+    /// starts (`DiagonalMass::from_diagonal`).
+    pub fn new(chains: Vec<WarmChain>) -> Result<Self, Error> {
+        let dimension = chains
+            .first()
+            .map(|chain| chain.position.len())
+            .ok_or_else(|| Error::configuration("warm state needs at least one chain"))?;
+        if dimension == 0 {
+            return Err(Error::configuration("warm state dimension must be nonzero"));
+        }
+        for (index, chain) in chains.iter().enumerate() {
+            if chain.position.len() != dimension || chain.mass_diagonal.len() != dimension {
+                return Err(Error::configuration(format!(
+                    "warm state chain {index}: position ({}) and mass diagonal ({}) must both have the state dimension {dimension}",
+                    chain.position.len(),
+                    chain.mass_diagonal.len()
+                )));
+            }
+            if chain.position.iter().any(|x| !x.is_finite()) {
+                return Err(Error::configuration(format!(
+                    "warm state chain {index}: position must be finite"
+                )));
+            }
+            if !chain.step_size.is_finite() || chain.step_size <= 0.0 {
+                return Err(Error::configuration(format!(
+                    "warm state chain {index}: step size must be finite and positive"
+                )));
+            }
+            if chain
+                .mass_diagonal
+                .iter()
+                .any(|m| !m.is_finite() || *m <= 0.0)
+            {
+                return Err(Error::configuration(format!(
+                    "warm state chain {index}: mass diagonal entries must be finite and positive"
+                )));
+            }
+        }
+        Ok(Self { dimension, chains })
+    }
+
+    /// Dimension of every position and mass diagonal.
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    /// Number of chains.
+    pub fn chain_count(&self) -> usize {
+        self.chains.len()
+    }
+
+    /// Per-chain states in chain-index order.
+    pub fn chains(&self) -> &[WarmChain] {
+        &self.chains
+    }
+
+    /// The per-chain states, consuming the value.
+    pub fn into_chains(self) -> Vec<WarmChain> {
+        self.chains
+    }
+
+    /// Grow every chain to `dimension` by appending coordinates at the end,
+    /// each with position `position_fill` and mass `mass_fill` (the WP84
+    /// rule for a new latent: its prior median 0 and prior variance 1, so
+    /// `extend_to(n + 1, 0.0, 1.0)`). Step sizes are unchanged. `dimension`
+    /// must be at least the current one; equal returns a copy. Whether the
+    /// fill is a sensible start for the new target is the caller's decision.
+    pub fn extend_to(
+        &self,
+        dimension: usize,
+        position_fill: f64,
+        mass_fill: f64,
+    ) -> Result<Self, Error> {
+        self.extend_with(dimension, |_, _| (position_fill, mass_fill))
+    }
+
+    /// Grow every chain to `dimension` by appending coordinates at the end,
+    /// `fill(chain, coordinate)` giving each new coordinate's
+    /// `(position, mass)` (`coordinate` is the absolute index, from the
+    /// current dimension up). The result is validated as by [`WarmState::new`].
+    pub fn extend_with<F>(&self, dimension: usize, mut fill: F) -> Result<Self, Error>
+    where
+        F: FnMut(usize, usize) -> (f64, f64),
+    {
+        if dimension < self.dimension {
+            return Err(Error::configuration(format!(
+                "cannot extend a warm state of dimension {} to the smaller dimension {dimension}",
+                self.dimension
+            )));
+        }
+        let chains = self
+            .chains
+            .iter()
+            .enumerate()
+            .map(|(index, chain)| {
+                let mut extended = chain.clone();
+                extended.position.reserve(dimension - self.dimension);
+                extended.mass_diagonal.reserve(dimension - self.dimension);
+                for coordinate in self.dimension..dimension {
+                    let (position, mass) = fill(index, coordinate);
+                    extended.position.push(position);
+                    extended.mass_diagonal.push(mass);
+                }
+                extended
+            })
+            .collect();
+        Self::new(chains)
+    }
+}
+
+impl SessionChunk {
+    /// The warm state at the end of this chunk: per chain, the chunk's last
+    /// retained draw, the session's step size and diagonal mass (sessions
+    /// are identity/diagonal only). Errors when the chunk holds no retained
+    /// draws (a warmup chunk) or has no chains.
+    pub fn warm_state(&self) -> Result<WarmState, Error> {
+        let dimension = self.dimension.max(1);
+        let chains = self
+            .chains
+            .iter()
+            .enumerate()
+            .map(|(index, chain)| {
+                let draws = chain.samples.len() / dimension;
+                if draws == 0 || self.dimension == 0 {
+                    return Err(Error::configuration(format!(
+                        "session chunk chain {index} has no retained draw (a warmup chunk?)"
+                    )));
+                }
+                Ok(WarmChain {
+                    position: chain.samples[(draws - 1) * dimension..draws * dimension].to_vec(),
+                    step_size: chain.tuning.step_size(),
+                    mass_diagonal: chain.mass_diagonal.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        WarmState::new(chains)
     }
 }

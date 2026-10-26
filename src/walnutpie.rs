@@ -5323,6 +5323,22 @@ impl ResourceLimits {
         Ok(limits)
     }
 
+    /// Raise (or lower) the result-size ceiling without the "tighten only"
+    /// check of [`ResourceLimits::new`]: an explicit opt-in for runs whose
+    /// retained draws legitimately exceed 512 MiB (for example 4 chains x
+    /// 22,000 draws x 1,004 coordinates, about 707 MB, the WP84 reference).
+    /// The ceiling still bounds the exact accounted result allocation
+    /// (samples, mandatory diagnostics, telemetry and containers), so a run
+    /// is still refused at admission, before any target call, when its
+    /// result would exceed the raised value; nothing else is relaxed. The
+    /// working-memory, dimension, chain, transition and evaluation ceilings
+    /// are unchanged. The sampler exposes this as
+    /// `sampler::Limits::max_result_bytes_unchecked`.
+    pub fn with_max_result_bytes_unchecked(mut self, max_result_bytes: NonZeroUsize) -> Self {
+        self.max_result_bytes = max_result_bytes.get();
+        self
+    }
+
     pub fn max_dimension(&self) -> usize {
         self.max_dimension
     }
@@ -6342,6 +6358,32 @@ impl MultiChainOutput {
     pub fn algorithm_revision(&self) -> &str {
         self.algorithm_revision
     }
+
+    /// Assemble a multi-chain output from single-chain runs, one per chain
+    /// in chain-index order (the warm continuation of `sampler::Sampler::run_warm`).
+    /// Each chain keeps its own draws, diagnostics, telemetry and effective
+    /// seed; its reported base seed and thread count become those of the
+    /// assembled run, as the multi-chain driver reports them.
+    pub(crate) fn assemble(
+        outputs: Vec<MultiChainOutput>,
+        base_seed: u64,
+        thread_count: usize,
+    ) -> Self {
+        let chains = outputs
+            .into_iter()
+            .flat_map(|output| output.chains)
+            .map(|mut chain| {
+                chain.metadata.base_seed = base_seed;
+                chain.metadata.thread_count = thread_count;
+                chain
+            })
+            .collect();
+        Self {
+            chains,
+            base_seed,
+            algorithm_revision: ALGORITHM_REVISION,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -6549,7 +6591,7 @@ impl Error {
         self.transition = Some(transition);
         self
     }
-    fn at_chain(mut self, chain: usize) -> Self {
+    pub(crate) fn at_chain(mut self, chain: usize) -> Self {
         self.chain = Some(chain);
         self
     }
@@ -10704,7 +10746,7 @@ thread_local! {
 /// Build a run-local Rayon pool whose operating-system threads are joined
 /// before this helper returns. Joining the scoped threads also completes their
 /// native TLS destructors before a caller can drop a target backed by a DLL.
-fn with_scoped_pool<R>(
+pub(crate) fn with_scoped_pool<R>(
     threads: usize,
     operation: impl FnOnce(&rayon::ThreadPool) -> R,
 ) -> Result<R, Error> {
