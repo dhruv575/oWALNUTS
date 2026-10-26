@@ -64,6 +64,14 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Three-sampler table over 18 Linux seeds (WP76): gates 239 / 198 / 163 of
   288 for oWALNUTS / CmdStan / nutpie; per gradient 0.83x CmdStan and 0.70x
   nutpie; per second 0.89x and 0.93x with both intervals reaching 1.
+- Warmup schedule confirmation (WP77): neither the 500-transition warmup nor
+  the 25-transition initial phase confirms on fresh seeds; the defaults stay.
+- Python call paths on Linux (WP78): compiled paths cost what the Rust target
+  costs; `from_pymc(gil_free=True)` is 8–22x the default callable; the nutpie
+  per-gradient gap on PyMC models persists (1.67x) and is not the call path.
+- nutpie gap decomposition (WP80): the lead is sampling gradients per draw
+  from a smaller effective step (installed inverse mass far from the
+  posterior variance on some coordinates), not warmup and not ESS per draw.
 - Warmup spend (WP73): not the nutpie gap (median warmup shares 0.52 /
   0.51 / 0.52 for oWALNUTS / CmdStan / nutpie). A 500-transition warmup
   gave 1.32x ESS per total gradient with no gate lost; WP77 confirms on

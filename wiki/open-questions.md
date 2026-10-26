@@ -229,9 +229,17 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     not the gap either. What WP73 did find is that every sampler's
     1,000-transition warmup is longer than these models need: a
     500-transition warmup gave 1.32x ESS per total gradient with no gate
-    lost (median model 1.25x). WP77 confirms it on fresh seeds. The nutpie
-    gap on PyMC models (WP47, WP58) therefore remains unexplained by either
-    half of the WP58 attribution.
+    lost (median model 1.25x). WP77 (`STUDIES/warmup_schedule_confirmation_v1`)
+    did **not** confirm it on six fresh seeds (gates 81 vs 87, headline 1.119,
+    0.875x per sampling gradient), so the defaults stay. WP78
+    (`STUDIES/python_callpath_linux_v1`, Linux) showed the PyMC gap is not the
+    call path either (compiled paths cost what the Rust target costs; gap
+    1.67x pooled). WP80 (`STUDIES/nutpie_gap_decomposition_v1`) then
+    decomposed it on the fixed-16: the lead is sampling gradients per
+    retained draw from a smaller effective step (sblrc raw step 0.10 vs 0.66,
+    installed inverse mass about 11x the posterior variance on the betas),
+    not warmup and not ESS per draw, where oWALNUTS leads. WP81 tests the
+    diagonal metric regularisation as the cause.
 14. **Fixed `delta = 2`** (WP34, WP37A, WP49, WP53): WP37A did not
     qualify it (funnel gates F3 and F4 failed). As WP49's control it is
     1.141x over posteriordb with 43 gates (1.067x without two seed

@@ -909,3 +909,37 @@ provenance.
   on `hmm_drive_0`: oWALNUTS 1/18, CmdStan 5/18, nutpie 6/18. nutpie was
   bit-identical to WP64 on all 45 cells both runs finished:
   [`STUDIES/nutpie_18seed_v1`](STUDIES/nutpie_18seed_v1/README.md) (WP76).
+- [E43] Warmup schedule confirmation (Linux, 17 house models x 6 fresh seeds,
+  funnel 30 seeds): **neither WP73 candidate confirms**. Warmup 500 fails the
+  gate clause (81 vs 87) and the headline (1.119 [0.861, 1.224] per total
+  gradient; 0.875x per sampling gradient; `hmm_drive_0` 0.356 and 3/6
+  passes); initial phase 25 fails headline, median, leave-one-out, max |z|
+  (5.85) and funnel (0.0530 ± 0.0051). Default warmup 1,000 and windows
+  75/25/50 stay:
+  [`STUDIES/warmup_schedule_confirmation_v1`](STUDIES/warmup_schedule_confirmation_v1/README.md)
+  (WP77).
+- [E44] Python call paths on Linux (lane-pinned, 3 seeds, gauss100 / Eight
+  Schools / hier): wall per gradient at one thread, Rust target 1.57 / 0.57 /
+  3.84 µs; `from_cfunc` 0.98–1.15x Rust; `from_pymc(gil_free=True)` 1.2–4.0x;
+  plain numba callable 1.4–3.5x; default `from_pymc` 4–17x; `from_jax` 11–39x
+  (about 20–40 µs extra per gradient). Compiled paths scale 3.4–3.8x at 4
+  threads; callables and `from_jax` lose at 4 threads. `from_cfunc`, the
+  Rust target and the numba callable gave bit-identical draws. The nutpie
+  per-gradient gap persists on PyMC models (pooled 1.67x; Windows 1.70x);
+  ESS per second `gil_free` 0.51–0.78x nutpie at 1 core and 0.53–1.21x at 4,
+  `from_cfunc` 0.53–1.92x and 0.80–2.74x; nutpie failed non-centred Eight
+  Schools 3/3, oWALNUTS passed 9/9 on every arm but `from_jax` (8/9):
+  [`STUDIES/python_callpath_linux_v1`](STUDIES/python_callpath_linux_v1/README.md)
+  (WP78).
+- [E45] nutpie gap decomposition (18 seeds, 15 complete fixed-16 models, 24
+  telemetry cells matching their WP72/WP76 cells 24/24): nutpie's
+  per-gradient lead (×1.26 on the mean-of-logs scale, ×1.43 by per-model
+  medians) is sampling gradients per retained draw (B = +0.58), not warmup
+  (C = +0.03) and not ESS per draw, where oWALNUTS leads (A = −0.38). The
+  consistent mechanism is a smaller effective step on every carrying model
+  (sblrc raw step 0.10 vs 0.66; diamonds 0.0035 vs 0.062; on sblrc the
+  installed inverse mass is about 11x the posterior variance on the betas
+  against 1x on sigma); refinement spend matters on centred Eight Schools
+  alone (30 % of transitions refined, 4.3 gradients per refined leaf):
+  [`STUDIES/nutpie_gap_decomposition_v1`](STUDIES/nutpie_gap_decomposition_v1/README.md)
+  (WP80).
