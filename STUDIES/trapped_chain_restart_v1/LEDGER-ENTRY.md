@@ -1,0 +1,33 @@
+### WP67-TRAPPED-CHAIN-RESTART-V1: the end-of-first-window step rule plus an independent best-of-16 restart takes `lotka_volterra` trapped chains from 2/48 to 0/48 on the WP57 seeds; bit-identical on all 40 non-firing pairs; the regression arm is identical (0/72 chains flagged); SUPPORTED on two events, so a confirmation study is recommended, not a flip
+
+- **When.** 2026-10-26 UTC (2026-10-25 local).
+  - Research-only library opt-in at `8887a0f0`: `WarmupConfig::with_trapped_chain_restart`, `TrappedChainRestartConfig::step_rule()`, `TrappedChainCheck`. Default `None`; fingerprints untouched.
+  - Preregistration and harness frozen at `c4522b8b` before the first cell.
+  - 84 one-shot cells ran in manifest order, 01:08–01:24 UTC. Lane 4 of the shared Linux box (c7a.4xlarge, `taskset -c 12-15`, three other lanes active: walls are pinned, co-tenanted). None was rerun, and none failed or timed out.
+- **Protocol.** `STUDIES/trapped_chain_restart_v1/{PREREGISTRATION.md,protocol.json}`.
+  - Detector: chain `c` is flagged iff its step at transition 99 (the end of the first slow window) is below 0.1 x the median over chains. It is checked once, with the chains synchronised there.
+  - Restart: the flagged chain reruns the full schedule from transition 0, from the best of 16 fresh uniform(-2, 2) candidates on an independent stream. It gets the initial metric and step, fresh dual averaging and a fresh RNG stream. Nothing is copied from another chain.
+  - Arms: `defaults` and `restart`, 4 x 1,000/1,000, `Init::best_of(16)`.
+  - Blocks: L1 = WP57 seeds 5701101–5701112 (targeted replication); R = 6 house posteriordb models x seeds 6701301–6701303; L2 = fresh lotka seeds 6701201–6701212.
+  - Gates (CmdStan-free): R-hat <= 1.01, bulk and tail ESS >= 400, 0 divergences; lotka cells also |z| <= 4. A trapped chain is one more than 3 reference SD off.
+  - Build: BridgeStan 2.9.0 built in the lane; posteriordb `28f8d3d`; ArviZ 0.23.4.
+- **Outcome.**
+  - **L1, trapped chains: defaults 2/48, restart 0/48.** The two defaults traps are WP57's own chains (5701103 chain 3, 5701106 chain 2): same starts, R-hat 1.592 / 1.595, 169 / 162 reference SD off.
+  - **The two restarts.** Both chains were flagged at transition 99, with step ratios 0.0023 and 0.025. Both cured cells passed every gate (R-hat 1.003 / 1.004, shifts 0.06 / 0.07) at 4.6x / 2.4x fewer gradients and 9.5x / 5.9x less wall.
+  - **L2:** 0/48 trapped in both arms.
+  - **Lotka gates:** 23 vs 21 cells passed.
+  - **Fingerprint: 42/42 pairs.** Flag sets and transition-99 steps are equal on every pair. The 40 non-firing pairs are bit-identical in draw hash and target calls. The 6 untouched chains of the firing pairs are bit-identical per chain.
+  - **Detector on 96 lotka defaults chains:** 2 TP, 0 FN, 0 FP. The lowest healthy ratio was 0.388.
+  - **Regression arm:** 0 of 72 chains flagged (lowest ratio 0.301, `eight_schools_centered`). Passes 12 = 12 of 18, wrong-chain cells 1 = 1, ESS per gradient ratio 1.0000.
+  - **A wrong chain the rule misses.** `one_comp` 6701303 chain 2 is 8.3 SD off at ratio 0.736. The step rule does not see it, and neither does `chain_warnings`.
+  - **Predictions:** P1–P7 all held.
+- **Decision.** The frozen rule is SUPPORTED: E (2 vs 0, exactly at the 2-event floor), F, G, R1, R2 and R3 all hold.
+  - The efficacy evidence is two events, both on targeted seeds.
+  - The restart never acted on a model with a genuine second mode.
+- **Change.** None to defaults. The opt-in stays research-only.
+- **Next.** A default-flip confirmation study, with:
+  - fresh seeds at a scale that yields many trap events;
+  - a broad posteriordb specificity panel;
+  - a forced second-mode case (`hmm_drive_0` many seeds, or the WP52 two-mode target) where the restart acts on a genuine mode;
+  - the boundary-synchronisation wall cost;
+  - a v7-style validation afterwards if it flips.

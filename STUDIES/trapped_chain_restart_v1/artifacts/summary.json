@@ -1,0 +1,2149 @@
+{
+ "cells_written": 84,
+ "cells_expected": 84,
+ "complete": true,
+ "lotka_totals": {
+  "L1": {
+   "defaults": 2,
+   "restart": 0,
+   "chains": 48,
+   "pass_d": 10,
+   "pass_r": 12,
+   "grads_d": 5800999,
+   "grads_r": 3674895,
+   "cells_d": 12,
+   "cells_r": 12
+  },
+  "L2": {
+   "defaults": 0,
+   "restart": 0,
+   "chains": 48,
+   "pass_d": 11,
+   "pass_r": 11,
+   "grads_d": 3403075,
+   "grads_r": 3403075,
+   "cells_d": 12,
+   "cells_r": 12
+  }
+ },
+ "pooled_trapped": {
+  "defaults": 2,
+  "restart": 0
+ },
+ "detector_lotka_defaults": {
+  "tp": 2,
+  "fn": 0,
+  "fp": 0,
+  "tn": 94,
+  "fn_not_reached": 0
+ },
+ "restarts_total_lotka": 2,
+ "retrapped": 0,
+ "regression": {
+  "passes_defaults": 12,
+  "passes_restart": 12,
+  "wrong_defaults": 1,
+  "wrong_restart": 1,
+  "firing_cells": 0,
+  "per_model_ratio": {
+   "eight_schools-eight_schools_centered": 1.0,
+   "bball_drive_event_0-hmm_drive_0": 1.0,
+   "arma-arma11": 1.0,
+   "garch-garch11": 1.0,
+   "gp_pois_regr-gp_pois_regr": 1.0,
+   "one_comp_mm_elim_abs-one_comp_mm_elim_abs": 1.0
+  },
+  "geomean_ratio": 1.0
+ },
+ "clauses": {
+  "E": true,
+  "E_evaluable": true,
+  "F": true,
+  "G": true,
+  "R1": true,
+  "R2": true,
+  "R3": true
+ },
+ "verdict": "SUPPORTED: recommend a default-flip confirmation study",
+ "predictions": {
+  "P1": {
+   "text": "L1 defaults has 1-3 trapped chains of 48 (WP57 saw 2; cross-platform floating point may move them)",
+   "observed": 2,
+   "held": true
+  },
+  "P2": {
+   "text": "L1 restart has at most 1 trapped chain of 48 (expected 0)",
+   "observed": 0,
+   "held": true
+  },
+  "P3": {
+   "text": "the detector flags every defaults-arm trapped chain of the lotka blocks that reached transition 99 (sensitivity 1) and at most 1 chain of all lotka defaults chains that is not trapped",
+   "observed": {
+    "tp": 2,
+    "fn": 0,
+    "fp": 0,
+    "tn": 94,
+    "fn_not_reached": 0
+   },
+   "held": true
+  },
+  "P4": {
+   "text": "fingerprint: on every cell (lotka and regression) the restart arm's flagged set equals the defaults arm's emulated set; every non-firing cell is bit-identical to defaults (all-chain draw hash and total target calls); every non-flagged chain of a firing cell is bit-identical per chain (draw hash and per-chain target calls)",
+   "observed": "42/42 pairs",
+   "held": true
+  },
+  "P5": {
+   "text": "the detector fires on 0 of the 18 regression cells, so the regression arm is identical (equal pass counts, efficiency ratio exactly 1)",
+   "observed": "0/18 firing; ratio 1.0000",
+   "held": true
+  },
+  "P6": {
+   "text": "pooled over L1 and L2, the restart arm spends fewer total target calls than defaults when at least one restart occurs",
+   "observed": {
+    "grads_defaults": 9204074,
+    "grads_restart": 7077970,
+    "restarts": 2
+   },
+   "held": true
+  },
+  "P7": {
+   "text": "a restarted chain ends trapped in at most 1 case",
+   "observed": 0,
+   "held": true
+  }
+ },
+ "lotka_rows": [
+  {
+   "block": "L1",
+   "seed": 5701101,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0046376882393266,
+    "min_bulk": 1022.5970012249486,
+    "grads": 281909,
+    "wall": 6.161574851,
+    "shift": [
+     0.03913707246885791,
+     0.04964270032599391,
+     0.10444610374978576,
+     0.04827248713296431
+    ],
+    "hash": "1b942ac4e778cd21",
+    "ratios": [
+     0.9490518583518188,
+     1.0509481416481814,
+     1.378471032321553,
+     0.9290839690419486
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0046376882393266,
+    "min_bulk": 1022.5970012249486,
+    "grads": 281909,
+    "wall": 6.154551745,
+    "shift": [
+     0.03913707246885791,
+     0.04964270032599391,
+     0.10444610374978576,
+     0.04827248713296431
+    ],
+    "hash": "1b942ac4e778cd21"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701102,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0075835390308805,
+    "min_bulk": 784.0267181587024,
+    "grads": 272884,
+    "wall": 6.177980203,
+    "shift": [
+     0.13808776678995346,
+     0.07387051243400722,
+     0.09753127760054987,
+     0.11929035482595522
+    ],
+    "hash": "187c5845779c6c76",
+    "ratios": [
+     0.8548700075209932,
+     1.1451299924790068,
+     2.3839791831692287,
+     0.7242906587324383
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0075835390308805,
+    "min_bulk": 784.0267181587024,
+    "grads": 272884,
+    "wall": 6.086503839,
+    "shift": [
+     0.13808776678995346,
+     0.07387051243400722,
+     0.09753127760054987,
+     0.11929035482595522
+    ],
+    "hash": "187c5845779c6c76"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701103,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "trapped": [
+     3
+    ],
+    "flags_emulated": [
+     3
+    ],
+    "rhat": 1.59171689517835,
+    "min_bulk": 6.743433096126356,
+    "grads": 2083742,
+    "wall": 350.069013312,
+    "shift": [
+     0.08630014383458433,
+     0.09026278136874705,
+     0.06601078999316554,
+     169.42030992073154
+    ],
+    "hash": "30343a96953b3d92",
+    "ratios": [
+     1.0433234866277465,
+     1.2443939104484387,
+     0.9566765133722532,
+     0.00231720846717627
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [
+     3
+    ],
+    "rhat": 1.0034452818909652,
+    "min_bulk": 861.048802732743,
+    "grads": 452827,
+    "wall": 36.982766696,
+    "shift": [
+     0.08630014383458433,
+     0.09026278136874705,
+     0.06601078999316554,
+     0.05989491723281948
+    ],
+    "hash": "9fe77786bb4cfd4c"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [
+     3
+    ],
+    "flags_restart": [
+     3
+    ],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701104,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0048473356293863,
+    "min_bulk": 904.7474872036112,
+    "grads": 278068,
+    "wall": 6.010183466,
+    "shift": [
+     0.06392244513865662,
+     0.04276498390644643,
+     0.19446845915459066,
+     0.07639310915941101
+    ],
+    "hash": "c0beeb8a8319197b",
+    "ratios": [
+     1.1073937826800897,
+     1.0606590443423407,
+     0.9282076696579182,
+     0.9393409556576593
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0048473356293863,
+    "min_bulk": 904.7474872036112,
+    "grads": 278068,
+    "wall": 6.029720538,
+    "shift": [
+     0.06392244513865662,
+     0.04276498390644643,
+     0.19446845915459066,
+     0.07639310915941101
+    ],
+    "hash": "c0beeb8a8319197b"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701105,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0045212591225523,
+    "min_bulk": 964.5440905884875,
+    "grads": 278763,
+    "wall": 5.879049143,
+    "shift": [
+     0.09751693034140677,
+     0.17254333878237219,
+     0.07357715969707673,
+     0.08613134717588003
+    ],
+    "hash": "c3f5e4b48699930e",
+    "ratios": [
+     0.9161199038627913,
+     0.5581486841573278,
+     1.0838800961372086,
+     1.0931393916264325
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0045212591225523,
+    "min_bulk": 964.5440905884875,
+    "grads": 278763,
+    "wall": 5.823215558,
+    "shift": [
+     0.09751693034140677,
+     0.17254333878237219,
+     0.07357715969707673,
+     0.08613134717588003
+    ],
+    "hash": "c3f5e4b48699930e"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701106,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "trapped": [
+     2
+    ],
+    "flags_emulated": [
+     2
+    ],
+    "rhat": 1.59453962379123,
+    "min_bulk": 6.797263812863946,
+    "grads": 846873,
+    "wall": 87.412105413,
+    "shift": [
+     0.0620269324556152,
+     0.05857869013641557,
+     162.1664598258873,
+     0.054555938402905575
+    ],
+    "hash": "9765a46b67fab6f1",
+    "ratios": [
+     1.5420685236040939,
+     1.396748602700074,
+     0.025449496703784737,
+     0.6032513972999262
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [
+     2
+    ],
+    "rhat": 1.0038180349703911,
+    "min_bulk": 962.9706251667776,
+    "grads": 351684,
+    "wall": 14.816150751,
+    "shift": [
+     0.0620269324556152,
+     0.05857869013641557,
+     0.06549150019810478,
+     0.054555938402905575
+    ],
+    "hash": "bf3cc220925711b9"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [
+     2
+    ],
+    "flags_restart": [
+     2
+    ],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701107,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0053694544441478,
+    "min_bulk": 949.2182625070843,
+    "grads": 285927,
+    "wall": 6.147620229,
+    "shift": [
+     0.0836072248043231,
+     0.06361497599177056,
+     0.03255070837182858,
+     0.13681744998709558
+    ],
+    "hash": "2c7a8c63958351f5",
+    "ratios": [
+     0.7304447911795697,
+     1.26955520882043,
+     1.9425981606574547,
+     0.6228876976493813
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0053694544441478,
+    "min_bulk": 949.2182625070843,
+    "grads": 285927,
+    "wall": 6.534523822,
+    "shift": [
+     0.0836072248043231,
+     0.06361497599177056,
+     0.03255070837182858,
+     0.13681744998709558
+    ],
+    "hash": "2c7a8c63958351f5"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701108,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0053695888939553,
+    "min_bulk": 875.1985673397273,
+    "grads": 317586,
+    "wall": 7.970228266,
+    "shift": [
+     0.09131748673000342,
+     0.10301530132665998,
+     0.07128926211007007,
+     0.06260903702022665
+    ],
+    "hash": "1630f75ec49f609e",
+    "ratios": [
+     0.4722367713897789,
+     0.9033569848114081,
+     1.096643015188592,
+     1.233276936990128
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0053695888939553,
+    "min_bulk": 875.1985673397273,
+    "grads": 317586,
+    "wall": 7.925057717,
+    "shift": [
+     0.09131748673000342,
+     0.10301530132665998,
+     0.07128926211007007,
+     0.06260903702022665
+    ],
+    "hash": "1630f75ec49f609e"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701109,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0043523437910267,
+    "min_bulk": 989.1902625213417,
+    "grads": 283365,
+    "wall": 5.938641672,
+    "shift": [
+     0.036797917237469155,
+     0.048396530524645875,
+     0.042632758474434866,
+     0.053114338923547624
+    ],
+    "hash": "033828994894e504",
+    "ratios": [
+     1.1494326559968624,
+     0.8039107294547773,
+     1.089012371964871,
+     0.9109876280351291
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0043523437910267,
+    "min_bulk": 989.1902625213417,
+    "grads": 283365,
+    "wall": 6.224010633,
+    "shift": [
+     0.036797917237469155,
+     0.048396530524645875,
+     0.042632758474434866,
+     0.053114338923547624
+    ],
+    "hash": "033828994894e504"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701110,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.002644065363894,
+    "min_bulk": 1049.6800307784129,
+    "grads": 299290,
+    "wall": 6.23179085,
+    "shift": [
+     0.09101350550042656,
+     0.06499818075356892,
+     0.04412083792560007,
+     0.06152416184450189
+    ],
+    "hash": "d88953915d172e97",
+    "ratios": [
+     1.036070825429113,
+     0.837521923373622,
+     1.8319663080620028,
+     0.9639291745708869
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.002644065363894,
+    "min_bulk": 1049.6800307784129,
+    "grads": 299290,
+    "wall": 6.483627836,
+    "shift": [
+     0.09101350550042656,
+     0.06499818075356892,
+     0.04412083792560007,
+     0.06152416184450189
+    ],
+    "hash": "d88953915d172e97"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701111,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.001347463553081,
+    "min_bulk": 957.0515610769893,
+    "grads": 288667,
+    "wall": 6.505281516,
+    "shift": [
+     0.06816603195978728,
+     0.057942183049901105,
+     0.030007512342753097,
+     0.06508885531617375
+    ],
+    "hash": "1d6135d4d030d848",
+    "ratios": [
+     1.1018484615835191,
+     1.063287331985872,
+     0.6809303557642872,
+     0.9367126680141281
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.001347463553081,
+    "min_bulk": 957.0515610769893,
+    "grads": 288667,
+    "wall": 6.4850622940000004,
+    "shift": [
+     0.06816603195978728,
+     0.057942183049901105,
+     0.030007512342753097,
+     0.06508885531617375
+    ],
+    "hash": "1d6135d4d030d848"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L1",
+   "seed": 5701112,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0077630516938414,
+    "min_bulk": 934.4587056076705,
+    "grads": 283925,
+    "wall": 6.180610344,
+    "shift": [
+     0.07496267559819227,
+     0.05649259512421754,
+     0.061401469091570966,
+     0.057733194763492104
+    ],
+    "hash": "0248170be38a1e93",
+    "ratios": [
+     0.6905856150434809,
+     4.166712049056741,
+     0.4133442170685829,
+     1.309414384956519
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0077630516938414,
+    "min_bulk": 934.4587056076705,
+    "grads": 283925,
+    "wall": 6.6977206989999996,
+    "shift": [
+     0.07496267559819227,
+     0.05649259512421754,
+     0.061401469091570966,
+     0.057733194763492104
+    ],
+    "hash": "0248170be38a1e93"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701201,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.003830198556236,
+    "min_bulk": 951.9433619187287,
+    "grads": 305309,
+    "wall": 6.507355174,
+    "shift": [
+     0.16578884072574468,
+     0.04882391341536315,
+     0.0579505854348532,
+     0.09135619645670194
+    ],
+    "hash": "79c4d1846b0365ab",
+    "ratios": [
+     0.8353074329178046,
+     1.7849462314971951,
+     0.6527564174613876,
+     1.1646925670821953
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.003830198556236,
+    "min_bulk": 951.9433619187287,
+    "grads": 305309,
+    "wall": 6.758462807,
+    "shift": [
+     0.16578884072574468,
+     0.04882391341536315,
+     0.0579505854348532,
+     0.09135619645670194
+    ],
+    "hash": "79c4d1846b0365ab"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701202,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.003247233902586,
+    "min_bulk": 1030.4384460552674,
+    "grads": 289159,
+    "wall": 6.372792234,
+    "shift": [
+     0.059452484322421034,
+     0.0407684081445826,
+     0.07313275530569124,
+     0.043165053095630415
+    ],
+    "hash": "e43436e48fd72842",
+    "ratios": [
+     0.9600484889129249,
+     1.7606064012231517,
+     0.7892357276813436,
+     1.0399515110870747
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.003247233902586,
+    "min_bulk": 1030.4384460552674,
+    "grads": 289159,
+    "wall": 6.475337308,
+    "shift": [
+     0.059452484322421034,
+     0.0407684081445826,
+     0.07313275530569124,
+     0.043165053095630415
+    ],
+    "hash": "e43436e48fd72842"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701203,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0030177023672773,
+    "min_bulk": 944.7814044603284,
+    "grads": 278994,
+    "wall": 6.146527624,
+    "shift": [
+     0.03768876003513504,
+     0.0946691502412078,
+     0.07462342207100092,
+     0.047719618030260466
+    ],
+    "hash": "72b2595d1181b060",
+    "ratios": [
+     0.8844103344018555,
+     0.8527966075854543,
+     2.2440317893299877,
+     1.1155896655981445
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0030177023672773,
+    "min_bulk": 944.7814044603284,
+    "grads": 278994,
+    "wall": 6.10356026,
+    "shift": [
+     0.03768876003513504,
+     0.0946691502412078,
+     0.07462342207100092,
+     0.047719618030260466
+    ],
+    "hash": "72b2595d1181b060"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701204,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0032103807001194,
+    "min_bulk": 843.6056915593327,
+    "grads": 274021,
+    "wall": 5.97070855,
+    "shift": [
+     0.0681550751641849,
+     0.09215447759970907,
+     0.06482767910834888,
+     0.05454245669525998
+    ],
+    "hash": "0d4e363432eacfc3",
+    "ratios": [
+     1.0336458702816733,
+     0.9663541297183267,
+     0.887650426154724,
+     1.1408708810195702
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0032103807001194,
+    "min_bulk": 843.6056915593327,
+    "grads": 274021,
+    "wall": 5.9859432219999995,
+    "shift": [
+     0.0681550751641849,
+     0.09215447759970907,
+     0.06482767910834888,
+     0.05454245669525998
+    ],
+    "hash": "0d4e363432eacfc3"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701205,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0044525105348214,
+    "min_bulk": 941.451095158725,
+    "grads": 281218,
+    "wall": 5.938742774,
+    "shift": [
+     0.0842152801061727,
+     0.0701317369913475,
+     0.050988727746101505,
+     0.11569014887760745
+    ],
+    "hash": "fbc79315a7eef1dd",
+    "ratios": [
+     0.8913657355247355,
+     1.1086342644752645,
+     0.7740618793323648,
+     1.2031907330586356
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0044525105348214,
+    "min_bulk": 941.451095158725,
+    "grads": 281218,
+    "wall": 6.081694181,
+    "shift": [
+     0.0842152801061727,
+     0.0701317369913475,
+     0.050988727746101505,
+     0.11569014887760745
+    ],
+    "hash": "fbc79315a7eef1dd"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701206,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.00316226921283,
+    "min_bulk": 992.037099290931,
+    "grads": 276070,
+    "wall": 5.801976813,
+    "shift": [
+     0.050331466765480684,
+     0.07127950183734029,
+     0.03849283563998241,
+     0.14245441830148758
+    ],
+    "hash": "39475463bcc0d686",
+    "ratios": [
+     0.38787487500001594,
+     1.050518542018532,
+     1.310520866385975,
+     0.949481457981468
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.00316226921283,
+    "min_bulk": 992.037099290931,
+    "grads": 276070,
+    "wall": 5.708173179,
+    "shift": [
+     0.050331466765480684,
+     0.07127950183734029,
+     0.03849283563998241,
+     0.14245441830148758
+    ],
+    "hash": "39475463bcc0d686"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701207,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0035351668308432,
+    "min_bulk": 1127.0966559010524,
+    "grads": 289881,
+    "wall": 7.031215468,
+    "shift": [
+     0.05039396644454267,
+     0.030708829861252167,
+     0.042863222501063454,
+     0.06842252855457231
+    ],
+    "hash": "30ad80964588d78e",
+    "ratios": [
+     0.917469617309415,
+     1.0744572066081586,
+     1.052495550167057,
+     0.9475044498329429
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0035351668308432,
+    "min_bulk": 1127.0966559010524,
+    "grads": 289881,
+    "wall": 7.068632552,
+    "shift": [
+     0.05039396644454267,
+     0.030708829861252167,
+     0.042863222501063454,
+     0.06842252855457231
+    ],
+    "hash": "30ad80964588d78e"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701208,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0026338785150897,
+    "min_bulk": 919.8142038417495,
+    "grads": 274266,
+    "wall": 5.654688199,
+    "shift": [
+     0.05694710100995544,
+     0.079839777860339,
+     0.08165444208862532,
+     0.046459154386721394
+    ],
+    "hash": "dc676c72bf7702af",
+    "ratios": [
+     0.789065985926959,
+     1.3748871371835834,
+     0.4717392066916917,
+     1.2109340140730411
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0026338785150897,
+    "min_bulk": 919.8142038417495,
+    "grads": 274266,
+    "wall": 5.81900722,
+    "shift": [
+     0.05694710100995544,
+     0.079839777860339,
+     0.08165444208862532,
+     0.046459154386721394
+    ],
+    "hash": "dc676c72bf7702af"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701209,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0028483597796407,
+    "min_bulk": 957.2250885824833,
+    "grads": 273341,
+    "wall": 5.529712502,
+    "shift": [
+     0.047728806802659944,
+     0.09859877246003033,
+     0.06360226232051729,
+     0.10929823266858323
+    ],
+    "hash": "6754c95414556fd8",
+    "ratios": [
+     1.2825262193200921,
+     0.6988844073893433,
+     0.8376434697965206,
+     1.1623565302034795
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0028483597796407,
+    "min_bulk": 957.2250885824833,
+    "grads": 273341,
+    "wall": 5.893600655,
+    "shift": [
+     0.047728806802659944,
+     0.09859877246003033,
+     0.06360226232051729,
+     0.10929823266858323
+    ],
+    "hash": "6754c95414556fd8"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701210,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.002839999603696,
+    "min_bulk": 863.251036770845,
+    "grads": 281492,
+    "wall": 6.908279674,
+    "shift": [
+     0.051302006888145714,
+     0.06942871416989355,
+     0.09510389579447913,
+     0.07242585290122813
+    ],
+    "hash": "af77401bade81756",
+    "ratios": [
+     0.6946946317566022,
+     1.8305307671602615,
+     0.5633340062413155,
+     1.305305368243398
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.002839999603696,
+    "min_bulk": 863.251036770845,
+    "grads": 281492,
+    "wall": 5.990311618,
+    "shift": [
+     0.051302006888145714,
+     0.06942871416989355,
+     0.09510389579447913,
+     0.07242585290122813
+    ],
+    "hash": "af77401bade81756"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701211,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0052425679019656,
+    "min_bulk": 913.750951272364,
+    "grads": 285552,
+    "wall": 6.238413178,
+    "shift": [
+     0.04580890375220752,
+     0.11338768914562994,
+     0.06518843994938464,
+     0.06893925335981525
+    ],
+    "hash": "d9256391a59feba3",
+    "ratios": [
+     2.6485610617801987,
+     0.6114001628963615,
+     0.9093270714614968,
+     1.0906729285385033
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0052425679019656,
+    "min_bulk": 913.750951272364,
+    "grads": 285552,
+    "wall": 6.2416969,
+    "shift": [
+     0.04580890375220752,
+     0.11338768914562994,
+     0.06518843994938464,
+     0.06893925335981525
+    ],
+    "hash": "d9256391a59feba3"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "block": "L2",
+   "seed": 6701212,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "trapped": [],
+    "flags_emulated": [],
+    "rhat": 1.0119316322019243,
+    "min_bulk": 939.8206084445309,
+    "grads": 293772,
+    "wall": 6.004433831,
+    "shift": [
+     0.04485094045605687,
+     0.12878033368972872,
+     0.06822047305302953,
+     0.06619224922215504
+    ],
+    "hash": "2f8fd5ba9796c15c",
+    "ratios": [
+     1.1748293803009704,
+     0.6286613419293859,
+     2.2044626341612923,
+     0.8251706196990294
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "trapped": [],
+    "restarted": [],
+    "rhat": 1.0119316322019243,
+    "min_bulk": 939.8206084445309,
+    "grads": 293772,
+    "wall": 6.132523492,
+    "shift": [
+     0.04485094045605687,
+     0.12878033368972872,
+     0.06822047305302953,
+     0.06619224922215504
+    ],
+    "hash": "2f8fd5ba9796c15c"
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  }
+ ],
+ "regression_rows": [
+  {
+   "model": "eight_schools-eight_schools_centered",
+   "seed": 6701301,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.126982346301331,
+    "min_bulk": 23.684856305550962,
+    "min_tail": 41.36422356185765,
+    "div": 0,
+    "ess_per_grad": 7.925120393481507e-05,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     1.3068062515475956,
+     0.8052043144764346,
+     1.027991969730748,
+     0.9720080302692518
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.126982346301331,
+    "min_bulk": 23.684856305550962,
+    "min_tail": 41.36422356185765,
+    "div": 0,
+    "ess_per_grad": 7.925120393481507e-05,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "eight_schools-eight_schools_centered",
+   "seed": 6701302,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.02683969702729,
+    "min_bulk": 101.87523209162478,
+    "min_tail": 108.18525994868475,
+    "div": 0,
+    "ess_per_grad": 0.0003920826694721753,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.417995878768974,
+     1.0525771538739557,
+     0.9474228461260444,
+     1.825114087903453
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.02683969702729,
+    "min_bulk": 101.87523209162478,
+    "min_tail": 108.18525994868475,
+    "div": 0,
+    "ess_per_grad": 0.0003920826694721753,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "eight_schools-eight_schools_centered",
+   "seed": 6701303,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0295452392939535,
+    "min_bulk": 106.8938250604178,
+    "min_tail": 95.44888920822697,
+    "div": 0,
+    "ess_per_grad": 0.0005456829090837602,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.3011039578981653,
+     0.6390846873263553,
+     1.3609153126736446,
+     2.212512854984636
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0295452392939535,
+    "min_bulk": 106.8938250604178,
+    "min_tail": 95.44888920822697,
+    "div": 0,
+    "ess_per_grad": 0.0005456829090837602,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "bball_drive_event_0-hmm_drive_0",
+   "seed": 6701301,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0036097202071128,
+    "min_bulk": 4055.477474669063,
+    "min_tail": 2167.311583478782,
+    "div": 0,
+    "ess_per_grad": 0.04099920614126191,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     1.0032533393549303,
+     0.9051365321430205,
+     0.9967466606450694,
+     1.9747617977773237
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0036097202071128,
+    "min_bulk": 4055.477474669063,
+    "min_tail": 2167.311583478782,
+    "div": 0,
+    "ess_per_grad": 0.04099920614126191,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "bball_drive_event_0-hmm_drive_0",
+   "seed": 6701302,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0039350564640828,
+    "min_bulk": 3705.111658683335,
+    "min_tail": 1438.314227490937,
+    "div": 0,
+    "ess_per_grad": 0.0481183332296537,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.9131345966810722,
+     1.256048270086744,
+     0.877999115083917,
+     1.086865403318928
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0039350564640828,
+    "min_bulk": 3705.111658683335,
+    "min_tail": 1438.314227490937,
+    "div": 0,
+    "ess_per_grad": 0.0481183332296537,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "bball_drive_event_0-hmm_drive_0",
+   "seed": 6701303,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0016863571696748,
+    "min_bulk": 3511.4602654715522,
+    "min_tail": 2020.748655832217,
+    "div": 0,
+    "ess_per_grad": 0.03506761205456241,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.7200297761331043,
+     1.2602473581248637,
+     1.0530582610597603,
+     0.9469417389402396
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0016863571696748,
+    "min_bulk": 3511.4602654715522,
+    "min_tail": 2020.748655832217,
+    "div": 0,
+    "ess_per_grad": 0.03506761205456241,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "arma-arma11",
+   "seed": 6701301,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0014838556240018,
+    "min_bulk": 3846.158566170674,
+    "min_tail": 2882.9070041934538,
+    "div": 0,
+    "ess_per_grad": 0.06944906314748152,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.4593444811313298,
+     0.8515528220204406,
+     1.1484471779795595,
+     1.2939332797436192
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0014838556240018,
+    "min_bulk": 3846.158566170674,
+    "min_tail": 2882.9070041934538,
+    "div": 0,
+    "ess_per_grad": 0.06944906314748152,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "arma-arma11",
+   "seed": 6701302,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0029052552897129,
+    "min_bulk": 3557.0889069674463,
+    "min_tail": 2673.0781274006276,
+    "div": 0,
+    "ess_per_grad": 0.06455813911264173,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.5394513063683928,
+     1.4439543969484165,
+     1.1400516147492754,
+     0.8599483852507247
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0029052552897129,
+    "min_bulk": 3557.0889069674463,
+    "min_tail": 2673.0781274006276,
+    "div": 0,
+    "ess_per_grad": 0.06455813911264173,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "arma-arma11",
+   "seed": 6701303,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.000836875470306,
+    "min_bulk": 3300.0257652235255,
+    "min_tail": 2884.3182084529785,
+    "div": 0,
+    "ess_per_grad": 0.055180686329067044,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     1.1158403681199267,
+     1.7812788191303153,
+     0.8841596318800735,
+     0.5114133629109646
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.000836875470306,
+    "min_bulk": 3300.0257652235255,
+    "min_tail": 2884.3182084529785,
+    "div": 0,
+    "ess_per_grad": 0.055180686329067044,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "garch-garch11",
+   "seed": 6701301,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.001867858610143,
+    "min_bulk": 1822.581448185518,
+    "min_tail": 1579.703584693834,
+    "div": 0,
+    "ess_per_grad": 0.01904056004623351,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.9955640645433926,
+     1.0044359354566075,
+     1.416738726436693,
+     0.5750511725951233
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.001867858610143,
+    "min_bulk": 1822.581448185518,
+    "min_tail": 1579.703584693834,
+    "div": 0,
+    "ess_per_grad": 0.01904056004623351,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "garch-garch11",
+   "seed": 6701302,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0037327776786933,
+    "min_bulk": 1764.4746136362414,
+    "min_tail": 1963.3899967516213,
+    "div": 0,
+    "ess_per_grad": 0.018835528231134754,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     1.012854168890085,
+     0.9302165127776678,
+     1.6212257088567663,
+     0.9871458311099152
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0037327776786933,
+    "min_bulk": 1764.4746136362414,
+    "min_tail": 1963.3899967516213,
+    "div": 0,
+    "ess_per_grad": 0.018835528231134754,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "garch-garch11",
+   "seed": 6701303,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0038560335989857,
+    "min_bulk": 1509.1366993119086,
+    "min_tail": 1266.0495529425739,
+    "div": 0,
+    "ess_per_grad": 0.016468279873328044,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.9904296162043487,
+     1.0095703837956511,
+     1.135446481474986,
+     0.7374129751953209
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0038560335989857,
+    "min_bulk": 1509.1366993119086,
+    "min_tail": 1266.0495529425739,
+    "div": 0,
+    "ess_per_grad": 0.016468279873328044,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "gp_pois_regr-gp_pois_regr",
+   "seed": 6701301,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0057122052830212,
+    "min_bulk": 780.7839446322345,
+    "min_tail": 614.4006873826703,
+    "div": 0,
+    "ess_per_grad": 0.0006317804264057237,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     1.445235986892056,
+     1.0024118906520592,
+     0.9788283367903614,
+     0.9975881093479407
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0057122052830212,
+    "min_bulk": 780.7839446322345,
+    "min_tail": 614.4006873826703,
+    "div": 0,
+    "ess_per_grad": 0.0006317804264057237,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "gp_pois_regr-gp_pois_regr",
+   "seed": 6701302,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0106230523299111,
+    "min_bulk": 833.543414086394,
+    "min_tail": 1073.8868198593052,
+    "div": 0,
+    "ess_per_grad": 0.0006543975138793302,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.8416561371718727,
+     1.0670381833735374,
+     1.217042299723542,
+     0.9329618166264625
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0106230523299111,
+    "min_bulk": 833.543414086394,
+    "min_tail": 1073.8868198593052,
+    "div": 0,
+    "ess_per_grad": 0.0006543975138793302,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "gp_pois_regr-gp_pois_regr",
+   "seed": 6701303,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0046116560764404,
+    "min_bulk": 1005.7816703229898,
+    "min_tail": 1374.5710812355212,
+    "div": 0,
+    "ess_per_grad": 0.0008357923679772092,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.4908891949945077,
+     0.6727354265866058,
+     1.327264573413394,
+     1.59053224603847
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0046116560764404,
+    "min_bulk": 1005.7816703229898,
+    "min_tail": 1374.5710812355212,
+    "div": 0,
+    "ess_per_grad": 0.0008357923679772092,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+   "seed": 6701301,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0087094028646317,
+    "min_bulk": 714.7822937995052,
+    "min_tail": 345.81136900319086,
+    "div": 0,
+    "ess_per_grad": 0.009152962414038457,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     0.8967225777060972,
+     1.3353082487777994,
+     0.7430038045156645,
+     1.1032774222939028
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0087094028646317,
+    "min_bulk": 714.7822937995052,
+    "min_tail": 345.81136900319086,
+    "div": 0,
+    "ess_per_grad": 0.009152962414038457,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+   "seed": 6701302,
+   "defaults": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0032518428380357,
+    "min_bulk": 920.8515507151544,
+    "min_tail": 422.7740654027883,
+    "div": 0,
+    "ess_per_grad": 0.011513378811407139,
+    "wrong_chain_cell": false,
+    "flags_emulated": [],
+    "ratios": [
+     1.0718029837883447,
+     0.785189815380907,
+     1.1894050204788604,
+     0.9281970162116552
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": true,
+    "rhat": 1.0032518428380357,
+    "min_bulk": 920.8515507151544,
+    "min_tail": 422.7740654027883,
+    "div": 0,
+    "ess_per_grad": 0.011513378811407139,
+    "wrong_chain_cell": false,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  },
+  {
+   "model": "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+   "seed": 6701303,
+   "defaults": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0416505904551134,
+    "min_bulk": 87.50309593076638,
+    "min_tail": 19.214102123041986,
+    "div": 0,
+    "ess_per_grad": 0.0010714752275214456,
+    "wrong_chain_cell": true,
+    "flags_emulated": [],
+    "ratios": [
+     1.228141439764312,
+     0.7718585602356878,
+     0.7356508263312423,
+     1.9924058760475563
+    ]
+   },
+   "restart": {
+    "status": "ok",
+    "passed": false,
+    "rhat": 1.0416505904551134,
+    "min_bulk": 87.50309593076638,
+    "min_tail": 19.214102123041986,
+    "div": 0,
+    "ess_per_grad": 0.0010714752275214456,
+    "wrong_chain_cell": true,
+    "restarted": []
+   },
+   "fingerprint": {
+    "evaluable": true,
+    "flags_defaults_emulated": [],
+    "flags_restart": [],
+    "flag_sets_equal": true,
+    "steps_at_99_equal": true,
+    "identity": true,
+    "holds": true
+   }
+  }
+ ]
+}
