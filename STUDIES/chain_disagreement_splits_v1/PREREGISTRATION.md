@@ -40,12 +40,28 @@ without losing any warning the shipped rule gives?
 
 ## Candidate checks (fixed here; `src/split_rules.rs`)
 
-Both are observe-only: they read the finished run's retained draws and its
+All three are observe-only: they read the finished run's retained draws and its
 `RunTelemetry::warmup_end()` / `sampling_end()` window summaries. **No
 library change, no kernel change, draws unchanged.** A candidate warning is
 the shipped disagreement checks plus the candidate check (additive).
 
-- **S, split R-hat (primary).** D4's leave-one-out test extended to every
+- **K, pairwise agreement clusters (primary; added after the smoke, see
+  below).** D4's columns, R-hat and threshold applied to pairs of chains.
+  - Needs at least 3 chains and all-chain max R-hat > 1.01.
+  - Two chains **agree** iff the max R-hat over parameters of that pair
+    alone is <= 1.01.
+  - The clusters are the connected components of the agreement graph. The
+    reference cluster is the largest. On a size tie it is the one with the
+    higher mean retained-draw median log density; if that is tied or
+    undefined, the cluster holding the lowest chain index.
+  - K fires iff there are at least two clusters **and** the reference
+    cluster has at least two chains. It names every chain outside the
+    reference cluster.
+  - What it covers: a 3-1 split, a clean 2-2 split, and a split with a chain
+    that crosses between modes (it disagrees with every other chain and is
+    named). It stays silent when no two chains agree (all-chain poor mixing,
+    the funnel): that is not a split.
+- **S, split R-hat (secondary).** D4's leave-one-out test extended to every
   complementary pair, with D4's columns (every `ChainOutput` sample
   coordinate), D4's R-hat (`diagnostics::rhat`, rank-normalised folded split
   R-hat, NaN-ignoring max over parameters) and D4's threshold 1.01.
@@ -61,7 +77,7 @@ the shipped disagreement checks plus the candidate check (additive).
   - With 4 chains there are exactly 3 partitions (2-2). A 3-1 split has no
     agreeing 2-2 partition, so S is silent there and D4 covers it; all-chain
     poor mixing has no agreeing partition either.
-- **G, density clusters (secondary).** On each window D2/D3 score, with
+- **G, density clusters (third).** On each window D2/D3 score, with
   their preconditions (>= 3 chains, windows >= 10 transitions, finite
   medians and IQRs):
   - sort the chains' median log densities and cut between neighbours
@@ -111,6 +127,7 @@ the shipped disagreement checks plus the candidate check (additive).
 - **The split-rule record.** Each binary adds one call,
   `split_rules::evaluate(posterior.chains())`. It records:
   - the shipped warnings (via `ChainWarning::from_chains`);
+  - K, with every pair's R-hat and the clusters;
   - S, with every partition's R-hats;
   - G, with both windows' medians, IQRs, gaps and clusters.
   
@@ -118,11 +135,53 @@ the shipped disagreement checks plus the candidate check (additive).
 - **`run_study.py`.** The WP69 posteriordb plumbing (`reference`,
   `constrain`, `arviz_stats`, `score` without the lotka z gate) plus the
   three cell kinds.
-- **`analyze.py`.** Written before the evidence.
+- **`analyze.py`.** Written before the evidence. Its context-only
+  comparison with the source studies' recorded warnings reads their
+  `artifacts/cells/` files, which are added to the box's sparse checkout.
 
 ### Smoke (non-evidence, seed 7409901, before freezing)
 
-SMOKE_PLACEHOLDER
+Run on the box at the harness committed as drafts `a4da1eb5` (S and G
+only) and `69a2e067` (K added). Seed 7409901, one cell of each kind.
+
+**Draft 1 (S, G).**
+- **Two-mode cell.** It ended 2-2 by the frozen end-mode definition: chains
+  0 and 2 minor, 1 and 3 major, max R-hat 1.668.
+  - But chain 2 crossed the boundary once and spent 49.3 % of its retained
+    draws in the major mode.
+  - Pairwise R-hats: {1, 3} 1.006; every other pair 1.57–1.83.
+  - The shipped warning was silent. **S was silent:** in the only
+    candidate partition, {0, 2} disagrees internally (1.573) because chain 2
+    holds both modes. G was silent too (maximum gap 0.07 of its threshold).
+- **`eight_schools_centered`** (`pdb-cell`): R-hat 1.0735, fails; no rule
+  fired.
+- **Funnel** (replay): R-hat 1.026; no rule fired.
+- **Radon** (replay): R-hat 1.006; no rule fired.
+- The implementation check held on all 4 cells.
+
+**The change before freezing.** That two-mode cell is exactly the case the
+question is about: a split the shipped rule misses. It showed that S's
+requirement that *both* groups agree internally fails whenever a chain is
+caught mid-crossing. Before freezing I therefore added K (only the
+reference cluster must agree internally) and made it the primary
+candidate, ahead of S and G.
+- K was designed after seeing this one non-evidence cell, so that cell is
+  not evidence for K.
+- The thresholds, columns and R-hat are D4's; nothing was tuned to a
+  number.
+
+**Draft 2 (K added).**
+- All 4 cells gave the same draw hashes as draft 1.
+- On the two-mode cell, K's clusters are {1, 3}, {0}, {2}, so it names
+  chains 0 and 2: exactly the minor-ending group.
+- On the other three cells every chain is its own cluster, so K is silent.
+- The implementation check held on all 4 cells.
+
+**Analysis dry run.** `analyze.py` ran end to end on these smoke cells
+relabelled into blocks I–IV (in `tmp/`, not kept).
+
+Smoke cells are in `artifacts/smoke-v1/` (draft 1) and `artifacts/smoke/`
+(draft 2). None is evidence.
 
 ## Arms and cells (strictly sequential in this order; none rerun; failures are results)
 
@@ -185,26 +244,33 @@ SMOKE_PLACEHOLDER
 ## Predictions (written before any evidence cell)
 
 - **P1.** Arm (i):
-  - S reports every fresh split: 2-2 through S, 3-1 through D4.
+  - K reports every fresh split: 2-2 and crossing splits through K, 3-1
+    through D4 and K.
   - Both fresh blocks together give at least one 2-2 split. WP69 saw three
     2-2 splits in 6 two-mode cells.
-  - On every reported 2-2 split, S names exactly one true mode group.
+  - On every reported 2-2 split without a crossing chain, K names exactly
+    one true mode group.
+- **P1b.** S reports every clean 2-2 split but misses any split with a
+  chain caught mid-crossing. Whether S passes (i) depends on whether such a
+  chain occurs among the fresh cells.
 - **P2.** G misses every two-mode 2-2 split (0.85 nats is far below 3
   IQRs), so G fails clause (i) whenever a two-mode 2-2 split occurs. On
   `hmm_drive_0` (second mode about 62 nats down, 3 x IQR about 6.5) G
   reports any split it sees.
-- **P3.** Arm (ii): zero false positives for S (a gate-passing cell has
-  reference-parameter R-hat <= 1.01, and S needs > 1.01) and for G (healthy
+- **P3.** Arm (ii): zero false positives for K and S (a gate-passing cell
+  has reference-parameter R-hat <= 1.01, and K and S need > 1.01 on the
+  unconstrained coordinates) and for G (healthy
   WP44 margins were a 0.29 IQR maximum gap against 3). The shipped warning
   fires on no passing cell.
-- **P4.** *My expectation, not a clause.* S fires on at least one failing
+- **P4.** *My expectation, not a clause.* K fires on at least one failing
   arm (ii) cell where no chain is off: a noise warning on a marginal-R-hat
-  cell such as `eight_schools_centered`, `one_comp` or `accel_gp`. This is the
-  practical cost the decision rule does not count.
-- **P5.** Arm (iii): zero regressions for S and G. The WP67 seeds and the
+  cell such as `eight_schools_centered`, `one_comp` or `accel_gp`, where two
+  chains happen to agree and the others do not. This is the practical cost
+  the decision rule does not count.
+- **P5.** Arm (iii): zero regressions for K, S and G. The WP67 seeds and the
   WP69 motivating replays reproduce their recorded draw hashes, and the
   shipped warning names lotka chain 3 / chain 2 again.
-- **P6.** Motivating replay (block IV): S reports all three WP69 2-2 splits
+- **P6.** Motivating replay (block IV): K reports all three WP69 2-2 splits
   (6903201/02/05), and the shipped rule again misses them.
 - **P7.** The implementation check holds on every completed cell.
 
@@ -215,8 +281,9 @@ SMOKE_PLACEHOLDER
   is proposed.
 - **(ii)** Zero false positives over the 51 arm (ii) cells.
 - **(iii)** Zero regressions over the 26 arm (iii) cells.
-- **PROPOSE S** iff (i), (ii) and (iii) all hold for S. Otherwise **PROPOSE
-  G** iff they all hold for G. Otherwise **DO NOT PROPOSE**.
+- **PROPOSE K** iff (i), (ii) and (iii) all hold for K. Otherwise
+  **PROPOSE S** iff they all hold for S. Otherwise **PROPOSE G** iff they
+  all hold for G. Otherwise **DO NOT PROPOSE**.
 - A proposal is a warning change: a new observe-only `ChainWarning` variant
   and its summary line. It is not a kernel change, and draws are unchanged,
   so there is no fingerprint issue. **No library code changes in this
