@@ -24,6 +24,9 @@ architecture and operating system (see the `walnutpie` module documentation).
   per gradient. Build without `STAN_THREADS` on Linux too.
 - Funnel tail deficit closed (WP66, WP68): not a bias; the default's tail mass
   at 80,000 draws over 30 seeds is 0.0478, the exact value.
+- posteriordb v7 reproduced on Linux (WP64): pass counts within one cell per
+  block, draws not bit-identical across platforms, wall per gradient 0.94x
+  CmdStan's; the per-gradient headline is platform- and seed-dependent.
 
 ## [0.3.0] - 2026-10-25
 

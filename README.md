@@ -225,6 +225,19 @@ with the seeds. Wall per gradient is 1.85x CmdStan's, because the Windows
 owned worker serialises BridgeStan and the machine was contended. ESS per
 second is 1.23x nutpie's.
 
+The same protocol on Linux (WP64, 16 dedicated cores, pinned and
+co-tenanted) reproduces the pass counts within one cell per block: oWALNUTS
+44/51, 7/15 and 41/48 (one `seeds_centered` cell now passes), CmdStan 33, 5
+and 31, nutpie 27 and 5. No cell is bit-identical across platforms (the
+start search matches; runs diverge by warmup iteration 50, as libm differs).
+The per-gradient headline is platform- and seed-dependent: pooled over six
+Linux seeds it is **1.21x CmdStan**, because CmdStan's chain sits in
+`hmm_drive_0`'s second mode on 4 of 6 Linux seeds (2 of 6 on Windows), and
+0.86x without that model (Windows 0.75x). Wall per gradient falls to 0.94x
+CmdStan's with the concurrent-replica dispatch, and ESS per second is 1.22x
+CmdStan's and 1.45x nutpie's. A preregistered robustness study (WP72)
+decides which per-gradient statistic the v8 headline uses. [E34]
+
 v7 did **not** pass the v6 release rule. Its per-gradient clause (>= 0.75
 CmdStan) failed: the value was 0.708, and the clause was formally
 unevaluable because one CmdStan `lotka_volterra` cell errored. Its wall
