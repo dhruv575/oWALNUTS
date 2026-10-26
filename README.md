@@ -185,7 +185,10 @@ runs error), the fill of new coordinates is the caller's decision, and the
 library does not validate that `k` draws refresh the posterior to any
 accuracy: on the 250-return SV model of WP84, 50–200 draws per chain stayed
 calibrated over 100 ticks (20–80 ms per tick) but did not reach the R-hat
-1.01 / reference-MCSE bar. Python: `result.warm_state()`,
+1.01 / reference-MCSE bar; scored against the quote itself (post hoc), 200
+draws per chain kept the next-period sigma P50 within 2 % and the P95
+within 5 % of the reference on 97 % / 98 % of ticks, 50 draws on 74 % /
+78 %. Python: `result.warm_state()`,
 `state.extend_to(dim)`, `owalnuts.sample_warm(target, state, draws=k, seed=s)`.
 
 ## Where it shines
