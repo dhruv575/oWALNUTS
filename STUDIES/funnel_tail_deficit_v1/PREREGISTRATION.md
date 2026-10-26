@@ -195,3 +195,14 @@ last 60,000.
 2. **Pipeline checks on diagnostic seed 990661** (unused), made after the
    predictions above were written. Outputs are in the lane scratch directory
    and are not committed.
+
+   Each arm ran once at 2,000/20,000 and two side cells ran; all exited 0, at
+   1–2 s per funnel cell. Two things were seen there and are disclosed:
+   - On that seed the default's neck-class energy-acceptance proxy was 0.45,
+     against 0.76 for the bulk. The H1 signature is therefore expected to
+     hold, and H1's support will rest on its causal clause (i).
+   - `levels10` was draw-for-draw identical to the default. It differs only
+     where level 8 would exhaust.
+
+   No rule, threshold or prediction was changed after the pipeline check.
+   This paragraph was added in a second commit, before any evidence cell.
