@@ -197,12 +197,30 @@ As `protocol.json` `proposed_flip`:
    states that a restarted chain is an independent start, so independent-chain R-hat remains valid (unlike
    chain rescue, WP36).
 
-## Smoke (disclosed, non-evidence; diagnostic seed 9059901, before the freeze)
+## Smoke (disclosed, non-evidence; diagnostic seed 9059901, run before the freeze)
 
-Filled in before the freeze commit; see the section of the same name in `README.md` for the outcome. The
-smoke runs the pipeline once per kind in the lane's scratch artifacts (`artifacts/smoke/`, committed
-without draws or telemetry): `kidiq` `defaults` and `guard-0.01-0` (bit-identical expected; a
-reference-tier cell), one gates-only `defaults` cell (`GLMM_Poisson`), one funnel pair, one SV pair, and
-the analysis code over the smoke cells. Local (Windows) functional checks before shipping: the funnel at
-200/2,000 and one SV guard cell at the smoke seed, to validate the recorded fields the driver reads; both
-arms of the funnel were bit-identical there (844,864 calls, no firing).
+Run on the box in the lane at harness commit `df1b9047` (the binaries that run the evidence; the freeze
+commit changes only this file), outputs in `artifacts/smoke/` (cells, `summary.json`, `results-table.md`;
+draws and telemetry kept out of git):
+
+- `kidiq` `defaults` vs `guard-0.01-0`: bit-identical (hash `5510d495c6ee8a05`, 340,220 calls both;
+  step ratios at transition 99 0.977-1.06, no firing; passed, |z| 0.74).
+- `GLMM_Poisson` (gates-only tier) `defaults` vs guard: bit-identical (`ae86f736badcc53a`, 424,249 calls;
+  ratio 0.664; R-hat 1.087, failed at both arms as WP85's cells did).
+- Funnel `diag` vs guard at 2,000/20,000: bit-identical (`0dbc416e74ea356b`), no firing, P5 0.0580. The
+  lowest step ratio among the four healthy chains at the window close (transition 199) was **0.055**,
+  below WP89's healthy minimum of 0.076 and 5.5x above the cut: recorded here before the evidence as the
+  closest healthy approach to the threshold seen so far.
+- SV `defaults` vs guard: bit-identical (`fb4cd70d2586e4dc`), no firing, no trapped chain.
+- The analysis pass over the smoke cells produced the rules table, the (empty) firing audit and the
+  prediction scoring; R5 and R8 read false there only because one funnel cell has no between-seed s.e.
+  and the smoke passes no `environment.json` (the box setup had already written it: fingerprint tests
+  3 + 3 passed, `trapped_chain_restart` 5 passed, clippy clean on both crates, library diff against
+  `f5500db3` empty, 568 lane protocol files with no seed hit).
+- Local (Windows) functional checks before shipping: the funnel at 200/2,000 and one SV guard cell at
+  the smoke seed; both funnel arms bit-identical (844,864 calls, no firing).
+
+Changes made because of the smoke, all before any evidence cell: none to the design, rules, seeds or
+predictions. Harness fix between the first ship and the smoke (commit `df1b9047`): `pdb_cell.rs` records
+the chain index and variant of every chain warning (`ChainWarning`'s display string carries the numbers
+but not the index, which T1 needs); the smoke runs both GLMM arms and the analysis pass.
