@@ -89,7 +89,13 @@ One line each for the other front doors:
 - **Python**: `pip install maturin` then `maturin develop --release` in
   [`integrations/python`](integrations/python/README.md);
   `owalnuts.sample(logp_and_grad, dim=10, warmup=1000, draws=1000, seed=1).summary()`,
-  with `from_jax`, `from_torch` and `from_pymc` adapters.
+  with `from_jax`, `from_torch` and `from_pymc` adapters. For PyMC models use
+  `from_pymc(model, gil_free=True)` with `threads=4`; for hand-written
+  densities a numba `from_cfunc` (within 1.15x of a native Rust target);
+  plain callables, the default `from_pymc` and `from_jax` at `threads=1`
+  (`from_jax` adds 20–40 µs per gradient). nutpie is 1.4–1.9x faster per
+  second on smooth and larger hierarchical PyMC models and fails
+  noncentred Eight Schools [E44].
 - **Stan models**: [`owalnuts-bridgestan`](integrations/bridgestan/README.md)
   wraps a BridgeStan-compiled model as a `Target`
   (`ReplicatedStanTarget::load(so, preload, data, seed, threads)` for

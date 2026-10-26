@@ -60,6 +60,14 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Documented
 
+- Python guidance rewritten from WP78 (Linux): `from_pymc(model, gil_free=True)`
+  with `threads=4` first for PyMC models (8–22x the default's ESS/s;
+  fallback `from_pymc(model)` at `threads=1` when the snapshot fails
+  closed); `from_cfunc` with numba `error_model="numpy"` plus the nonfinite
+  guard runs within 1.15x of a native Rust target; Python callables, the
+  default `from_pymc` and `from_jax` stay at `threads=1` (`from_jax` adds
+  20–40 µs per gradient); nutpie is 1.4–1.9x faster per second on smooth
+  and larger hierarchical PyMC models and fails noncentred Eight Schools.
 - Linux BridgeStan: the concurrent-replica dispatch is qualified on x86_64
   glibc (WP65): 0/500 child faults, bit-identical draws, 0.96x CmdStan wall
   per gradient. Build without `STAN_THREADS` on Linux too.
