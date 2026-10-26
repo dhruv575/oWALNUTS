@@ -785,3 +785,16 @@ provenance.
   the funnel opt-in:
   [`STUDIES/refinement_levels10_v1`](STUDIES/refinement_levels10_v1/README.md)
   (WP68).
+- [E34] posteriordb v7 and its seed extension re-run on Linux (x86_64 glibc,
+  c7a.4xlarge, lane-pinned, co-tenanted) at the original commits, seeds,
+  gates and analysis: oWALNUTS 44/51 house, 7/15 hard, 41/48 extension
+  (Windows 43, 6, 40); CmdStan 33/51, 5/15, 31/48 (34, 7, 30); nutpie 27/51,
+  5/15 (26, 3). 0/114 oWALNUTS cells bit-identical to Windows (start search
+  identical in 114/114; divergence by warmup iteration 50). Six-seed
+  per-gradient ratio vs CmdStan 1.206 (Windows 0.761), 0.862 excluding
+  `hmm_drive_0` (Windows 0.749), where CmdStan is mode-trapped on 4/6 Linux
+  seeds; wall per gradient 0.942 over the 15 complete models (Windows 1.849);
+  ESS per second 1.215x CmdStan and 1.454x nutpie; dense arm 18/18 at 12.2x;
+  funnel z +0.29, -0.53, +0.55:
+  [`STUDIES/posteriordb_bench_v7_linux_v1`](STUDIES/posteriordb_bench_v7_linux_v1/README.md)
+  (WP64).
