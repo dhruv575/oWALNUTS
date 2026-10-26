@@ -1,0 +1,90 @@
+[2026-10-26 03:46:37] P kidiq-kidscore_momhsiq diag 990675 [2.1s]: grads 391396 minbulk 1456 mintail 1435 rhat 1.0016 div 0 |z| 1.93 passed True warmup-share 0.650 branch - G nan exh 7 fnv cff8dced48c476bc
+[2026-10-26 03:46:37] P kidiq-kidscore_momhsiq dense 990675 [0.6s]: grads 172590 minbulk 4056 mintail 2758 rhat 1.0007 div 0 |z| 1.71 passed True warmup-share 0.884 branch - G nan exh 7 fnv a35ae020a5bd06fe
+[2026-10-26 03:46:38] P kidiq-kidscore_momhsiq auto 990675 [0.6s]: grads 188695 minbulk 3913 mintail 3086 rhat 1.0010 div 0 |z| 1.74 passed True warmup-share 0.891 branch dense G 75.6 exh 7 fnv 34df4cbd58900e2e
+[2026-10-26 03:46:40] F [1.9s] funnel diag 2000/20000 seed 990675: P(omega < -5) 0.0587 +- 0.0134 (z +0.82), P(omega > 5) 0.0423, divergences 2, min bulk ESS 277, neck/deep transitions 3345/1349 (top level 3/181, exhausted 0/55), 5665514 target calls, warnings 1, wall 0.8s
+[2026-10-26 03:46:42] F [1.7s] funnel dense 2000/20000 seed 990675: P(omega < -5) 0.0566 +- 0.0071 (z +1.23), P(omega > 5) 0.0554, divergences 1, min bulk ESS 596, neck/deep transitions 3676/848 (top level 6/161, exhausted 2/37), 5859147 target calls, warnings 0, wall 1.0s
+[2026-10-26 03:46:43] F [1.4s] funnel auto 2000/20000 seed 990675: P(omega < -5) 0.0442 +- 0.0067 (z -0.54), P(omega > 5) 0.0423, divergences 0, min bulk ESS 491, neck/deep transitions 2779/756 (top level 2/57, exhausted 0/12), 3693871 target calls, warnings 0, wall 0.6s
+{
+ "verdict": "NOT PROPOSED (failed: R3, F, D)",
+ "decision_rules": {
+  "R1_auto_pass_count_ge_diag": {
+   "diag": 1,
+   "auto": 1,
+   "held": true
+  },
+  "R2_geomean_auto_over_diag_ge_1.5": {
+   "value": 5.576412667376951,
+   "models": 1,
+   "held": true
+  },
+  "R3_no_model_below_0.9x_diag": {
+   "models_below": [
+    "arK-arK",
+    "arma-arma11",
+    "bball_drive_event_0-hmm_drive_0",
+    "diamonds-diamonds",
+    "earnings-logearn_interaction",
+    "eight_schools-eight_schools_centered",
+    "eight_schools-eight_schools_noncentered",
+    "garch-garch11",
+    "gp_pois_regr-gp_pois_regr",
+    "hmm_example-hmm_example",
+    "hudson_lynx_hare-lotka_volterra",
+    "mcycle_gp-accel_gp",
+    "mesquite-logmesquite_logvash",
+    "nes2000-nes",
+    "one_comp_mm_elim_abs-one_comp_mm_elim_abs",
+    "sblrc-blr"
+   ],
+   "held": false
+  },
+  "R4_no_new_divergences": {
+   "models_with_more_divergences": [],
+   "total_diag": 0,
+   "total_auto": 0,
+   "held": true
+  },
+  "F_funnel_auto_p5_within_1se": {
+   "pooled": 0.0441875,
+   "se": NaN,
+   "abs_error": 0.003602852272814705,
+   "held": false
+  },
+  "D_flag_off_integrity": {
+   "library_diff_scoped": null,
+   "kernel_fingerprint_test_passed": null,
+   "flag_off_test_passed": null,
+   "held": false
+  }
+ },
+ "predictions": {
+  "Pa_branch_matches_prediction_ge_45_of_51": {
+   "observed": 1,
+   "runs": 1,
+   "held": false
+  },
+  "Pb_rules_predicted": {
+   "predicted_failures": [
+    "R1",
+    "R3"
+   ],
+   "observed_failures": [
+    "R3",
+    "F",
+    "D"
+   ],
+   "held": false
+  },
+  "Pc_dense_replicates_wp51_geomean_ge_2": {
+   "observed": 6.3195991155579,
+   "held": true
+  },
+  "Pd_funnel_auto_takes_diag_on_all_10": {
+   "observed": 0,
+   "held": true
+  }
+ }
+}
+plain execution ReplicatedConcurrent 4 calls 391396 research-build calls 391396
+plain-feature default == research-build default: True
+PIPELINE_DONE
