@@ -502,8 +502,8 @@ def trapped_chains(cell: dict, anchor_ls: float, anchor_hl: float) -> list[int]:
 
 def owalnuts_chain_summaries(cell: dict) -> dict:
     """Bring an sv-owalnuts cell to the common per-chain summary shape."""
-    if "retained_draws_mu_logsigma_hlast" in cell or cell.get("status") != "ok":
-        return cell
+    if cell.get("status") != "ok" or "draws_mu_logsigma_hlast" not in cell["chains_data"][0]:
+        return cell  # a CmdStan / nutpie cell, or an oWALNUTS cell already stripped by strip_draws.py
     arr = np.asarray([c["draws_mu_logsigma_hlast"] for c in cell["chains_data"]])  # (chains, draws, 3)
     for c, ch in enumerate(cell["chains_data"]):
         ch.update(median_log_sigma=float(np.median(arr[c, :, 1])), median_mu=float(np.median(arr[c, :, 0])),
@@ -631,9 +631,9 @@ def analyze() -> None:
         # funnel
         fd = {s: cells.get(f"F-diag-{s}") for s in blocks["F"]["seeds"]}
         fc = {s: cells.get(f"F-{cand}-{s}") for s in blocks["F"]["seeds"]}
-        fired_f = [s for s, c in fc.items() if c and c.get("status") == "ok" and any(x["restarted"] for ch in c["chains_data"] for x in ch["trapped_chain_checks"])]
-        ident_f = [s for s, c in fc.items() if c and fd[s] and c.get("draw_hash") == fd[s].get("draw_hash")]
-        est = [c["tail_mass"]["estimate"] for c in fc.values() if c and c.get("status") == "ok"]
+        fired_f = [s for s, c in fc.items() if funnel_ok(c) and funnel_fired(c)]
+        ident_f = [s for s, c in fc.items() if funnel_ok(c) and funnel_ok(fd[s]) and c["draws_fnv"] == fd[s]["draws_fnv"]]
+        est = [c["tail_mass"]["estimate"] for c in fc.values() if funnel_ok(c)]
         p5 = statistics.fmean(est) if est else None
         se = statistics.stdev(est) / math.sqrt(len(est)) if len(est) > 1 else None
         exact = PROTOCOL["funnel"]["exact_p5"]
@@ -676,14 +676,26 @@ def quant(xs):
     return {"n": len(xs), "min": q[0], "q25": q[1], "median": q[2], "q75": q[3], "max": q[4]}
 
 
+def funnel_ok(c) -> bool:
+    # funnel.rs (WP85 harness) writes no `status` field: a cell is complete when it carries the
+    # tail-mass block and a draws hash (`draws_fnv`, not `draw_hash` as in the SV/house cells).
+    # The analysis read `status == "ok"` / `draw_hash` until the post-run fix of 2026-10-26, which
+    # reported 0 funnel cells and an R3 of False; the cells themselves were never rerun.
+    return bool(c) and c.get("status") != "error" and "tail_mass" in c and "draws_fnv" in c
+
+
+def funnel_fired(c) -> bool:
+    return any(x["restarted"] for ch in c["chains_data"] for x in ch.get("trapped_chain_checks", []))
+
+
 def funnel_arm(cells, blocks, arm):
     cs = [cells.get(f"F-{arm}-{s}") for s in blocks["F"]["seeds"]]
-    cs = [c for c in cs if c and c.get("status") == "ok"]
+    cs = [c for c in cs if funnel_ok(c)]
     est = [c["tail_mass"]["estimate"] for c in cs]
     return {"cells": len(cs), "p5": statistics.fmean(est) if est else None,
             "se": statistics.stdev(est) / math.sqrt(len(est)) if len(est) > 1 else None,
             "divergences": sum(ch["divergences"] for c in cs for ch in c["chains_data"]),
-            "fired": sum(1 for c in cs if any(x["restarted"] for ch in c["chains_data"] for x in ch["trapped_chain_checks"]))}
+            "fired": sum(1 for c in cs if funnel_fired(c))}
 
 
 def predictions(per_arm: dict) -> dict:
@@ -708,6 +720,9 @@ def results_table(s: dict) -> str:
          "| block-arm | cells ok / errors | chains | trapped chains | trapped cells | rate | flagged by warnings | flags agree | restarted | median wall s | first collapse window of trapped chains | start log_sigma trapped (median) | start log_sigma healthy (median) | final step trapped (median) | final step healthy (median) |",
          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for key, a in s["arms"].items():
+        if not a["ok"]:
+            L.append(f"| {key} | 0 / {a['errors']} | | | | | | | | | | | | | |")
+            continue
         cw = {k: v for k, v in a["collapse_window_counts"].items() if v}
         f = lambda d: f"{d['median']:.3g}" if d else "-"
         L.append(f"| {key} | {a['ok']} / {a['errors']} | {a['chains']} | {a['trapped_chains']} | {a['trapped_cells']} | "
@@ -725,7 +740,7 @@ def results_table(s: dict) -> str:
                  f"{r['qualifies_for_confirmation']} |")
     L += ["", "## Funnel (4 x 2,000/20,000, 30 seeds)", "", "| arm | cells | P5 | s.e. | divergences | fired |", "|---|---|---|---|---|---|"]
     for arm, f in s["funnel"].items():
-        L.append(f"| {arm} | {f['cells']} | {f['p5']} | {f['se']} | {f['divergences']} | {f['fired']} |")
+        L.append(f"| {arm} | {f['cells']} | {f['p5']} | {f['se']} | {f['divergences']} | {f['fired']} |" if f["cells"] else f"| {arm} | 0 | | | | |")
     L += ["", "## House models (v7 gates), passes per seed", ""]
     for arm, d in s["house"].items():
         L.append(f"- {arm}: " + ", ".join(f"{m} {sum(v)}/{len(v)}" for m, v in d.items()))
