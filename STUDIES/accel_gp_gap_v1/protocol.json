@@ -1,0 +1,94 @@
+{
+  "schema": "accel-gp-gap-v1",
+  "ledger_id": "WP70",
+  "ledger_title": "WP70-ACCEL-GP-GAP-V1",
+  "status": "FROZEN_BEFORE_EXECUTION",
+  "frozen_utc": "2026-10-26",
+  "purpose": "Why is oWALNUTS's min bulk ESS per gradient on mcycle_gp-accel_gp about 0.35x CmdStan's (the worst fixed-16 cell in posteriordb v7 and its seed extension)? Record one preregistered diagnostic for each of three mechanistic hypotheses at the defaults against CmdStan 2.39.0, then test three research settings, one per hypothesis, each under a frozen rule. Research flags only; no default changes.",
+  "wp_number_rule": "Assigned by the coordinator: WP70 (WP68 and WP69 are lanes 3 and 4).",
+  "source_commit_under_test": "d39efaad",
+  "source_commit_note": "local main at freeze (after the WP65-WP68 merges). WP67 added a research-only option with default None and WP68 a study-only Cargo feature (candidate-levels10) that is off here; the sampler defaults equal v7's (f097391c) defaults. run_gap.py refuses oWALNUTS cells if src/, integrations/, tests/ or Cargo.toml differ from this commit.",
+  "prior_evidence": {
+    "v7_and_seed_extension": "accel_gp oWALNUTS/CmdStan min bulk ESS per gradient 0.35x (v7, 3 seeds) and similar on 620601-620603; oWALNUTS 0/6 gates (tail ESS 49-298, R-hat 1.011-1.033), 0 max-depth stops, 2.3-2.9M gradients; CmdStan 0/6 gates (55-339 divergences), 800-2,700 depth-10 caps of 4,000, 5.1-6.0M gradients; adapted steps oWALNUTS 0.0057-0.0107, CmdStan 0.0049-0.0086; oWALNUTS retained stops chain 0: reverse_coarser_accepted 35-92 % (Windows record, read before this freeze)",
+    "already_tested_elsewhere": "dense metric 0.38x, 0/3 (WP48/WP51); delta 2 0.68x of default (WP34); ZeroWeightBeyond 0.61x, ZeroWeightBeyondAdaptSelected targets 0.70x (WP39/WP39B); acceptance targets 0.85/0.9 with and without the skip statistic 0.52-0.65x of default on 2 seeds (WP40 sweep4); a 5-20 % larger step halves the worst-parameter ESS (WP40)"
+  },
+  "environment": {
+    "host": "AWS EC2 c7a.4xlarge (16 dedicated AMD EPYC 9R14 cores, no SMT, 32 GB, two 32 MB L3 instances; cores 0-7 share one), Ubuntu 24.04, g++ 13.3.0, Rust 1.88.0",
+    "lane": "lane 2, cores 4-7; every process (builds, drivers, harness, CmdStan) under taskset -c 4-7; RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, TMPDIR=~/lanes/accel_gp_gap_v1/tmp; files only under ~/lanes/accel_gp_gap_v1/",
+    "timing_label": "pinned, co-tenanted: three other core-pinned lanes run at the same time. Walls are not used for any decision; ESS per gradient, pass counts and the diagnostics are unaffected by co-tenancy.",
+    "bridgestan": "BridgeStan 2.9.0 / Stan 2.39.0, library built without STAN_THREADS, in a lane copy of the WP65 BridgeStan tree; loaded with ReplicatedStanTarget (4 replicas, ReplicatedConcurrent, the dispatch qualified on this host by WP65)",
+    "cmdstan": "CmdStan 2.39.0 via cmdstanpy 1.3.0 defaults (adapt_delta 0.8, max_treedepth 10, diag_e, four chains in four processes), lane copy of the WP65 lane's byte copy of ~/infra/cmdstan/cmdstan-2.39.0",
+    "python": "lane venv with the WP65 lane package set (arviz 0.23.4, bridgestan 2.9.0, cmdstanpy 1.3.0, numpy 2.5.4, posteriordb 0.2.0)",
+    "posteriordb": "~/infra/posteriordb at 28f8d3d6e975315f42aa274a8399f21e07a43b30 (read-only)"
+  },
+  "posteriordb": {"commit": "28f8d3d6e975315f42aa274a8399f21e07a43b30", "path": "posterior_database"},
+  "target_model": "mcycle_gp-accel_gp",
+  "control_models": ["eight_schools-eight_schools_noncentered", "kidiq-kidscore_momhsiq", "arK-arK", "gp_pois_regr-gp_pois_regr", "garch-garch11"],
+  "control_models_note": "five other house models: two GP/regression models that share the step sensitivity (gp_pois_regr) or not (kidiq), a hierarchical model, an autoregression and a volatility model; diamonds and the ODE models are excluded for cost",
+  "gates_only_models": [],
+  "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0, "finite_draws": true, "no_sampler_error": true},
+  "seeds": [700711, 700712, 700713],
+  "seeds_verified_unused": "git grep -n -w -E '70071[1-3]' over every tracked file of the worktree at d39efaad found no occurrence before freezing.",
+  "chains": 4,
+  "warmup": 1000,
+  "retained": 1000,
+  "threads": 4,
+  "cell_timeout_seconds": 2700,
+  "owalnuts_arms": {
+    "owalnuts": {"mode": "defaults", "hypothesis": null, "setting": "Sampler::new() with only the run shape, seed, threads and admit_worst_case set (v7)"},
+    "cand-target095": {"mode": "target095", "hypothesis": "H1", "setting": "defaults plus Adaptation::DualAveraging { target_accept: 0.95 } (smaller step so fewer leaves refine and fail the reverse check)"},
+    "cand-depth12": {"mode": "depth12", "hypothesis": "H2", "setting": "defaults plus Tuning::default().max_depth(12)"},
+    "cand-warmup2000": {"mode": "warmup2000", "hypothesis": "H3", "setting": "defaults with 2,000 warmup transitions (1,000 retained); warmup gradients count"}
+  },
+  "phases": {
+    "phase_1": "accel_gp x {cmdstan, owalnuts} x 3 seeds, then each control x owalnuts x 3 seeds; then `diagnose` (mechanical, writes artifacts/diagnosis.json)",
+    "phase_2": "each candidate (cand-target095, cand-depth12, cand-warmup2000, in that order) on accel_gp then the five controls x 3 seeds; then `analyze`",
+    "candidates_run_regardless": "All three candidates run whatever the diagnostics show. Each candidate's rule decides whether it is a research flag; whether its hypothesis was supported by the phase-1 diagnostic is reported beside it, so a candidate that passes with its hypothesis unsupported is reported as passing for an unexplained reason."
+  },
+  "run_order": "phases in order; within a phase the listed (model, arm) order, seeds ascending; strictly sequential, one sampling process (CmdStan: its four chain processes) at a time",
+  "metrics": {
+    "gradients_total": "oWALNUTS target calls including start search, warmup and sampling; CmdStan sum n_leapfrog__ including warmup (v7)",
+    "ess_per_gradient": "minimum over gate (reference) parameters of ArviZ 0.23.4 bulk ESS divided by gradients_total (v7)",
+    "ratios": "seed-median over seed-median (v7 convention), evaluable only when all three seeds are status ok on both arms"
+  },
+  "hypotheses": {
+    "H1": {
+      "statement": "Orbit truncation: retained oWALNUTS orbits on accel_gp end on a reverse-coarser stop (a refined leaf that fails the reverse check, StopOrbit) far more often than at a U-turn, so they integrate for much less time per transition than CmdStan's trajectories and the slow coordinates (sdgp_1, lscale_1, Intercept, zgp_1) random-walk.",
+      "diagnostic": "D1: fraction of all retained oWALNUTS transitions whose stop reason is reverse_coarser_accepted (mean over the 3 seeds), and the integration-time ratio = median over seeds of [median over retained transitions of leaves_built x step (oWALNUTS; the kernel's trajectory_macro_length)] / [median over retained transitions of n_leapfrog__ x stepsize__ (CmdStan)]. Pre-freeze smoke finding: merged orbit_states x step excludes built-but-unmerged subtrees and gave 0.57 on a healthy non-study model, so it is reported only.",
+      "supported_if": "RC fraction >= 0.40 AND integration-time ratio <= 0.60",
+      "rc_fraction_threshold": 0.40,
+      "integration_ratio_threshold": 0.60,
+      "prediction": "supported: RC fraction about 0.6, integration-time ratio about 0.4"
+    },
+    "H2": {
+      "statement": "Depth cap: oWALNUTS's orbits are cut by max_depth 10 before they reach a U-turn, as CmdStan's are on 20-68 % of its transitions.",
+      "diagnostic": "D2: fraction of retained oWALNUTS transitions whose stop reason is maximum_depth (mean over seeds).",
+      "supported_if": "fraction >= 0.05",
+      "threshold": 0.05,
+      "prediction": "not supported: about 0 (v7 recorded zero oWALNUTS max-depth stops on accel_gp)"
+    },
+    "H3": {
+      "statement": "Adaptation: 1,000 warmup transitions leave oWALNUTS's diagonal metric further from the posterior scales than CmdStan's, so the slowest coordinates are badly preconditioned.",
+      "diagnostic": "D3: metric mismatch = per chain the 0.9-quantile over unconstrained coordinates of |ln(adapted variance / reference variance)| (oWALNUTS adapted variance = 1 / mass_diagonal; CmdStan = inv_metric; reference variance = variance of the posteriordb reference draws mapped to the unconstrained space with BridgeStan param_unconstrain), median over chains; ratio oWALNUTS / CmdStan per seed, median over seeds.",
+      "supported_if": "ratio >= 1.5",
+      "threshold": 1.5,
+      "prediction": "not supported: about 1.1"
+    },
+    "reported_not_gated": "adapted step oWALNUTS / CmdStan, CmdStan mean accept_stat__ (oWALNUTS records no acceptance statistic on retained transitions; smoke finding), warmup gradient share, gradients per retained transition, refined selected-leaf fraction and level histogram, stop counts, integration time by stop reason, depth >= 10 fraction, CmdStan depth-cap fraction, argmin-ESS parameter; prediction: oWALNUTS warmup share >= CmdStan's and step ratio 1.0-1.4"
+  },
+  "baseline_prediction": "P0: oWALNUTS/CmdStan accel_gp ESS per gradient (seed medians) in [0.25, 0.55], point 0.35; oWALNUTS 0/3 and CmdStan 0/3 accel_gp gates",
+  "decision_rule": {
+    "per_candidate": "A candidate qualifies as a research flag for accel_gp-type posteriors if all hold on the 3 seeds: R1 accel_gp candidate / CmdStan min bulk ESS per gradient (seed medians) >= 0.75; R2 v7 gates held on accel_gp: candidate accel_gp passes >= the default's on the same seeds, and no passing candidate cell (any model) has max |z| > 4 against the reference; R3a no regression in pass count on the 15 control cells (candidate passes >= default passes; 'pass count unchanged' read as not lower); R3b geomean over the 5 controls of candidate / default min bulk ESS per gradient (seed medians) >= 0.95.",
+    "accel_ratio_threshold": 0.75,
+    "max_abs_z": 4.0,
+    "control_geomean_threshold": 0.95,
+    "candidate_failures": "an errored or timed-out candidate cell counts as a failed gate cell and makes its ratio unevaluable (R1/R3b not held)",
+    "outcome": "Research flags only. No default changes and no library code changes in this study. If no candidate qualifies, the README reports the diagnosed mechanism and that no tested setting closes the gap.",
+    "candidate_predictions": {
+      "cand-target095": "fails R1 (accel ratio about 0.4) and probably R3b (WP40: higher targets cost the controls 6-10 %)",
+      "cand-depth12": "fails R1 (accel ratio within 0.9-1.1x the default's; trajectories rarely reach the cap); R3 holds",
+      "cand-warmup2000": "fails R1 (accel ratio about 0.35: the extra warmup gradients cost about as much as any mixing gain); R3b fails (controls pay 1,000 extra warmup transitions)"
+    }
+  },
+  "rules": "PREREGISTRATION.md and protocol.json committed before the first cell. Builds and a smoke run on a non-study posterior with a non-evidence seed are infrastructure. Every cell is reported; failures and timeouts are results; no reruns and no tuning after seeing results. A driver killed by the host may be relaunched; an interrupted cell without an artifact may be rerun once with the same seed, recorded as a deviation. Amendments only for cells not yet run, committed before them."
+}
