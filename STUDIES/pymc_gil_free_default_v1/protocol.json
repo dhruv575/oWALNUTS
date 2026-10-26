@@ -1,0 +1,52 @@
+{
+ "study": "pymc_gil_free_default_v1",
+ "ledger_id": "WP83",
+ "frozen": "2026-10-26, before the first evidence cell (PREREGISTRATION.md)",
+ "base_commit": "aa7160bd",
+ "question": "Should gil_free=True become from_pymc's default?",
+ "seeds": [8383101, 8383102, 8383103],
+ "models": ["eight", "hier", "logistic", "poisson", "ar1", "simplex_bounded", "data_dims_det", "initvals", "initvals_data", "potential", "student_t"],
+ "breadth_arms": [["default", 1], ["numba", 1], ["gilfree", 1], ["gilfree", 4]],
+ "arm_definitions": {
+  "default": "owalnuts.from_pymc(model) (PyTensor C backend, Python callable), threads=1",
+  "numba": "owalnuts.from_pymc(model, mode='NUMBA') (the same numba-compiled function gil_free wraps, as a Python callable), threads=1: the bit-identity control",
+  "gilfree": "owalnuts.from_pymc(model, gil_free=True) (numba cfunc, C ABI), threads 1 and 4"
+ },
+ "robustness": {"models": ["eight", "hier", "logistic"], "reps": 50, "threads": 4, "seed": 8383500,
+                "note": "50 separate child processes per model, each a full 4 x 1,000/1,000 gil_free run at threads=4 on the same seed; a fault is a nonzero exit, a timeout, or a status other than ok; a non-identical result is a draw hash differing from rep 1"},
+ "sampler": {"chains": 4, "warmup": 1000, "draws": 1000, "settings": "owalnuts.sample defaults (init=None = best-of-16)"},
+ "gates": {"max_rank_rhat": 1.01, "min_bulk_ess": 400, "min_tail_ess": 400, "sampling_divergences": 0},
+ "functionals": "every unconstrained coordinate (+ theta_1..8 for eight)",
+ "cell_timeout_seconds": 1800,
+ "order": "breadth: seeds outer, models in list order, the 4 arms rotated by (seed index + model index); then robustness: models outer, reps 1..50",
+ "metrics": {
+  "bit_identity": "sha256 of the (chains, draws, dim) retained draws; gilfree t1 vs numba t1 (same compiled function), gilfree t1 vs t4, gilfree t1 vs default",
+  "wall_ratio": "median over seeds of gilfree wall per gradient / default wall per gradient, both threads=1 (Rust-side wall / target calls); also gilfree t4 / default t1",
+  "agreement": "per seed: max over functionals of |mean_gilfree - mean_default| / sqrt(mcse_gilfree^2 + mcse_default^2)",
+  "gates": "cells passing R-hat <= 1.01, bulk/tail ESS >= 400, zero retained divergences"
+ },
+ "predictions": {
+  "P1": "gilfree t1 is bit-identical to numba t1 on every model and seed where both run (same compiled function)",
+  "P2": "gilfree is bit-identical at threads 1 and 4 on every model and seed",
+  "P3": "gilfree is NOT bit-identical to the default C backend on most models (identical on at most 3 of 10 runnable models): C and numba compile different elementwise code (WP47: equal on gauss100 only; WP78: unequal on eight and hier). The brief's expectation was 'identical'; this preregistration disagrees and records both",
+  "P4": "gilfree t1 / default t1 wall per gradient in [0.1, 0.9] on every runnable model",
+  "P5": "agreement: max |z| <= 5 on every seed of every model where both arms pass the gates",
+  "P6": "gates: gilfree passes at least as many cells as default on every model",
+  "P7": "errors: initvals_data fails under gilfree with NotImplementedError at construction (the documented PyMC >= 5.28 snapshot limitation) while the default runs; no other model errors under any arm",
+  "P8": "robustness: 0 faults and 0 non-identical results in 150 runs"
+ },
+ "decision_rule": {
+  "frozen": true,
+  "propose_default_iff": [
+   "R1: 0 models where gilfree errors (construction, sampling, fault or timeout) where the default succeeds, other than the known initval + pm.Data limitation, and that limitation fails closed with NotImplementedError before sampling and is documented with a fallback (from_pymc(model) at threads=1, or the gil_free=False switch)",
+   "R2: 0 models where gilfree differs where the default succeeds; 'differs' = (a) gilfree not bit-identical to numba on any seed, or (b) gilfree passes fewer gate cells than default, or (c) agreement max |z| > 5 on >= 2 of 3 seeds",
+   "R3: robustness 0 faults and 0 non-identical results"
+  ],
+  "note": "Bit identity with the C-backend default is reported but is not a rule clause: a default change from C to numba changes the draws for a given seed by construction, which the CHANGELOG would state. The rule decides a proposal only; no default is changed in this study. API compatibility (gilfree returns a CFuncTarget, not a callable; refresh= needs the callable transport) is recorded per cell and reported as a separate requirement for any default change."
+ },
+ "environment": {
+  "box": "lane 4 (cores 12-15) of the shared c7a.4xlarge, other lanes active; walls pinned, co-tenanted",
+  "venv": "the WP78 lane venv (~/lanes/python_callpath_linux_v1/venv: CPython 3.12.3, numpy 2.4.6, numba 0.67.0, pymc 5.28.5, pytensor 2.38.2), extension rebuilt by maturin develop --release from this study's clone at aa7160bd",
+  "files": "~/lanes/pymc_gil_free_default_v1/ (clone, logs, PyTensor compiledir, numba cache, TMPDIR)"
+ }
+}

@@ -1,0 +1,104 @@
++ . /home/ubuntu/lanes/pymc_gil_free_default_v1/env.sh
+++ export L=/home/ubuntu/lanes/pymc_gil_free_default_v1
+++ L=/home/ubuntu/lanes/pymc_gil_free_default_v1
+++ export S=/home/ubuntu/lanes/pymc_gil_free_default_v1/repo/STUDIES/pymc_gil_free_default_v1
+++ S=/home/ubuntu/lanes/pymc_gil_free_default_v1/repo/STUDIES/pymc_gil_free_default_v1
+++ export TMPDIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/tmp RAYON_NUM_THREADS=4 OMP_NUM_THREADS=1
+++ TMPDIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/tmp
+++ RAYON_NUM_THREADS=4
+++ OMP_NUM_THREADS=1
+++ export CARGO_TARGET_DIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/target
+++ CARGO_TARGET_DIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/target
+++ export PIP_CACHE_DIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/pip-cache
+++ PIP_CACHE_DIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/pip-cache
+++ export XDG_CACHE_HOME=/home/ubuntu/lanes/pymc_gil_free_default_v1/cache
+++ XDG_CACHE_HOME=/home/ubuntu/lanes/pymc_gil_free_default_v1/cache
+++ export NUMBA_CACHE_DIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/cache/numba
+++ NUMBA_CACHE_DIR=/home/ubuntu/lanes/pymc_gil_free_default_v1/cache/numba
+++ export PYTENSOR_FLAGS=compiledir=/home/ubuntu/lanes/pymc_gil_free_default_v1/cache/pytensor
+++ PYTENSOR_FLAGS=compiledir=/home/ubuntu/lanes/pymc_gil_free_default_v1/cache/pytensor
+++ export JAX_PLATFORMS=cpu
+++ JAX_PLATFORMS=cpu
+++ . /home/ubuntu/.cargo/env
++++ case ":${PATH}:" in
++++ export PATH=/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++++ PATH=/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+++ export PATH=/home/ubuntu/lanes/python_callpath_linux_v1/venv/bin:/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+++ PATH=/home/ubuntu/lanes/python_callpath_linux_v1/venv/bin:/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++ export VIRTUAL_ENV=/home/ubuntu/lanes/python_callpath_linux_v1/venv CARGO_BUILD_JOBS=4
++ VIRTUAL_ENV=/home/ubuntu/lanes/python_callpath_linux_v1/venv
++ CARGO_BUILD_JOBS=4
++ cd /home/ubuntu/lanes/pymc_gil_free_default_v1/repo/integrations/python
++ taskset -c 12-15 maturin develop --release -j 4
+🍹 Building a mixed python/rust project
+🐍 Found CPython 3.12 at /home/ubuntu/lanes/python_callpath_linux_v1/venv/bin/python
+🔗 Found pyo3 bindings with abi3-py3.10 support
+Ignoring arviz: markers 'extra == "arviz"' don't match your environment
+Ignoring jax: markers 'extra == "jax"' don't match your environment
+Ignoring numba: markers 'extra == "numba"' don't match your environment
+Ignoring pymc: markers 'extra == "pymc"' don't match your environment
+Ignoring bridgestan: markers 'extra == "stan"' don't match your environment
+Ignoring pytest: markers 'extra == "test"' don't match your environment
+Ignoring arviz: markers 'extra == "test"' don't match your environment
+Ignoring jax: markers 'extra == "test"' don't match your environment
+Ignoring torch: markers 'extra == "test"' don't match your environment
+Ignoring pymc: markers 'extra == "test"' don't match your environment
+Ignoring numba: markers 'extra == "test"' don't match your environment
+Ignoring bridgestan: markers 'extra == "test"' don't match your environment
+Ignoring torch: markers 'extra == "torch"' don't match your environment
+Requirement already satisfied: numpy>=1.24 in /home/ubuntu/lanes/python_callpath_linux_v1/venv/lib/python3.12/site-packages (2.4.6)
+   Compiling target-lexicon v0.13.5
+   Compiling python3-dll-a v0.2.15
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.189
+   Compiling libm v0.2.16
+   Compiling num-traits v0.2.19
+   Compiling cfg-if v1.0.4
+   Compiling getrandom v0.3.4
+   Compiling pyo3-build-config v0.28.3
+   Compiling crossbeam-utils v0.8.22
+   Compiling proc-macro2 v1.0.107
+   Compiling zerocopy v0.8.56
+   Compiling crossbeam-epoch v0.9.20
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling crossbeam-deque v0.8.7
+   Compiling pyo3-ffi v0.28.3
+   Compiling pyo3-macros-backend v0.28.3
+   Compiling rand_core v0.9.5
+   Compiling rayon-core v1.13.0
+   Compiling syn v2.0.119
+   Compiling matrixmultiply v0.3.11
+   Compiling zmij v1.0.23
+   Compiling heck v0.5.0
+   Compiling serde_core v1.0.229
+   Compiling pyo3 v0.28.3
+   Compiling serde_json v1.0.151
+   Compiling rawpointer v0.2.1
+   Compiling either v1.18.0
+   Compiling rayon v1.12.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling rand v0.9.5
+   Compiling rand_distr v0.5.1
+   Compiling numpy v0.28.0
+   Compiling num-integer v0.1.47
+   Compiling num-complex v0.4.6
+   Compiling itoa v1.0.18
+   Compiling once_cell v1.21.4
+   Compiling memchr v2.8.3
+   Compiling owalnuts v0.3.0 (/home/ubuntu/lanes/pymc_gil_free_default_v1/repo)
+   Compiling ndarray v0.17.2
+   Compiling pyo3-macros v0.28.3
+   Compiling libloading v0.8.9
+   Compiling rustc-hash v2.1.3
+   Compiling owalnuts-bridgestan v0.1.0 (/home/ubuntu/lanes/pymc_gil_free_default_v1/repo/integrations/bridgestan)
+   Compiling owalnuts-python v0.3.0 (/home/ubuntu/lanes/pymc_gil_free_default_v1/repo/integrations/python)
+    Finished `release` profile [optimized] target(s) in 2m 51s
+📦 Built wheel for abi3 Python ≥ 3.10 to /home/ubuntu/lanes/pymc_gil_free_default_v1/tmp/.tmpqRoHVp/owalnuts-0.3.0-cp310-abi3-linux_x86_64.whl
+✏️ Setting installed package as editable
+🛠 Installed owalnuts-0.3.0
++ taskset -c 12-15 python -I -c 'import owalnuts; print(owalnuts.__file__)'
+/home/ubuntu/lanes/pymc_gil_free_default_v1/repo/integrations/python/python/owalnuts/__init__.py
++ echo build-done
+build-done
