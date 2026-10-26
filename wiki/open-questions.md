@@ -238,8 +238,18 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     decomposed it on the fixed-16: the lead is sampling gradients per
     retained draw from a smaller effective step (sblrc raw step 0.10 vs 0.66,
     installed inverse mass about 11x the posterior variance on the betas),
-    not warmup and not ESS per draw, where oWALNUTS leads. WP81 tests the
-    diagonal metric regularisation as the cause.
+    not warmup and not ESS per draw, where oWALNUTS leads. WP81
+    (`STUDIES/diagonal_metric_shrinkage_v1`) tested the diagonal metric
+    regularisation as the cause: Stan's 1e-3 anchor binds only on sblrc
+    (five coordinates at up to 12x) and diamonds (one at 4x); on the other
+    15 models the installed metric is 0.9–1.1x the posterior variance, and
+    nutpie's own metric sits *below* the variance (0.01–1.0x) yet its raw
+    step is 1.3–19x larger on every model. Two research regularisations
+    (`StanLowAnchor`, `StanCoordinateCap`) gain 1.7–1.8x on sblrc alone,
+    lose on earnings and fail the rule (1.025x / 1.017x, LOMO below 1), so
+    `Stan` stays. What remains open is the step adaptation (the
+    dual-averaging target statistic) and the metric's overall scale, not
+    coordinate-wise shrinkage.
 14. **Fixed `delta = 2`** (WP34, WP37A, WP49, WP53): WP37A did not
     qualify it (funnel gates F3 and F4 failed). As WP49's control it is
     1.141x over posteriordb with 43 gates (1.067x without two seed

@@ -41,6 +41,13 @@ architecture and operating system (see the `walnutpie` module documentation).
 - Study-only Cargo feature `candidate-levels10` (off): ten refinement levels
   in `sampler::Tuning::default()` for WP68. Not qualified as a default; eight
   levels stay.
+- Research-only `DiagonalMetricRegularization::StanLowAnchor` and
+  `StanCoordinateCap` (feature `research`, WP81,
+  `STUDIES/diagonal_metric_shrinkage_v1`): Stan's rule with its `1e-3`
+  anchor lowered to the window's smallest variance, or capped per
+  coordinate at that coordinate's variance. Neither meets the rule (1.025x,
+  1.017x; leave-one-model-out below 1); `Stan` stays the default and is
+  bit-identical (the prior terms are now computed by one shared helper).
 
 ### Changed
 
@@ -96,6 +103,12 @@ architecture and operating system (see the `walnutpie` module documentation).
 - nutpie gap decomposition (WP80): the lead is sampling gradients per draw
   from a smaller effective step (installed inverse mass far from the
   posterior variance on some coordinates), not warmup and not ESS per draw.
+- Diagonal metric shrinkage (WP81): Stan's `1e-3` anchor over-states the
+  variance only on sblrc (five coordinates, up to 12x) and diamonds (one,
+  4x); elsewhere the installed metric is 0.9–1.1x the posterior variance,
+  while nutpie's metric sits below the variance and still steps 1.3–19x
+  larger. The step gap is not the regularisation; the next candidates are
+  the step adaptation statistic and the metric's overall scale.
 - Warmup spend (WP73): not the nutpie gap (median warmup shares 0.52 /
   0.51 / 0.52 for oWALNUTS / CmdStan / nutpie). A 500-transition warmup
   gave 1.32x ESS per total gradient with no gate lost; WP77 confirms on

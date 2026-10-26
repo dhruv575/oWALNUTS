@@ -993,3 +993,18 @@ provenance.
   centred model alone and pays elsewhere:
   [`STUDIES/centered_eight_schools_refinement_v1`](STUDIES/centered_eight_schools_refinement_v1/README.md)
   (WP82).
+- [E49] Diagonal metric shrinkage (Linux, house 17 x 3 seeds, 204 cells
+  plus 30 funnel runs): the installed inverse mass is 0.9–1.1x the
+  posterior variance on every model except sblrc (five coordinates at up to
+  12.2x) and diamonds (one at 4.3x), so Stan's 1e-3 anchor explains the
+  step gap only where it binds; nutpie's own metric sits below the variance
+  (0.01–1.0x, all 66 accel_gp coordinates below 0.39x) yet its raw step is
+  1.3–19x larger on all 17 models. Neither research regularisation
+  (`DiagonalMetricRegularization::StanLowAnchor`, `StanCoordinateCap`,
+  both off) meets the rule: 1.025x [0.997, 1.378] and 1.017x [0.990,
+  1.422], per-model median 1.000, leave-one-model-out minimum 0.994 and
+  0.982; each is bit-identical to the default on 27 of 51 cells, gains
+  1.7–1.8x on sblrc and loses on earnings (0.73x / 0.88x). Gates 41 vs 40,
+  funnel within one s.e., fingerprints held. `Stan` stays:
+  [`STUDIES/diagonal_metric_shrinkage_v1`](STUDIES/diagonal_metric_shrinkage_v1/README.md)
+  (WP81).
