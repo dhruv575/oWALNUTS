@@ -246,3 +246,14 @@ level and could break P4 (rust ≡ cfunc) for a harness reason. Fix:
 `serde_json` with `features = ["float_roundtrip"]` in `rust/Cargo.toml`.
 No prediction, rule or other code changes. The setup check is repeated on
 the rebuilt binary before the smoke.
+
+## Smoke outcome (disclosed; committed while the evidence run was starting, changes nothing)
+
+The smoke (eight, seed 1, 4 x 50/50) completed 18/20 steps. The two `rust`
+sampler cells failed in post-processing because the Rust harness's warmup
+and draw counts are fixed at the protocol's 1,000/1,000 and the smoke
+shortens only the Python side. That path was then checked once at full
+length on seed 1 (`eight`, threads=4) outside `artifacts/`: it completed
+(64 start-selection calls counted separately). The smoke and that cell were
+deleted. Their numbers were seen while checking the plumbing and are not
+evidence; no prediction, rule or code changed after seeing them.
