@@ -290,20 +290,10 @@ def run_pdb(cid: str, model: str, arm: str, seed: int) -> None:
     if ok(c):
         log(f"{cid} [{time.time() - t0:.1f}s] ok grads {c['gradients_total']} minbulk {c['min_bulk_ess']:.0f} mintail {c['min_tail_ess']:.0f} "
             f"rhat {c['max_rank_rhat']:.4f} div {c['divergences']} |z| {c['max_abs_z'] if c['max_abs_z'] is None else round(c['max_abs_z'], 2)} "
-            f"passed {c['passed']} ratio99 {min(c['step_ratio_99']):.3g} fired {c['restarted_chains']} warned {c['chain_warning_chains']} hash {c['draw_hash']}")
+            f"passed {c['passed']} ratio99 {min([r for r in c['step_ratio_99'] if r is not None], default=float('nan')):.3g} "
+            f"fired {c['restarted_chains']} warned {c['chain_warning_chains']} hash {c['draw_hash']}")
     else:
         log(f"{cid} [{time.time() - t0:.1f}s] {c.get('status')}: {str(c.get('error', ''))[:300]}")
-
-
-def warning_chains(warnings: list[str]) -> list[int]:
-    """Chains named by the library's chain warnings (`ChainWarning::to_string`: '... chain <i> ...')."""
-    import re
-    out = set()
-    for w in warnings:
-        m = re.search(r"\bchain (\d+)\b", w)
-        if m:
-            out.add(int(m.group(1)))
-    return sorted(out)
 
 
 def score_pdb(cid: str, model: str, arm: str, seed: int, o: dict) -> dict:
@@ -364,7 +354,8 @@ def score_pdb(cid: str, model: str, arm: str, seed: int, o: dict) -> dict:
         "draw_hash": o["draw_hash"], "chain_draw_hashes": [c["draw_hash"] for c in chains],
         "chain_total_target_calls": [c["total_target_calls"] for c in chains],
         "target_calls_total": o["target_calls_total"],
-        "chain_warnings": o.get("chain_warnings", []), "chain_warning_chains": warning_chains(o.get("chain_warnings", [])),
+        "chain_warnings": o.get("chain_warnings", []), "chain_warning_chains": sorted(set(o.get("chain_warning_chains", []))),
+        "chain_warning_kinds": o.get("chain_warning_kinds", []),
         "trapped_chain_checks": checks,
         "restarted_chains": [i for i, cs in enumerate(checks) if any(x["restarted"] for x in cs)],
         "step_at_transition_99": steps99,
@@ -430,12 +421,13 @@ def run(part: str | None) -> None:
 def smoke() -> None:
     """The diagnostic seed (protocol.json `smoke.seed`, never evidence): one pdb pair (kidiq, reference tier), one
     gates-only defaults cell (GLMM_Poisson), one funnel pair, one SV pair, then the analysis over them."""
-    global CELLS, TELEM, DRAWS
+    global ART, CELLS, TELEM, DRAWS
     CELLS, TELEM, DRAWS = ART / "smoke" / "cells", ART / "smoke" / "telemetry", ART / "smoke" / "draws"
     s = int(PROTOCOL["smoke"]["seed"])
     for arm in ("defaults", GUARD):
         run_pdb(f"P-kidiq-kidscore_momhsiq-{arm}-{s}", "kidiq-kidscore_momhsiq", arm, s)
-    run_pdb(f"P-GLMM_Poisson_data-GLMM_Poisson_model-defaults-{s}", "GLMM_Poisson_data-GLMM_Poisson_model", "defaults", s)
+    for arm in ("defaults", GUARD):
+        run_pdb(f"P-GLMM_Poisson_data-GLMM_Poisson_model-{arm}-{s}", "GLMM_Poisson_data-GLMM_Poisson_model", arm, s)
     for arm in ("diag", GUARD):
         run_funnel(f"F-{arm}-{s}", arm, s)
     for arm in ("defaults", GUARD):
@@ -447,6 +439,13 @@ def smoke() -> None:
     log(f"smoke funnel identity: {a.get('draws_fnv')} == {b.get('draws_fnv')} -> {a.get('draws_fnv') == b.get('draws_fnv')}")
     a, b = load(f"S-defaults-{s}"), load(f"S-{GUARD}-{s}")
     log(f"smoke sv identity: {a.get('draw_hash')} == {b.get('draw_hash')} -> {a.get('draw_hash') == b.get('draw_hash')}; trapped {sv_trapped(a)} / {sv_trapped(b)}")
+    # the analysis code over the smoke cells: the protocol narrowed to the smoke seed and the two smoke models
+    ART = ART / "smoke"
+    for b in PROTOCOL["blocks"]:
+        b["seeds"] = [s]
+        if b["kind"] == "pdb":
+            b["models"] = ["kidiq-kidscore_momhsiq", "GLMM_Poisson_data-GLMM_Poisson_model"]
+    analyze({"smoke": True})
 
 
 # --------------------------------------------------------------------------- analysis
@@ -698,8 +697,9 @@ def analyze(env: dict | None = None) -> None:
     rules["R8_library_integrity"]["held"] = all(bool(v) for v in rules["R8_library_integrity"].values())
     failed = [k.split("_")[0] for k, r in rules.items() if not r["held"]]
     verdict = "QUALIFIES: every preregistered rule holds; proposed for the flip" if not failed else "DOES NOT QUALIFY (failed: " + ", ".join(failed) + "); stays research"
+    wall_ratios = [v["wall_per_gradient_ratio"] for v in per_model.values() if v["wall_per_gradient_ratio"] == v["wall_per_gradient_ratio"]]
     reported = {"max_abs_z_passing_guard": max(hz) if hz else None, "models_below_0.9": below,
-                "wall_per_gradient_guard_over_defaults_geomean": geomean([v["wall_per_gradient_ratio"] for v in per_model.values() if v["wall_per_gradient_ratio"] == v["wall_per_gradient_ratio"]]) if per_model else None,
+                "wall_per_gradient_guard_over_defaults_geomean": geomean(wall_ratios) if wall_ratios else None,
                 "part1_firings": len([f for f in firings if f["block"] == "P"]), "part2_firings": len([f for f in firings if f["block"] == "F"]),
                 "part3_firings": len(sv["guard"]["fired"]), "sv_median_wall": {k: v["median_wall"] for k, v in sv.items()},
                 "funnel_diag": funnel["diag"]}

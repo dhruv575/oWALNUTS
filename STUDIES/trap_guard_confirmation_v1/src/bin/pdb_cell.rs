@@ -17,7 +17,9 @@
 //!
 //! Changes from WP89 (for the WP90 firing audit, R7): each chain also records the warmup-end
 //! and retained-window (sampling-end) step, median log density and log-density IQR
-//! (`RunTelemetry::warmup_end` / `sampling_end`); the schema name changed. Nothing else: the
+//! (`RunTelemetry::warmup_end` / `sampling_end`); the cell records the chain index and variant of
+//! every chain warning (`chain_warning_chains`, `chain_warning_kinds`; the display string carries
+//! the numbers but not the index); the schema name changed. Nothing else: the
 //! check record already carried every chain's scored step, the median over chains and the
 //! scored transition's log density (`abandoned_log_density`, recorded for unfired chains too).
 //!
@@ -385,6 +387,14 @@ fn run(
         .iter()
         .map(|w| w.to_string())
         .collect();
+    // WP90: the chain each warning names (`Display` carries the numbers, not the index) and the
+    // variant, for the firing audit's T1.
+    let warning_chains: Vec<usize> = posterior.chain_warnings().iter().map(|w| w.chain()).collect();
+    let warning_kinds: Vec<String> = posterior
+        .chain_warnings()
+        .iter()
+        .map(|w| format!("{w:?}").split([' ', '{']).next().unwrap_or("").to_string())
+        .collect();
     let payload = json!({
         "schema": "trap-guard-confirmation-v1-pdb-cell",
         "sampler": format!("owalnuts-{arm}"),
@@ -413,6 +423,8 @@ fn run(
         "target_calls_total": target.calls(),
         "recoverable_failures_total": target.recoverable_failures(),
         "chain_warnings": warnings,
+        "chain_warning_chains": warning_chains,
+        "chain_warning_kinds": warning_kinds,
         "draw_hash": all_hash.hex(),
         "chains_data": chains,
         "algorithm_revision": posterior.algorithm_revision(),
