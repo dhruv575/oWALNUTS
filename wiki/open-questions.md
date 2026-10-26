@@ -338,6 +338,21 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     those three models (more windows, a margin around the thresholds, or a
     chain-pooled fit) before a second confirmation. Above 256 dimensions
     the flag is the plain diagonal run.
+22. **A continuation API for online posteriors** (WP84,
+    `STUDIES/online_sv_quote_v1`). The session API serves one fixed target
+    of fixed dimension: one warmup, then draws up to a budget. It cannot
+    take new data, a new dimension, or injected positions, step and metric.
+    WP84 built the warm path in the study harness instead (last positions,
+    step and diagonal metric carried over, new latent appended at 0 with
+    unit mass, 50–200 transitions per chain) and measured 20–80 ms per
+    refresh at N = 250 with no drift over 100 ticks, but 4 x 50–200 draws
+    do not reach R-hat 1.01, and the frozen quantile bar (3 reference
+    MCSE) is nearly unattainable even for full refits (9–14 %). Open: (a) a
+    library `continue`/retarget entry point that carries chain state across
+    targets; (b) an accuracy bar suited to a warm refresh (the arm's own
+    MCSE, or pooled chains) before any "real-time" claim; (c) the
+    result-size limit, which the N = 1,000 reference (4 x 22,000 draws x
+    1,004 dimensions) exceeded.
 
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the

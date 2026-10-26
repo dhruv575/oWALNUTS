@@ -1036,3 +1036,22 @@ provenance.
   opt-in:
   [`STUDIES/metric_autoselect_confirmation_v1`](STUDIES/metric_autoselect_confirmation_v1/README.md)
   (WP85).
+- [E52] Online stochastic-volatility quote benchmark (Linux, 4 pinned
+  cores, simulated t5 / AR(1) log-vol data, one return per tick for 100
+  ticks, N = 250 and 1,000, 3 seeds, 32 cells): a warm continuation
+  (each chain's last position, step and diagonal metric carried over, the
+  new latent appended, 50 or 200 transitions per chain, built in the study
+  harness because the session API cannot be retargeted) refreshes the
+  posterior in 20 ms / 80 ms median at N = 250 (0.27 s / 1.07 s at
+  N = 1,000) against 1.1 s for a nutpie refit, 3.1 s for an oWALNUTS refit
+  and 6.5 s for CmdStan (4.5 s / 16.7 s / 42 s at N = 1,000); it stayed
+  calibrated over 100 ticks (90.1–90.3 % of warm draws inside the
+  reference 90 % interval, early-vs-late drift at most 0.003, 6/6 runs;
+  coverage of the true log-vol 85–87 % against 87–90 % for refits; 0
+  divergences anywhere). The frozen accuracy bar (R-hat ≤ 1.01 and
+  quantiles within 3 reference MCSE) is met on 0–2 % of warm ticks and
+  9–14 % of refit ticks, so "real-time" is not claimed; the N = 1,000
+  reference (4 x 22,000 draws x 1,004 dimensions) failed every tick at the
+  result-size limit and was not rerun:
+  [`STUDIES/online_sv_quote_v1`](STUDIES/online_sv_quote_v1/README.md)
+  (WP84).

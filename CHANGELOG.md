@@ -122,6 +122,15 @@ architecture and operating system (see the `walnutpie` module documentation).
 - nutpie gap decomposition (WP80): the lead is sampling gradients per draw
   from a smaller effective step (installed inverse mass far from the
   posterior variance on some coordinates), not warmup and not ESS per draw.
+- Online stochastic-volatility quote benchmark (WP84): a harness-level warm
+  continuation (frozen step and metric, 50–200 transitions per chain)
+  refreshes a 250-return SV posterior in 20–80 ms median and stays
+  calibrated over 100 ticks, against 1 s for a nutpie refit and 3–6 s for
+  oWALNUTS and CmdStan refits; it does not reach the frozen R-hat / MCSE
+  accuracy bar, so it is a fast approximate refresh, not a validated
+  real-time posterior. The session API serves one fixed target and cannot
+  be retargeted; a library continuation API is the open item. The
+  N = 1,000 reference exceeded the result-size limit.
 - Dense auto-selection default-flip confirmation (WP85): not qualified. The
   rule is safe and 2.0x faster per gradient where it goes dense, but on
   kidiq, garch11 and lotka_volterra the seed decides the branch (linearity
