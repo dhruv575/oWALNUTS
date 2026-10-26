@@ -328,6 +328,50 @@ The callback must be thread-safe, deterministic, write every gradient
 element on finite returns, and never raise across the ABI (hence
 `error_model="numpy"` for numba).
 
+## Warm continuation
+
+`start_session` serves one fixed target of fixed dimension. When the target
+changes (a new observation, a new latent coordinate), `sample_warm` refreshes
+the posterior from a carried state instead of a refit (the WP84 warm path,
+`STUDIES/online_sv_quote_v1`, as a library call since WP87): per chain its
+last draw, its adapted step size and its adapted diagonal mass, run for
+`draws` transitions with no warmup and no adaptation, each chain on its own
+frozen step and metric. Chain `c` is bit-identical to the single-chain
+`sample(target, dim, init=positions[c:c+1], chains=1, warmup=0, draws=k,
+seed=seed + c, adaptation=None, mass=mass_diagonal[c],
+tuning=replace(tuning, step_size=step_sizes[c]))`
+(`tests/test_warm_continuation.py`). It does not re-adapt, it carries
+diagonal metrics only (a structured-mass result raises), the fill of new
+coordinates is yours to choose, and the library does not validate that `k`
+draws reach any accuracy: in WP84, 50–200 draws per chain stayed calibrated
+over 100 ticks (20–80 ms per tick on a 250-return SV model) but did not reach
+the R-hat 1.01 / reference-MCSE bar. `ContinuationChunk.warm_state()` gives
+the same state from a session.
+
+```python
+import numpy as np, owalnuts
+
+def make_target(y):                       # dim = 1 + len(y): [mu, z_1..z_n]
+    n = len(y)
+    def logp_and_grad(q):
+        mu, z = q[0], q[1:]
+        lp = -0.5 * mu * mu - 0.5 * float(z @ z) - 0.5 * float(((y - mu - z) ** 2).sum())
+        r = y - mu - z
+        return lp, np.concatenate([[-mu + r.sum()], -z + r])
+    return logp_and_grad
+
+y = np.random.default_rng(0).normal(size=250)
+result = owalnuts.sample(make_target(y), 1 + len(y), warmup=1000, draws=1000, seed=1)
+state = result.warm_state()               # positions (4, 251), step_sizes (4,), mass_diagonal (4, 251)
+
+for tick, y_new in enumerate(np.random.default_rng(1).normal(size=100)):
+    y = np.append(y, y_new)
+    state = state.extend_to(1 + len(y), position=0.0, mass=1.0)   # new latent: prior median, prior variance
+    refreshed = owalnuts.sample_warm(make_target(y), state, draws=100, seed=1000 + tick)
+    state = refreshed.warm_state()        # the next tick starts here
+    quote = refreshed.samples[:, :, 0].mean()
+```
+
 ## Example: stochastic volatility on the top-5 cryptocurrencies
 
 `examples/crypto_sv.ipynb` (executed notebook) and `examples/crypto_sv.py`

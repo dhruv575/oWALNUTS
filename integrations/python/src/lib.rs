@@ -24,7 +24,7 @@ use owalnuts::diagnostics::{ChainDisagreement, ChainWarning, ParameterSummary};
 use owalnuts::sampler::{
     Adaptation, CandidateStarts, DEFAULT_CHAIN_RESCUE, DEFAULT_INIT_CANDIDATES,
     DEFAULT_METRIC_REGULARIZATION, DEFAULT_WARMUP_EXHAUSTION, Init, Limits, Metric, Posterior,
-    Sampler, StartSelection, Tuning, candidate_starts, uniform_starts,
+    Sampler, StartSelection, Tuning, WarmChain, WarmState, candidate_starts, uniform_starts,
 };
 use owalnuts::walnutpie::{
     ALGORITHM_REVISION, CONSERVATIVE_MAX_TARGET_EVALUATIONS, ChainOutput, ChainWindowSummary,
@@ -1301,6 +1301,148 @@ fn sample_cfunc<'py>(
     output_dict(py, output.inner(), wall, calls, 0, 0.0)
 }
 
+// ── Warm continuation ────────────────────────────────────────────────────
+
+/// Build the `WarmState` of `Sampler::run_warm` from the Python arrays:
+/// positions `(chains, dim)`, step sizes `(chains,)`, mass diagonals
+/// `(chains, dim)`. Validation (finite, positive, consistent shapes) is the
+/// sampler's.
+fn parse_warm_state(
+    positions: PyReadonlyArray2<'_, f64>,
+    step_sizes: PyReadonlyArray1<'_, f64>,
+    mass_diagonals: PyReadonlyArray2<'_, f64>,
+) -> PyResult<WarmState> {
+    let positions = positions.as_array();
+    let masses = mass_diagonals.as_array();
+    let steps = step_sizes.as_slice()?;
+    if positions.nrows() != steps.len() || masses.nrows() != steps.len() {
+        return Err(value_error(format!(
+            "positions ({}), step_sizes ({}) and mass_diagonals ({}) must agree on the chain count",
+            positions.nrows(),
+            steps.len(),
+            masses.nrows()
+        )));
+    }
+    if positions.ncols() != masses.ncols() {
+        return Err(value_error(format!(
+            "positions ({} columns) and mass_diagonals ({} columns) must agree on the dimension",
+            positions.ncols(),
+            masses.ncols()
+        )));
+    }
+    let chains = positions
+        .outer_iter()
+        .zip(masses.outer_iter())
+        .zip(steps)
+        .map(|((position, mass), step)| WarmChain {
+            position: position.to_vec(),
+            step_size: *step,
+            mass_diagonal: mass.to_vec(),
+        })
+        .collect();
+    WarmState::new(chains).map_err(facade_error)
+}
+
+/// Warm continuation of a Python callable target: `Sampler::run_warm` with
+/// the carried per-chain positions, steps and diagonal masses. `config` is
+/// the ordinary run configuration (its warmup, mass and adaptation entries
+/// are ignored by the warm path).
+#[pyfunction]
+#[pyo3(signature = (target, positions, step_sizes, mass_diagonals, config, nonfinite="zero_density"))]
+fn sample_warm_callable<'py>(
+    py: Python<'py>,
+    target: Py<PyAny>,
+    positions: PyReadonlyArray2<'py, f64>,
+    step_sizes: PyReadonlyArray1<'py, f64>,
+    mass_diagonals: PyReadonlyArray2<'py, f64>,
+    config: &Bound<'py, PyDict>,
+    nonfinite: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let state = parse_warm_state(positions, step_sizes, mass_diagonals)?;
+    let run = parse_run(config, None)?;
+    let py_target = PyTarget {
+        callable: target,
+        dimension: state.dimension(),
+        policy: NonFinitePolicy::parse(nonfinite)?,
+        calls: AtomicUsize::new(0),
+        recoverable: AtomicUsize::new(0),
+        attached_nanos: AtomicU64::new(0),
+        last_fatal: Mutex::new(None),
+        pinned: Some(std::sync::Arc::new(AtomicUsize::new(0))),
+    };
+    let started = Instant::now();
+    let output = py
+        .detach(|| {
+            let output = run.sampler.run_warm(&py_target, &state);
+            if let Some(live) = &py_target.pinned {
+                wait_for_pinned_thread_states(live, std::time::Duration::from_secs(10));
+            }
+            output
+        })
+        .map_err(|e| py_target.fatal_error(e))?;
+    let wall = started.elapsed().as_secs_f64();
+    output_dict(
+        py,
+        output.inner(),
+        wall,
+        py_target.calls.load(Ordering::Relaxed),
+        py_target.recoverable.load(Ordering::Relaxed),
+        py_target.attached_nanos.load(Ordering::Relaxed) as f64 * 1e-9,
+    )
+}
+
+/// Warm continuation of a compiled C-ABI target (`from_cfunc`); see
+/// `sample_warm_callable`.
+#[pyfunction]
+#[pyo3(signature = (address, dimension, positions, step_sizes, mass_diagonals, config, user_data=0, parameter_names=None))]
+#[allow(clippy::too_many_arguments)]
+fn sample_warm_cfunc<'py>(
+    py: Python<'py>,
+    address: usize,
+    dimension: usize,
+    positions: PyReadonlyArray2<'py, f64>,
+    step_sizes: PyReadonlyArray1<'py, f64>,
+    mass_diagonals: PyReadonlyArray2<'py, f64>,
+    config: &Bound<'py, PyDict>,
+    user_data: usize,
+    parameter_names: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    if address == 0 {
+        return Err(value_error("address must be a nonzero cfunc address"));
+    }
+    let state = parse_warm_state(positions, step_sizes, mass_diagonals)?;
+    if state.dimension() != dimension {
+        return Err(value_error(format!(
+            "warm state dimension {} must match the cfunc dimension {dimension}",
+            state.dimension()
+        )));
+    }
+    let run = parse_run(config, None)?;
+    // SAFETY: as in `sample_cfunc`: the caller passes the address of a
+    // compiled callback with the documented `RawTargetFn` ABI and keeps it
+    // alive for the whole call; the rest is asserted by `RawTarget::new`.
+    let function: RawTargetFn = unsafe { std::mem::transmute::<usize, RawTargetFn>(address) };
+    // SAFETY: thread-safety, reentrancy, determinism, buffer discipline, and
+    // `user_data` validity are the documented `from_cfunc` contract.
+    let mut target = unsafe {
+        RawTarget::new(
+            nonzero(dimension, "dimension")?,
+            function,
+            user_data as *mut core::ffi::c_void,
+        )
+    };
+    if let Some(names) = parameter_names {
+        target = target.with_parameter_names(names).map_err(facade_error)?;
+    }
+    let started = Instant::now();
+    let output = py
+        .detach(|| run.sampler.run_warm(&target, &state))
+        .map_err(facade_error)?;
+    let wall = started.elapsed().as_secs_f64();
+    let calls = output.total_target_calls();
+    output_dict(py, output.inner(), wall, calls, 0, 0.0)
+}
+
 // ── BridgeStan (feature `stan`) ──────────────────────────────────────────
 
 /// Stan models compiled by the `bridgestan` Python package, loaded through
@@ -2068,6 +2210,8 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(continuation::start_cfunc_session, m)?)?;
     m.add_class::<continuation::CFuncSession>()?;
     m.add_function(wrap_pyfunction!(sample_callable, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_warm_callable, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_warm_cfunc, m)?)?;
     m.add_function(wrap_pyfunction!(preflight_callable, m)?)?;
     m.add_function(wrap_pyfunction!(sample_eight_schools, m)?)?;
     m.add_function(wrap_pyfunction!(sample_local_level, m)?)?;

@@ -165,6 +165,29 @@ Chains run in parallel on up to `threads` worker threads (WP45, [E24]):
   (`arK`) and is not unloaded on drop. macOS, aarch64 and Windows multi-worker
   dispatch remain unqualified.
 
+## Warm continuation
+
+`Sampler::start_session` serves one fixed target of fixed dimension: one
+`adapt()`, then `draw(n)` chunks. For a posterior that must be refreshed
+when the target changes (new data, a new latent coordinate), the warm path
+of WP84 ([E52]) is a library call since WP87: `Posterior::warm_state()` (or
+`SessionChunk::warm_state()`) carries each chain's last position, its
+adapted step size and its adapted diagonal mass; `WarmState::extend_to(n,
+0.0, 1.0)` appends coordinates for a larger target; and
+`Sampler::new().draws(k).seed(s).run_warm(&new_target, &state)` runs `k`
+transitions per chain with no warmup, no adaptation, each chain on its own
+frozen step and metric (chain `c` is bit-identical to the single-chain
+`run` with seed `s + c`, `Metric::fixed_diagonal`, `Adaptation::None` and
+`Tuning::step_size`; `tests/warm_continuation.rs`). The result is an ordinary
+`Posterior` whose `warm_state()` is the next tick's state. It does not
+re-adapt, it carries identity/diagonal metrics only (dense and structured
+runs error), the fill of new coordinates is the caller's decision, and the
+library does not validate that `k` draws refresh the posterior to any
+accuracy: on the 250-return SV model of WP84, 50–200 draws per chain stayed
+calibrated over 100 ticks (20–80 ms per tick) but did not reach the R-hat
+1.01 / reference-MCSE bar. Python: `result.warm_state()`,
+`state.extend_to(dim)`, `owalnuts.sample_warm(target, state, draws=k, seed=s)`.
+
 ## Where it shines
 
 Every number below is from a preregistered, checksummed study in

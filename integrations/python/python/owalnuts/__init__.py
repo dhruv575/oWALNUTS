@@ -128,6 +128,71 @@ class Adaptation:
     metric_regularization: str | None = None
 
 
+@dataclass(frozen=True)
+class WarmState:
+    """Carried sampler state for a warm continuation (``sample_warm``): per
+    chain, a position, a step size and a diagonal mass, all of one
+    dimension (``owalnuts::sampler::WarmState`` in Rust).
+
+    ``positions`` is ``(chains, dim)``, ``step_sizes`` is ``(chains,)`` and
+    ``mass_diagonal`` is ``(chains, dim)``: the momentum covariance ``M`` in
+    the library's convention (what ``chains[c]["metadata"]["mass_diagonal"]``
+    reports and what ``sample(mass=...)`` takes; warmup sets it to a
+    regularised reciprocal posterior variance). Obtain it from
+    ``SampleResult.warm_state()`` or ``ContinuationChunk.warm_state()``; grow
+    it onto a larger target with ``extend_to``.
+    """
+
+    positions: np.ndarray
+    step_sizes: np.ndarray
+    mass_diagonal: np.ndarray
+
+    def __post_init__(self) -> None:
+        positions = np.ascontiguousarray(self.positions, dtype=np.float64)
+        step_sizes = np.ascontiguousarray(self.step_sizes, dtype=np.float64)
+        mass = np.ascontiguousarray(self.mass_diagonal, dtype=np.float64)
+        if positions.ndim != 2 or positions.shape[0] == 0 or positions.shape[1] == 0:
+            raise ValueError("positions must be a nonempty (chains, dim) array")
+        chains, dim = positions.shape
+        if step_sizes.shape != (chains,):
+            raise ValueError(f"step_sizes must have shape ({chains},); got {step_sizes.shape}")
+        if mass.shape != (chains, dim):
+            raise ValueError(f"mass_diagonal must have shape ({chains}, {dim}); got {mass.shape}")
+        if not np.isfinite(positions).all():
+            raise ValueError("positions must be finite")
+        if not (np.isfinite(step_sizes).all() and (step_sizes > 0).all()):
+            raise ValueError("step_sizes must be finite and positive")
+        if not (np.isfinite(mass).all() and (mass > 0).all()):
+            raise ValueError("mass_diagonal entries must be finite and positive")
+        object.__setattr__(self, "positions", positions)
+        object.__setattr__(self, "step_sizes", step_sizes)
+        object.__setattr__(self, "mass_diagonal", mass)
+
+    @property
+    def chains(self) -> int:
+        return int(self.positions.shape[0])
+
+    @property
+    def dim(self) -> int:
+        return int(self.positions.shape[1])
+
+    def extend_to(self, dim: int, position: float = 0.0, mass: float = 1.0) -> "WarmState":
+        """Grow every chain to ``dim`` by appending coordinates at the end,
+        each at ``position`` with mass ``mass`` (the WP84 rule for a new
+        latent: its prior median 0 and prior variance 1). Step sizes are
+        unchanged; ``dim`` must be at least the current dimension. Whether
+        the fill is a sensible start is the caller's decision."""
+        dim = int(dim)
+        if dim < self.dim:
+            raise ValueError(f"cannot extend a warm state of dimension {self.dim} to the smaller dimension {dim}")
+        extra = dim - self.dim
+        return WarmState(
+            positions=np.concatenate([self.positions, np.full((self.chains, extra), float(position))], axis=1),
+            step_sizes=self.step_sizes.copy(),
+            mass_diagonal=np.concatenate([self.mass_diagonal, np.full((self.chains, extra), float(mass))], axis=1),
+        )
+
+
 @dataclass
 class SampleResult:
     samples: np.ndarray  # (chains, draws, dim)
@@ -170,6 +235,22 @@ class SampleResult:
     @property
     def final_max_error(self) -> np.ndarray:
         return np.array([c["metadata"]["final_max_error"] for c in self.chains])
+
+    def warm_state(self) -> "WarmState":
+        """The state a warm continuation (``sample_warm``) starts from: per
+        chain, its last retained draw, its final step size and its final
+        diagonal mass (``Posterior::warm_state`` in Rust). Raises
+        ``ValueError`` for a structured-mass run, whose metric is not a
+        diagonal."""
+        if isinstance(self.config.get("mass"), list):
+            raise ValueError("warm continuation carries identity or diagonal metrics only; this run used a structured mass")
+        if self.samples.ndim != 3 or self.samples.shape[1] == 0:
+            raise ValueError("the run has no retained draws")
+        return WarmState(
+            positions=np.ascontiguousarray(self.samples[:, -1, :], dtype=np.float64),
+            step_sizes=self.final_step_size.astype(np.float64),
+            mass_diagonal=np.stack([np.asarray(c["metadata"]["mass_diagonal"], dtype=np.float64) for c in self.chains]),
+        )
 
     def to_inferencedata(self, var_names: Sequence[str] | None = None, warmup: int | None = None):
         return to_inferencedata(self, var_names=var_names, warmup=warmup)
@@ -761,6 +842,19 @@ class ContinuationChunk:
     initialization_target_calls: int
     wall_seconds: float
 
+    def warm_state(self) -> "WarmState":
+        """The warm state at the end of this chunk: per chain, the chunk's
+        last retained draw, the session's step size and diagonal mass
+        (``SessionChunk::warm_state`` in Rust). Raises ``ValueError`` on a
+        warmup chunk, which has no retained draws."""
+        if self.samples.ndim != 3 or self.samples.shape[1] == 0:
+            raise ValueError("the chunk has no retained draws (a warmup chunk?)")
+        return WarmState(
+            positions=np.ascontiguousarray(self.samples[:, -1, :], dtype=np.float64),
+            step_sizes=np.array([m["final_step_size"] for m in self.metadata], dtype=np.float64),
+            mass_diagonal=np.stack([np.asarray(m["mass_diagonal"], dtype=np.float64) for m in self.metadata]),
+        )
+
 
 class CFuncSession:
     """Single-worker continuation; use as a context manager or call close().
@@ -840,6 +934,81 @@ def start_session(
     inner = _owalnuts.start_cfunc_session(target, target.address, target.dim, starts,
         cfg, target.user_data, list(target.parameter_names) if target.parameter_names else None)
     return CFuncSession(inner)
+
+
+def sample_warm(
+    logp_and_grad: "LogpGrad | CFuncTarget",
+    state: WarmState,
+    *,
+    draws: int,
+    seed: int = 0,
+    threads: int = 1,
+    tuning: Tuning = Tuning(),
+    nonfinite: str = "zero_density",
+    max_target_evaluations: int | None = None,
+    max_depth_stop_limit: int | None = None,
+    admit_worst_case: bool = True,
+    coerce: bool = True,
+    cache_initial_evaluation: bool | None = None,
+) -> SampleResult:
+    """Warm continuation (``Sampler::run_warm``): ``draws`` transitions per
+    chain from ``state``, with no warmup and no adaptation, each chain on
+    its own carried step size and fixed diagonal mass.
+
+    This is the WP84 (``STUDIES/online_sv_quote_v1``) warm path as a library
+    call: take ``result.warm_state()`` from a completed ``sample`` (or
+    ``chunk.warm_state()`` from a session), optionally ``extend_to`` it onto
+    a target of larger dimension, and refresh the posterior on the new
+    target in ``draws`` transitions; the result's ``warm_state()`` is the
+    next state. ``logp_and_grad`` is a callable (including ``from_pymc``
+    targets) or a ``CFuncTarget``; its dimension is the state's.
+
+    Chain ``c`` is run exactly as ``sample(target, dim, init=positions[c:c+1],
+    chains=1, warmup=0, draws=draws, seed=seed + c, adaptation=None,
+    mass=mass_diagonal[c], tuning=replace(tuning, step_size=step_sizes[c]))``
+    and its draws are bit-identical to that call (the chain seeds are
+    ``splitmix64(seed + c)``, the ordinary rule). ``tuning.step_size`` is
+    ignored: the state carries each chain's step. Chains run in parallel on
+    up to ``threads`` workers (a Python callable is serialised by the GIL;
+    use a ``CFuncTarget`` for real parallelism); admission and limits apply
+    to the whole run as for ``sample``.
+
+    Not validated by the library: whether ``draws`` transitions on a frozen
+    step and metric are enough for the new target (WP84: 50–200 draws per
+    chain met its calibration bar on a 250-return SV model but not an R-hat
+    1.01 bar), and whether the fill of appended coordinates is a sensible
+    start; both are the caller's decisions.
+    """
+    if not isinstance(state, WarmState):
+        raise TypeError("state must be a WarmState (SampleResult.warm_state())")
+    if isinstance(draws, bool) or not isinstance(draws, (int, np.integer)) or draws < 1:
+        raise ValueError("draws must be a positive integer")
+    if isinstance(threads, bool) or not isinstance(threads, (int, np.integer)) or threads < 1:
+        raise ValueError("threads must be a positive integer")
+    cfg = _config_dict(
+        warmup=0, draws=draws, seed=seed, threads=threads, tuning=tuning,
+        adaptation=None, mass=None, max_target_evaluations=max_target_evaluations,
+        max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,
+        cache_initial_evaluation=cache_initial_evaluation,
+    )
+    if isinstance(logp_and_grad, StanTarget):
+        raise TypeError("sample_warm supports callables and CFuncTarget; pass the StanTarget as a callable")
+    if isinstance(logp_and_grad, CFuncTarget):
+        cft = logp_and_grad
+        if cft.dim != state.dim:
+            raise ValueError(f"CFuncTarget dim {cft.dim} != warm state dim {state.dim}")
+        raw = _owalnuts.sample_warm_cfunc(
+            cft.address, cft.dim, state.positions, state.step_sizes, state.mass_diagonal, cfg,
+            cft.user_data, list(cft.parameter_names) if cft.parameter_names else None,
+        )
+        result = _result(raw, cfg)
+        result.parameter_names = list(cft.parameter_names) if cft.parameter_names else None
+        return result
+    target = wrap_callable(logp_and_grad) if coerce else logp_and_grad
+    raw = _owalnuts.sample_warm_callable(
+        target, state.positions, state.step_sizes, state.mass_diagonal, cfg, nonfinite,
+    )
+    return _result(raw, cfg)
 
 
 def preflight(
@@ -1416,7 +1585,7 @@ __all__ = [
     "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "HAS_STAN", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
     "summary", "format_summary", "uniform_starts", "best_of_starts", "START_RULES", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
-    "start_session", "CFuncSession", "ContinuationChunk",
+    "start_session", "CFuncSession", "ContinuationChunk", "WarmState", "sample_warm",
     "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",

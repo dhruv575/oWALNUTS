@@ -9,6 +9,37 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Added
 
+- Warm continuation API (WP87, after WP84 `STUDIES/online_sv_quote_v1`):
+  `sampler::WarmState` / `WarmChain` (per chain: position, step size,
+  diagonal mass `M`), `Posterior::warm_state()` and
+  `SessionChunk::warm_state()` (identity/diagonal runs only; dense and
+  structured runs error), `WarmState::extend_to(dimension, position_fill,
+  mass_fill)` / `extend_with` (append coordinates for a larger target), and
+  `Sampler::run_warm(&target, &state)`: `draws` transitions per chain with
+  no warmup and no adaptation, each chain on its own carried step and fixed
+  diagonal mass, chains in parallel on `threads`, whole-run admission as
+  `run`. Chain `c` is bit-identical to the single-chain
+  `Sampler::new().warmup(0).draws(k).seed(seed + c).metric(Metric::fixed_diagonal(mass_c)).adaptation(Adaptation::None).tuning(Tuning::new().step_size(step_c)).run(target, &[position_c])`
+  the WP84 harness built (`tests/warm_continuation.rs`); the sampler's
+  `warmup`, `metric` and `adaptation` settings are ignored on this path.
+  No re-adaptation happens and the library does not validate that `k`
+  draws refresh the posterior to any accuracy (WP84: 50–200 draws per
+  chain met its calibration bar but not an R-hat 1.01 bar). Python:
+  `SampleResult.warm_state()`, `ContinuationChunk.warm_state()`,
+  `WarmState(positions, step_sizes, mass_diagonal).extend_to(dim,
+  position=0.0, mass=1.0)` and `owalnuts.sample_warm(target, state, *,
+  draws, seed, threads, ...)` for callables (including `from_pymc`
+  targets) and `CFuncTarget`, with the same per-chain bit-identity test
+  (`integrations/python/tests/test_warm_continuation.py`).
+- `sampler::Limits::max_result_bytes_unchecked(NonZeroUsize)` and
+  `walnutpie::ResourceLimits::with_max_result_bytes_unchecked`: an explicit
+  opt-in to raise the 512 MiB result-size ceiling, which
+  `ResourceLimits::new` only lets tighten (WP84's N = 1,000 reference, 4 x
+  22,000 x 1,004-D draws, about 707 MB, was refused at admission with
+  "result data exceeds its resource limit"). The run is still refused
+  before any target call when its exact accounted result exceeds the raised
+  value; every other ceiling and the default are unchanged.
+  `Limits::resource_limits()` reports the effective `ResourceLimits`.
 - Research flag `WarmupConfig::with_stable_metric_stop(StableMetricStop)`
   (default off, diagonal adaptive facade only): at the close of each slow
   metric window from a given index on, if the new diagonal metric and the
