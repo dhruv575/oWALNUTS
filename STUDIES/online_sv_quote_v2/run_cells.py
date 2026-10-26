@@ -112,7 +112,7 @@ def prep(workdir):
         src.write_text(STAN.read_text())
     cmdstanpy.CmdStanModel(stan_file=str(src))
     so = workdir / "libsv.so"
-    subprocess.run(["gcc", "-O2", "-shared", "-fPIC", "-o", str(so), str(HERE / "models" / "sv.c"), "-lm"], check=True)
+    subprocess.run(["gcc", "-O2", "-shared", "-fPIC", "-o", str(so), str(HERE / "models" / "sv_cabi.c"), "-lm"], check=True)
     print("prep done", exe_dir, so)
 
 

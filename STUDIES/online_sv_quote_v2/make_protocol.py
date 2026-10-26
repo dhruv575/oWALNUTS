@@ -51,7 +51,7 @@ P = {
                    "census reported)",
         "nutpie": "nutpie 0.16.8 defaults, cores=4, seed = seed*1000+tick (as sampled; stuck census reported)",
         "pyextra": "owalnuts.sample_warm (Python wheel built on the box from this branch) on a C-ABI translation of the same "
-                   "density (models/sv.c, from_cfunc, threads 4), one seed, sim N=250, K=200, 100 ticks; tick-0 via "
+                   "density (models/sv_cabi.c, from_cfunc, threads 4), one seed, sim N=250, K=200, 100 ticks; tick-0 via "
                    "owalnuts.sample defaults; reported only (latency and accuracy vs the same reference)"},
     "seeds": {"arms": SEEDS, "data_sim": 84084,
               "fresh": "880101-880103, 889450, 890200, 889500 grep-verified unused before the freeze; 84084 reused on purpose "
