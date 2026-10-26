@@ -1,0 +1,42 @@
+### WP75-METRIC-AUTOSELECT-V1 — per-run dense/diagonal auto-selection is NOT PROPOSED as a default: geomean 2.30x the diagonal (dense 2.92x), but passes 39 vs 44 and two models below 0.9x (hmm_drive_0 0.09, eight_schools_nc 0.89); the failed set {R1, R3} was the preregistered prediction; 45/51 runs took the predicted branch; funnel sound (P5 0.0480 ± 0.0034, all 10 seeds diagonal)
+- **Ordered time:** 2026-10-26 on `wt/metric-autoselect`.
+  - Library commit `090eaa20` adds the research flag `WarmupConfig::with_dense_auto_select` (off by default; dense adaptive facade only).
+  - A draft harness was committed in `d52b50f0`. The reference-draw prediction ran on the box with no sampling. The freeze is `a0bd292e`, before any evidence cell.
+  - Pipeline check on seed 990675 (not committed). Then block P ran 153 cells and block F 30, with no errors.
+  - Everything ran on AWS `owalnuts-bench` lane 3, pinned `taskset -c 8-11` and co-tenanted. Dispatch was WP65 `ReplicatedConcurrent` x 4.
+- **Protocol/config:**
+  - **Statistic.** `G = kappa_diag / kappa_dense`: how well window 1's Stan-regularised diagonal and dense estimates (pooled within-chain covariance) whiten window 2's covariance.
+  - **Rule.** Dense iff `G >= 5`, decided once at the close of slow window 2 (transition 249). Diagonal installs before the switch; one metric family from window 2 on.
+  - **Threshold.** From the WP48 reference-geometry `k` against WP51's observed ratios: fit `ratio = 0.707 k^0.473`, which reaches 1.5 at `k = 4.9`.
+  - **Arms.** diag, dense (`Metric::dense()`), auto.
+  - **Rules.** PROPOSE iff all of:
+    - R1: auto pass count >= diag's;
+    - R2: geomean >= 1.5;
+    - R3: no model below 0.9x;
+    - R4: no new divergences;
+    - F: funnel P5 within 1 s.e.;
+    - D: flag-off integrity.
+- **Seeds:** P 757501–757503, F 757401–757410. No repository or box-lane hit.
+- **Outcome:**
+  - **Passes** diag 44, dense 40, auto 39.
+    - Lost: gp_pois_regr 3 -> 1 (dense branch, as predicted), hmm_drive_0 3 -> 1 (diagonal branch: second-mode R-hat 1.29 and tail ESS 86), lotka_volterra 3 -> 2 (one stuck chain), one_comp 3 -> 2.
+    - Gained: sblrc 2 -> 3.
+  - **Geomean** auto/diag 2.297 and dense/diag 2.921.
+  - **Below 0.9x:** hmm_drive_0 0.09, eight_schools_nc 0.89.
+  - **Divergences** 1/1/1.
+  - **Funnel** auto 0.0480 ± 0.0034, diagonal branch on all 10 seeds, 8 divergences (diag 19, dense 141).
+  - R1 and R3 fail; R2, R4, F and D hold.
+- **Branches:** 28 dense and 23 diag; 45 of 51 runs as predicted (Pa holds).
+  - earnings went diagonal on all 3 seeds (in-run G 0.02–1.5, reference 49), losing its 5x gain.
+  - kidiq went diagonal on 1 seed.
+  - garch11 went dense on 2 seeds (G 5.08 and 5.28, at the threshold).
+- **Predictions:**
+  - Pb holds: the failed set is exactly {R1, R3}, though partly for other reasons. accel_gp came out 1.36x with every arm at 0/3; hmm_drive_0 and eight_schools_nc failed R3 instead.
+  - Pc holds (dense 2.92).
+  - Pd holds.
+- **Reading (not tested):**
+  - The statistic picks dense on gp_pois_regr, where dense loses gates; no window-whitening statistic separates it from mesquite.
+  - The diagonal-warmup windows of near-collinear posteriors are too poorly mixed to show the dense gain (earnings).
+  - The diagonal branch runs the dense driver, so it is not bitwise the diag arm. A follow-up would use the diagonal driver itself for that branch and add a guard specific to GP posteriors.
+- **Decision:** none needed. The flag stays research-only and off by default; there is no change to `ALGORITHM_REVISION` or the fingerprints.
+- **Files:** `STUDIES/metric_autoselect_v1/` (README, cells, summary, reference prediction, draws manifest, CHECKSUMS.sha256).

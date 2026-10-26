@@ -1345,6 +1345,7 @@ pub struct WarmupConfig {
     chain_rescue: Option<ChainRescueConfig>,
     trapped_chain_restart: Option<TrappedChainRestartConfig>,
     stable_metric_stop: Option<StableMetricStop>,
+    dense_auto_select: Option<DenseAutoSelectConfig>,
 }
 
 impl Default for WarmupConfig {
@@ -1378,6 +1379,7 @@ impl Default for WarmupConfig {
             chain_rescue: None,
             trapped_chain_restart: None,
             stable_metric_stop: None,
+            dense_auto_select: None,
         }
     }
 }
@@ -1853,6 +1855,19 @@ impl WarmupConfig {
     pub fn trapped_chain_restart(&self) -> Option<&TrappedChainRestartConfig> {
         self.trapped_chain_restart.as_ref()
     }
+
+    /// Choose dense vs diagonal per run at a warmup window close; see
+    /// [`DenseAutoSelectConfig`]. Research-only (`STUDIES/metric_autoselect_v1`,
+    /// WP75); off by default. Dense adaptive facade only.
+    #[cfg(feature = "research")]
+    pub fn with_dense_auto_select(mut self, auto: DenseAutoSelectConfig) -> Self {
+        self.dense_auto_select = Some(auto);
+        self
+    }
+
+    pub fn dense_auto_select(&self) -> Option<&DenseAutoSelectConfig> {
+        self.dense_auto_select.as_ref()
+    }
 }
 
 fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
@@ -2005,6 +2020,134 @@ impl TrappedChainRestartConfig {
     }
     pub fn max_attempts(&self) -> usize {
         self.max_attempts
+    }
+}
+
+/// Per-run choice between the dense and the diagonal metric from the first
+/// slow warmup windows. Research-only (`STUDIES/metric_autoselect_v1`, WP75).
+/// Dense adaptive facade only. Off by default.
+///
+/// Until the close of slow window `select_window` every chain installs only
+/// the diagonal of its window covariance, regularised by the configured
+/// [`DiagonalMetricRegularization`] exactly as the diagonal driver would. At
+/// that close all chains meet once and compute, from the pooled within-chain
+/// covariances `S_prev` of window `select_window - 1` and `S_cur` of window
+/// `select_window`:
+///
+/// * `A = (n / (n + 5)) S_prev + 1e-3 (5 / (n + 5)) I` (Stan's dense rule, `n`
+///   the pooled count of the previous window), `D = diag(A)`, `A = L L^T`;
+/// * `kappa_diagonal = cond(D^{-1/2} S_cur D^{-1/2})` and
+///   `kappa_dense = cond(L^{-1} S_cur L^{-T})` (eigenvalue ratios), i.e. how
+///   well each metric estimated on the previous window whitens the current
+///   window;
+/// * `statistic = kappa_diagonal / kappa_dense`.
+///
+/// The run takes the dense branch iff `statistic >= threshold` (and both
+/// condition numbers are finite); otherwise the diagonal branch. From that
+/// window on (its own install included) every chain installs the full dense
+/// precision (dense branch, the dense facade's rule) or the diagonal (diagonal
+/// branch), so retained draws come from one metric family. The decision is
+/// identical for every chain and recorded in
+/// [`RunTelemetry::dense_auto_select`]. All chains must run concurrently
+/// (threads >= chains).
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct DenseAutoSelectConfig {
+    select_window: usize,
+    threshold: f64,
+}
+
+impl Default for DenseAutoSelectConfig {
+    /// Slow window 2 (the third: transitions 150..250 at the default
+    /// 1,000-transition schedule) and threshold 5 (WP75's preregistered
+    /// value, fixed from the WP48 / WP51 records).
+    fn default() -> Self {
+        Self {
+            select_window: 2,
+            threshold: 5.0,
+        }
+    }
+}
+
+impl DenseAutoSelectConfig {
+    pub fn new(select_window: usize, threshold: f64) -> Result<Self, Error> {
+        if select_window == 0 {
+            return Err(Error::configuration(
+                "dense auto-selection needs a previous slow window (select_window >= 1)",
+            ));
+        }
+        if !threshold.is_finite() || threshold <= 0.0 {
+            return Err(Error::configuration(
+                "dense auto-selection threshold must be finite and positive",
+            ));
+        }
+        Ok(Self {
+            select_window,
+            threshold,
+        })
+    }
+    pub fn select_window(&self) -> usize {
+        self.select_window
+    }
+    pub fn threshold(&self) -> f64 {
+        self.threshold
+    }
+}
+
+/// The run-level decision of a [`DenseAutoSelectConfig`] (identical on every
+/// chain of the run).
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct DenseAutoSelectDecision {
+    window_index: usize,
+    transition: usize,
+    previous_count: usize,
+    current_count: usize,
+    kappa_diagonal: f64,
+    kappa_dense: f64,
+    statistic: f64,
+    threshold: f64,
+    chose_dense: bool,
+    max_abs_correlation: f64,
+}
+
+impl DenseAutoSelectDecision {
+    /// The slow window at whose close the decision was made.
+    pub fn window_index(&self) -> usize {
+        self.window_index
+    }
+    /// The last transition of that window.
+    pub fn transition(&self) -> usize {
+        self.transition
+    }
+    /// Pooled draw count of the previous window (all chains).
+    pub fn previous_count(&self) -> usize {
+        self.previous_count
+    }
+    /// Pooled draw count of the selection window (all chains).
+    pub fn current_count(&self) -> usize {
+        self.current_count
+    }
+    pub fn kappa_diagonal(&self) -> f64 {
+        self.kappa_diagonal
+    }
+    pub fn kappa_dense(&self) -> f64 {
+        self.kappa_dense
+    }
+    /// `kappa_diagonal / kappa_dense` (NaN when either is not finite).
+    pub fn statistic(&self) -> f64 {
+        self.statistic
+    }
+    pub fn threshold(&self) -> f64 {
+        self.threshold
+    }
+    pub fn chose_dense(&self) -> bool {
+        self.chose_dense
+    }
+    /// Largest absolute off-diagonal correlation of the selection window's
+    /// pooled covariance (descriptive).
+    pub fn max_abs_correlation(&self) -> f64 {
+        self.max_abs_correlation
     }
 }
 
@@ -5673,6 +5816,7 @@ pub struct RunTelemetry {
     paper_adaptation_updates: Vec<PaperAdaptationUpdate>,
     chain_rescues: Vec<ChainRescueUpdate>,
     trapped_chain_checks: Vec<TrappedChainCheck>,
+    dense_auto_select: Option<DenseAutoSelectDecision>,
     warmup_end: Option<ChainWindowSummary>,
     sampling_end: Option<ChainWindowSummary>,
     stable_metric_checks: Vec<StableMetricCheck>,
@@ -5785,6 +5929,11 @@ impl RunTelemetry {
     /// with enough chains.
     pub fn trapped_chain_checks(&self) -> &[TrappedChainCheck] {
         &self.trapped_chain_checks
+    }
+    /// The run-level dense / diagonal decision of a [`DenseAutoSelectConfig`]
+    /// run (the same on every chain); `None` otherwise.
+    pub fn dense_auto_select(&self) -> Option<&DenseAutoSelectDecision> {
+        self.dense_auto_select.as_ref()
     }
     /// Paper-rule update points, in transition order; empty unless
     /// [`WarmupConfig::with_paper_adaptation`] was used.
@@ -6601,6 +6750,335 @@ impl DenseCovariance {
             MetricUpdateOutcome::IllConditionedFallback
         };
         (outcome, None, shrinkage, ridge, last_condition, failures)
+    }
+
+    /// The diagonal-only candidate of a [`DenseAutoSelectConfig`] run: the
+    /// window variances regularised by `regularization` exactly as
+    /// `DiagonalVariance::regularized_mass`, installed as a diagonal dense
+    /// precision.
+    fn diagonal_candidate(
+        &self,
+        regularization: DiagonalMetricRegularization,
+    ) -> (
+        MetricUpdateOutcome,
+        Option<DenseMass>,
+        f64,
+        f64,
+        Option<f64>,
+        usize,
+    ) {
+        let n_dim = self.mean.len();
+        if self.count < 2 {
+            return (
+                MetricUpdateOutcome::InsufficientSamples,
+                None,
+                0.0,
+                0.0,
+                None,
+                0,
+            );
+        }
+        let mut variance = DiagonalVariance::new(n_dim);
+        variance.count = self.count;
+        for i in 0..n_dim {
+            variance.m2[i] = self.m2[i * n_dim + i];
+        }
+        let Some(mass) = variance.regularized_mass(regularization) else {
+            return (
+                MetricUpdateOutcome::InsufficientSamples,
+                None,
+                0.0,
+                0.0,
+                None,
+                0,
+            );
+        };
+        let n = self.count as f64;
+        let (lo, hi) = mass.iter().fold((f64::INFINITY, 0.0_f64), |(lo, hi), m| {
+            (lo.min(*m), hi.max(*m))
+        });
+        let mut matrix = vec![0.0; n_dim * n_dim];
+        for (i, m) in mass.iter().enumerate() {
+            matrix[i * n_dim + i] = *m;
+        }
+        match DenseMass::from_matrix(matrix, n_dim) {
+            Ok(candidate) => (
+                MetricUpdateOutcome::Installed,
+                Some(candidate),
+                5.0 / (n + 5.0),
+                0.0,
+                Some(hi / lo),
+                0,
+            ),
+            Err(_) => (
+                MetricUpdateOutcome::InsufficientSamples,
+                None,
+                0.0,
+                0.0,
+                None,
+                1,
+            ),
+        }
+    }
+}
+
+/// Eigenvalues of a symmetric `n x n` row-major matrix (cyclic Jacobi),
+/// ascending. Used only by the WP75 auto-selection statistic.
+fn symmetric_eigenvalues(matrix: &[f64], n: usize) -> Vec<f64> {
+    let mut a = matrix.to_vec();
+    for _sweep in 0..100 {
+        let off: f64 = (0..n)
+            .flat_map(|i| (0..n).filter(move |&j| j != i).map(move |j| (i, j)))
+            .map(|(i, j)| a[i * n + j] * a[i * n + j])
+            .sum();
+        let diag: f64 = (0..n).map(|i| a[i * n + i] * a[i * n + i]).sum();
+        if off.is_nan() || off <= 1.0e-30 * diag.max(f64::MIN_POSITIVE) {
+            break;
+        }
+        for p in 0..n {
+            for q in p + 1..n {
+                let apq = a[p * n + q];
+                if apq == 0.0 {
+                    continue;
+                }
+                let theta = (a[q * n + q] - a[p * n + p]) / (2.0 * apq);
+                let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+                let t = if theta == 0.0 { 1.0 } else { t };
+                let c = 1.0 / (t * t + 1.0).sqrt();
+                let s = t * c;
+                for k in 0..n {
+                    let akp = a[k * n + p];
+                    let akq = a[k * n + q];
+                    a[k * n + p] = c * akp - s * akq;
+                    a[k * n + q] = s * akp + c * akq;
+                }
+                for k in 0..n {
+                    let apk = a[p * n + k];
+                    let aqk = a[q * n + k];
+                    a[p * n + k] = c * apk - s * aqk;
+                    a[q * n + k] = s * apk + c * aqk;
+                }
+            }
+        }
+    }
+    let mut values: Vec<f64> = (0..n).map(|i| a[i * n + i]).collect();
+    values.sort_by(f64::total_cmp);
+    values
+}
+
+/// `lambda_max / lambda_min` of a symmetric matrix; infinite when the
+/// smallest eigenvalue is not positive, NaN when an entry is not finite.
+fn eigen_condition(matrix: &[f64], n: usize) -> f64 {
+    if matrix.iter().any(|x| !x.is_finite()) {
+        return f64::NAN;
+    }
+    let values = symmetric_eigenvalues(matrix, n);
+    let (lo, hi) = (values[0], values[n - 1]);
+    if lo <= 0.0 { f64::INFINITY } else { hi / lo }
+}
+
+/// Pooled within-chain covariance `sum_c m2_c / (sum_c n_c - chains)` and
+/// the pooled count, over chains with at least two draws.
+fn pooled_within_chain_covariance(windows: &[&DenseCovariance], n_dim: usize) -> (Vec<f64>, usize) {
+    let mut m2 = vec![0.0; n_dim * n_dim];
+    let mut count = 0usize;
+    let mut groups = 0usize;
+    for window in windows.iter().filter(|w| w.count >= 2) {
+        for (total, value) in m2.iter_mut().zip(&window.m2) {
+            *total += value;
+        }
+        count += window.count;
+        groups += 1;
+    }
+    let denominator = count.saturating_sub(groups) as f64;
+    (m2.into_iter().map(|x| x / denominator).collect(), count)
+}
+
+/// The WP75 run-level decision from every chain's (previous, current)
+/// selection-window covariances, in chain order.
+fn dense_auto_select_decision(
+    windows: &[(DenseCovariance, DenseCovariance)],
+    auto: &DenseAutoSelectConfig,
+    window_index: usize,
+    transition: usize,
+) -> DenseAutoSelectDecision {
+    let n_dim = windows.first().map_or(0, |(p, _)| p.mean.len());
+    let previous: Vec<&DenseCovariance> = windows.iter().map(|(p, _)| p).collect();
+    let current: Vec<&DenseCovariance> = windows.iter().map(|(_, c)| c).collect();
+    let (s_prev, n_prev) = pooled_within_chain_covariance(&previous, n_dim);
+    let (s_cur, n_cur) = pooled_within_chain_covariance(&current, n_dim);
+    let mut decision = DenseAutoSelectDecision {
+        window_index,
+        transition,
+        previous_count: n_prev,
+        current_count: n_cur,
+        kappa_diagonal: f64::NAN,
+        kappa_dense: f64::NAN,
+        statistic: f64::NAN,
+        threshold: auto.threshold,
+        chose_dense: false,
+        max_abs_correlation: f64::NAN,
+    };
+    if n_dim == 0 || n_prev <= n_dim || n_cur <= n_dim {
+        return decision;
+    }
+    let mut max_corr = 0.0_f64;
+    for i in 0..n_dim {
+        for j in 0..i {
+            let r = s_cur[i * n_dim + j] / (s_cur[i * n_dim + i] * s_cur[j * n_dim + j]).sqrt();
+            max_corr = max_corr.max(r.abs());
+        }
+    }
+    decision.max_abs_correlation = max_corr;
+    let n = n_prev as f64;
+    let weight = n / (n + 5.0);
+    let prior = 1.0e-3 * 5.0 / (n + 5.0);
+    let mut regularized: Vec<f64> = s_prev.iter().map(|x| weight * x).collect();
+    for i in 0..n_dim {
+        regularized[i * n_dim + i] += prior;
+    }
+    // Diagonal whitening.
+    let scale: Vec<f64> = (0..n_dim)
+        .map(|i| {
+            regularized[i * n_dim + i]
+                .max(MIN_ADAPTATION_VARIANCE)
+                .sqrt()
+                .recip()
+        })
+        .collect();
+    let whitened_diagonal: Vec<f64> = (0..n_dim * n_dim)
+        .map(|k| s_cur[k] * scale[k / n_dim] * scale[k % n_dim])
+        .collect();
+    decision.kappa_diagonal = eigen_condition(&whitened_diagonal, n_dim);
+    // Dense whitening: L^{-1} S_cur L^{-T}.
+    if let Some(lower) = cholesky(&regularized, n_dim) {
+        let mut x = vec![0.0; n_dim * n_dim]; // X = L^{-1} S_cur, column by column
+        for j in 0..n_dim {
+            let column: Vec<f64> = (0..n_dim).map(|i| s_cur[i * n_dim + j]).collect();
+            for (i, value) in solve_lower(&lower, &column, n_dim).into_iter().enumerate() {
+                x[i * n_dim + j] = value;
+            }
+        }
+        let mut whitened_dense = vec![0.0; n_dim * n_dim]; // L^{-1} X^T
+        for j in 0..n_dim {
+            let column: Vec<f64> = (0..n_dim).map(|i| x[j * n_dim + i]).collect();
+            for (i, value) in solve_lower(&lower, &column, n_dim).into_iter().enumerate() {
+                whitened_dense[i * n_dim + j] = value;
+            }
+        }
+        decision.kappa_dense = eigen_condition(&symmetrized(whitened_dense, n_dim), n_dim);
+    }
+    if decision.kappa_diagonal.is_finite() && decision.kappa_dense.is_finite() {
+        decision.statistic = decision.kappa_diagonal / decision.kappa_dense;
+        decision.chose_dense = decision.statistic >= auto.threshold;
+    }
+    decision
+}
+
+/// The one meeting point of a [`DenseAutoSelectConfig`] run's chains.
+struct AutoSelectRendezvous {
+    chains: usize,
+    state: std::sync::Mutex<AutoSelectState>,
+    ready: std::sync::Condvar,
+}
+
+struct AutoSelectState {
+    posted: Vec<Option<Option<(DenseCovariance, DenseCovariance)>>>,
+    count: usize,
+}
+
+impl AutoSelectRendezvous {
+    fn new(chains: usize) -> Self {
+        Self {
+            chains,
+            state: std::sync::Mutex::new(AutoSelectState {
+                posted: vec![None; chains],
+                count: 0,
+            }),
+            ready: std::sync::Condvar::new(),
+        }
+    }
+
+    /// Post a chain's windows (`None`: the chain failed before the meeting)
+    /// and wait for every chain; returns all chains' windows in chain order,
+    /// or an error if any chain failed.
+    fn post_and_wait(
+        &self,
+        chain: usize,
+        windows: Option<(DenseCovariance, DenseCovariance)>,
+    ) -> Result<Vec<(DenseCovariance, DenseCovariance)>, Error> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| Error::new(ErrorKind::Panic, "auto-selection lock poisoned"))?;
+        if state.posted[chain].is_none() {
+            state.posted[chain] = Some(windows);
+            state.count += 1;
+            self.ready.notify_all();
+        }
+        while state.count < self.chains {
+            state = self
+                .ready
+                .wait(state)
+                .map_err(|_| Error::new(ErrorKind::Panic, "auto-selection lock poisoned"))?;
+        }
+        state
+            .posted
+            .iter()
+            .map(|slot| slot.clone().flatten())
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorKind::Internal,
+                    "dense auto-selection aborted: another chain failed before the selection window",
+                )
+            })
+    }
+
+    /// Mark a chain as failed (idempotent; a chain that already posted is
+    /// unaffected).
+    fn abandon(&self, chain: usize) {
+        if let Ok(mut state) = self.state.lock()
+            && state.posted[chain].is_none()
+        {
+            state.posted[chain] = Some(None);
+            state.count += 1;
+            self.ready.notify_all();
+        }
+    }
+}
+
+/// Marks its chain failed on drop unless the chain reached the meeting.
+struct AutoSelectGuard<'a> {
+    rendezvous: &'a AutoSelectRendezvous,
+    chain: usize,
+}
+
+impl Drop for AutoSelectGuard<'_> {
+    fn drop(&mut self) {
+        self.rendezvous.abandon(self.chain);
+    }
+}
+
+/// The shared meeting point for a dense run, or `None` without the flag.
+fn auto_select_rendezvous(
+    config: &RunConfig,
+    chains: usize,
+    threads: usize,
+) -> Result<Option<AutoSelectRendezvous>, Error> {
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.adapt_mass && warmup.dense_auto_select.is_some())
+    {
+        if threads < chains {
+            return Err(Error::configuration(
+                "dense auto-selection needs every chain running concurrently (threads >= chains)",
+            ));
+        }
+        Ok(Some(AutoSelectRendezvous::new(chains)))
+    } else {
+        Ok(None)
     }
 }
 
@@ -8184,6 +8662,11 @@ impl<'a, T: Target> ChainRun<'a, T> {
             });
         if let Some(warmup) = config.warmup.as_ref() {
             warmup.validate_relative_floor()?;
+            if warmup.dense_auto_select.is_some() {
+                return Err(Error::configuration(
+                    "dense auto-selection is supported by the dense adaptive facade only",
+                ));
+            }
         }
         // Inputs of the relative step floors: the latest initial-step search
         // result and the step the current dual-averaging stream started from.
@@ -9997,6 +10480,26 @@ pub fn sample_dense_with_control<T: Target>(
     config: &RunConfig,
     run_control: &RunControl<'_>,
 ) -> Result<ChainOutput, Error> {
+    let rendezvous = auto_select_rendezvous(config, 1, 1)?;
+    sample_dense_inner(
+        target,
+        initial_position,
+        mass,
+        config,
+        run_control,
+        rendezvous.as_ref().map(|r| (r, 0)),
+    )
+}
+
+fn sample_dense_inner<T: Target>(
+    target: &T,
+    initial_position: &[f64],
+    mass: &DenseMass,
+    config: &RunConfig,
+    run_control: &RunControl<'_>,
+    auto: Option<(&AutoSelectRendezvous, usize)>,
+) -> Result<ChainOutput, Error> {
+    let _auto_guard = auto.map(|(rendezvous, chain)| AutoSelectGuard { rendezvous, chain });
     if target.dimension() != mass.dimension || initial_position.len() != mass.dimension {
         return Err(Error::configuration(
             "target and dense mass dimensions differ",
@@ -10014,6 +10517,16 @@ pub fn sample_dense_with_control<T: Target>(
         ));
     }
     let schedule = warmup_schedule(config.discarded, &warmup.windows)?;
+    let auto_select = warmup.dense_auto_select.filter(|_| auto.is_some());
+    if let Some(auto_select) = auto_select
+        && auto_select.select_window >= schedule.windows.len()
+    {
+        return Err(Error::configuration(
+            "dense auto-selection window is beyond the warmup schedule's slow windows",
+        ));
+    }
+    let mut auto_previous: Option<DenseCovariance> = None;
+    let mut auto_decision: Option<DenseAutoSelectDecision> = None;
     let dense_bytes = mass
         .dimension
         .checked_mul(mass.dimension)
@@ -10174,11 +10687,36 @@ pub fn sample_dense_with_control<T: Target>(
             warmup.dynamic_floor(search_step, stream_step),
         )?
         .expect("nonempty metric window");
-        let (outcome, candidate, shrinkage, ridge, condition, failures) = covariance
-            .precision_candidate(
+        let use_dense = match (auto_select, auto) {
+            (Some(auto_select), Some((rendezvous, chain))) => {
+                if window_index == auto_select.select_window {
+                    let previous = auto_previous
+                        .take()
+                        .unwrap_or_else(|| DenseCovariance::new(mass.dimension));
+                    let all =
+                        rendezvous.post_and_wait(chain, Some((previous, covariance.clone())))?;
+                    auto_decision = Some(dense_auto_select_decision(
+                        &all,
+                        &auto_select,
+                        window_index,
+                        window.end - 1,
+                    ));
+                }
+                auto_previous = Some(covariance.clone());
+                auto_decision
+                    .as_ref()
+                    .is_some_and(DenseAutoSelectDecision::chose_dense)
+            }
+            _ => true,
+        };
+        let (outcome, candidate, shrinkage, ridge, condition, failures) = if use_dense {
+            covariance.precision_candidate(
                 warmup.dense_metric_regularization,
                 warmup.dense_symmetrize_precision,
-            );
+            )
+        } else {
+            covariance.diagonal_candidate(warmup.metric_regularization)
+        };
         let step_before = active_step;
         let mass_dense_before = active_mass.matrix.clone();
         let mut step_after_search = None;
@@ -10311,6 +10849,7 @@ pub fn sample_dense_with_control<T: Target>(
     output.telemetry.terminal_fast = terminal_fast;
     output.telemetry.metric_updates = updates;
     output.telemetry.step_searches = restart_events;
+    output.telemetry.dense_auto_select = auto_decision;
     output.metadata.discarded = config.discarded;
     output.metadata.initial_position = initial_position.to_vec();
     output.metadata.warmup = Some(warmup.clone());
@@ -10388,17 +10927,25 @@ pub fn sample_chains_dense_with_control<T: Target>(
         return Err(Error::resource("thread count exceeds its resource limit"));
     }
 
+    let rendezvous = auto_select_rendezvous(config, initial_positions.len(), threads)?;
     let execute = |chain: usize, position: &Vec<f64>| {
         let mut chain_config = config.clone();
         chain_config.seed = config.seed.wrapping_add(chain as u64);
-        sample_dense_with_control(target, position, mass, &chain_config, run_control)
-            .map(|mut output| {
-                output.metadata.base_seed = config.seed;
-                output.metadata.effective_seed = chain_seed(config.seed, chain);
-                output.metadata.thread_count = threads;
-                output
-            })
-            .map_err(|error| error.at_chain(chain))
+        sample_dense_inner(
+            target,
+            position,
+            mass,
+            &chain_config,
+            run_control,
+            rendezvous.as_ref().map(|r| (r, chain)),
+        )
+        .map(|mut output| {
+            output.metadata.base_seed = config.seed;
+            output.metadata.effective_seed = chain_seed(config.seed, chain);
+            output.metadata.thread_count = threads;
+            output
+        })
+        .map_err(|error| error.at_chain(chain))
     };
     let run = || {
         initial_positions
@@ -10839,6 +11386,11 @@ fn validate_structured_refresh<T: Target>(
     reject_paper_adaptation(config, "structured metric refresh")?;
     reject_stable_metric_stop(config, "structured metric refresh")?;
     reject_chain_rescue(config, "structured metric refresh")?;
+    if warmup.dense_auto_select.is_some() {
+        return Err(Error::configuration(
+            "dense auto-selection is supported by the dense adaptive facade only",
+        ));
+    }
     if !warmup.adapt_mass {
         return Err(Error::configuration(
             "structured metric refresh requires mass adaptation to be enabled",
@@ -11489,6 +12041,7 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
     if threads > config.limits.max_chains {
         return Err(Error::resource("thread count exceeds its resource limit"));
     }
+    let rendezvous = auto_select_rendezvous(config, initial_positions.len(), threads)?;
     let execute = |chain: usize, position: &Vec<f64>| {
         let mut chain_config = config.clone();
         chain_config.seed = config.seed.wrapping_add(chain as u64);
@@ -11501,14 +12054,21 @@ pub fn sample_chains_dense_with_target_budget_and_control<T: Target>(
             .limits
             .max_target_evaluations
             .max(admission_limit.maximum());
-        sample_dense_with_control(&wrapped, position, mass, &chain_config, run_control)
-            .map(|mut chain_output| {
-                chain_output.metadata.base_seed = config.seed;
-                chain_output.metadata.effective_seed = chain_seed(config.seed, chain);
-                chain_output.metadata.thread_count = threads;
-                chain_output
-            })
-            .map_err(|error| error.at_chain(chain))
+        sample_dense_inner(
+            &wrapped,
+            position,
+            mass,
+            &chain_config,
+            run_control,
+            rendezvous.as_ref().map(|r| (r, chain)),
+        )
+        .map(|mut chain_output| {
+            chain_output.metadata.base_seed = config.seed;
+            chain_output.metadata.effective_seed = chain_seed(config.seed, chain);
+            chain_output.metadata.thread_count = threads;
+            chain_output
+        })
+        .map_err(|error| error.at_chain(chain))
     };
     let run = || {
         initial_positions
@@ -14839,6 +15399,24 @@ mod tests {
             covariance.precision_candidate(DenseMetricRegularization::MeanVarianceShrinkage, false);
         let shipped = shipped.unwrap().matrix;
         assert!(shipped[4] < 0.1 * precision[4]);
+    }
+
+    #[test]
+    fn symmetric_eigenvalues_match_known_spectra() {
+        let two = symmetric_eigenvalues(&[2.0, 1.0, 1.0, 2.0], 2);
+        assert!((two[0] - 1.0).abs() < 1e-12 && (two[1] - 3.0).abs() < 1e-12);
+        // Equicorrelated 4x4 at rho: eigenvalues 1 - rho (x3) and 1 + 3 rho.
+        let rho = 0.9;
+        let m: Vec<f64> = (0..16)
+            .map(|k| if k / 4 == k % 4 { 1.0 } else { rho })
+            .collect();
+        let v = symmetric_eigenvalues(&m, 4);
+        for x in &v[..3] {
+            assert!((x - 0.1).abs() < 1e-10, "{v:?}");
+        }
+        assert!((v[3] - 3.7).abs() < 1e-10, "{v:?}");
+        assert!((eigen_condition(&m, 4) - 37.0).abs() < 1e-8);
+        assert!(eigen_condition(&[1.0, 1.0, 1.0, 1.0], 2).is_infinite());
     }
 
     #[test]

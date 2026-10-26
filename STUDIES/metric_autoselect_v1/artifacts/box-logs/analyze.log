@@ -1,0 +1,66 @@
+{
+ "verdict": "NOT PROPOSED (failed: R1, R3)",
+ "decision_rules": {
+  "R1_auto_pass_count_ge_diag": {
+   "diag": 44,
+   "auto": 39,
+   "held": false
+  },
+  "R2_geomean_auto_over_diag_ge_1.5": {
+   "value": 2.2971193834645924,
+   "models": 17,
+   "held": true
+  },
+  "R3_no_model_below_0.9x_diag": {
+   "models_below": [
+    "bball_drive_event_0-hmm_drive_0",
+    "eight_schools-eight_schools_noncentered"
+   ],
+   "held": false
+  },
+  "R4_no_new_divergences": {
+   "models_with_more_divergences": [],
+   "total_diag": 1,
+   "total_auto": 1,
+   "held": true
+  },
+  "F_funnel_auto_p5_within_1se": {
+   "pooled": 0.04795875,
+   "se": 0.003394811732834221,
+   "abs_error": 0.00016839772718529877,
+   "held": true
+  },
+  "D_flag_off_integrity": {
+   "library_diff_scoped": true,
+   "kernel_fingerprint_test_passed": true,
+   "flag_off_test_passed": true,
+   "held": true
+  }
+ },
+ "predictions": {
+  "Pa_branch_matches_prediction_ge_45_of_51": {
+   "observed": 45,
+   "runs": 51,
+   "held": true
+  },
+  "Pb_rules_predicted": {
+   "predicted_failures": [
+    "R1",
+    "R3"
+   ],
+   "observed_failures": [
+    "R1",
+    "R3"
+   ],
+   "held": true
+  },
+  "Pc_dense_replicates_wp51_geomean_ge_2": {
+   "observed": 2.921022293183648,
+   "held": true
+  },
+  "Pd_funnel_auto_takes_diag_on_all_10": {
+   "observed": 0,
+   "held": true
+  }
+ }
+}
