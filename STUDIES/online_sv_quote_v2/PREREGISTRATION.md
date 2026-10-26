@@ -24,8 +24,8 @@ simulated series, and at N = 250 on an archived real BTC-perpetual return series
 2. Accuracy is the quote-error rule: sigma_next = exp(h_next / 2); a tick passes if |P50 relative
    error| <= 2 % and |P95 relative error| <= 5 % against the gated reference, with no stuck chain.
 3. The reference is gated (below).
-4. The reference runs at tick 0 and at every tick (sim N = 250), every 2nd tick (real N = 250) and at
-   {0, 5, 10, 15, 20, 30, 40, ..., 100} (sim N = 1,000); the warm arms run every tick for 100 ticks.
+4. The reference runs at tick 0 and at every tick (sim N = 250), every 2nd tick (real N = 250) and
+   every 5th tick (sim N = 1,000); the warm arms run every tick for 100 ticks.
 5. The full-refit baselines run 20 ticks only and are scored at the reference ticks within them.
 6. The N = 1,000 reference uses `Limits::max_result_bytes_unchecked(2 GiB)`, no thinning (both N).
 7. K in {50, 100, 200}; 8. three seeds; 9. two datasets; 10. three parallel queues; 11. a Python
@@ -54,7 +54,8 @@ noncentred AR(1) log-vol with rho = 0.95 fixed, priors mu ~ N(2 log 0.005, 1), l
 
 Target check (`run_cells.py check`, BridgeStan 2.9.0 on the box, before the cells): the Rust density
 matches `models/sv.stan` on both datasets, lp offset spread < 1e-8 and gradient relative error < 1e-8
-at n = 250 and 1,001 (sim) and 250 and 350 (real). Result: <<CHECK>>.
+at n = 250 and 1,001 (sim) and 250 and 350 (real). Result: pass, lp offset spread <= 1.8e-12 and gradient relative error <= 2.1e-14 on all four (n, dataset) pairs
+(`work/target-check.json` on the box, copied to `artifacts/prefreeze/`).
 
 ## Stream and quantities
 
@@ -83,7 +84,7 @@ reproduced the sampler's own flags 121/121 there). oWALNUTS flags are recorded a
 
 **Accuracy.** A scored tick passes iff |P50 error| <= 2 % AND |P95 error| <= 5 % AND no stuck chain AND
 wall under the latency threshold (0.4 s at N = 250, 2 s at N = 1,000). Scored ticks are the reference
-ticks >= 1 within the arm's range: per seed 100 (sim-N250), 50 (real-N250), 12 (sim-N1000) for the
+ticks >= 1 within the arm's range: per seed 100 (sim-N250), 50 (real-N250), 20 (sim-N1000) for the
 warm arms; 20 / 10 / 4 for the 20-tick refit baselines. The warm arm's tick 0 (the full fit) is scored
 separately and reported. Latency is the wall per tick from new-target construction (including
 `extend_to`) to draws in memory (`run_warm` returned and `warm_state()` taken); writing draws and the
@@ -93,14 +94,14 @@ CSV read (CmdStan) or `with_data` (nutpie), compilation excluded. Latency statis
 
 **Pass.** An arm passes at (K, dataset, N) iff the pass share is >= 95 % pooled over the three seeds
 AND >= 90 % in every seed AND drift is within bound in every seed. In integers: sim-N250 >= 285/300
-pooled and >= 90/100 per seed; real-N250 >= 143/150 and >= 45/50; sim-N1000 >= 35/36 and >= 11/12.
+pooled and >= 90/100 per seed; real-N250 >= 143/150 and >= 45/50; sim-N1000 >= 57/60 and >= 18/20.
 
 **Drift.** Per seed, mean signed P50 error over the late scored ticks (tick >= 70) minus over the
 early ones (1 <= tick <= 30); bound 0.5 percentage points. Windows: 30/31 ticks (sim-N250), 15/16
-(real), 5/4 (sim-N1000). With a per-tick P50 error sd of about 0.9 % (K = 200) to 1.8 % (K = 50)
-the statistic's sd is about 0.23 % / 0.33 % / 0.6 % at K = 200, so the N = 1,000 drift test is
-underpowered; a miss there without a common sign across seeds is reported as noise-compatible but
-still counts against the pass (the rule is mechanical).
+(real), 6/7 (sim-N1000). With a per-tick P50 error sd of about 0.9 % (K = 200) to 1.8 % (K = 50)
+the statistic's sd is about 0.23 % / 0.33 % / 0.5 % at K = 200, so the real and N = 1,000 drift
+tests have less power; a miss there without a common sign across seeds is reported as
+noise-compatible but still counts against the pass (the rule is mechanical).
 
 **Decision rule.** The README may say "real-time quote refresh at K = k" only for a K that passes on
 all seeds, both N (sim-N250, sim-N1000) and every dataset run (sim, real). Otherwise it states the
@@ -119,22 +120,23 @@ latency condition) per K, N and dataset.
   of the same density (`models/sv_cabi.c`, checked against the Rust `eval` at 5 points, `from_cfunc`,
   threads = 4), sim N = 250, K = 200, seed 880101, 100 ticks; tick 0 via `owalnuts.sample` defaults.
   Reported only.
-* **ref** three cells (sim-N250 101 ticks, real-N250 51, sim-N1000 13; 165 reference ticks).
+* **ref** three cells (sim-N250 101 ticks, real-N250 51, sim-N1000 21; 173 reference ticks).
 
 58 cells in three queues (`protocol.json` order; `run_cells.py plan`): A on cores 4–7 (ref sim-N1000,
-warm sim-N1000, refit sim-N1000, nutpie sim-N1000), B on 8–11 (ref sim-N250, ref real-N250, cmdstan
-sim-N250, refit sim-N250, nutpie sim-N250, pyextra), C on 12–15 (warm sim-N250, warm real-N250,
-cmdstan sim-N1000, cmdstan real-N250, refit real-N250, nutpie real-N250). Queues run in parallel,
+warm sim-N1000, refit sim-N1000, nutpie sim-N1000, refit sim-N250, cmdstan real-N250, refit
+real-N250, nutpie real-N250), B on 8–11 (ref sim-N250, ref real-N250, cmdstan sim-N250, nutpie
+sim-N250, pyextra), C on 12–15 (warm sim-N250, warm real-N250, cmdstan sim-N1000). Queues run in parallel,
 cells sequentially within a queue; a started cell is never rerun; failures are results. Seeds
 880101–880103, 889450, 890200, 889500 were grep-verified unused; 84084 is reused on purpose (the
 same series as WP84).
 
 ## Budget
 
-About 255 lane-minutes from WP84's walls on this box: references 42 (sim-N250) + 20 (real) + 45–50
-(sim-N1000, 13 ticks at about 200 s; the full-size smoke tick below gives the measured figure),
-warm 27 cells about 20, oWALNUTS refits about 30, CmdStan about 90, nutpie about 8, pyextra 3,
-builds 6. Three queues of 80–95 min: about 1.5 h wall.
+About 240 lane-minutes from WP84's walls on this box and the pre-freeze smoke: references 42
+(sim-N250) + 20 (real) + 25 (sim-N1000, 21 ticks at the measured 69 s), warm 27 cells about 20,
+oWALNUTS refits about 30, CmdStan about 90, nutpie about 8, pyextra 3. Queues A/B/C about 80 / 80 /
+70 min: about 1.5 h wall. (The first draft planned 13 N = 1,000 reference ticks at an assumed 200 s;
+the smoke tick's 69 s paid for every 5th tick instead, decided before the freeze.)
 
 ## Predictions (from the WP84 post-hoc numbers, written before any evidence cell)
 
@@ -148,7 +150,7 @@ builds 6. Three queues of 80–95 min: about 1.5 h wall.
 * P4 latency medians (4 pinned cores): sim-N250 K = 50 15–30 ms, K = 100 30–60 ms, K = 200
   60–120 ms; sim-N1000 4–10x those; the 0.1 s share at sim-N250 >= 95 % for K = 50/100, 30–80 % for
   K = 200.
-* P5 reference gate: 1–5 of the 165 reference ticks drop a flagged chain; 0–2 need the second seed;
+* P5 reference gate: 1–5 of the 173 reference ticks drop a flagged chain; 0–2 need the second seed;
   0 fail both.
 * P6 refit baselines: stuck-chain ticks at sim-N250 oWALNUTS 2–8/60, CmdStan 4–12/60, nutpie 0–1/60;
   as-sampled accuracy share nutpie >= 95 %, oWALNUTS and CmdStan 85–95 % (gated oWALNUTS >= 95 %);
@@ -161,12 +163,19 @@ builds 6. Three queues of 80–95 min: about 1.5 h wall.
 
 * **Bit-identity on this model** (`wp88 bitcheck`, sim N = 250, K = 50, seed 880101, tick 1):
   `run_warm` vs one single-chain `Sampler` per chain with the carried start, step and fixed diagonal
-  mass (new coordinate at 0, mass 1), `warmup(0)`, `Adaptation::None`, seed `base + c`: <<BITCHECK>>.
+  mass (new coordinate at 0, mass 1), `warmup(0)`, `Adaptation::None`, seed `base + c`: **identical on
+  all 4 chains** (draws, diagnostics, effective seed, step, mass; `artifacts/prefreeze/bitcheck.json`;
+  tick-0 fit 2.17 s, no flagged chain).
 * **Full-size N = 1,000 reference tick** (sim, n = 1,000, diagnostic seed 990001, 4 x 2,000/20,000 with
-  the 2 GiB result ceiling): <<SMOKE1000>>.
+  the 2 GiB result ceiling): **ran, status ok, 69.0 s wall**, 6.5 M gradient calls, no chain warning, no
+  divergence (`artifacts/prefreeze/ref-N1000-smoke.json`); the result ceiling that refused WP84's
+  N = 1,000 reference no longer binds.
 * **Smoke** (2 ticks of warm, refit, nutpie, CmdStan and pyextra at diagnostic seeds 99xxxx, a 3-tick
-  gated reference through the gate code path, `analyze.py` on them): <<SMOKE>>. No laptop timing is
-  used anywhere.
+  gated reference through the gate code path, `analyze.py` on them): every code path ran; the three
+  smoke reference ticks passed the gate at attempt 0 (4 chains, R-hat <= 1.01); CmdStan printed its
+  usual non-fatal `student_t_lpdf` scale warnings during warmup (as in WP84); `analyze.py` crashed
+  in its table printer on groups with missing cells (`KeyError: 'drift'`), fixed before the freeze
+  (pipeline only, no rule changed) and rerun on the smoke. No laptop timing is used anywhere.
 
 ## Execution
 
