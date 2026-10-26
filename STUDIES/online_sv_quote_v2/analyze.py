@@ -363,7 +363,7 @@ def tables(groups, verdict, ref_stats, rows):
             if not g:
                 L.append(f"| {K} | {key} | missing |" + " |" * 15)
                 continue
-            drift = ", ".join("n/a" if d is None else f"{100 * d:+.2f}" for d in g["drift"])
+            drift = ", ".join("n/a" if d is None else f"{100 * d:+.2f}" for d in g.get("drift", [])) or "n/a"
             tol = "none" if g["largest_tolerance_met"] is None else f"{100 * g['largest_tolerance_met'][0]:.0f} / {100 * g['largest_tolerance_met'][1]:.0f} %"
             L.append(f"| {K} | {key} | {g['scored']} | {pct(g['pass_share'])} | "
                      f"{' / '.join(pct(p, 0) for p in g['per_seed_pass'])} | {pct(g['accurate_share'])} | {sec(g['median_s'])} | "
@@ -404,8 +404,8 @@ def tables(groups, verdict, ref_stats, rows):
         for name, x in (("Python sample_warm (C-ABI target, 4 threads)", g), ("Rust run_warm", w)):
             L.append(f"| {name} | {sec(x['median_s'])} | {sec(x['p95_s'])} | {pct(x['frac_lt']['0.4'], 0)} | {pct(x['frac_lt']['0.1'], 0)} | "
                      f"{pct(x['accurate_share'])} | {pct(x['pass_share'])} | {pct(x['e50_abs_median'], 2)} | "
-                     f"{', '.join('n/a' if d is None else f'{100 * d:+.2f}' for d in x['drift'])} | "
-                     f"{', '.join(sec(t) for t in x['tick0_wall_s'])} |")
+                     f"{', '.join('n/a' if d is None else f'{100 * d:+.2f}' for d in x.get('drift', [])) or 'n/a'} | "
+                     f"{', '.join(sec(t) for t in x.get('tick0_wall_s', [])) or 'n/a'} |")
         if g["median_s"] and w["median_s"]:
             L.append(f"\nPython / Rust median latency ratio: {g['median_s'] / w['median_s']:.2f}.")
     else:

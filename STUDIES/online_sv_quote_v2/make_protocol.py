@@ -5,7 +5,7 @@ from pathlib import Path
 
 SEEDS = [880101, 880102, 880103]
 REF_TICKS = {"sim-N250": list(range(0, 101)), "real-N250": list(range(0, 101, 2)),
-             "sim-N1000": [0, 5, 10, 15, 20] + list(range(30, 101, 10))}
+             "sim-N1000": list(range(0, 101, 5))}
 P = {
     "wp": "WP88", "ledger_id": "WP88-ONLINE-SV-QUOTE-V2", "base": "main 5027bc1e (WP87 warm-continuation API)",
     "model": {"source": "market_uncertainty_v1 sv_prototype Target, P=1 intercept, K=0 flow (WP84 target, unchanged)",
@@ -68,20 +68,20 @@ P = {
         "stuck_chain": "a chain is stuck when the median of its log_sigma draws is > 1.0 from the gated reference's median "
                        "log_sigma, or the median of its h_last draws > 2.0 from the reference's median h_last (WP84 posthoc "
                        "census rule; applied to every arm, oWALNUTS flags also recorded)",
-        "scored_ticks": "reference ticks >= 1 within the arm's tick range (warm: 100 at sim-N250, 50 at real-N250, 12 at "
+        "scored_ticks": "reference ticks >= 1 within the arm's tick range (warm: 100 at sim-N250, 50 at real-N250, 20 at "
                         "sim-N1000 per seed; refits: 20 / 10 / 4 per seed); tick 0 of the warm arm scored separately (full "
                         "fit, reported)",
         "pass": "an arm passes at (K, dataset, N) iff the passing share is >= 0.95 over the three seeds pooled AND >= 0.90 in "
                 "every seed AND drift is within bound in every seed; integer form: sim-N250 >= 285/300 and >= 90/100; "
-                "real-N250 >= 143/150 and >= 45/50; sim-N1000 >= 35/36 and >= 11/12"},
+                "real-N250 >= 143/150 and >= 45/50; sim-N1000 >= 57/60 and >= 18/20"},
     "drift": {
         "statistic": "per seed: mean signed P50 relative error over late scored ticks (tick >= 70) minus over early scored "
                      "ticks (1 <= tick <= 30)",
-        "bound": 0.005, "windows": "sim-N250 30 early / 31 late ticks; real-N250 15 / 16; sim-N1000 5 / 4",
+        "bound": 0.005, "windows": "sim-N250 30 early / 31 late ticks; real-N250 15 / 16; sim-N1000 6 / 7",
         "noise_note": "with a per-tick P50 error sd of about 0.9 % (K=200) to 1.8 % (K=50) the statistic's sd is ~0.23 % "
-                      "(sim-N250), ~0.33 % (real), ~0.6 % (sim-N1000) at K=200, so the N=1000 drift test is underpowered: a "
-                      "miss there without a common sign across seeds is reported as noise-compatible but still counts against "
-                      "the pass"},
+                      "(sim-N250), ~0.33 % (real), ~0.5 % (sim-N1000) at K=200, so the real and N=1000 drift tests have "
+                      "less power: a miss there without a common sign across seeds is reported as noise-compatible but still "
+                      "counts against the pass"},
     "decision_rule": "The README may say 'real-time quote refresh at K = k' only for a K that passes on all seeds, both N "
                      "(sim-N250, sim-N1000) and every dataset run (sim, real). Otherwise it states the measured latency, "
                      "accuracy and the largest tolerance met (over the grid P50 in {1,2,5,10} % x P95 in {2,5,10,20} %) per "
@@ -95,7 +95,7 @@ P = {
               "K=50 fails; stuck-chain ticks in the refit baselines more frequent than on sim",
         "P4": "latency medians (4 pinned cores): sim-N250 K=50 15-30 ms, K=100 30-60 ms, K=200 60-120 ms; sim-N1000 4-10x "
               "those; the 0.1 s share at sim-N250 >= 0.95 for K=50/100 and 0.3-0.8 for K=200",
-        "P5": "reference gate: 1-5 of the 165 reference ticks drop a flagged chain; 0-2 need the second seed; 0 fail both",
+        "P5": "reference gate: 1-5 of the 173 reference ticks drop a flagged chain; 0-2 need the second seed; 0 fail both",
         "P6": "refit baselines (20 ticks x 3 seeds per dataset/N): stuck-chain ticks oWALNUTS 2-8/60, CmdStan 4-12/60, "
               "nutpie 0-1/60 at sim-N250; as-sampled accuracy share nutpie >= 95 %, oWALNUTS and CmdStan 85-95 % (gated "
               "oWALNUTS >= 95 %); none under 0.4 s at N=250; nutpie median 1-1.5 s (N=250) / 4-6 s (N=1000)",
@@ -103,12 +103,13 @@ P = {
               "(70-200 ms), accuracy share within 5 points of it",
         "P8": "bit-identity: run_warm reproduces the WP84 harness construction bit-for-bit on the SV target for tick 1 (all "
               "4 chains)"},
-    "budget": "about 255 lane-minutes: references 42 (sim-N250, 101 ticks) + 20 (real, 51 ticks) + 45-50 (sim-N1000, 13 "
-              "ticks at ~200 s); warm 27 cells ~20; oWALNUTS refits ~30; CmdStan ~90; nutpie ~8; pyextra ~3; builds ~6. "
-              "Three queues of 80-95 min each; about 1.5 h wall. Based on WP84 walls on the same box.",
+    "budget": "about 240 lane-minutes: references 42 (sim-N250, 101 ticks) + 20 (real, 51 ticks) + 25 (sim-N1000, 21 "
+              "ticks at the measured 69 s of the pre-freeze full-size tick); warm 27 cells ~20; oWALNUTS refits ~30; CmdStan "
+              "~90; nutpie ~8; pyextra ~3. Queues A/B/C about 80 / 80 / 70 min; about 1.5 h wall. Based on WP84 walls on the "
+              "same box and the pre-freeze smoke.",
     "software": {"cmdstan_path": "/home/ubuntu/infra/cmdstan/cmdstan-2.39.0", "nutpie": "0.16.8", "cmdstanpy": "1.3.0",
                  "arviz": "0.23.4", "rust": "1.88.0", "bridgestan": "2.9.0"},
-    "execution": "lanes 2-4 (cores 4-7 = queue A, 8-11 = queue B, 12-15 = queue C) of the shared c7a.4xlarge, "
+    "execution": "lanes 2-4 (cores 4-7 = queue A, 8-11 = queue B, 12-15 = queue C); queue A: ref sim-N1000, warm sim-N1000, refit sim-N1000, nutpie sim-N1000, refit sim-N250, cmdstan/refit/nutpie real-N250; B: ref sim-N250, ref real-N250, cmdstan sim-N250, nutpie sim-N250, pyextra; C: warm sim-N250, warm real-N250, cmdstan sim-N1000 of the shared c7a.4xlarge, "
                  "taskset-pinned, RAYON_NUM_THREADS=4 OMP_NUM_THREADS=1, co-tenanted with lane 1 (WP89) and with each other: "
                  "walls are 'pinned, co-tenanted'; accuracy and gradient counts unaffected",
     "discipline": "three queues run in parallel, cells sequential within a queue in this order; a started cell is never "
@@ -136,7 +137,7 @@ add("B", id="ref-real-N250", arm="ref", ds="real", N=250)
 for s in SEEDS:
     add("B", id=f"cmdstan-sim-N250-s{s}", arm="cmdstan", ds="sim", N=250, seed=s, ticks=20)
 for s in SEEDS:
-    add("B", id=f"refit-sim-N250-s{s}", arm="refit", ds="sim", N=250, seed=s, ticks=20)
+    add("A", id=f"refit-sim-N250-s{s}", arm="refit", ds="sim", N=250, seed=s, ticks=20)
 for s in SEEDS:
     add("B", id=f"nutpie-sim-N250-s{s}", arm="nutpie", ds="sim", N=250, seed=s, ticks=20)
 add("B", id="pyextra-sim-N250-K200-s880101", arm="pyextra", ds="sim", N=250, K=200, seed=880101, ticks=100)
@@ -149,10 +150,10 @@ for s in SEEDS:
 for s in SEEDS:
     add("C", id=f"cmdstan-sim-N1000-s{s}", arm="cmdstan", ds="sim", N=1000, seed=s, ticks=20)
 for s in SEEDS:
-    add("C", id=f"cmdstan-real-N250-s{s}", arm="cmdstan", ds="real", N=250, seed=s, ticks=20)
+    add("A", id=f"cmdstan-real-N250-s{s}", arm="cmdstan", ds="real", N=250, seed=s, ticks=20)
 for s in SEEDS:
-    add("C", id=f"refit-real-N250-s{s}", arm="refit", ds="real", N=250, seed=s, ticks=20)
+    add("A", id=f"refit-real-N250-s{s}", arm="refit", ds="real", N=250, seed=s, ticks=20)
 for s in SEEDS:
-    add("C", id=f"nutpie-real-N250-s{s}", arm="nutpie", ds="real", N=250, seed=s, ticks=20)
+    add("A", id=f"nutpie-real-N250-s{s}", arm="nutpie", ds="real", N=250, seed=s, ticks=20)
 Path(__file__).resolve().parent.joinpath("protocol.json").write_text(json.dumps(P, indent=1) + "\n", encoding="utf-8")
 print(len(cells), "cells; reference ticks", {k: len(v) for k, v in REF_TICKS.items()}, sum(map(len, REF_TICKS.values())))
