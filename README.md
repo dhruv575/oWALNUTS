@@ -219,7 +219,12 @@ paired per-seed ratios over the fixed-16 models, seed-bootstrap interval
 [0.79, 0.94]; WP72, [E38]). The earlier six-seed figures, 0.76 on Windows
 and 1.21 on Linux, were both seed noise: on six seeds the interval spans
 0.7–1.6 on either platform. Gates over the same 288 cells are 239 for
-oWALNUTS and 198 for CmdStan. v7's own three seeds gave
+oWALNUTS, 198 for CmdStan and 163 for nutpie 0.16.8 (WP76, [E42]); per
+gradient oWALNUTS is 0.70x nutpie [0.65, 0.96], and per second on Linux it
+is 0.89x CmdStan [0.85, 1.00] and 0.93x nutpie [0.87, 1.28], both intervals
+reaching 1. The honest line over 18 seeds: the most reliable of the three
+by a wide margin, a little behind per gradient, about even per second.
+v7's own three seeds gave
 0.708 over the 15 complete fixed-16 models, against v6's 0.848; a
 preregistered three-seed extension (WP62) gave 0.810 on the new seeds and
 **0.761 pooled over six**, with a leave-one-seed-out interval of
@@ -240,8 +245,9 @@ Linux seeds it is **1.21x CmdStan**, because CmdStan's chain sits in
 `hmm_drive_0`'s second mode on 4 of 6 Linux seeds (2 of 6 on Windows), and
 0.86x without that model (Windows 0.75x). Wall per gradient falls to 0.94x
 CmdStan's with the concurrent-replica dispatch, and ESS per second is 1.22x
-CmdStan's and 1.45x nutpie's. The robustness study (WP72, 12 further seeds)
-fixed the headline statistic above. [E34]
+CmdStan's and 1.45x nutpie's on those six seeds (over 18 seeds, 0.89x and
+0.93x; WP76). The robustness study (WP72, 12 further seeds) fixed the
+headline statistic above. [E34]
 
 v7 did **not** pass the v6 release rule. Its per-gradient clause (>= 0.75
 CmdStan) failed: the value was 0.708, and the clause was formally
@@ -886,3 +892,13 @@ provenance.
   0.02–1.5). WP79 fixes the diagonal branch and adds a GP guard:
   [`STUDIES/metric_autoselect_v1`](STUDIES/metric_autoselect_v1/README.md)
   (WP75).
+- [E42] nutpie 0.16.8 on the fixed-16 x the same 18 Linux seeds (288 cells,
+  one child process per seed; the oWALNUTS and CmdStan cells reused from
+  WP64/WP72): gates oWALNUTS 239, CmdStan 198 (3 errors), nutpie 163 (7
+  crashes, all `lotka_volterra`; non-centred Eight Schools 2/18, `diamonds`
+  2/18, `hmm_drive_0` 11/18); median paired per-seed ratio oWALNUTS ÷
+  nutpie: per gradient 0.699 [0.650, 0.962], per second 0.932 [0.865,
+  1.275]; oWALNUTS ÷ CmdStan per second 0.886 [0.846, 1.000]. Stuck chains
+  on `hmm_drive_0`: oWALNUTS 1/18, CmdStan 5/18, nutpie 6/18. nutpie was
+  bit-identical to WP64 on all 45 cells both runs finished:
+  [`STUDIES/nutpie_18seed_v1`](STUDIES/nutpie_18seed_v1/README.md) (WP76).
