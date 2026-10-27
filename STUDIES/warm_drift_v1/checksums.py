@@ -5,6 +5,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 FILES = ["protocol.json", "PREREGISTRATION.md", "README.md", "LEDGER-ENTRY.md", "analyze.py", "checksums.py",
+         "audit_recovery.py", "test_audit_recovery.py", "RECOVERY-AUDIT.md",
          "make_protocol.py", "simulate.py", "run_cells.py", ".gitignore",
          "models/data-shift.json", "models/data-control.json",
          "rust/Cargo.toml", "rust/Cargo.lock", "rust/src/main.rs"]
