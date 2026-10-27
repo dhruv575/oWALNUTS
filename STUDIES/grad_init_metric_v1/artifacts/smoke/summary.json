@@ -1,0 +1,544 @@
+{
+ "schema": "grad-init-metric-v1-summary",
+ "ledger_id": "WP94-GRAD-INIT-METRIC-V1",
+ "environment": {
+  "smoke": true,
+  "custom_noop_identity": {
+   "P:kidiq-kidscore_momhsiq": {
+    "holds": true,
+    "chains_identical": true,
+    "whole_cell_identical": true,
+    "hashes": [
+     [
+      "4c5e7f5ef5ac31cf",
+      352766
+     ],
+     [
+      "4c5e7f5ef5ac31cf",
+      352766
+     ]
+    ]
+   },
+   "P:GLMM_Poisson_data-GLMM_Poisson_model": {
+    "holds": true,
+    "chains_identical": true,
+    "whole_cell_identical": true,
+    "hashes": [
+     [
+      "c76d228056b67065",
+      334670
+     ],
+     [
+      "c76d228056b67065",
+      334670
+     ]
+    ]
+   },
+   "F": {
+    "holds": true,
+    "chains_identical": true,
+    "whole_cell_identical": true,
+    "hashes": [
+     [
+      "7e905ac903cd2c69",
+      4527127
+     ],
+     [
+      "7e905ac903cd2c69",
+      4527127
+     ]
+    ]
+   },
+   "S": {
+    "holds": true,
+    "chains_identical": true,
+    "whole_cell_identical": true,
+    "hashes": [
+     [
+      "1e0ceee07cf88f44",
+      813847
+     ],
+     [
+      "1e0ceee07cf88f44",
+      813847
+     ]
+    ]
+   }
+  }
+ },
+ "verdict": "DOES NOT QUALIFY (failed: R2, R5, R7); stays research",
+ "rules": {
+  "R1_passes": {
+   "defaults": 1,
+   "gradinit": 1,
+   "gradinit-noguard": 1,
+   "cells_per_arm": 2,
+   "part1_errors": [],
+   "held": true
+  },
+  "R2_headline_ge_0.98": {
+   "geomean": 0.9279958700467771,
+   "models": 2,
+   "models_without_5_paired_seeds": [],
+   "paired_per_seed": {
+    "pairs": 2,
+    "median": 0.9580446887955091,
+    "bootstrap_95_interval_of_median": [
+     0.719983161232971,
+     1.1961062163580471
+    ],
+    "min": 0.719983161232971,
+    "max": 1.1961062163580471
+   },
+   "noguard_geomean": 0.9279958700467771,
+   "noguard_paired_per_seed": {
+    "pairs": 2,
+    "median": 0.9580446887955091,
+    "bootstrap_95_interval_of_median": [
+     0.719983161232971,
+     1.1961062163580471
+    ],
+    "min": 0.719983161232971,
+    "max": 1.1961062163580471
+   },
+   "held": false
+  },
+  "R3_warmup_gradients_and_gates": {
+   "warmup_gradient_ratio_geomean": 0.5932591934226614,
+   "per_model_warmup_gradient_ratio": {
+    "kidiq-kidscore_momhsiq": 0.5459044869405205,
+    "GLMM_Poisson_data-GLMM_Poisson_model": 0.6447217031554725
+   },
+   "noguard_warmup_gradient_ratio_geomean": 0.5932591934226614,
+   "models_with_gate_drop": [],
+   "held": true
+  },
+  "R4_no_new_divergences": {
+   "models_with_more_candidate_divergences": [],
+   "passing_cells_with_new_divergences": [],
+   "held": true
+  },
+  "R5_funnel": {
+   "cells": 1,
+   "p5": 0.0466625,
+   "se": null,
+   "z": null,
+   "within_2se": false,
+   "fired_chains": 0,
+   "fired_cells": [],
+   "divergences": 0,
+   "exact": 0.0477903522728147,
+   "diag": {
+    "cells": 1,
+    "p5": 0.0425125,
+    "se": null,
+    "abs_error": 0.005277852272814701,
+    "z": null,
+    "within_2se": false,
+    "divergences": 2,
+    "fired_cells": [],
+    "fired_chains": 0,
+    "min_step_ratio_at_close": 0.6880761814979469,
+    "median_wall": null
+   },
+   "noguard": {
+    "cells": 1,
+    "p5": 0.0466625,
+    "se": null,
+    "abs_error": 0.0011278522728147,
+    "z": null,
+    "within_2se": false,
+    "divergences": 0,
+    "fired_cells": [],
+    "fired_chains": 0,
+    "min_step_ratio_at_close": null,
+    "median_wall": null
+   },
+   "held": false
+  },
+  "R6_sv_trapped": {
+   "noguard_trapped_chains": 0,
+   "noguard_chains": 4,
+   "candidate_trapped_chains": 0,
+   "candidate_chains": 4,
+   "candidate_firings": 0,
+   "defaults_trapped_chains": 0,
+   "defaults_chains": 4,
+   "defaults_firings": 0,
+   "held": true
+  },
+  "R7_library_integrity": {
+   "kernel_fingerprint_default_passed": null,
+   "kernel_fingerprint_research_passed": null,
+   "grad_init_metric_tests_passed": null,
+   "trapped_chain_restart_tests_passed": null,
+   "clippy_library_clean": null,
+   "clippy_study_clean": null,
+   "smoke_custom_noop_identical": null,
+   "held": false
+  }
+ },
+ "reported": {
+  "models_below_0.9": [
+   "GLMM_Poisson_data-GLMM_Poisson_model"
+  ],
+  "models_above_1.1": [
+   "kidiq-kidscore_momhsiq"
+  ],
+  "headline_per_model_sorted": [
+   [
+    "GLMM_Poisson_data-GLMM_Poisson_model",
+    0.719983161232971
+   ],
+   [
+    "kidiq-kidscore_momhsiq",
+    1.1961062163580471
+   ]
+  ],
+  "wall_per_gradient_candidate_over_defaults_geomean": 1.1552311303717449,
+  "firings": {
+   "defaults": 0,
+   "gradinit": 0,
+   "gradinit-noguard": 0
+  },
+  "firings_by_block": {
+   "P": {
+    "defaults": 0,
+    "gradinit": 0
+   },
+   "F": {
+    "defaults": 0,
+    "gradinit": 0
+   }
+  },
+  "sv_median_wall": {
+   "defaults": 2.292981686,
+   "gradinit": 1.428788139,
+   "gradinit-noguard": 1.366661098
+  },
+  "sv_target_calls_total": {
+   "defaults": 813847,
+   "gradinit": 485600,
+   "gradinit-noguard": 485600
+  },
+  "sv_warmup_calls_total": {
+   "defaults": 691287,
+   "gradinit": 363349,
+   "gradinit-noguard": 363349
+  },
+  "errors": []
+ },
+ "per_model": {
+  "kidiq-kidscore_momhsiq": {
+   "passes_defaults": 1,
+   "divergences_defaults": 0,
+   "warned_cells_defaults": [],
+   "fired_cells_defaults": [],
+   "max_rank_rhat_defaults": [
+    1.0022040569898967
+   ],
+   "gradients_warmup_defaults_median": 231379,
+   "gradinit": {
+    "passes": 1,
+    "paired_ratios": [
+     1.1961062163580471
+    ],
+    "headline_ratio": 1.1961062163580471,
+    "warmup_gradient_ratios": [
+     0.5459044869405205
+    ],
+    "warmup_gradient_ratio": 0.5459044869405205,
+    "divergences": 0,
+    "fired_cells": [],
+    "warned_cells": [],
+    "max_rank_rhat": [
+     1.0026344607610216
+    ],
+    "max_abs_z_passing": 1.3998955245534677,
+    "gradients_warmup_median": 141206,
+    "initial_mass_range": [
+     20.98728403329696,
+     251995.84158846634
+    ],
+    "wall_per_gradient_ratio": 0.9040184093266513
+   },
+   "gradinit-noguard": {
+    "passes": 1,
+    "paired_ratios": [
+     1.1961062163580471
+    ],
+    "headline_ratio": 1.1961062163580471,
+    "warmup_gradient_ratios": [
+     0.5459044869405205
+    ],
+    "warmup_gradient_ratio": 0.5459044869405205,
+    "divergences": 0,
+    "fired_cells": [],
+    "warned_cells": [],
+    "max_rank_rhat": [
+     1.0026344607610216
+    ],
+    "max_abs_z_passing": 1.3998955245534677,
+    "gradients_warmup_median": 141206,
+    "initial_mass_range": [
+     20.98728403329696,
+     251995.84158846634
+    ],
+    "wall_per_gradient_ratio": 0.8732330504950276
+   }
+  },
+  "GLMM_Poisson_data-GLMM_Poisson_model": {
+   "passes_defaults": 0,
+   "divergences_defaults": 0,
+   "warned_cells_defaults": [],
+   "fired_cells_defaults": [],
+   "max_rank_rhat_defaults": [
+    1.1360254980681301
+   ],
+   "gradients_warmup_defaults_median": 237835,
+   "gradinit": {
+    "passes": 0,
+    "paired_ratios": [
+     0.719983161232971
+    ],
+    "headline_ratio": 0.719983161232971,
+    "warmup_gradient_ratios": [
+     0.6447217031554725
+    ],
+    "warmup_gradient_ratio": 0.6447217031554725,
+    "divergences": 0,
+    "fired_cells": [],
+    "warned_cells": [],
+    "max_rank_rhat": [
+     1.1242790985341387
+    ],
+    "max_abs_z_passing": null,
+    "gradients_warmup_median": 176641,
+    "initial_mass_range": [
+     10.760911263476224,
+     41121.282816597304
+    ],
+    "wall_per_gradient_ratio": 1.476251977627327
+   },
+   "gradinit-noguard": {
+    "passes": 0,
+    "paired_ratios": [
+     0.719983161232971
+    ],
+    "headline_ratio": 0.719983161232971,
+    "warmup_gradient_ratios": [
+     0.6447217031554725
+    ],
+    "warmup_gradient_ratio": 0.6447217031554725,
+    "divergences": 0,
+    "fired_cells": [],
+    "warned_cells": [],
+    "max_rank_rhat": [
+     1.1242790985341387
+    ],
+    "max_abs_z_passing": null,
+    "gradients_warmup_median": 176641,
+    "initial_mass_range": [
+     10.760911263476224,
+     41121.282816597304
+    ],
+    "wall_per_gradient_ratio": 1.4789831317178364
+   }
+  }
+ },
+ "funnel": {
+  "diag": {
+   "cells": 1,
+   "p5": 0.0425125,
+   "se": null,
+   "abs_error": 0.005277852272814701,
+   "z": null,
+   "within_2se": false,
+   "divergences": 2,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_at_close": 0.6880761814979469,
+   "median_wall": null
+  },
+  "gradinit": {
+   "cells": 1,
+   "p5": 0.0466625,
+   "se": null,
+   "abs_error": 0.0011278522728147,
+   "z": null,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_at_close": 0.16931432647518133,
+   "median_wall": null
+  },
+  "gradinit-noguard": {
+   "cells": 1,
+   "p5": 0.0466625,
+   "se": null,
+   "abs_error": 0.0011278522728147,
+   "z": null,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_at_close": null,
+   "median_wall": null
+  },
+  "diag-best16": {
+   "cells": 1,
+   "p5": 0.0358875,
+   "se": null,
+   "abs_error": 0.0119028522728147,
+   "z": null,
+   "within_2se": false,
+   "divergences": 5,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_at_close": 0.5169680032889036,
+   "median_wall": null
+  },
+  "gradinit-best16": {
+   "cells": 1,
+   "p5": 0.037725,
+   "se": null,
+   "abs_error": 0.010065352272814701,
+   "z": null,
+   "within_2se": false,
+   "divergences": 0,
+   "fired_cells": [],
+   "fired_chains": 0,
+   "min_step_ratio_at_close": 0.5935799793439662,
+   "median_wall": null
+  }
+ },
+ "sv": {
+  "defaults": {
+   "cells": 1,
+   "chains": 4,
+   "trapped_chains": 0,
+   "trapped_cells": 0,
+   "trapped": [],
+   "warned_chains": 0,
+   "fired": [],
+   "target_calls_total": 813847,
+   "warmup_calls_total": 691287,
+   "start_log_sigma_gt_1_3": 0,
+   "median_wall": 2.292981686,
+   "firings": 0
+  },
+  "gradinit": {
+   "cells": 1,
+   "chains": 4,
+   "trapped_chains": 0,
+   "trapped_cells": 0,
+   "trapped": [],
+   "warned_chains": 0,
+   "fired": [],
+   "target_calls_total": 485600,
+   "warmup_calls_total": 363349,
+   "start_log_sigma_gt_1_3": 0,
+   "median_wall": 1.428788139,
+   "firings": 0
+  },
+  "gradinit-noguard": {
+   "cells": 1,
+   "chains": 4,
+   "trapped_chains": 0,
+   "trapped_cells": 0,
+   "trapped": [],
+   "warned_chains": 0,
+   "fired": [],
+   "target_calls_total": 485600,
+   "warmup_calls_total": 363349,
+   "start_log_sigma_gt_1_3": 0,
+   "median_wall": 1.366661098,
+   "firings": 0
+  }
+ },
+ "firings": [],
+ "predictions": {
+  "P1_part1_passes": {
+   "text": "Part 1 passes: defaults 88-100 of 132 (WP90: 92 on its seeds; WP85: 105); gradinit within -3..+4 of the defaults (the initial metric changes every chain's first 100 transitions; the gates are dominated by the retained window).",
+   "observed": {
+    "defaults": 1,
+    "gradinit": 1
+   },
+   "held": false
+  },
+  "P2_headline": {
+   "text": "R2 headline geomean in [0.97, 1.08]: the metric is identity-adapted by transition 100 either way, so retained ESS is unchanged in expectation and the gradient count moves with the first window's cost; paired per-seed median within [0.95, 1.10]. Models with a stiff start (kilpisjarvi, lotka_volterra, one_comp, GLMM_Poisson) gain; no model below 0.85 (reported, not ruled).",
+   "observed": {
+    "geomean": 0.9279958700467771,
+    "paired_median": 0.9580446887955091,
+    "min_model": 0.719983161232971
+   },
+   "held": false
+  },
+  "P3_warmup_gradients": {
+   "text": "R3 warmup-gradient geomean ratio gradinit / defaults in [0.80, 1.02]: fewer identity-phase gradients on the badly scaled models (the WP89 picture: 800 gradients per transition at depth 8-9 under the identity metric on the SV model), about equal elsewhere; no model's pass count drops.",
+   "observed": {
+    "geomean": 0.5932591934226614,
+    "gate_drops": []
+   },
+   "held": false
+  },
+  "P4_divergences": {
+   "text": "No new divergences on any model (R4 holds); divergence totals equal to the defaults' on at least 18 of 22 models.",
+   "observed": {
+    "held_R4": true,
+    "models_equal": 2
+   },
+   "held": false
+  },
+  "P5_funnel": {
+   "text": "Funnel P5 within 2 s.e. for all three arms (WP85 diag 0.0492 +- 0.0017, WP89 0.0503 +- 0.0012, WP90 0.0458 +- 0.0016); 0 firings in the gradinit arm.",
+   "observed": {
+    "diag": {
+     "within_2se": false,
+     "fired": 0
+    },
+    "gradinit": {
+     "within_2se": false,
+     "fired": 0
+    },
+    "gradinit-noguard": {
+     "within_2se": false,
+     "fired": 0
+    },
+    "diag-best16": {
+     "within_2se": false,
+     "fired": 0
+    },
+    "gradinit-best16": {
+     "within_2se": false,
+     "fired": 0
+    }
+   },
+   "held": false
+  },
+  "P6_sv": {
+   "text": "SV: defaults trapped 3-16 of 480 with 6-16 guard firings (WP90: 8 and 13); gradinit-noguard trapped 0-2 of 480 (WP89 nutpie_init: 1/240); gradinit 0 of 480 with 0-3 guard firings.",
+   "observed": {
+    "defaults": {
+     "trapped": 0,
+     "firings": 0
+    },
+    "gradinit": {
+     "trapped": 0,
+     "firings": 0
+    },
+    "gradinit-noguard": {
+     "trapped": 0,
+     "firings": 0
+    }
+   },
+   "held": false
+  },
+  "P7_library": {
+   "text": "R7 holds: fingerprints untouched, the flag-off tests pass, clippy clean, custom_noop bit-identical to defaults on every smoke cell.",
+   "held": false
+  }
+ }
+}

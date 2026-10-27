@@ -9,7 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 FILES = ["protocol.json", "PREREGISTRATION.md", "README.md", "LEDGER-ENTRY.md", "run_study.py", "make_protocol.py",
          "checksums.py", "Cargo.toml", "Cargo.lock", ".gitignore", "src/bin/sv_cell.rs", "src/bin/pdb_cell.rs",
-         "src/bin/funnel.rs", "models/data.json", "box/env.sh", "box/setup.sh", "box/run_all.sh", "box/post.sh"]
+         "src/bin/funnel.rs", "models/data.json", "box/env.sh", "box/setup.sh", "box/smoke.sh", "box/run_all.sh", "box/post.sh"]
 SKIP = {"draws", "telemetry", "raw-tmp"}
 paths = [HERE / f for f in FILES if (HERE / f).exists()] + sorted(
     p for p in (HERE / "artifacts").rglob("*") if p.is_file() and not (SKIP & set(p.parts)))
