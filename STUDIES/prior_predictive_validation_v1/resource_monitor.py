@@ -50,7 +50,7 @@ def execute(command,cwd,cap,output_root,rss_limit,byte_limit,log_path,ownership_
                 code=p.poll()
                 if code is not None:
                     result.update(status='exited',exit_code=code)
-                    if alive:result['orphaned_children_after_leader_exit']=True
+                    if discover():result['orphaned_children_after_leader_exit']=True
                     break
                 time.sleep(.1)
     except Exception as exc:result.update(status='failed',error=repr(exc))
