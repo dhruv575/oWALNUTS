@@ -58,9 +58,13 @@ def main():
     tracked, process = {}, None
 
     def discover():
-        if process is not None:
+        # Never reconstruct the launcher solely from its numeric PID after exit.
+        # Its PID could have been reused while the real Python child still runs.
+        for key, parent in list(tracked.items()):
             try:
-                for item in [psutil.Process(process.pid)] + psutil.Process(process.pid).children(recursive=True):
+                if not parent.is_running() or parent.create_time() != key[1]:
+                    continue
+                for item in parent.children(recursive=True):
                     tracked.setdefault((item.pid, item.create_time()), item)
             except psutil.NoSuchProcess:
                 pass
@@ -77,6 +81,8 @@ def main():
         with log.open('xb') as stream:
             process = subprocess.Popen(command, cwd=study, env=env,
                                        stdout=stream, stderr=subprocess.STDOUT)
+            launcher = psutil.Process(process.pid)
+            tracked[(launcher.pid, launcher.create_time())] = launcher
             state.update(status='running', launcher_pid=process.pid)
             phase_start = None
             while True:
