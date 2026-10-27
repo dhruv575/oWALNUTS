@@ -1,0 +1,45 @@
+﻿# DRAFT preregistration: long-horizon resident K400 reliability
+
+Status: unexecuted draft. No data/RNG generation or AWS launch until fixed source/protocol/runtime/seed review and parent authorization. Earlier evidence and the user's options_flow_v1 edit remain untouched. This diagnostic cannot change a default or claim market value.
+
+## Question and limited replication
+
+Does the unchanged resident K400 approximation continue to agree with an independent posterior for the SAME fixed250-return target after2000 updates, including a fixed volatility regime change? Separate continuation discrepancy from finite Monte Carlo noise and from a misspecified model's forecasting error. One new base data path, paired stationary/shift variants, and two independent sampler replicates per variant give four continuous lanes/8000updates. The two variants share data innovations and each replicate's initialization/warm seeds; their common prefix is not independent evidence. This first bounded experiment cannot support population calibration, broad market claims or a causal proof that elapsed time alone creates error.
+
+## Exact data and causal shift
+
+Generate2251 latent states/returns from one fresh reserved data RNG: first mu~N(2log(.005),1),log_sigma~N(log(.2),.5),beta~N(0,.002), then2251Gaussian innovations and2251Student-t5 innovations. rho=.95; stationary initial latent. Same frozen NumPy/runtime and call order as the reviewed prior-predictive generator, with this separately frozen length/new seed. Do NOT extend/reuse the E61 RNG prefix: changing its batched draw length changes the later Student-t stream. No truncation, resampling or replacement of hard parameters/data.
+
+Control follows the stationary base path. Shift adds exactly2log2 to h[t] for t>=1250, with beta unchanged: return innovations around beta double from that index onward. This is an instantaneous fixed latent-level shock followed by the same innovations around the shifted level, not a globally stationary data model. The first shifted observation y[1250] is incorporated at update1001. Initial fit uses y[0:250]; update j observes y[249+j], conditions on y[j:250+j], and optionally scores y[250+j]. Windows through update1000 are identical across variants; after update1250 the entire250-observation window is post-shift. Last scored label is y[2250]. The inference model/prior remains unchanged and constant-parameter, so its transition-period forecast miscalibration is NOT approximation error.
+
+## Fixed candidate and checkpoints
+
+Use the validated native wheel/unified environment and unchanged DrawResident numeric methods: four chains, initial1000warmup/200retained, K400 per update, fixed tuning/remap, declared initial guard, no adaptive budget or re-adaptation. A terminal native/required evaluator failure poisons/stops that lane; all remaining planned updates remain unattempted. No retry, replacement, dropped chain or changed seed.
+
+Checkpoints are exactly [1,500,999,1000,1001,1002,1010,1025,1500,1750,2000]. Thus44 planned candidate checkpoint rows; eight immediate transition observations/checks across the two variants/replicates are not collapsed into the old every25-tick schedule. All8000update timing/work/health rows remain accounted. Full compact draws and per-transition diagnostics persist at each fixed checkpoint; between checkpoints store native scalar health/work totals plus complete timing and causal window identity. No previous row is rewritten or rehashed each tick. The persistence/loop module is shared with the separately frozen real-data study, which can enable every-tick scoring/raw retention without changing the native engine.
+
+## Primary full-return fidelity and secondary scale functional
+
+At each checkpoint derive a causal query grid ONLY from the current250 observations: center=arithmetic mean, scale=population standard deviation(ddof0), offsets[-2,-1,0,1,2]. The same queries are supplied to every candidate replicate and the independent reference. Nonfinite/nonpositive scale is a recorded failure; no data-dependent fallback. Score unchanged full-return GH128-primary/GH64-check CDF and logdensity at these five points; also retain the next realized-label CDF/logdensity as a separate diagnostic. Primary inference comparison is candidate minus independent reference on the same target/query, not raw PIT calibration across a regime change.
+
+Report signed and absolute errors per variant/replicate/checkpoint/query, all own CDF and delta-log(mean-density) MCSEs, between-replicate differences and shared reference uncertainty. Predeclare early=[1,500,999] and late=[1500,1750,2000]: report late-minus-early mean signed error for each query and replicate, plus paired shift-minus-control contrast. Display all transition checkpoints separately. Two sampler replicates and one data path are insufficient for a population confidence interval; do not treat dependent ticks, paired variants or a reused reference as independent replicates. Short-chain MCSE can understate error, so no automatic standardized-error/2SE pass rule is introduced.
+
+Prespecified secondary: analytic predictive-SCALE P50/P95 using the already reviewed warm_precision_diagnostic_v1/analyze.py formulas. Explicitly map full joint columns [mu,log_sigma,beta,h_last] to indices[0,1,3]. Preserve log-scale Gaussian-mixture CDF bracketing, Brent root tolerances/residual checks and per-chain CDF MCSE/density delta scaling. Report relative candidate/reference errors and BOTH MCSEs. No simulated future innovations and no full-return quantile inversion. This connects to WP96's functional but does NOT apply its old2%/5% qualification rule to this different schedule/design.
+
+## Independent references and missingness
+
+There are22 variant/checkpoint target slots,18unique targets: four pre-shift windows [1,500,999,1000] are shared between variants only after exact data/window hash equality. Fit each unique target once using public nutpie0.16.8/BridgeStan2.9, four chains,2000warmup/4000retained, the same explicit engine settings and fullfloat64joint extraction as E61. Shared references stay shared in uncertainty accounting. No target selected by outcomes; no precision-driven fit extensions or replacements.
+
+Use existing reference reliability criteria: finite draws, zero retained divergences, rankRhat<=1.01 and bulk/tailESS>=1000 for globals/terminal latent and primary CDF/integrated-density functionals; CDFMCSE<=.005 and delta logdensityMCSE<=.01. Preserve all diagnostics even if unreliable. Secondary scale roots/MCSE must be finite and valid; their precision is reported descriptively, not silently assumed adequate. Unreliable/missing reference slots yield unavailable agreement with exact denominators; they never remove candidate records.
+
+Mechanical result is complete/incomplete evidence plus the prespecified error/contrast tables and all reference diagnostics, not a binary sampler qualification. Predictions to examine: stationary-control late errors should remain comparable to early errors/replicate scatter; transition errors may be larger; adequate posterior agreement need not imply accurate real-data forecasting. A failure is evidence, never a reason to alter scope.
+
+## Scheduling, cost and bounds
+
+Four independent lane subprocesses, fixed affinities0-3/4-7/8-11/12-15, each native threads4 and BLAS/OpenMP1. A small concurrent wrapper owns each scoped monitor; all four groups must drain before sequential reference compilation/fits. Record co-tenancy explicitly; latency is shared-host and cannot be called an isolated speed benchmark. Preserve all four planned lane slots even if one fails; avoid serial last-lane ordering truncation.
+
+E61 native update median.241s implies roughly32minutes serial work for8000updates;18reference jobs at~21s add6.3minutes, plus startup/checkpoint arithmetic/persistence. Four-way lane concurrency is expected to reduce paid wall to roughly15-25minutes, with uncertainty from shared hardware and difficult priors. Fixed outer cap3600s, internal3480s: lane phase2400s (each lane at most2400s), reference phase900s (each fit180s), final analysis120s, remainder integrity/teardown. Aggregate sampledRSS4GiB, total outputs2GiB, no cap changes after outcomes. Final numbers/source and a literal-only shared-runner fixture must be reviewed before freeze.
+
+## Seed reservation proposal
+
+Data2026102706000000; initial replicate bases2026102707000000/2026102707100000; warm replicate bases2026102708000000/2026102708100000. Each paired variant intentionally shares its replicate seeds/starts; replicate stride100000 exceeds the8000raw chain inputs per2000updates. Reference sample bases312710000+1000*j for j0..17, modelbase+1. Before freeze compare exact raw/effective/declared-guard seeds with existing reserved inventories, then one bounded exact-integer-token project metadata/source search (<=30s,<=5000files,<=2MiB/file, bounded path/count output). Exclude dependencies/raw artifacts; preserve honest scope/partial status. Never serialize raw matching lines. No RNG has been consumed by this draft.
