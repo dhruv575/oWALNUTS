@@ -1,0 +1,21 @@
+[package]
+name = "pool-confirm-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP97: oWALNUTS arms (gated reference, library warm continuation at small K) for the preregistered confirmation of the lag-normalised likelihood-reweighted tick pool"
+
+[dependencies]
+owalnuts = { path = "../../.." }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bin]]
+name = "wp97"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[workspace]
