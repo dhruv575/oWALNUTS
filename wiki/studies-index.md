@@ -81,6 +81,7 @@ evidence cell. Every study has a ledger entry in the
 | `uturn_default_v1` | WP26 | yes | `MomentumSum` alone is not the default: three of four criteria fail. |
 | `warmup_gap_diag_v1` | WP40 | no | None of four warmup levers meets the bar; the gap is warmup gradients from single-leaf step crashes. |
 | [`warm_drift_v1`](../STUDIES/warm_drift_v1/README.md) | WP96 | yes | No K=200 frozen/re-adapted policy qualifies over 2,000 fixed-window updates; re-adaptation increases cost without fixing precision. |
+| [`pool_confirm_v1`](../STUDIES/pool_confirm_v1/README.md) | WP97 | yes | Reweighted exponential H=10/20 pooling qualifies at K=200 on both fixed datasets; K=20/50 do not qualify jointly. Growing history and predictive-scale component timing only. |
 | [`amm_predictive_review_v1`](../STUDIES/amm_predictive_review_v1/README.md) | Diagnostic | no | Predictive-functional oracles and archived-draw audits; analytic scale CDF helps but does not rescue WP96. |
 | [`predictive_mcse_diagnostic_v1`](../STUDIES/predictive_mcse_diagnostic_v1/README.md) | Diagnostic | no | Exact stationary Gaussian-chain experiment: short correlated-chain tail MCSE and Wald coverage can be substantially optimistic. |
 | [`warm_precision_diagnostic_v1`](../STUDIES/warm_precision_diagnostic_v1/README.md) | Diagnostic | no | On reused WP96 windows and one fresh seed, K=400 plus analytic scale quantiles meets descriptive error bands at 159/160 sampled origins, with about 255 ms sampler time. Candidate for fresh testing, not qualification. |

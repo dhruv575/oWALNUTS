@@ -1271,3 +1271,22 @@ claims explicitly.
   A separately labeled post-hoc analytic-CDF diagnostic improves accuracy
   but still produces no policy passing all halves/streams:
   [`AMM predictive review`](STUDIES/amm_predictive_review_v1/README.md).
+  A separate fixed-budget diagnostic on reused windows and one fresh seed
+  reaches 159/160 sampled-origin accuracy at K=400 with analytic scale
+  quantiles, at about 255 ms sampler time. This is a candidate for fresh
+  testing, not qualification:
+  [`warm_precision_diagnostic_v1`](STUDIES/warm_precision_diagnostic_v1/README.md).
+- [E59] Likelihood-reweighted tick-pool confirmation (WP97, Linux, growing
+  history from 250 to 350 returns, simulated and real BTC bar-close streams,
+  three fresh sampler seeds): **K=200 with exponential H=10 or H=20 passes
+  the frozen predictive-scale rule on both datasets; no lower K qualifies**.
+  H=10 passes 300/300 simulated and 294/300 real seed/tick pairs, at median
+  library-plus-pooling component times of 79.7/306.2 ms; H=20 reaches
+  300/300 and 296/300 at 84.0/311.3 ms. Real K=50/H=20 misses the 285/300
+  threshold by two ticks, and its simulated counterpart fails the drift
+  rule. All 22 cells completed; all 202 references pass on their first
+  attempt and pass a supplemental saved-coordinate mixing audit. These
+  are predictive Student-t scale quantiles and summed component timings,
+  not complete return prediction, executable quotes or profitability.
+  Growing-history weights cannot be reused unchanged in a sliding window:
+  [`STUDIES/pool_confirm_v1`](STUDIES/pool_confirm_v1/README.md).
