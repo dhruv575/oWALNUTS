@@ -128,7 +128,8 @@ fills, fees, adverse selection, inventory-control actions or P&L. Log-return
 limits are not dollar-loss estimates. For the Student-t log-return
 model, E[exp(R)] is infinite; finite expected-price or unbounded-short dollar-loss
 claims are therefore unavailable. Bounded utility and bounded positive long
-downside are different quantities and need not share that divergence.
+downside are different quantities and need not share that divergence. See the
+[decision-contract moment analysis](../amm_decision_contract_v1/README.md).
 Realized finite-label pinball and the fixed finite stored-draw mixture's expected
 absolute log return are finite; no unproved integrability assertion is made
 about the unrestricted posterior hierarchy.
