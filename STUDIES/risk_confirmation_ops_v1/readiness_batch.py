@@ -1,5 +1,5 @@
 """Literal engineering route with four concurrent isolated reference compiles."""
-import argparse,concurrent.futures,hashlib,json,subprocess,time
+import argparse,concurrent.futures,hashlib,json,os,subprocess,time
 from pathlib import Path
 from batch import load_worker,safe
 from evidence_io import exclusive
@@ -17,7 +17,8 @@ def main():
     with (root/'fixtures.log').open('xb') as log:
         end=time.monotonic()+45
         for folder in (here,Path(spec['worker_path']).parent):
-            subprocess.run([spec['python'],'-m','unittest','discover','-s',str(folder),'-p','test_*.py','-v'],stdout=log,stderr=subprocess.STDOUT,timeout=max(.01,end-time.monotonic()),check=True)
+            env=dict(os.environ,OWALNUTS_E62_ROOT=spec['e62_root'])
+            subprocess.run([spec['python'],'-m','unittest','discover','-s',str(folder),'-p','test_*.py','-v'],stdout=log,stderr=subprocess.STDOUT,timeout=max(.01,end-time.monotonic()),check=True,env=env)
     jobs=[dict(phase=p,slot=i,status='not_started') for p,n in (('native',1),('baselines',1),('reference',4),('tails',1),('report',1)) for i in range(n)];unsafe=False;sdk_unchanged=None
     def one(phase,slot,cap,affinity):
         owned=root/'monitor'/f'{phase}-{slot}';owned.mkdir(parents=True);cap=min(cap,deadline-time.monotonic()-5)
