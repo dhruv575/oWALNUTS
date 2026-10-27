@@ -395,7 +395,7 @@ fn close_then_refresh_errors_and_drop_does_not_block() {
         .seed(1)
         .start_warm_session(Gaussian(4), state)
         .unwrap();
-    assert_eq!(format!("{dropped:?}").contains("WarmSession"), true);
+    assert!(format!("{dropped:?}").contains("WarmSession"));
     drop(dropped);
 }
 
