@@ -41,7 +41,9 @@ def supervise(manifest_path,output):
         if p is not None:p.poll()
         state['group_drained']=not alive()
         if alive():state['status']='cleanup_failed'
-        state['postrun_sources_match']=all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==want for path,want in spec['sources'].items())
+        try:state['postrun_sources_match']=all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==want for path,want in spec['sources'].items())
+        except Exception as exc:state.update(postrun_sources_match=False,integrity_error=repr(exc))
+        if not state['postrun_sources_match'] and state['status']=='exited':state['status']='integrity_failed'
         # Exit0 never means calibrated/completed: dedicated final evidence validator required.
         state['complete_evidence_verified']=False
         state['elapsed_seconds']=time.monotonic()-start;save()
