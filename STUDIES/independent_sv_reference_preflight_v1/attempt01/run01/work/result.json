@@ -1,0 +1,82 @@
+{
+  "status": "failed",
+  "phase": "public nutpie compile",
+  "started": 1793127773.1576712,
+  "source_manifest": {
+    ".gitattributes": "8b9c3028d6467ff3be7c793141927841d70f47f52d0590677438f488ca154992",
+    "common.py": "dde6fe9670627254dad1c025cba75a91b5ddf2c4e2520cf5f2786aeb52f21085",
+    "model.stan": "a303ef17066a157d3c0ac6165d2c603c7aed35afd4fd4e0146f4615d0cd92ada",
+    "native_fixture.py": "29eb8e7a009c3ed0fc034c408ccd799903739e67b7a348b021a13aa7b87e96d3",
+    "PLAN.md": "d7b244b15c5667adc0626dc030c7f6bdeba4a40e3d05c85fa46bef9df73c2440",
+    "preflight.py": "134776aa529014f8e923779802d607dad3ba129c04e5ab6087cd45b72d7e3c18",
+    "supervise.py": "cd64895c384938395d773740631e3a3e21e2985a8260912d16935ebe2b7b997d",
+    "sv_target_snapshot.py": "f3d60f512d51c88e3b08dc3229a1b8bcc5084627346051939ec700f66ea3fa15",
+    "test_preflight.py": "51e3340adacbabcc660068cbe05acdb9782e5e7ea6a35674fb2822d2ea0c9db4"
+  },
+  "runtime_binaries": {
+    "/home/ubuntu/venv/lib/python3.12/site-packages/nutpie/_lib.cpython-312-x86_64-linux-gnu.so": "a0df15cfdb5672786b3f1e04983e598f74a58e5201b55b89f25ce3d5ff7620f3"
+  },
+  "inventory": {
+    "prefix": "/home/ubuntu/venv",
+    "executable": "/home/ubuntu/venv/bin/python",
+    "nutpie": "0.16.8",
+    "bridgestan": "2.9.0",
+    "numpy": "2.5.4",
+    "sdk": "/home/ubuntu/.bridgestan/bridgestan-2.9.0",
+    "sdk_makefile_sha256": "21f9f85c5d2390ba61cfb23015514b4f7dcb678b9f89927ece6bc43ec4eafeee",
+    "sample_signature": "(compiled_model: nutpie.sample.CompiledModel, *, draws: int | None = None, tune: int | None = None, chains: int | None = None, cores: int | None = None, seed: int | None = None, save_warmup: bool = True, progress_bar: bool = True, low_rank_modified_mass_matrix: bool = False, transform_adapt: bool = False, init_mean: numpy.ndarray | None = None, return_raw_trace: bool = False, blocking: bool = True, progress_template: str | None = None, progress_style: str | None = None, progress_rate: int = 100, zarr_store: _lib.store.S3Store | _lib.store.LocalStore | _lib.store.HTTPStore | _lib.store.GCSStore | _lib.store.AzureStore | None = None, **kwargs) -> arviz.data.inference_data.InferenceData | nutpie.sample._BackgroundSampler",
+    "compile_signature": "(*, code: Optional[str] = None, filename: Optional[str] = None, extra_compile_args: Optional[list[str]] = None, extra_stanc_args: Optional[list[str]] = None, dims: Optional[dict[str, int]] = None, coords: Optional[dict[str, Any]] = None, model_name: Optional[str] = None, cleanup: bool = True) -> nutpie.compile_stan.CompiledStanModel"
+  },
+  "bridgestan_library": {
+    "path": "/home/ubuntu/lanes/independent-reference-preflight-20261027/run01/work/model_model.so",
+    "sha256": "a35ce9b94a71193ed43aeae488773db672f55e4a7b8fddb8d481bd49b404ad32"
+  },
+  "parity": [
+    {
+      "n": 12,
+      "variant": 0,
+      "lp_offset": -7.105427357601002e-15,
+      "gradient_relative_error": 6.012128309235776e-16,
+      "finite_difference_error": 5.985013876121956e-10
+    },
+    {
+      "n": 12,
+      "variant": 1,
+      "lp_offset": 7.105427357601002e-15,
+      "gradient_relative_error": 7.920834304402291e-16,
+      "finite_difference_error": 6.136518851131744e-10
+    },
+    {
+      "n": 12,
+      "variant": -1,
+      "lp_offset": 1.4210854715202004e-14,
+      "gradient_relative_error": 1.5484922641936448e-16,
+      "finite_difference_error": 1.0114410307922901e-09
+    },
+    {
+      "n": 250,
+      "variant": 0,
+      "lp_offset": 9.094947017729282e-13,
+      "gradient_relative_error": 5.541459586182709e-16,
+      "finite_difference_error": 1.906495924375421e-08
+    },
+    {
+      "n": 250,
+      "variant": 1,
+      "lp_offset": -4.547473508864641e-13,
+      "gradient_relative_error": 7.462109810857241e-16,
+      "finite_difference_error": 1.2087733995908533e-09
+    },
+    {
+      "n": 250,
+      "variant": -1,
+      "lp_offset": 4.547473508864641e-13,
+      "gradient_relative_error": 4.1113831868605865e-16,
+      "finite_difference_error": 5.9939667771364995e-09
+    }
+  ],
+  "compiled_libraries": {},
+  "error": "RuntimeError('compiled library identity unavailable')",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/ubuntu/lanes/independent-reference-preflight-20261027/preflight/preflight.py\", line 57, in main\n    if not r['compiled_libraries']:raise RuntimeError('compiled library identity unavailable')\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: compiled library identity unavailable\n",
+  "finished": 1793127807.0723982
+}
