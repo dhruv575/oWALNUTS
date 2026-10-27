@@ -58,6 +58,10 @@ def execute(command,cwd,cap,output_root,rss_limit,byte_limit,log_path,ownership_
         if utilization_path is not None:util_file=Path(utilization_path).open('x',encoding='utf-8')
         with Path(log_path).open('xb') as log:
             env=os.environ.copy();env.update({k:'1' for k in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS')});env[ownership_env]=token
+            cache_root=Path(log_path).absolute().parent/'runtime-cache';cache_root.mkdir(exist_ok=False)
+            for name in ('tmp','numba','matplotlib'):(cache_root/name).mkdir()
+            env.update(TMPDIR=str(cache_root/'tmp'),TMP=str(cache_root/'tmp'),TEMP=str(cache_root/'tmp'),NUMBA_CACHE_DIR=str(cache_root/'numba'),MPLCONFIGDIR=str(cache_root/'matplotlib'),PYTHONDONTWRITEBYTECODE='1')
+            result['runtime_cache_root']=str(cache_root)
             p=subprocess.Popen(command,cwd=cwd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=env)
             try:
                 item=psutil.Process(p.pid);tracked[(item.pid,item.create_time())]=item
