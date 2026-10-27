@@ -46,15 +46,16 @@ sealed original bytes. No other period, asset or baseline is introduced.
 Use the reviewed ConfiguredReturnCDF with explicit exact_t5 backend and all
 stored draws, rho.95 and nu5. For each draw, predictive latent logvariance has
 mean mu+.95*(h_last-mu), innovation SD exp(log_sigma); Student-t return location
-is beta. Retain GH64 andGH128, chunk512 and64MiB cache per rule. Reuse inherited
-PS=(.05,.5,.95) without global mutation; median is retained only as a diagnostic.
+is beta. Retain GH64 andGH128, chunk512 and64MiB cache per rule. Use a separately frozen explicit (.05,.95) root wrapper, without global mutation.
+P50 is neither computed nor scored. A deterministic fixture must match the two
+tail roots from the inherited (.05,.5,.95) method before outcome arithmetic.
 No conditional-median shortcut or sampled future innovations.
 
 Reuse dynamic bracketing (at most61 expansions) and Brent roots xtol=rtol=1e-12.
 Require finite ordered roots and each rule's root CDF residual<=1e-8. Primary
 reported roots are GH128. Preserve the existing numerical acceptance formulas:
 max_p |F64(q128_p)-p|<=1e-6 and max_p|q64_p-q128_p|/(q128_.95-q128_.05)<=1e-6,
-for p=.05,.5,.95, with finite strictly positive denominator. These are the existing
+for p=.05,.95, with finite strictly positive denominator. These are the existing
 one-direction cross-CDF check plus both rules' own residual checks; do not
 silently introduce a different gate or reduce nodes to meet budget.
 
@@ -97,19 +98,23 @@ not erase an otherwise valid candidate forecast/primary pinball score.
 1. Source/schema/hash admission, then fixed literal full-size1600-draw candidate
    and16000-draw reference numerical timing/fixture check, no E64 values. Freeze
    exact process layout and resource caps before any stored-data arithmetic.
-2. Three independent month arithmetic lanes on cores0-3/4-7/8-11, BLAS threads1,
-   quantiles and preserved baseline limits/labels, immutable per-origin rows.
-3. Drain all candidate lanes; process the24 fixed references serially on0-3,
-   including candidate/reference own-tail precision diagnostics.
+2. Twelve persistent one-core arithmetic shards on cores0 through11, BLAS threads1.
+   Canonical month-major origin index modulo12 fixes assignment before outcomes.
+   Quantiles and preserved baseline limits/labels have immutable per-origin rows.
+3. Drain all candidate shards; use twelve one-core reference shards, canonical
+   month-major reference index modulo12 (two each), including candidate/reference
+   own-tail precision diagnostics.
 4. Produce frozen monthly ledgers/summaries and descriptive aggregate, archive
    checked evidence, then hand the productive host to the next reviewed queue.
 
-Proposed whole envelope3600seconds internal/3720external,4GiB sampled owned RSS,
-2GiB output. Candidate phase2400seconds, baseline/label checks120 aggregate,
-reference/precision phase900 aggregate (60seconds per reference job), report120.
+Proposed whole envelope3600seconds internal/3720external,8GiB sampled owned RSS,
+1GiB output. Candidate phase 2700 seconds, including baseline/label checks inline;
+reference/precision phase 600 seconds aggregate (60 seconds per reference origin),
+report phase 120 seconds. Twelve concurrent literal full-size readiness shards
+run under a separate 600-second engineering envelope before production admission.
 Per-origin candidate numerical cap10seconds; no cap-based subset or reduced
 precision. Existing E62 full-summary timing around.66seconds at1600 draws suggests
-parallel arithmetic may fit, but only the fixed literal readiness establishes
+fixed parallel arithmetic may fit, but only the fixed literal readiness establishes
 feasibility. If readiness cannot fit, record that and seek a separately reviewed
 operational plan before touching E64 quantiles; do not silently extend budgets.
 
@@ -117,3 +122,8 @@ Parent owns AWS lifecycle. User's standing preference is to keep the host
 productive across reviewed studies, not routinely stop it after this experiment.
 No automatic study-end shutdown belongs in this runner. Process deadlines and
 resource cleanup still apply to this bounded job.
+
+Measured costs are quantile-only postprocessing of cached draws, not combined live
+inference/update latency. Do not add archived inference timing and label that sum
+a measured end-to-end refresh. No additional metrics beyond the frozen long/short
+pinball, exceedances, limit levels/widths and diagnostic precision are introduced.
