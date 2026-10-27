@@ -28,3 +28,10 @@ class BatchTests(unittest.TestCase):
         spec=self.spec();spec['months'][0]['origins']=1
         with tempfile.TemporaryDirectory() as t:
             with self.assertRaises(ValueError):run(spec,Path(t)/'run',lambda *a:None)
+    def test_final_aggregate_is_required_for_execution(self):
+        def launch(*args):return dict(status='exited',exit_code=0,group_drained=True)
+        def finalize(*args):return dict(accounting_complete=True,artifact_integrity={'integrity_ok':True})
+        with tempfile.TemporaryDirectory() as t:
+            missing=run(self.spec(),Path(t)/'missing',launch,clock=lambda:0.,finalize=finalize)
+            complete=run(self.spec(),Path(t)/'complete',launch,clock=lambda:0.,finalize=finalize,aggregate=lambda *a:{'written':True})
+        self.assertTrue(missing['all_jobs_successful']);self.assertFalse(missing['execution_complete']);self.assertTrue(complete['execution_complete'])
