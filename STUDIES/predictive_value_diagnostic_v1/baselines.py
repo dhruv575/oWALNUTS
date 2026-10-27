@@ -6,13 +6,20 @@ from scipy.stats import t
 
 FLOOR = 1e-8
 
+def finite_or_none(value):
+    value=float(value)
+    return value if np.isfinite(value) else None
+
 def check_deadline(deadline):
     if deadline is not None and time.monotonic() >= deadline:
         raise TimeoutError('Research deadline reached')
 
 def score_distribution(location, scale, df, observation):
-    return dict(logpdf=float(t.logpdf(observation, df, loc=location, scale=scale)),
+    result=dict(logpdf=float(t.logpdf(observation, df, loc=location, scale=scale)),
                 pit=float(t.cdf(observation, df, loc=location, scale=scale)))
+    if not np.isfinite(result['logpdf']) or not np.isfinite(result['pit']) or not 0<=result['pit']<=1:
+        raise ValueError('Nonfinite log score or invalid PIT')
+    return result
 
 def nig_ar1(history):
     y = np.asarray(history, dtype=float)
@@ -75,17 +82,17 @@ def fit_t5(history, deadline=None):
                 and np.max(abs(projected))<=1e-5)
             attempts.append(dict(eligible=eligible, success=bool(result.success),
                 message=str(result.message), nfev=int(result.nfev), nit=int(result.nit),
-                mean_nll=float(value+np.log(unit)),
-                projected_gradient_inf=float(np.max(abs(projected))),
-                location=float(center+unit*result.x[0]),
-                scale=float(max(FLOOR,unit*np.exp(result.x[1]))),
+                mean_nll=finite_or_none(value+np.log(unit)),
+                projected_gradient_inf=finite_or_none(np.max(abs(projected))),
+                location=finite_or_none(center+unit*result.x[0]),
+                scale=finite_or_none(unit*np.exp(result.x[1])),
                 floor_hit=bool(result.x[1]<=lower+1e-10)))
     valid = [i for i,a in enumerate(attempts) if a['eligible']]
     if not valid:
         return dict(status='unavailable', attempts=attempts)
     chosen = min(valid,key=lambda i: (attempts[i]['mean_nll'],i))
     a = attempts[chosen]
-    return dict(status='ok', location=a['location'], scale=a['scale'], df=5,
+    return dict(status='ok', location=a['location'], scale=max(FLOOR,a['scale']), df=5,
                 chosen_start=chosen, floor_hit=a['floor_hit'], attempts=attempts)
 
 def ewma_t5(history, initial_fit):

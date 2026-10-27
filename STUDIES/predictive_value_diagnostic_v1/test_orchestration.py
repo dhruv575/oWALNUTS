@@ -27,6 +27,7 @@ class OrchestrationTests(unittest.TestCase):
             value=json.loads(path.read_text())
             self.assertEqual(len(value['arms']),1)
             self.assertEqual(value['arms'][0]['status'],'ok')
+            self.assertEqual(value['active_arm']['seed'],1)
 
     def test_missing_arm_and_paired_summary(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -44,5 +45,15 @@ class OrchestrationTests(unittest.TestCase):
             self.assertEqual(warm['available_pairs'],99)
             self.assertIsNone(warm['full_mean']);self.assertIsNone(warm['bootstrap']['10'])
             self.assertEqual(warm['available_mean'],-.5)
+
+    def test_duplicate_and_invalid_score_fail_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'sim-tick-001.json'
+            row=dict(arm='reference',seed=None,status='ok',logpdf=1.,pit=.4)
+            evaluate.atomic(path,dict(dataset='sim',tick=1,arms=[row,row]))
+            with self.assertRaises(ValueError):summarize(folder)
+            row['pit']=1.1
+            evaluate.atomic(path,dict(dataset='sim',tick=1,arms=[row]))
+            with self.assertRaises(ValueError):summarize(folder)
 
 if __name__=='__main__':unittest.main()
