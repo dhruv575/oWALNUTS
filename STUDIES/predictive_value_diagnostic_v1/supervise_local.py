@@ -38,7 +38,7 @@ def main():
             raise FileExistsError(out)
         audit = json.loads((study / 'RECOVERY-AUDIT.json').read_text())
         budget = audit['remaining_seconds']
-        if budget != 308.172 or len(audit['remaining']) != 79:
+        if abs(budget - 308.172) > 1e-9 or len(audit['remaining']) != 79:
             raise ValueError('Recovery budget or fixed schedule mismatch')
     else:
         pilot = json.loads((out / 'preflight.json').read_text())
