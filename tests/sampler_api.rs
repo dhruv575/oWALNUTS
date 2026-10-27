@@ -87,7 +87,7 @@ fn starts(dimension: usize) -> Vec<Vec<f64>> {
         .collect()
 }
 
-/// The same numbers and kernel options as `Tuning::default()`: `h = 0.5`,
+/// The published (non-candidate) tuning: `h = 0.5`,
 /// depth 10, one micro-step, eight levels, `delta = 1`, and the momentum-sum
 /// U-turn rule (the post-WP31 default; `KernelOptions::default()` is the
 /// frozen endpoint rule), and the `RejectLeaf` nonfinite-position policy
@@ -119,7 +119,11 @@ fn sampler() -> Sampler {
         .draws(DRAWS)
         .seed(SEED)
         .threads(1)
-        .tuning(Tuning::default())
+        // Facade parity fixtures use eight levels and their matching
+        // conservative resource bounds, even when the study-only candidate
+        // feature changes the builder default. The feature default itself is
+        // checked by `default_refinement_levels_follow_the_candidate_feature`.
+        .tuning(Tuning::default().max_refinement_levels(8))
         // Compare against the plain facades, which admit conservatively.
         .limits(Limits::new().admit_conservative())
 }
@@ -611,6 +615,7 @@ fn parallel_and_sequential_runs_are_identical_and_chains_replicate_a_start() {
         .warmup(WARMUP)
         .draws(DRAWS)
         .seed(SEED)
+        .tuning(Tuning::default().max_refinement_levels(8))
         .run(&target, &starts(10))
         .unwrap();
     assert_same_run(sequential.chains(), parallel.chains());
