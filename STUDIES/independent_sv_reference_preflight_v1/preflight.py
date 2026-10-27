@@ -3,6 +3,7 @@ import argparse,hashlib,inspect,json,os,subprocess,sys,time,traceback
 from pathlib import Path
 import numpy as np
 from common import fixture,data,extract,require_finite
+from compiler_capture import capture_compiler
 
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def main():
@@ -52,8 +53,12 @@ def main():
     if error>1e-8 or max(fd)>1e-5:raise RuntimeError('gradient parity failed')
    if np.ptp(offsets)>1e-8:raise RuntimeError('density offset not constant')
   r['phase']='public nutpie compile';save()
-  compiled=nutpie.compile_stan_model(code=source.read_text(encoding='utf-8-sig'),cleanup=False)
-  r['compiled_libraries']={str(f):sha(f) for f in (out/'tmp').rglob('*.so')}
+  r['compiler_capture_source_sha256']=sha(Path(__file__).with_name('compiler_capture.py'))
+  captures=[]
+  with capture_compiler(bridgestan,out/'captured-libraries',captures):
+   compiled=nutpie.compile_stan_model(code=source.read_text(encoding='utf-8-sig'),cleanup=False)
+  r['compiler_captures']=captures
+  r['compiled_libraries']={entry['copy_path']:entry['sha256'] for entry in captures}
   if not r['compiled_libraries']:raise RuntimeError('compiled library identity unavailable')
   r['with_data_signature']=str(inspect.signature(compiled.with_data))
   (out/'with-data-installed.py').write_text(inspect.getsource(type(compiled).with_data))
