@@ -15,6 +15,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 mod continuation;
+mod warm_session;
 
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
@@ -2212,6 +2213,12 @@ fn _owalnuts(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sample_callable, m)?)?;
     m.add_function(wrap_pyfunction!(sample_warm_callable, m)?)?;
     m.add_function(wrap_pyfunction!(sample_warm_cfunc, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        warm_session::start_warm_session_callable,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(warm_session::start_warm_session_cfunc, m)?)?;
+    m.add_class::<warm_session::PyWarmSession>()?;
     m.add_function(wrap_pyfunction!(preflight_callable, m)?)?;
     m.add_function(wrap_pyfunction!(sample_eight_schools, m)?)?;
     m.add_function(wrap_pyfunction!(sample_local_level, m)?)?;
