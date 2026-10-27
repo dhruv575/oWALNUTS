@@ -6,8 +6,19 @@
 //! [`WarmSession`]. Like [`super::session`], no borrowed state leaves the
 //! worker stack and the target drops on the worker thread after its last
 //! callback has returned.
+//!
+//! Streaming functionals (WP95): [`WarmSession::refresh_functionals`] and
+//! `Sampler::run_warm_functionals` evaluate caller-supplied
+//! [`Functional`]s on every retained draw inside the chain loop and keep
+//! the functional values (and their running moments) instead of the
+//! draws, so the memory a quote needs is `draws * outputs` per chain
+//! rather than `draws * dimension`. The kernel never sees the functionals:
+//! the chain is advanced one transition at a time through the same
+//! `ChainRun::advance` the plain call uses, so draws and diagnostics are
+//! bit-identical with and without them (`tests/warm_functionals.rs`).
 use super::*;
 use std::cell::Cell;
+use std::ops::Range;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::JoinHandle;
@@ -93,6 +104,508 @@ impl WarmChunk {
     }
 }
 
+/// A function of the position, evaluated on every retained draw of a warm
+/// refresh inside the chain loop ([`WarmSession::refresh_functionals`],
+/// [`crate::sampler::Sampler::run_warm_functionals`]) so that the draws
+/// themselves need not be retained. [`FunctionalFn`] adapts a closure and
+/// [`RawFunctional`] a C-ABI callback.
+///
+/// `evaluate` runs on the chain's worker thread, once per retained draw,
+/// concurrently for different chains, and must be deterministic in the
+/// position (the values are reported as the functional of the draws). It
+/// must not call back into the session. An error (or a panic) ends the call
+/// as an execution error: the session becomes terminal, like a fatal
+/// target error.
+pub trait Functional: Send + Sync {
+    /// The number of outputs: the length of `out` in [`Functional::evaluate`].
+    fn dimension(&self) -> usize;
+
+    /// Write the outputs for `position` (one retained draw, the target's
+    /// dimension) into `out` (`self.dimension()` values, write-only; stale
+    /// values from earlier draws may be present).
+    fn evaluate(&self, position: &[f64], out: &mut [f64]) -> Result<(), FunctionalError>;
+}
+
+/// A [`Functional::evaluate`] failure; ends the call that evaluated it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FunctionalError {
+    message: Box<str>,
+}
+
+impl FunctionalError {
+    pub fn new(message: impl Into<Box<str>>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for FunctionalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for FunctionalError {}
+
+/// A [`Functional`] over a closure `f(position, out)` with a fixed number
+/// of outputs.
+pub struct FunctionalFn<F> {
+    outputs: usize,
+    function: F,
+}
+
+impl<F: Fn(&[f64], &mut [f64]) + Send + Sync> FunctionalFn<F> {
+    /// `function` writes `outputs` values into its second argument.
+    pub fn new(outputs: usize, function: F) -> Self {
+        Self { outputs, function }
+    }
+}
+
+impl<F: Fn(&[f64], &mut [f64]) + Send + Sync> Functional for FunctionalFn<F> {
+    fn dimension(&self) -> usize {
+        self.outputs
+    }
+
+    fn evaluate(&self, position: &[f64], out: &mut [f64]) -> Result<(), FunctionalError> {
+        (self.function)(position, out);
+        Ok(())
+    }
+}
+
+impl<F> fmt::Debug for FunctionalFn<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FunctionalFn")
+            .field("outputs", &self.outputs)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The C ABI of a [`RawFunctional`] callback: `dimension` is the length of
+/// `position`, `outputs` the length of `out` (the functional's
+/// [`Functional::dimension`]); the callback writes every element of
+/// `out[..outputs]` and reads `position[..dimension]` only. numba
+/// signature: `void(intp, double*, double*, intp, void*)`.
+pub type RawFunctionalFn = unsafe extern "C" fn(
+    dimension: usize,
+    position: *const f64,
+    out: *mut f64,
+    outputs: usize,
+    user_data: *mut core::ffi::c_void,
+);
+
+/// A [`Functional`] over a raw C-ABI callback (a numba or Cython `cfunc`,
+/// a C function), the functional counterpart of [`RawTarget`]: GIL-free, so
+/// chains evaluate it in parallel.
+pub struct RawFunctional {
+    outputs: usize,
+    function: RawFunctionalFn,
+    user_data: *mut core::ffi::c_void,
+}
+
+// SAFETY: asserted by the `RawFunctional::new` caller: the callback and its
+// `user_data` are thread-safe and reentrant for the life of the value.
+unsafe impl Send for RawFunctional {}
+// SAFETY: as above; shared `&RawFunctional` calls are concurrent callback
+// calls, which the constructor contract requires to be safe.
+unsafe impl Sync for RawFunctional {}
+
+impl RawFunctional {
+    /// Wrap a raw callback as a functional with `outputs` outputs.
+    ///
+    /// # Safety
+    ///
+    /// The caller asserts, for the entire lifetime of the returned value:
+    /// `function` is safe to call concurrently from multiple threads with
+    /// this `user_data`; it only reads `position[..dimension]` and only
+    /// writes `out[..outputs]`; it neither unwinds across the FFI boundary
+    /// nor stores the passed pointers beyond the call; and `user_data`
+    /// remains valid.
+    pub unsafe fn new(
+        outputs: usize,
+        function: RawFunctionalFn,
+        user_data: *mut core::ffi::c_void,
+    ) -> Self {
+        Self {
+            outputs,
+            function,
+            user_data,
+        }
+    }
+}
+
+impl Functional for RawFunctional {
+    fn dimension(&self) -> usize {
+        self.outputs
+    }
+
+    fn evaluate(&self, position: &[f64], out: &mut [f64]) -> Result<(), FunctionalError> {
+        // SAFETY: the `RawFunctional::new` contract; `position` and `out`
+        // are live slices of the stated lengths for the duration of the
+        // call.
+        unsafe {
+            (self.function)(
+                position.len(),
+                position.as_ptr(),
+                out.as_mut_ptr(),
+                out.len(),
+                self.user_data,
+            );
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for RawFunctional {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawFunctional")
+            .field("outputs", &self.outputs)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The functionals of one call, in order, with their output layout: output
+/// `j` of functional `k` is output `offset_k + j` of the call, where
+/// `offset_k` is the sum of the earlier functionals' dimensions
+/// ([`Functionals::output_range`]). `retain_draws` also keeps the position
+/// draws in the chunk (off by default: not keeping them is the point).
+#[derive(Clone)]
+pub struct Functionals {
+    items: Vec<Arc<dyn Functional>>,
+    offsets: Vec<usize>,
+    retain_draws: bool,
+}
+
+impl Default for Functionals {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Functionals {
+    pub fn new() -> Self {
+        Self {
+            items: Vec::new(),
+            offsets: vec![0],
+            retain_draws: false,
+        }
+    }
+
+    /// Append a functional.
+    pub fn with(self, functional: impl Functional + 'static) -> Self {
+        self.with_arc(Arc::new(functional))
+    }
+
+    /// Append a shared functional.
+    pub fn with_arc(mut self, functional: Arc<dyn Functional>) -> Self {
+        let end = self.outputs().saturating_add(functional.dimension());
+        self.items.push(functional);
+        self.offsets.push(end);
+        self
+    }
+
+    /// Also keep the position draws in the chunk.
+    pub fn retain_draws(mut self, retain: bool) -> Self {
+        self.retain_draws = retain;
+        self
+    }
+
+    pub fn retains_draws(&self) -> bool {
+        self.retain_draws
+    }
+
+    pub fn functionals(&self) -> &[Arc<dyn Functional>] {
+        &self.items
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    /// Outputs of the call: the sum of the functionals' dimensions.
+    pub fn outputs(&self) -> usize {
+        self.offsets.last().copied().unwrap_or(0)
+    }
+
+    /// The call outputs written by functional `functional`.
+    pub fn output_range(&self, functional: usize) -> Option<Range<usize>> {
+        Some(*self.offsets.get(functional)?..*self.offsets.get(functional + 1)?)
+    }
+
+    fn ranges(&self) -> impl Iterator<Item = Range<usize>> + '_ {
+        self.offsets.windows(2).map(|w| w[0]..w[1])
+    }
+}
+
+impl fmt::Debug for Functionals {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Functionals")
+            .field("functionals", &self.items.len())
+            .field("outputs", &self.outputs())
+            .field("retain_draws", &self.retain_draws)
+            .finish()
+    }
+}
+
+/// Running moments of one functional output over one chain's draws
+/// (Welford's update, so `mean` and `m2 = sum (x - mean)^2` are accumulated
+/// in one pass): `count` draws, their `mean`, `m2`, `min` and `max`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OutputMoments {
+    pub count: usize,
+    pub mean: f64,
+    pub m2: f64,
+    pub min: f64,
+    pub max: f64,
+}
+
+impl Default for OutputMoments {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            mean: 0.0,
+            m2: 0.0,
+            min: f64::INFINITY,
+            max: f64::NEG_INFINITY,
+        }
+    }
+}
+
+impl OutputMoments {
+    /// Add one value.
+    pub fn push(&mut self, value: f64) {
+        self.count += 1;
+        let delta = value - self.mean;
+        self.mean += delta / self.count as f64;
+        self.m2 += delta * (value - self.mean);
+        self.min = self.min.min(value);
+        self.max = self.max.max(value);
+    }
+
+    /// The moments of the union of two samples (Chan, Golub and LeVeque).
+    pub fn merge(&self, other: &Self) -> Self {
+        if self.count == 0 {
+            return *other;
+        }
+        if other.count == 0 {
+            return *self;
+        }
+        let (a, b) = (self.count as f64, other.count as f64);
+        let count = a + b;
+        let delta = other.mean - self.mean;
+        Self {
+            count: self.count + other.count,
+            mean: self.mean + delta * b / count,
+            m2: self.m2 + other.m2 + delta * delta * a * b / count,
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
+        }
+    }
+
+    /// The sample variance (`m2 / (count - 1)`); `None` below two values.
+    pub fn variance(&self) -> Option<f64> {
+        (self.count >= 2).then(|| self.m2 / (self.count - 1) as f64)
+    }
+}
+
+/// One chain's functional values and diagnostics from one
+/// [`WarmSession::refresh_functionals`] (or
+/// [`crate::sampler::Sampler::run_warm_functionals`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionalChainChunk {
+    /// The functional values of every retained draw, draw-major
+    /// `[draw][output]` (`draws * outputs` values).
+    pub values: Vec<f64>,
+    /// Running moments per output over this chain's draws.
+    pub moments: Vec<OutputMoments>,
+    /// The chain's last draw (its position after the call).
+    pub position: Vec<f64>,
+    /// The retained draws, draw-major `[draw][parameter]`, when
+    /// [`Functionals::retain_draws`] was set; `None` otherwise.
+    pub samples: Option<Vec<f64>>,
+    /// One record per transition of this call.
+    pub diagnostics: Vec<TransitionDiagnostics>,
+    /// Telemetry of this call only (not cumulative).
+    pub telemetry: RunTelemetry,
+    /// The chain's step size; carried unchanged (nothing adapts).
+    pub step_size: f64,
+    /// The chain's diagonal mass `M`; carried unchanged (a copy).
+    pub mass_diagonal: Vec<f64>,
+    /// `splitmix64(seed + chain)` for the call's `seed`.
+    pub effective_seed: u64,
+}
+
+/// The functional values of one warm call, every chain in chain-index
+/// order: what [`WarmChunk`] is for the draws. The pooled statistics
+/// ([`FunctionalChunk::mean`], [`FunctionalChunk::variance`],
+/// [`FunctionalChunk::quantile`]) treat every chain's draws as one sample;
+/// the per-chain ones take a chain index.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionalChunk {
+    pub chains: Vec<FunctionalChainChunk>,
+    /// The target's dimension.
+    pub dimension: usize,
+    /// Outputs per draw (the sum of the functionals' dimensions).
+    pub outputs: usize,
+    /// `offsets[k]..offsets[k + 1]` are the outputs of functional `k`.
+    pub offsets: Vec<usize>,
+    /// Transitions per chain in this call.
+    pub draws: usize,
+    /// The call's base seed.
+    pub seed: u64,
+    /// Zero-based index of the call in the session (0 for a one-shot run).
+    pub call_index: usize,
+    /// Target calls of this call, summed over chains.
+    pub target_calls: usize,
+}
+
+impl FunctionalChunk {
+    /// The call outputs written by functional `functional`.
+    pub fn output_range(&self, functional: usize) -> Option<Range<usize>> {
+        Some(*self.offsets.get(functional)?..*self.offsets.get(functional + 1)?)
+    }
+
+    /// Functional values of `chain`, draw-major `[draw][output]`.
+    pub fn chain_values(&self, chain: usize) -> Option<&[f64]> {
+        self.chains.get(chain).map(|c| c.values.as_slice())
+    }
+
+    /// One output of one draw of one chain.
+    pub fn value(&self, chain: usize, draw: usize, output: usize) -> Option<f64> {
+        if output >= self.outputs {
+            return None;
+        }
+        let index = draw.checked_mul(self.outputs)?.checked_add(output)?;
+        self.chains.get(chain)?.values.get(index).copied()
+    }
+
+    /// Output `output` over the draws of `chain`, in draw order.
+    pub fn chain_output(&self, chain: usize, output: usize) -> impl Iterator<Item = f64> + '_ {
+        let step = self.outputs.max(1);
+        let valid = output < self.outputs;
+        self.chains
+            .get(chain)
+            .into_iter()
+            .filter(move |_| valid)
+            .flat_map(move |c| c.values.iter().skip(output).step_by(step).copied())
+    }
+
+    /// Output `output` over every chain's draws, chain by chain.
+    pub fn output(&self, output: usize) -> impl Iterator<Item = f64> + '_ {
+        (0..self.chains.len()).flat_map(move |chain| self.chain_output(chain, output))
+    }
+
+    /// The running moments of `output` over the draws of `chain`.
+    pub fn chain_moments(&self, chain: usize, output: usize) -> Option<&OutputMoments> {
+        self.chains.get(chain)?.moments.get(output)
+    }
+
+    /// The moments of `output` pooled over every chain.
+    pub fn moments(&self, output: usize) -> Option<OutputMoments> {
+        if output >= self.outputs {
+            return None;
+        }
+        Some(
+            self.chains
+                .iter()
+                .filter_map(|c| c.moments.get(output))
+                .fold(OutputMoments::default(), |pooled, m| pooled.merge(m)),
+        )
+    }
+
+    /// The pooled mean of `output`.
+    pub fn mean(&self, output: usize) -> Option<f64> {
+        self.moments(output).filter(|m| m.count > 0).map(|m| m.mean)
+    }
+
+    /// The pooled sample variance of `output`.
+    pub fn variance(&self, output: usize) -> Option<f64> {
+        self.moments(output)?.variance()
+    }
+
+    /// The pooled `q`-quantile of `output` (`0 <= q <= 1`), by linear
+    /// interpolation between order statistics as NumPy's default
+    /// (`numpy.quantile(values, q)` on the pooled values), so a Python
+    /// caller can check it bit for bit.
+    pub fn quantile(&self, output: usize, q: f64) -> Option<f64> {
+        if output >= self.outputs {
+            return None;
+        }
+        let mut values: Vec<f64> = self.output(output).collect();
+        quantile_in_place(&mut values, q)
+    }
+
+    /// The `q`-quantile of `output` over the draws of `chain`.
+    pub fn chain_quantile(&self, chain: usize, output: usize, q: f64) -> Option<f64> {
+        if chain >= self.chains.len() || output >= self.outputs {
+            return None;
+        }
+        let mut values: Vec<f64> = self.chain_output(chain, output).collect();
+        quantile_in_place(&mut values, q)
+    }
+
+    /// The retained draws of `chain` when [`Functionals::retain_draws`]
+    /// was set.
+    pub fn chain_draws(&self, chain: usize) -> Option<&[f64]> {
+        self.chains.get(chain)?.samples.as_deref()
+    }
+
+    /// The warm state at the end of this call: per chain, its last draw,
+    /// its step size and its diagonal mass.
+    pub fn warm_state(&self) -> Result<WarmState, Error> {
+        let chains = self
+            .chains
+            .iter()
+            .enumerate()
+            .map(|(index, chain)| {
+                if chain.position.len() != self.dimension || self.dimension == 0 {
+                    return Err(Error::configuration(format!(
+                        "functional chunk chain {index} has no draw"
+                    )));
+                }
+                Ok(WarmChain {
+                    position: chain.position.clone(),
+                    step_size: chain.step_size,
+                    mass_diagonal: chain.mass_diagonal.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        WarmState::new(chains)
+    }
+}
+
+/// NumPy's default (`method="linear"`) quantile of `values`, which are
+/// sorted in place: the virtual index `q * (n - 1)`, its floor and the
+/// lerp `a + (b - a) * g`, or `b - (b - a) * (1 - g)` from `g >= 0.5`, as
+/// `numpy.lib._function_base_impl._lerp` computes it.
+fn quantile_in_place(values: &mut [f64], q: f64) -> Option<f64> {
+    if values.is_empty() || !(0.0..=1.0).contains(&q) {
+        return None;
+    }
+    values.sort_unstable_by(f64::total_cmp);
+    let last = values.len() - 1;
+    let virtual_index = q * last as f64;
+    let floor = virtual_index.floor();
+    let gamma = virtual_index - floor;
+    let lower = (floor as usize).min(last);
+    let upper = (lower + 1).min(last);
+    let (a, b) = (values[lower], values[upper]);
+    let difference = b - a;
+    Some(if gamma >= 0.5 {
+        b - difference * (1.0 - gamma)
+    } else {
+        a + difference * gamma
+    })
+}
+
 /// How each refresh call admits and caps its target evaluations: the
 /// sampler's [`crate::sampler::Limits`] read per call.
 #[derive(Clone, Copy, Debug)]
@@ -149,7 +662,8 @@ enum Request<T> {
         seed: u64,
         call_index: usize,
         deadline: Option<Instant>,
-        reply: mpsc::Sender<Result<WarmChunk, Failure>>,
+        functionals: Option<Functionals>,
+        reply: mpsc::Sender<Result<RawChunk, Failure>>,
     },
     Retarget(Box<Retarget<T>>),
     Close,
@@ -238,6 +752,39 @@ impl<T: Target + 'static> WarmSession<T> {
     /// them. See the type documentation for the seed rule, the allocation
     /// behaviour and the limits.
     pub fn refresh(&mut self, draws: usize) -> Result<WarmChunk, Error> {
+        self.refresh_raw(draws, None).map(RawChunk::into_warm_chunk)
+    }
+
+    /// Run `draws` transitions per chain as [`WarmSession::refresh`] does,
+    /// evaluating `functionals` on every retained draw inside the chain
+    /// loop and keeping the values (with running moments per output and
+    /// per chain) instead of the draws; the state advances as for
+    /// `refresh`. The call takes the same seed under the seed rule, so the
+    /// values are the functionals of the draws `refresh` would return, bit
+    /// for bit, and the draws and diagnostics are unaffected by the
+    /// functionals (`tests/warm_functionals.rs`). With
+    /// [`Functionals::retain_draws`] the chunk also holds the draws.
+    ///
+    /// Allocation per chain per call: `draws * outputs` values plus the
+    /// per-output moments, instead of `draws * dimension` draws (the
+    /// kernel's draw buffer is released at the start of the call and one
+    /// draw is kept at a time); the diagnostics vector as for `refresh`.
+    /// A functional error or panic is an execution error (the session
+    /// becomes terminal).
+    pub fn refresh_functionals(
+        &mut self,
+        draws: usize,
+        functionals: &Functionals,
+    ) -> Result<FunctionalChunk, Error> {
+        self.refresh_raw(draws, Some(functionals.clone()))
+            .map(|raw| raw.into_functional_chunk(functionals))
+    }
+
+    fn refresh_raw(
+        &mut self,
+        draws: usize,
+        functionals: Option<Functionals>,
+    ) -> Result<RawChunk, Error> {
         if draws == 0 {
             return Err(Error::configuration("draws must be nonzero"));
         }
@@ -260,6 +807,7 @@ impl<T: Target + 'static> WarmSession<T> {
             seed,
             call_index,
             deadline,
+            functionals,
             reply: tx,
         });
         if sent.is_err() {
@@ -275,7 +823,8 @@ impl<T: Target + 'static> WarmSession<T> {
         match result {
             Ok(chunk) => {
                 self.calls += 1;
-                self.state.set_positions_from_last_draws(&chunk);
+                self.state
+                    .set_positions(chunk.chains.iter().map(|c| c.last_position.as_slice()));
                 Ok(chunk)
             }
             Err(Failure { error, terminal }) => {
@@ -539,12 +1088,183 @@ struct Worker<T: Target> {
 
 /// What one chain run hands back to the worker.
 struct ChainResult {
+    /// The kernel's retained draws; empty on the functional path unless
+    /// the draws are retained.
     samples: Vec<f64>,
+    /// Functional values, draw-major `[draw][output]` (empty without
+    /// functionals).
+    values: Vec<f64>,
+    moments: Vec<OutputMoments>,
+    /// The chain's last draw.
+    last_position: Vec<f64>,
     diagnostics: Vec<TransitionDiagnostics>,
     telemetry: RunTelemetry,
     step_size: f64,
     mass_diagonal: Vec<f64>,
     effective_seed: u64,
+}
+
+/// One call's chain results before they become a [`WarmChunk`] or a
+/// [`FunctionalChunk`].
+pub(crate) struct RawChunk {
+    chains: Vec<ChainResult>,
+    dimension: usize,
+    draws: usize,
+    seed: u64,
+    call_index: usize,
+    target_calls: usize,
+}
+
+impl RawChunk {
+    fn into_warm_chunk(self) -> WarmChunk {
+        WarmChunk {
+            chains: self
+                .chains
+                .into_iter()
+                .map(|result| WarmChainChunk {
+                    samples: result.samples,
+                    diagnostics: result.diagnostics,
+                    telemetry: result.telemetry,
+                    step_size: result.step_size,
+                    mass_diagonal: result.mass_diagonal,
+                    effective_seed: result.effective_seed,
+                })
+                .collect(),
+            dimension: self.dimension,
+            draws: self.draws,
+            seed: self.seed,
+            call_index: self.call_index,
+            target_calls: self.target_calls,
+        }
+    }
+
+    pub(crate) fn into_functional_chunk(self, functionals: &Functionals) -> FunctionalChunk {
+        let retain = functionals.retains_draws();
+        FunctionalChunk {
+            chains: self
+                .chains
+                .into_iter()
+                .map(|result| FunctionalChainChunk {
+                    values: result.values,
+                    moments: result.moments,
+                    position: result.last_position,
+                    samples: retain.then_some(result.samples),
+                    diagnostics: result.diagnostics,
+                    telemetry: result.telemetry,
+                    step_size: result.step_size,
+                    mass_diagonal: result.mass_diagonal,
+                    effective_seed: result.effective_seed,
+                })
+                .collect(),
+            dimension: self.dimension,
+            outputs: functionals.outputs(),
+            offsets: functionals.offsets.clone(),
+            draws: self.draws,
+            seed: self.seed,
+            call_index: self.call_index,
+            target_calls: self.target_calls,
+        }
+    }
+}
+
+/// Every chain of `plan` once, on a scoped pool of `threads` workers or
+/// the calling thread.
+fn run_chains_once<U: Target>(
+    target: &U,
+    plan: &WarmPlan,
+    threads: usize,
+    control: &RunControl<'_>,
+    functionals: &Functionals,
+) -> Result<Vec<ChainResult>, Error> {
+    if threads == 1 {
+        run_chains(target, plan, threads, control, None, Some(functionals))
+    } else {
+        with_scoped_pool(threads, |pool| {
+            run_chains(
+                target,
+                plan,
+                threads,
+                control,
+                Some(pool),
+                Some(functionals),
+            )
+        })?
+    }
+}
+
+/// Assemble a call's results and advance the plan's positions to the
+/// chains' last draws.
+fn assemble(
+    plan: &mut WarmPlan,
+    results: Vec<ChainResult>,
+    draws: usize,
+    seed: u64,
+    call_index: usize,
+) -> RawChunk {
+    let mut target_calls = 0usize;
+    for (position, result) in plan.positions.iter_mut().zip(&results) {
+        position.copy_from_slice(&result.last_position);
+        target_calls = target_calls.saturating_add(result.telemetry.total().target_calls_total());
+    }
+    RawChunk {
+        chains: results,
+        dimension: plan.dimension,
+        draws,
+        seed,
+        call_index,
+        target_calls,
+    }
+}
+
+/// One-shot `Sampler::run_warm_functionals`: admit, run every chain once
+/// on a scoped pool (or the calling thread), and assemble the chunk, as
+/// call 0 of a session would (`seed` is the base seed, chain `c` runs on
+/// `seed + c`).
+pub(crate) fn run_warm_functionals_once<T: Target>(
+    target: &T,
+    state: &WarmState,
+    setup: WarmSessionSetup,
+    draws: usize,
+    functionals: &Functionals,
+) -> Result<FunctionalChunk, Error> {
+    if draws == 0 {
+        return Err(Error::configuration("draws must be nonzero"));
+    }
+    let threads = setup.threads.min(state.chain_count());
+    if threads == 0 {
+        return Err(Error::configuration("thread count must be nonzero"));
+    }
+    let mut plan = setup.recipe.plan(state)?;
+    let size = admit(target, &mut plan, draws, setup.budget)?;
+    for (chain, config) in plan.configs.iter_mut().enumerate() {
+        config.retained = draws;
+        config.seed = setup.base_seed.wrapping_add(chain as u64);
+    }
+    let deadline = match setup.timeout {
+        Some(timeout) => Some(
+            Instant::now()
+                .checked_add(timeout)
+                .ok_or_else(|| Error::configuration("timeout overflows deadline"))?,
+        ),
+        None => setup.deadline,
+    };
+    let mut control = RunControl::new();
+    if let Some(cancellation) = &setup.external_cancellation {
+        control = control.with_cancellation(&**cancellation);
+    }
+    if let Some(deadline) = deadline {
+        control = control.with_deadline(deadline);
+    }
+    let results = match size {
+        Some(size) => {
+            let budget = TargetEvaluationBudget::new(size);
+            let wrapped = budget.wrap(target);
+            run_chains_once(&wrapped, &plan, threads, &control, functionals)
+        }
+        None => run_chains_once(target, &plan, threads, &control, functionals),
+    }?;
+    let raw = assemble(&mut plan, results, draws, setup.base_seed, 0);
+    Ok(raw.into_functional_chunk(functionals))
 }
 
 impl<T: Target> Worker<T> {
@@ -556,10 +1276,18 @@ impl<T: Target> Worker<T> {
                     seed,
                     call_index,
                     deadline,
+                    functionals,
                     reply,
                 }) => {
-                    let result =
-                        self.refresh(draws, seed, call_index, deadline, cancellation, pool);
+                    let result = self.refresh(
+                        draws,
+                        seed,
+                        call_index,
+                        deadline,
+                        functionals.as_ref(),
+                        cancellation,
+                        pool,
+                    );
                     let terminal = result.as_ref().is_err_and(|failure| failure.terminal);
                     if reply.send(result).is_err() || terminal {
                         return;
@@ -593,15 +1321,17 @@ impl<T: Target> Worker<T> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn refresh(
         &mut self,
         draws: usize,
         seed: u64,
         call_index: usize,
         deadline: Option<Instant>,
+        functionals: Option<&Functionals>,
         cancellation: &WarmCancellation,
         pool: Option<&rayon::ThreadPool>,
-    ) -> Result<WarmChunk, Failure> {
+    ) -> Result<RawChunk, Failure> {
         let mut control = RunControl::new().with_cancellation(cancellation);
         if let Some(deadline) = deadline {
             control = control.with_deadline(deadline);
@@ -622,38 +1352,22 @@ impl<T: Target> Worker<T> {
             Some(size) => {
                 let budget = TargetEvaluationBudget::new(size);
                 let wrapped = budget.wrap(&self.target);
-                run_chains(&wrapped, &self.plan, threads, &control, pool)
+                run_chains(&wrapped, &self.plan, threads, &control, pool, functionals)
             }
-            None => run_chains(&self.target, &self.plan, threads, &control, pool),
+            None => run_chains(
+                &self.target,
+                &self.plan,
+                threads,
+                &control,
+                pool,
+                functionals,
+            ),
         }
         .map_err(|error| Failure {
             error,
             terminal: true,
         })?;
-        let dimension = self.plan.dimension;
-        let mut target_calls = 0usize;
-        let mut chains = Vec::with_capacity(results.len());
-        for (position, result) in self.plan.positions.iter_mut().zip(results) {
-            position.copy_from_slice(&result.samples[(draws - 1) * dimension..]);
-            target_calls =
-                target_calls.saturating_add(result.telemetry.total().target_calls_total());
-            chains.push(WarmChainChunk {
-                samples: result.samples,
-                diagnostics: result.diagnostics,
-                telemetry: result.telemetry,
-                step_size: result.step_size,
-                mass_diagonal: result.mass_diagonal,
-                effective_seed: result.effective_seed,
-            });
-        }
-        Ok(WarmChunk {
-            chains,
-            dimension,
-            draws,
-            seed,
-            call_index,
-            target_calls,
-        })
+        Ok(assemble(&mut self.plan, results, draws, seed, call_index))
     }
 }
 
@@ -667,6 +1381,7 @@ fn run_chains<U: Target>(
     threads: usize,
     control: &RunControl<'_>,
     pool: Option<&rayon::ThreadPool>,
+    functionals: Option<&Functionals>,
 ) -> Result<Vec<ChainResult>, Error> {
     let failed_chain = AtomicUsize::new(usize::MAX);
     let execute = |chain: usize| -> Result<ChainResult, Error> {
@@ -684,6 +1399,7 @@ fn run_chains<U: Target>(
                 &plan.configs[chain],
                 threads,
                 &control,
+                functionals,
             )
         }))
         .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "warm session chain panicked")))
@@ -701,6 +1417,7 @@ fn run_chains<U: Target>(
     results.into_iter().collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_one<U: Target>(
     target: &U,
     dimension: usize,
@@ -709,6 +1426,7 @@ fn run_one<U: Target>(
     config: &RunConfig,
     threads: usize,
     control: &ExecutionControl<'_>,
+    functionals: Option<&Functionals>,
 ) -> Result<ChainResult, Error> {
     // As `run_chain`: the kinetic-energy context is only needed by proposal
     // observers, which the warm path never attaches.
@@ -728,17 +1446,93 @@ fn run_one<U: Target>(
         None,
     )?;
     run.rescue_record = None;
-    run.advance(run.transitions)?;
+    let mut last_position = vec![0.0; dimension];
+    let mut values = Vec::new();
+    let mut moments = Vec::new();
+    match functionals {
+        None => {
+            run.advance(run.transitions)?;
+            last_position.copy_from_slice(last_draw(&run.samples, dimension)?);
+        }
+        Some(functionals) => {
+            // The streaming path: one transition at a time through the same
+            // `advance`, the functionals on each new draw, and the kernel's
+            // draw buffer released up front (one draw is kept at a time)
+            // unless the draws are wanted too.
+            let outputs = functionals.outputs();
+            let transitions = run.transitions;
+            values
+                .try_reserve_exact(
+                    transitions
+                        .checked_mul(outputs)
+                        .ok_or_else(Error::overflow)?,
+                )
+                .map_err(|_| Error::resource("functional value allocation failed"))?;
+            moments.resize(outputs, OutputMoments::default());
+            let retain = functionals.retains_draws();
+            if !retain {
+                let mut one_draw = Vec::new();
+                one_draw
+                    .try_reserve_exact(dimension)
+                    .map_err(|_| Error::resource("draw allocation failed"))?;
+                run.samples = one_draw;
+            }
+            for transition in 0..transitions {
+                run.advance(transition + 1)?;
+                let draw = last_draw(&run.samples, dimension)?;
+                let start = values.len();
+                values.resize(start + outputs, 0.0);
+                let out = &mut values[start..];
+                for (index, (functional, range)) in functionals
+                    .functionals()
+                    .iter()
+                    .zip(functionals.ranges())
+                    .enumerate()
+                {
+                    functional
+                        .evaluate(draw, &mut out[range])
+                        .map_err(|error| {
+                            Error::new(
+                                ErrorKind::Target,
+                                format!("functional {index} failed: {}", error.message()),
+                            )
+                        })?;
+                }
+                for (moment, value) in moments.iter_mut().zip(&values[start..]) {
+                    moment.push(*value);
+                }
+                if transition + 1 == transitions {
+                    last_position.copy_from_slice(draw);
+                }
+                if !retain {
+                    run.samples.clear();
+                }
+            }
+        }
+    }
     // As `ChainRun::finish`: a final control check, then the retained-draw
     // window summary.
     control.check().map_err(control_error)?;
     let telemetry = run.telemetry_snapshot();
     Ok(ChainResult {
         samples: std::mem::take(&mut run.samples),
+        values,
+        moments,
+        last_position,
         diagnostics: std::mem::take(&mut run.diagnostics),
         telemetry,
         step_size: run.active_tuning.step_size,
         mass_diagonal: run.active_mass.diagonal.clone(),
         effective_seed: run.seed,
     })
+}
+
+/// The last `dimension` values of the kernel's draw buffer.
+fn last_draw(samples: &[f64], dimension: usize) -> Result<&[f64], Error> {
+    samples
+        .len()
+        .checked_sub(dimension)
+        .filter(|_| dimension > 0)
+        .and_then(|start| samples.get(start..))
+        .ok_or_else(|| Error::new(ErrorKind::Internal, "warm chain retained no draw"))
 }
