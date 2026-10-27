@@ -232,6 +232,28 @@ window at K = 5), not from the session alone. Python: `owalnuts.WarmSession(targ
 threads=t)`, `session.refresh(k)`, `session.retarget(target, state)`,
 `state.shift_window(1, 1)`.
 
+When the tick needs a few quote quantities rather than the draws,
+`session.refresh_functionals(k, &functionals)` (WP95) evaluates
+registered `Functional`s (`FunctionalFn::new(outputs, |q, out| ...)`, or a
+C callback through `RawFunctional`) on every retained draw inside the
+chain loop and returns a `FunctionalChunk`: per chain the `k x outputs`
+values, streamed moments per output, the diagnostics and `warm_state()`,
+but no draws unless asked (`Functionals::retain_draws`), with pooled
+`mean` / `variance` / `quantile(output, q)`; `Sampler::run_warm_functionals`
+is the one-shot form. The values are the functionals of `refresh`'s draws
+bit for bit and the draws do not depend on the functionals
+(`tests/warm_functionals.rs`). The retained result shrinks from `k x dim x
+chains x 8` to `k x outputs x chains x 8` bytes (K = 50 on the WP84 shape:
+395 KiB of draws against 9.4 KiB for six outputs) and the peak live memory
+of a call with it (597 KiB against 279 KiB at K = 50 and 4 threads; the
+rest is the kernel's own per-transition workspace, which no result
+layout changes); wall per call is within noise of `refresh` because the
+functionals cost far less than the kernel's gradients. Python:
+`session.refresh_functionals(k, [owalnuts.from_cfunc_functional(f, 1)])`
+and `chunk.quantile(0.95, 0)`; a Python callable functional works too but
+attaches the interpreter once per draw per chain (0.16-0.55 ms each on
+the SV targets).
+
 ## Where it shines
 
 Every number below is from a preregistered, checksummed study in

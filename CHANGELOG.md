@@ -9,6 +9,72 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Added
 
+- Streaming functionals on the warm path (WP95): `sampler::Functional`
+  (`dimension()` outputs, `evaluate(position, out) -> Result<(),
+  FunctionalError>`), the closure adaptor `FunctionalFn::new(outputs, f)`,
+  the C-ABI adaptor `RawFunctional` (`RawFunctionalFn`: `void(dim, const
+  double* q, double* out, n_out, void* user_data)`), the call list
+  `Functionals::new().with(f).retain_draws(bool)`,
+  `WarmSession::refresh_functionals(draws, &functionals) ->
+  FunctionalChunk`, and the one-shot
+  `Sampler::run_warm_functionals(&target, &state, &functionals)`. The
+  functionals are evaluated on every retained draw inside the chain loop
+  (the chain advances one transition at a time through the same kernel
+  loop, so the kernel never sees them) and the chunk keeps, per chain, the
+  values (`draws x outputs`, draw-major), the streamed `OutputMoments`
+  per output (count, mean, M2, min, max), the last position, the
+  diagnostics and telemetry of the ordinary chunk and `warm_state()`, but
+  not the draws unless `retain_draws`; `mean(output)`,
+  `variance(output)` and `quantile(output, q)` pool every chain's draws
+  (NumPy's default linear interpolation, so a Python caller checks it bit
+  for bit) and `chain_moments` / `chain_quantile` give one chain.
+  Bit-identity: the values are the functionals of `refresh`'s draws under
+  the same seed, the draws and diagnostics do not depend on the
+  functionals, and `run_warm_functionals` equals both `run_warm` and call 0
+  of a session (`tests/warm_functionals.rs`). A functional error or panic
+  is an execution error (the session becomes terminal). Memory: the
+  kernel's `draws x dimension` draw buffer is released at the start of the
+  call and one draw is kept at a time, so the retained result is `draws x
+  outputs x chains x 8` bytes instead of `draws x dimension x chains x 8`
+  (K = 50, 4 chains, 6 outputs on the 253-coordinate SV target: 9.4 KiB of
+  values against 395 KiB of draws); the kernel's own per-transition
+  workspace is unchanged and dominates what a call allocates (about 7 KiB
+  per gradient, 22 MB per 50-transition call on that target, freed within
+  the call). `examples/warm_session_bench.rs` gains the functional arm
+  (`sigma_next = exp(h_{n+1} / 2)` from the latent recursion, and the last
+  five latents) and a counting global allocator. One laptop run (quiet
+  machine, indicative; median wall per call, 4 chains, release, counting
+  allocator on for every arm): on the 53-coordinate window at 4 threads, `refresh` versus `refresh_functionals` was 0.39 / 0.59 versus 0.38 / 0.55 ms (median / P95) at K = 5, 0.68 / 0.84 versus 0.70 / 0.82 at K = 10 and 3.2 / 3.5 versus 3.5 / 4.5 at K = 50 (`run_warm` 0.75, 1.03 and 3.6 ms), and at one thread 0.90 versus 0.84, 1.55 versus 1.55 and 7.9 versus 9.8 ms; on the 253-coordinate target at 4 threads 1.0 versus 1.0 ms at K = 5, 1.8 versus 2.0 at K = 10 and 13.6 versus 13.2 at K = 50, and at one thread 4.4 versus 4.6, 8.7 versus 9.3 and 41 versus 36 ms (that target's 4-thread medians moved by up to 2x between two runs on this laptop; in both runs the two arms stayed within each other's noise, as expected: the two functionals cost one pass over the latents per draw against about 60 gradients per transition). Peak live bytes
+  above the pre-call level (median, 4 threads): on the 253-coordinate
+  target 197 / 243 / 597 KiB for the session at K = 5 / 10 / 50 against
+  167 / 175 / 279 KiB with functionals; on the 53-coordinate window 53 /
+  66 / 169 KiB against 48 / 51 / 111 KiB; the difference is the draw
+  buffers, the remainder the kernel's workspace. Python:
+  `WarmSession.refresh_functionals(draws, functionals,
+  retain_draws=False) -> FunctionalChunk` (`values` of shape `(chains,
+  draws, outputs)`, `output(i)`, `functional(k)`, `mean(i)`,
+  `variance(i)`, `quantile(q, i)` pooled or `per_chain=True`, `moments`,
+  `positions`, `samples` with `retain_draws`, `warm_state()`), a
+  functional being a Python callable `f(position) -> array` (its output
+  count probed once on the current state; the interpreter is attached
+  once per draw per chain), a `(callable, outputs)` pair, or
+  `from_cfunc_functional(cfunc, outputs)` (GIL-free) with
+  `numba_functional_signature()` / `RAW_FUNCTIONAL_SIGNATURE` =
+  `void(intp, double*, double*, intp, void*)`; the same bit-identity and
+  quantile-pooling tests (`integrations/python/tests/test_warm_functionals.py`).
+  `integrations/python/bench/warm_functionals_bench.py` on the SV target
+  as a numba `cfunc` (one laptop, 4 chains x 4 threads, median wall per
+  call): `refresh` plus a numpy quote 6.3 / 6.1 / 20.4 ms at K = 5 / 10 /
+  50 on the 253-coordinate target and 1.7 / 2.7 / 5.2 ms on the
+  53-coordinate window, `refresh_functionals` with cfunc functionals 6.0 /
+  8.1 / 24.9 ms and 1.2 / 1.6 / 5.3 ms (within noise: the per-tick quote
+  is cheap either way once the draws come back as one array), and with
+  the sigma functional as a Python callable 17 / 29 / 135 ms and 4.8 /
+  8.8 / 38 ms, that is about 0.55 ms (253 coordinates) and 0.16 ms (53
+  coordinates) per draw per chain, serialised on the GIL, most of it the
+  callable's own numpy recursion over the latents. Use a cfunc functional
+  for the per-tick path; a callable functional is for prototyping.
+
 - Resident warm session (WP91): `Sampler::start_warm_session(target,
   state) -> WarmSession<T>` keeps a worker thread that owns the target, a
   pool of `threads` Rayon workers and every per-chain configuration, mass
