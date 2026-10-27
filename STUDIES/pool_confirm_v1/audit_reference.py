@@ -19,6 +19,19 @@ def finite(value):
     return value if np.isfinite(value) else None
 
 
+def diagnostics(arr):
+    result = {}
+    for column, name in enumerate(("mu", "log_sigma", "beta", "h_last")):
+        values = arr[..., column]
+        result[name] = {
+            "rhat_rank": finite(az.rhat(values, method="rank")),
+            "ess_bulk": finite(az.ess(values, method="bulk")),
+            "ess_tail": finite(az.ess(values, method="tail")),
+            "mcse_mean": finite(az.mcse(values, method="mean")),
+        }
+    return result
+
+
 def audit(here, cells):
     protocol_bytes = (here / "protocol.json").read_bytes()
     protocol = json.loads(protocol_bytes)
@@ -37,7 +50,8 @@ def audit(here, cells):
             if not record or record.get("status") != "ok":
                 continue
             raw = np.fromfile(folder / record["file"], dtype="<f4").astype(float)
-            arr = raw.reshape(record["chains"], record["draws"], 4)[record["kept"]]
+            all_arr = raw.reshape(record["chains"], record["draws"], 4)
+            arr = all_arr[record["kept"]]
             row["kept"] = record["kept"]
             row["original_rhat_h_next"] = record["rhat_h_next"]
             attempt = next(a for a in record["attempts"] if a["attempt"] == record["attempt"])
@@ -46,15 +60,10 @@ def audit(here, cells):
             row["selected_attempt_divergences_kept"] = (
                 [divergences[c] for c in record["kept"]] if divergences is not None else None
             )
-            row["diagnostics"] = {}
-            for column, name in enumerate(("mu", "log_sigma", "beta", "h_last")):
-                values = arr[..., column]
-                row["diagnostics"][name] = {
-                    "rhat_rank": finite(az.rhat(values, method="rank")),
-                    "ess_bulk": finite(az.ess(values, method="bulk")),
-                    "ess_tail": finite(az.ess(values, method="tail")),
-                    "mcse_mean": finite(az.mcse(values, method="mean")),
-                }
+            row["diagnostics"] = diagnostics(arr)
+            row["all_chain_diagnostics"] = (
+                row["diagnostics"] if len(record["kept"]) == record["chains"] else diagnostics(all_arr)
+            )
             row["supplemental_all_rhat_le_1_01"] = all(
                 d["rhat_rank"] is not None and d["rhat_rank"] <= 1.01 for d in row["diagnostics"].values()
             )
