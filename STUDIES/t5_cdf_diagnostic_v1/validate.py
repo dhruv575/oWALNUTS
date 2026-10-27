@@ -6,7 +6,7 @@ from scipy.special import stdtr
 from scipy.integrate import quad
 import t5
 H=Path(__file__).resolve().parent
-out=H/'validation.json'
+out=H/'validation02.json'
 if out.exists():raise SystemExit('Refuse overwrite')
 start=time.perf_counter();mp.mp.dps=90
 bounds=np.array([t5.SQRT5,4*t5.SQRT5])
@@ -35,3 +35,4 @@ for raw in ['.1','1',str(t5.SQRT5),str(4*t5.SQRT5),'20','100','1e4','1e20','1e50
 r['passed']=bool(r['max_abs_cdf']<=5e-15 and r['max_abs_sf']<=5e-15 and r['max_rel_small_tail']<=5e-12 and r['cdf_decreases']==0 and r['sf_increases']==0 and r['bounds_ok'] and all(x['relative_error']<=5e-12 for x in r['high_precision']) and all(x['abs_error']<=5e-15 for x in r['quadrature']))
 r.update(elapsed_seconds=time.perf_counter()-start,python=sys.version,platform=platform.platform(),versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__,mpmath=mp.__version__),sources={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [H/'PLAN.md',H/'t5.py',Path(__file__)]})
 out.write_text(json.dumps(r,indent=2));print(json.dumps(r,indent=2));sys.exit(0 if r['passed'] else 1)
+

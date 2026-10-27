@@ -1,8 +1,12 @@
-"""Exact t5 CDF/SF, stable smaller-tail evaluation; no fastmath or clipping."""
+"""Exact t5 CDF/SF with stable positive tail series; no fastmath/clipping."""
 import math
 import numpy as np
 from numba import njit, vectorize, float64
 SQRT5=math.sqrt(5.0)
+_coeff=[];_a=1.
+for _k in range(64):
+    _coeff.append(_a/(2*_k+5));_a*=(_k+.5)/(_k+1)
+COEFF=np.array(_coeff)
 @njit(cache=True)
 def small_tail(a):
     if math.isnan(a): return math.nan
@@ -10,16 +14,9 @@ def small_tail(a):
     if a <= SQRT5:
         v=a/SQRT5; z=v*v
         return .5-(math.atan(v)+v*(5+3*z)/(3*(1+z)*(1+z)))/math.pi
-    t=SQRT5/a; z=t*t
-    if t > .25:
-        return (math.atan(t)-t*(3+5*z)/(3*(1+z)*(1+z)))/math.pi
-    # Horner, 24 fixed terms. Multiplication ordering preserves representable tails.
-    p=0.0
-    for n in range(23,-1,-1):
-        coefficient=((n+1)*(n+2)/2)/(5+2*n)
-        if n%2: coefficient=-coefficient
-        p=coefficient+z*p
-    return ((8/(3*math.pi))*p*t)*t*t*t*t
+    v=SQRT5/math.hypot(a,SQRT5);z=v*v;p=0.0
+    for n in range(63,-1,-1):p=COEFF[n]+z*p
+    return ((8/(3*math.pi))*p*v)*v*v*v*v
 @vectorize([float64(float64)],nopython=True,cache=True)
 def cdf(x):
     q=small_tail(abs(x))
