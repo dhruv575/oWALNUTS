@@ -3,7 +3,9 @@ import numpy as np
 from scipy.stats import norm,t
 import owalnuts
 from sv_target import compile_target,compile_functional,TargetOwner,components,remap,RHO
-from harness import summarize,processor
+from harness import summarize,processor,Resident
+from unittest.mock import Mock,patch
+from types import SimpleNamespace
 
 class Checks(unittest.TestCase):
     @classmethod
@@ -53,4 +55,25 @@ class Checks(unittest.TestCase):
             raw=a.refresh(3); compact=b.refresh_functionals(3,[self.functional],retain_draws=True)
         np.testing.assert_array_equal(raw.samples,compact.samples)
         np.testing.assert_allclose(compact.values,components(raw.samples),rtol=1e-14,atol=1e-14)
+    def test_fail_closed_paths(self):
+        def fake():
+            r=Resident.__new__(Resident);r.closed=False;r.y=np.array([1.,2.,3.]);r.compiled=None;r.functional=None;r.session=Mock()
+            return r
+        r=fake()
+        row=r.tick(4.,0)
+        self.assertEqual(row['phase'],'validate');r.session.retarget.assert_not_called()
+        self.assertTrue(r.closed);np.testing.assert_array_equal(r.y,[1,2,3])
+        r=fake();r.session.retarget.side_effect=RuntimeError('injected retarget failure')
+        with patch('harness.remap',return_value=None),patch('harness.TargetOwner',return_value=SimpleNamespace(target=None)):
+            row=r.tick(4.,2)
+        self.assertEqual(row['state_advanced'],'uncertain');self.assertTrue(r.closed)
+        np.testing.assert_array_equal(r.y,[1,2,3]);r.session.refresh_functionals.assert_not_called()
+        r=fake();r.session.refresh_functionals.return_value=SimpleNamespace(values=np.zeros((1,2,4)),seed=7,
+            diagnostics=[{'divergent':[False,False]}],metadata=[{}],work=[{}],target_calls=23,call_index=0)
+        with patch('harness.remap',return_value=None),patch('harness.TargetOwner',return_value=SimpleNamespace(target=None)),patch('harness.summarize',side_effect=ValueError('injected numerical failure')):
+            row=r.tick(4.,2)
+        self.assertEqual(row['phase'],'summary');self.assertEqual(row['target_calls'],23)
+        self.assertTrue(row['state_advanced']);self.assertTrue(r.closed);np.testing.assert_array_equal(r.y,[2,3,4])
+        second=r.tick(5.,2);self.assertEqual(second['status'],'failed')
+        self.assertEqual(r.session.refresh_functionals.call_count,1);np.testing.assert_array_equal(r.y,[2,3,4])
 if __name__=='__main__':unittest.main()
