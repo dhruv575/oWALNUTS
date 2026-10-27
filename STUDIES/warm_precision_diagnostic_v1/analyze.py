@@ -156,6 +156,7 @@ def summarize(rows):
                          planned=len(all_rows), available=len(good), unavailable=len(all_rows)-len(good),
                          stuck_ticks=sum(bool(r["stuck"]) for r in good),
                          divergent_ticks=sum(r["divergences"] > 0 for r in good), estimators={})
+            group["combined_mcse_diagnostic_seconds_median"] = qfinite([r["computed"]["diagnostic_seconds"] for r in good], .5)
             for est in ESTIMATORS:
                 passed = sum(r["comparisons"][est]["within_bands_no_stuck"] for r in good)
                 e = np.array([r["comparisons"][est]["errors"] for r in good])
@@ -168,7 +169,8 @@ def summarize(rows):
                     absolute_error_p95=np.quantile(abs(e), .95, axis=0).tolist() if good else None,
                     own_relative_mcse_median=np.median(mcse, axis=0).tolist() if good else None,
                     arithmetic_seconds_median=qfinite([r["computed"][method]["arithmetic_seconds"] for r in good], .5),
-                    sampler_plus_separate_arithmetic_median=qfinite([r["sampler_seconds"]+r["computed"][method]["arithmetic_seconds"] for r in good], .5))
+                    sampler_plus_separate_arithmetic_median=qfinite([r["sampler_seconds"]+r["computed"][method]["arithmetic_seconds"] for r in good], .5),
+                    sampler_plus_arithmetic_plus_both_mcse_diagnostics_median=qfinite([r["sampler_seconds"]+r["computed"][method]["arithmetic_seconds"]+r["computed"]["diagnostic_seconds"] for r in good], .5))
             result.append(group)
     return result
 
