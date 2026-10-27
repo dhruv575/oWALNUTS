@@ -41,7 +41,7 @@ class Resident:
         self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
         self.owner=TargetOwner(compiled,self.y)
         self.session=owalnuts.WarmSession(self.owner.target,state,seed=seed,threads=4,
-            tuning=owalnuts.Tuning(max_depth=8),max_target_evaluations=2000000)
+            tuning=owalnuts.Tuning(max_depth=8),max_target_evaluations=2000000,admit_worst_case=False)
     def tick(self,y_new,k):
         start=time.perf_counter(); row={'status':'failed','k':k}
         try:
@@ -75,6 +75,7 @@ def main():
         native=[identity(p) for p in Path(owalnuts.__file__).parent.rglob('*.pyd')],
         configuration=dict(N=12,K=8,chains=4,max_depth=8,seed=99371001,initial_seed=99371002,
         data_seed=99371003,append_innovation=0,mass_append=1,numerical_nodes=[64,128],
+        max_target_evaluations=2000000,admit_worst_case=False,
         initial_warmup=100,initial_draws=10,early_shift_update=2),
         limitations='Different development seeds/initialization/API seed schedule from WP96; tiny N; no posterior accuracy claim')
     resident=None

@@ -31,3 +31,10 @@ Independent reference target: STUDIES/online_sv_quote_v2/models/sv.stan, with
 n/y/rho=.95/nu=5/mu_mean=2log(.005)/mu_sd=1/log_sigma_mean=log(.2)/
 log_sigma_sd=.5/beta_sd=.002. Tests compare independent density/finite differences,
 window preservation, native compact output parity and independent quadrature.
+
+Development smoke01 is preserved: admission rejected the first refresh because
+the kernel's theoretical worst-case target bound exceeded two million evaluations.
+No predictive result was produced. The corrected development harness disables
+worst-case admission while preserving the same actual two-million evaluation
+limit; this is an admission setting change, not a higher compute budget. Smoke02
+uses the identical seeds/data and is a debugging rerun, not fresh evidence.
