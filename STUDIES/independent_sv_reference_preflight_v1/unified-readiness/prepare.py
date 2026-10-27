@@ -35,6 +35,7 @@ def main():
   check=run([python,'-m','pip','check']);(root/'pip-check.txt').write_text(check.stdout)
   for name,digest in sdk_sources.items():
    if sha(sdk/name)!=digest:raise RuntimeError('SDK source drift '+name)
+  if sha(requirements)!=a.requirements_sha256:raise RuntimeError('requirements changed during preparation')
   record.update(status='complete',phase='complete',runtime_identity_sha256=sha(root/'runtime-identity.json'),sdk_sources_unchanged=True)
  except BaseException as exc:record.update(status='failed',error=repr(exc),traceback=traceback.format_exc())
  finally:record['finished']=time.time();save()
