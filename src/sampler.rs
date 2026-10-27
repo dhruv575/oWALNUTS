@@ -64,6 +64,8 @@
 pub use crate::walnutpie::session::{
     SessionChainChunk, SessionChunk, SessionHandle, SessionProgress,
 };
+use crate::walnutpie::warm_session::{WarmBudget, WarmPlan, WarmSessionSetup};
+pub use crate::walnutpie::warm_session::{WarmChainChunk, WarmChunk, WarmSession};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -1171,16 +1173,76 @@ impl Sampler {
         seed: u64,
         tuning: &Tuning,
     ) -> Result<RunConfig, Error> {
-        let draws = NonZeroUsize::new(self.draws)
-            .ok_or_else(|| Error::configuration("draws must be nonzero"))?;
-        let mut config = RunConfig::new(discarded, draws, seed)
-            .with_tuning(tuning.to_kernel()?)
-            .with_cached_initial_evaluation(self.cache_initial_evaluation)
-            .with_limits(self.limits.resource_limits());
-        if let Some(limit) = self.limits.max_depth_stops {
-            config = config.with_maximum_depth_stop_limit(limit);
+        build_run_config(
+            discarded,
+            self.draws,
+            seed,
+            tuning,
+            &self.limits,
+            self.cache_initial_evaluation,
+        )
+    }
+
+    /// Start a resident warm-continuation session ([`WarmSession`]) on
+    /// `target` from `state`: the worker thread, a pool of
+    /// [`Sampler::threads`] workers (default: one per chain) and every
+    /// per-chain configuration stay alive across [`WarmSession::refresh`]
+    /// calls. The session takes this sampler's seed, threads, tuning, limits
+    /// and cached-initial-evaluation setting; [`Sampler::draws`] is per call
+    /// and [`Sampler::warmup`], [`Sampler::metric`] and
+    /// [`Sampler::adaptation`] are ignored, as for [`Sampler::run_warm`].
+    /// [`Sampler::chains`], if set, must equal the state's chain count.
+    ///
+    /// Call `n` of the session is bit-identical to
+    /// `self.draws(k).seed(seed + n * chains).run_warm(&target, &state_n)`
+    /// where `state_n` is the session's state before the call (the seed
+    /// rule on [`WarmSession`]). The target and state are admitted here as
+    /// `run_warm` admits them (no target call); errors are
+    /// `ErrorKind::Configuration` for a dimension or chain-count mismatch
+    /// plus every admission error `run_warm` returns.
+    pub fn start_warm_session<T: Target + 'static>(
+        &self,
+        target: T,
+        state: WarmState,
+    ) -> Result<WarmSession<T>, Error> {
+        let chains = state.chain_count();
+        if let Some(configured) = self.chains
+            && configured != chains
+        {
+            return Err(Error::configuration(format!(
+                "chain count {configured} differs from the warm state's {chains} chains"
+            )));
         }
-        Ok(config)
+        let threads = self.threads.unwrap_or(chains);
+        if threads == 0 {
+            return Err(Error::configuration("thread count must be nonzero"));
+        }
+        let budget = match (
+            self.limits.max_target_evaluations,
+            self.limits.admit_worst_case,
+        ) {
+            (Some(evaluations), _) => WarmBudget::Fixed(evaluations),
+            (None, true) => WarmBudget::WorstCase,
+            (None, false) => WarmBudget::Unbudgeted,
+        };
+        crate::walnutpie::warm_session::spawn(
+            target,
+            state,
+            WarmSessionSetup {
+                threads,
+                base_seed: self.seed,
+                budget,
+                deadline: self.limits.deadline,
+                timeout: self.limits.timeout,
+                external_cancellation: self.limits.cancellation.clone(),
+                recipe: WarmRecipe {
+                    seed: self.seed,
+                    tuning: self.tuning.clone(),
+                    limits: self.limits.clone(),
+                    cache_initial_evaluation: self.cache_initial_evaluation,
+                },
+            },
+        )
     }
 
     /// The structured paths have no budgeted admission variant: they are
@@ -1707,6 +1769,82 @@ enum MetricKind {
     Structured,
 }
 
+/// The `RunConfig` shared by every sampler path: `draws` retained
+/// transitions, the given discarded count, seed and tuning, the cached
+/// initial evaluation, the depth-stop limit and the resource limits; no
+/// warmup.
+fn build_run_config(
+    discarded: usize,
+    draws: usize,
+    seed: u64,
+    tuning: &Tuning,
+    limits: &Limits,
+    cache_initial_evaluation: bool,
+) -> Result<RunConfig, Error> {
+    let draws =
+        NonZeroUsize::new(draws).ok_or_else(|| Error::configuration("draws must be nonzero"))?;
+    let mut config = RunConfig::new(discarded, draws, seed)
+        .with_tuning(tuning.to_kernel()?)
+        .with_cached_initial_evaluation(cache_initial_evaluation)
+        .with_limits(limits.resource_limits());
+    if let Some(limit) = limits.max_depth_stops {
+        config = config.with_maximum_depth_stop_limit(limit);
+    }
+    Ok(config)
+}
+
+/// What a [`WarmSession`] keeps of its sampler to build the per-chain
+/// kernel inputs of a state (at start and at every retarget), exactly as
+/// [`Sampler::run_warm`] builds them.
+pub(crate) struct WarmRecipe {
+    pub(crate) seed: u64,
+    pub(crate) tuning: Tuning,
+    pub(crate) limits: Limits,
+    pub(crate) cache_initial_evaluation: bool,
+}
+
+impl WarmRecipe {
+    /// Per chain: the configuration `run_warm` gives chain `c` (seed
+    /// `seed + c`, the chain's step, no warmup; `retained` is a placeholder
+    /// the session sets per call) and its validated mass; plus the
+    /// whole-run admission configuration and the starting positions.
+    pub(crate) fn plan(&self, state: &WarmState) -> Result<WarmPlan, Error> {
+        let mut configs = Vec::with_capacity(state.chain_count());
+        let mut masses = Vec::with_capacity(state.chain_count());
+        for (index, chain) in state.chains().iter().enumerate() {
+            let tuning = self.tuning.clone().step_size(chain.step_size);
+            configs.push(build_run_config(
+                0,
+                1,
+                self.seed.wrapping_add(index as u64),
+                &tuning,
+                &self.limits,
+                self.cache_initial_evaluation,
+            )?);
+            masses.push(DiagonalMass::from_diagonal(chain.mass_diagonal.clone())?);
+        }
+        let whole_run = build_run_config(
+            0,
+            1,
+            self.seed,
+            &self.tuning,
+            &self.limits,
+            self.cache_initial_evaluation,
+        )?;
+        Ok(WarmPlan {
+            configs,
+            masses,
+            whole_run,
+            positions: state
+                .chains()
+                .iter()
+                .map(|chain| chain.position.clone())
+                .collect(),
+            dimension: state.dimension(),
+        })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_diagonal<T: Target>(
     target: &T,
@@ -2006,7 +2144,7 @@ impl WarmState {
     /// `fill(chain, coordinate)` giving each new coordinate's
     /// `(position, mass)` (`coordinate` is the absolute index, from the
     /// current dimension up). The result is validated as by [`WarmState::new`].
-    pub fn extend_with<F>(&self, dimension: usize, mut fill: F) -> Result<Self, Error>
+    pub fn extend_with<F>(&self, dimension: usize, fill: F) -> Result<Self, Error>
     where
         F: FnMut(usize, usize) -> (f64, f64),
     {
@@ -2016,23 +2154,110 @@ impl WarmState {
                 self.dimension
             )));
         }
+        let current = self.dimension;
+        self.remap(
+            dimension,
+            |coordinate| (coordinate < current).then_some(coordinate),
+            fill,
+        )
+    }
+
+    /// Rebuild every chain onto `dimension` coordinates: new coordinate `j`
+    /// carries old coordinate `map(j)` (position and mass copied; it must
+    /// be below the current dimension) or, when `map(j)` is `None`, the
+    /// `(position, mass)` of `fill(chain, j)`. Step sizes are unchanged;
+    /// `map` is evaluated once per new coordinate, `fill` once per chain
+    /// and unmapped coordinate. Coordinates may be dropped, reordered or
+    /// duplicated; the result is validated as by [`WarmState::new`].
+    /// [`WarmState::extend_with`] is `remap` with the identity on the old
+    /// coordinates; [`WarmState::shift_window`] is the fixed-lag case.
+    /// Whether the fill is a sensible start for the new target is the
+    /// caller's decision.
+    pub fn remap<M, F>(&self, dimension: usize, map: M, mut fill: F) -> Result<Self, Error>
+    where
+        M: Fn(usize) -> Option<usize>,
+        F: FnMut(usize, usize) -> (f64, f64),
+    {
+        if dimension == 0 {
+            return Err(Error::configuration("warm state dimension must be nonzero"));
+        }
+        let sources: Vec<Option<usize>> = (0..dimension).map(&map).collect();
+        if let Some(bad) = sources
+            .iter()
+            .flatten()
+            .find(|source| **source >= self.dimension)
+        {
+            return Err(Error::configuration(format!(
+                "remap refers to coordinate {bad} of a warm state of dimension {}",
+                self.dimension
+            )));
+        }
         let chains = self
             .chains
             .iter()
             .enumerate()
             .map(|(index, chain)| {
-                let mut extended = chain.clone();
-                extended.position.reserve(dimension - self.dimension);
-                extended.mass_diagonal.reserve(dimension - self.dimension);
-                for coordinate in self.dimension..dimension {
-                    let (position, mass) = fill(index, coordinate);
-                    extended.position.push(position);
-                    extended.mass_diagonal.push(mass);
+                let mut position = Vec::with_capacity(dimension);
+                let mut mass_diagonal = Vec::with_capacity(dimension);
+                for (coordinate, source) in sources.iter().enumerate() {
+                    let (p, m) = match source {
+                        Some(source) => (chain.position[*source], chain.mass_diagonal[*source]),
+                        None => fill(index, coordinate),
+                    };
+                    position.push(p);
+                    mass_diagonal.push(m);
                 }
-                extended
+                WarmChain {
+                    position,
+                    step_size: chain.step_size,
+                    mass_diagonal,
+                }
             })
             .collect();
         Self::new(chains)
+    }
+
+    /// The fixed-lag window move: drop the first `drop_front` coordinates,
+    /// keep the rest in order, and append `append` new ones, each with the
+    /// `(position, mass)` of `fill(chain, coordinate)` (`coordinate` is the
+    /// index in the new state). A [`WarmState::remap`]; the new dimension
+    /// `current - drop_front + append` must be nonzero and `drop_front` at
+    /// most the current dimension.
+    pub fn shift_window<F>(&self, drop_front: usize, append: usize, fill: F) -> Result<Self, Error>
+    where
+        F: FnMut(usize, usize) -> (f64, f64),
+    {
+        if drop_front > self.dimension {
+            return Err(Error::configuration(format!(
+                "cannot drop {drop_front} coordinates from a warm state of dimension {}",
+                self.dimension
+            )));
+        }
+        let kept = self.dimension - drop_front;
+        let dimension = kept
+            .checked_add(append)
+            .ok_or_else(|| Error::configuration("warm state dimension overflows"))?;
+        self.remap(
+            dimension,
+            |coordinate| (coordinate < kept).then_some(coordinate + drop_front),
+            fill,
+        )
+    }
+
+    /// Replace every chain's position with its last draw of `chunk`
+    /// (the session's bookkeeping after a successful call; the chunk has
+    /// the state's chain count and dimension).
+    pub(crate) fn set_positions_from_last_draws(&mut self, chunk: &WarmChunk) {
+        for (chain, result) in self.chains.iter_mut().zip(&chunk.chains) {
+            if let Some(last) = result
+                .samples
+                .len()
+                .checked_sub(self.dimension)
+                .and_then(|start| result.samples.get(start..))
+            {
+                chain.position.copy_from_slice(last);
+            }
+        }
     }
 }
 
