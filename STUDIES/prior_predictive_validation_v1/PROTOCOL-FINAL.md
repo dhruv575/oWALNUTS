@@ -12,7 +12,7 @@ Initial fit uses y[0:250]. For update j=1..32, observe y[249+j], condition on y[
 
 Candidate is exactly four-chain resident K400 with frozen boundary remap, appended innovation0 and mass1, no pooling or re-adaptation. Initial fit1000 warmup/200 retained at deterministic prior-center positions; same reviewed depth10/refinement8 tuning, default declared initial trapped-chain guard, full guard/seed/cost telemetry. A failed transition poisons that stream; no retry. All chains are retained.
 
-Observed-return scoring uses the fixed evaluator, GH128 primary corroborated by GH64, both absolute PIT and logpdf differences <=1e-6. Same exact Student-t5 CDF implementation, full joint(mu,log_sigma,beta,h_last), stable density evaluation and inverse-scale Jacobian. No quantile roots, score clipping or probability repair. Numerical failure is unavailable evidence.
+Observed-return scoring uses the fixed evaluator, GH128 primary corroborated by GH64, both absolute PIT and logpdf differences <=1e-6. Same exact Student-t5 CDF implementation, full joint(mu,log_sigma,beta,h_last), stable density evaluation and inverse-scale Jacobian. No quantile roots or outcome-dependent score clipping. The frozen evaluator clips only CDF roundoff excursions within32 machine epsilons to[0,1], records that count and rejects larger excursions; this existing numerical rule is unchanged. Numerical failure is unavailable evidence.
 
 Baseline is the fixed NIG lag regression with a0=3,b0=.0002, prior covariance100s²I,249 mature pairs from the same250-return window, training-only lag standardization and latest-return forecast covariate. Candidate, baseline and oracle availability are independent. Side scores run on successfully generated streams even when candidate initialization failed.
 
