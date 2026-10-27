@@ -123,3 +123,80 @@ conditioning targets, independently generated rank randomness and adequate
 reference diagnostics. Fixed-truth coverage across one dependent stream is not
 SBC. Independent reference audit and fresh realized-return score evaluation answer
 different questions and should remain separate in the eventual report.
+
+## Existing predictive results already answer part of the question
+
+The earlier SV research was not limited to sampler agreement. September historical
+72-origin comparison reported mean90% interval scores: no-flow SV0.010549783,
+exact price baseline0.01206660, exact flow baseline0.01201039. No-flow SV was
+narrower and scored about12.6% lower than the exact price baseline on that grid.
+Its coverage was90.28% versus94.44% for the price baseline. Flow mean/scale/both
+ablations gave no clear improvement; marked/pooled activity also did not improve
+the no-flow score (marked0.010591066, pooled0.010566725). These are existing
+reported summaries, not a newly selected retrospective analysis.
+
+October terminal `report-result-v1.json` records32/32 usable origins for public SV,
+independent reference and exact price baseline. Mean interval scores were
+0.006399929,0.006399915 and0.009321820 respectively; SV coverage96.875% (one upper
+miss) and baseline100%. SV mean score was about31.3% lower on this four-day grid.
+The frozen protocol explicitly rejects iid uncertainty or generalized calibration
+claims from those dependent origins. These results support further study of the
+SV family; they do not demonstrate trading profitability.
+
+Important model distinction: the archived historical no-flow SV used rho=.9,
+rolling256 and a mean design containing intercept AND lagged return (see archived
+prepare.py and `sv_prototype/historical_inputs.py:design`). WP97's target uses
+rho=.95, intercept-only beta and growing250+t data, while the resident prototype
+uses fixed250 remapped windows. Exact price baseline is conjugate regression with
+parameter uncertainty, not a naive constant point prediction. Do not attribute
+older benefits to the new intercept-only target or pretend a repeated same-data
+screen is new market evidence. A distinct screen can measure full-return PIT/
+proper scores of current warm draws versus frozen expensive same-target draws and
+causal baselines, retaining all failures. Exact t5 versus SciPy is arithmetic
+identity and should not itself change predictive value.
+
+## Refined minimal fresh-synthetic proposal (supersedes eight-long-stream sketch)
+
+Favor32 independent matched-model streams, each250 training observations plus32
+forecasts (1024 origins), or16 streams as a smaller feasibility stage. Draw each
+stream's(mu,log_sigma,beta) independently from the model's declared prior, initialize
+h stationarily, and use distinct pre-audited data/initialization/sampler seeds.
+Freeze the exact count before generation. This tests prior-predictive calibration
+across independent datasets; fixed-truth or shifted stress cases belong in a
+separately labeled later regime rather than being pooled into nominal uniform-PIT
+claims. Cluster uncertainty by independent stream, with32 cluster means far more
+informative about replicate variability than two long paired trajectories.
+
+For the cheapest first calibration/value screen, evaluate only CDF and log density
+at the realized next return, with identicalGH64/128 cross-order checks. Quantile
+roots are unnecessary for PIT and log score. Student-t5 density is
+8/(3*pi*sqrt5)*(1+x^2/5)^(-3), including inverse-scale Jacobian before mixing over
+posterior/normal innovation nodes; use stable logsumexp rather than log of an
+underflowed sum. Freeze and independently validate this density evaluator before
+any outcome scoring. Do not infer its timing from CDF speed alone. Interval score
+can remain a later endpoint-based study if preliminary proper log score/PIT
+warrants it; do not retroactively change the primary endpoint after outcomes.
+
+A known-parameter/known-current-latent oracle can integrate just the next Gaussian
+innovation and t5 return. It provides an intentionally privileged, correctly
+specified forecast benchmark; it is not the posterior predictive given observed
+returns only, and finite samples need not always favor it. A second known-parameter
+filter still requires latent uncertainty integration and must not be mislabeled
+as analytic ground truth. Neither oracle replaces independent posterior checks.
+
+Sparse preselected posterior corroboration can initially use4–8 long fits from
+an independent engine at fixed stream IDs/timepoints, not80 references. Include
+mu,log_sigma,beta,h_last and predictive functional diagnostics/MCSE, failures
+retained. That is a spot audit, not every-tick accuracy qualification. Fix exact
+sentinels and reference budgets before generating streams, and do not expand based
+on favorable or unfavorable observed calibration without a separately frozen plan.
+
+Cost anchor only: original host fixed-parameter initialization2.148s, compilation
+0.536s, residentK400 native update roughly0.24s. Thus32x32 updates have a nominal
+native component around246s plus approximately69s initialization if those timings
+transferred;16x32 roughly123s+34s. Prior-drawn regimes can be much harder, so these
+are rough component projections, not a promised wall budget. Observed-return
+CDF/log-density cost and independent reference fits must be measured separately
+on a fixed source-only fixture first. Parent should choose a concrete bounded
+run after that preflight; no AWS restart, data generation or sampling is authorized
+by this note. Preserve every planned stream/tick and failures under the chosen cap.
