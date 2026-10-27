@@ -141,9 +141,13 @@ These eight spot checks cannot certify all1488 posteriors or transfer E61's
 32-update result into a1488-update claim without this new evidence.
 
 Keep all1488 scheduled origins and4464 planned forecasts in the status ledger,
-plus8 reference slots. Candidate failure poisons/stops its continuation; later
-candidate origins remain not_started. Baseline phases run independently on valid
-acquired data even if candidate sampling fails. Numerical failures retain raw
+plus8 reference slots. Fatal native advance/state failure poisons/stops its
+continuation; later candidate origins remain not_started. After a successful
+native advance, a downstream GH/scoring failure retains the raw draw and marks
+that score unavailable, but continues subsequent causal native updates. There is
+no retry/recomputation or changed quadrature. Persistence failure is terminal
+infrastructure failure. Baseline phases run independently on valid acquired data
+even if candidate sampling fails. Numerical failures retain raw
 draws/diagnostics and missing scores; no outcome clipping/replacing/fabricated penalty.
 The unchanged numerical kernel's counted CDF roundoff correction within32machine
 epsilons remains allowed and recorded; it is not an outcome-dependent adjustment.

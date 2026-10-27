@@ -1,17 +1,19 @@
 {
   "status": "frozen_pending_parent_launch_authorization",
-  "frozen_at_utc": "2026-10-27T20:13:17.056029+00:00",
-  "scope": "Acquisition-only source/method freeze; outcomes remain quarantined until separate full scoring freeze",
+  "frozen_at_utc": "2026-10-27T20:15:44.781723+00:00",
+  "scope": "Acquisition-only collector/supervisor/method freeze; rawvalues remain quarantined until separate full scoring freeze",
   "files": {
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
-    "PLAN-DRAFT.md": "749f41ed41a4f293f51fb307bbec2691a1fb8d2a1b1e0e818986e8036240568a",
+    "PLAN-DRAFT.md": "67fccf2b5c3eb1bab2a737f489554ab437496dbf85571b49042f63cd4a068998",
     "EXPOSURE-AUDIT.md": "c592c53d52b6348dd8369fd8a8e12c5c75ca1a17fbaca1cfeffe47d52c5eac06",
     "EXPOSURE-METADATA.json": "b11063da4c018d1ac97bedfe948b2361f1bfcf802e496fd0a62237838276743e",
     "exposure_inventory.py": "2b14bc4bc5f9ac652b11e17c59911173a72b0fa89e486276a91ffb503f56a055",
     "acquire.py": "aea1dfafe7ceddfb78814e154f1190dd950ee21cb851b5865230affc5667493d",
     "test_acquire.py": "5131f0777d683945c9a0cdbb506a90b2f0f35f30d27bcb53e7601b464281f7fe",
+    "supervise_acquisition.py": "992cb633d289eb61bf110adb29103304ef940431042f448ba9b51e4fee8bfec7",
+    "test_supervise_acquisition.py": "9a2c75b64f85da44046a39cc12372df74c6fa03da043ccb8c005b6f8357d1a7b",
     "ACQUISITION-DRAFT.json": "f2a02add3b11006bca8b612ada07c7765bf930dd346e958aedf15ae8f9ad97a6",
-    "ACQUISITION-PENDING.json": "88c2b7bc86124face0793c64535c7010ba5cf7f1c3c456d42d5ff079af653191",
+    "ACQUISITION-PENDING.json": "adb215dff3323c154ab7e435fd6d03e20b0fcec7b43c5c23191e43d957b418b8",
     "ACQUISITION-ADMISSION.md": "dcef60a23641e2d9ed884f79a0c0dcee5f1d17aba18cc6aa58349b72414ca4a8"
   },
   "runtime": {
@@ -19,14 +21,19 @@
     "executable": "C:\\dev\\owalnuts\\integrations\\python\\.venv\\Scripts\\python.exe",
     "base_executable": "C:\\Users\\dhruv\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\python.exe",
     "executable_sha256": "d87d6c4ea11c4322c3c27e50f0052b49445bb8eb7e38e62287ffdd1313294d24",
-    "base_executable_sha256": "624b66d8178129ac5611f3cf32adf440ea0b7dc6b1bde60c5677d7ebc62e635d"
+    "base_executable_sha256": "624b66d8178129ac5611f3cf32adf440ea0b7dc6b1bde60c5677d7ebc62e635d",
+    "psutil": "7.2.2"
   },
-  "fixtures": "4 deterministic acquisition tests pass; no network or market data",
+  "fixtures": "6 deterministic tests pass:4collector and normal/descendant-timeout supervisor; no network or market data",
   "external_limits": {
     "hard_seconds": 300,
+    "startup_allowance_seconds": 0,
+    "cleanup_seconds": 5,
     "rss_bytes": 536870912,
     "output_bytes": 67108864
   },
-  "launch_control": "Parent must separately bind and authorize immutable execution protocol and external monitor; only status may change from pending protocol, all acquisition/method settings unchanged",
+  "supersedes_pre_supervisor_freeze_sha256": "4ff18414ff455bd079b7604c1fd793f9e9551c63ab8dded3351223a2df76da11",
+  "superseded_commit": "6a0dc237",
+  "launch_control": "Parent creates new immutable authorized protocol by changing pendingstatus only; all other acquisition/method/source/runtime settings unchanged",
   "no_market_data_endpoint_called": true
 }
