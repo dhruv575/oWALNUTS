@@ -26,11 +26,26 @@ try:
   state['process_group']=process.pid;save()
   try:rc=process.wait(timeout=max(1,1200-(time.monotonic()-start)));state.update(status='complete' if rc==0 else 'failed',exit_code=rc)
   except subprocess.TimeoutExpired:
-   state.update(status='timeout');os.killpg(process.pid,signal.SIGTERM)
-   try:process.wait(timeout=5)
-   except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+   state.update(status='timeout')
 except Exception as exc:state.update(status='failed',error=repr(exc))
 finally:
- if process is not None and process.poll() is None:
-  os.killpg(process.pid,signal.SIGKILL);process.wait()
+ if process is not None:
+  pgid=process.pid
+  def group_alive():
+   try:os.killpg(pgid,0);return True
+   except ProcessLookupError:return False
+  if group_alive():
+   state['cleanup_required']=True
+   os.killpg(pgid,signal.SIGTERM)
+   grace=time.monotonic()+5
+   while group_alive() and time.monotonic()<grace:
+    process.poll();time.sleep(.1)
+   if group_alive():
+    os.killpg(pgid,signal.SIGKILL)
+   process.wait()
+   grace=time.monotonic()+5
+   while group_alive() and time.monotonic()<grace:time.sleep(.1)
+  else:process.wait()
+  state['owned_process_group_drained']=not group_alive()
+  if not state['owned_process_group_drained']:state['status']='cleanup_failed'
  state.update(end_utc=datetime.now(timezone.utc).isoformat(),elapsed_seconds=time.monotonic()-start);save()
