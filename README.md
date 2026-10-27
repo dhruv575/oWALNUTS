@@ -1246,3 +1246,19 @@ provenance.
   guard signal that survives a scaled metric:
   [`STUDIES/grad_init_metric_v1`](STUDIES/grad_init_metric_v1/README.md)
   (WP94).
+- [E58] Long-horizon warm-refresh drift and re-adaptation (WP96, Linux,
+  250-return sliding window, 2,000 updates, two synthetic streams and two
+  sampler seeds): **no tested K=200 policy qualifies**. Frozen, every-100,
+  every-500 and triggered re-adaptation all fail the predefined 2% P50 / 5%
+  P95 accuracy rule in both halves of both streams. Shifted second-half
+  pass shares are 66.25%, 71.25%, 60% and 62.5%, respectively. All 18 cells
+  completed; 32,000 warm updates had no retained divergence, and all 162
+  references pass a supplemental saved-coordinate mixing audit. Frozen
+  timing stays near 129 ms; re-adaptation increases typical cost without
+  restoring accuracy. Small signed errors and larger own-MCSE implicate
+  finite precision, without proving it the sole cause. Posterior interval
+  occupancy is not predictive calibration. No tuning default changes:
+  [`STUDIES/warm_drift_v1`](STUDIES/warm_drift_v1/README.md).
+  A separately labeled post-hoc analytic-CDF diagnostic improves accuracy
+  but still produces no policy passing all halves/streams:
+  [`AMM predictive review`](STUDIES/amm_predictive_review_v1/README.md).

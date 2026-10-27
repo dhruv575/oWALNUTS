@@ -388,7 +388,17 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     a resident session so per-call overhead stops dominating K = 50 (WP91);
     (d) metric drift over thousands of ticks and across a regime change
     (WP96); (e) a fixed-lag window so the gradient cost stops growing with
-    history.
+    history. WP96 is now complete: no frozen or tested re-adapted K=200
+    policy meets its long-horizon accuracy rule, despite healthy audited
+    references and no stuck scored warm chains. Re-adaptation increases
+    cost; the observed precision loss is not detected by the cost trigger.
+    See [the negative result](../STUDIES/warm_drift_v1/README.md).
+    Post-hoc analytic predictive-CDF integration improves precision but
+    does not rescue the complete rule. The next question is the fixed
+    draw-budget/accuracy tradeoff and reliable uncertainty measurement,
+    not which re-adaptation policy to ship. A known Gaussian-chain
+    [MCSE diagnostic](../STUDIES/predictive_mcse_diagnostic_v1/README.md)
+    shows why short-chain estimated MCSE alone cannot certify accuracy.
 23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
     250-return SV model from scratch at every tick, with best-of-16 starts,
     left one chain frozen (warmup step collapsed to about 1e-6, log density

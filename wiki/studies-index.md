@@ -80,3 +80,6 @@ evidence cell. Every study has a ledger entry in the
 | [`thread_scaling_v1`](../STUDIES/thread_scaling_v1/README.md) | WP45 | yes | Mixed. Draws bit-identical across every thread count; contended C=16 speedups 4.6x / 3.9x / 2.8x, capped by contention and the slowest chain. Budget-CAS fix F1 not merged (0.92 at C=T=1). |
 | `uturn_default_v1` | WP26 | yes | `MomentumSum` alone is not the default: three of four criteria fail. |
 | `warmup_gap_diag_v1` | WP40 | no | None of four warmup levers meets the bar; the gap is warmup gradients from single-leaf step crashes. |
+| [`warm_drift_v1`](../STUDIES/warm_drift_v1/README.md) | WP96 | yes | No K=200 frozen/re-adapted policy qualifies over 2,000 fixed-window updates; re-adaptation increases cost without fixing precision. |
+| [`amm_predictive_review_v1`](../STUDIES/amm_predictive_review_v1/README.md) | Diagnostic | no | Predictive-functional oracles and archived-draw audits; analytic scale CDF helps but does not rescue WP96. |
+| [`predictive_mcse_diagnostic_v1`](../STUDIES/predictive_mcse_diagnostic_v1/README.md) | Diagnostic | no | Exact stationary Gaussian-chain experiment: short correlated-chain tail MCSE and Wald coverage can be substantially optimistic. |
