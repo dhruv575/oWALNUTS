@@ -50,6 +50,8 @@ def main():
         if a.numerical_backend=='exact_t5':
             if a.baseline is None:raise ValueError('Exact backend comparison requires frozen baseline')
             baseline=load_baseline(a.baseline)
+            if sys.prefix!='/home/ubuntu/lanes/resident-predictive-build-20261027/env':raise ValueError('Unexpected isolated environment prefix')
+            if result['versions']!=baseline['versions']:raise ValueError('Runtime package versions differ from baseline')
             result['baseline_identity']=identity(a.baseline/'results.json')
         backend_start=time.perf_counter();backend=Backend(a.numerical_backend)
         result['numerical_backend']=backend.metadata;result['backend_initialization_seconds']=time.perf_counter()-backend_start
@@ -62,7 +64,7 @@ def main():
         (a.out/'data.json').write_text(json.dumps(dict(seed=99371013,returns=data,h=truth,parameters=parameters,shift_return_index=251),indent=2))
         result['data_identity']=identity(a.out/'data.json')
         if baseline is not None and result['data_identity']['sha256']!=baseline['data_identity']['sha256']:raise ValueError('Generated data differ from baseline')
-        if baseline is not None and (result['tuning']!=baseline['tuning'] or result['adaptation']!=baseline['adaptation']):raise ValueError('Sampler config differs from baseline')
+        if baseline is not None and (result['configuration']!=baseline['configuration'] or result['tuning']!=baseline['tuning'] or result['adaptation']!=baseline['adaptation']):raise ValueError('Sampler config differs from baseline')
         if baseline is not None and [x['sha256'] for x in result['native']]!=[x['sha256'] for x in baseline['native']]:raise ValueError('Native identity differs from baseline')
         save()
         started=time.perf_counter();compiled=compile_target();functional=compile_functional()
