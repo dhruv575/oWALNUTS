@@ -2,7 +2,7 @@
 import hashlib,json,os,signal,subprocess,sys,time
 from pathlib import Path
 from datetime import datetime,timezone
-root=Path(sys.argv[1]).resolve();python=Path(sys.argv[2]).resolve();source=Path(sys.argv[3]).resolve()
+root=Path(sys.argv[1]).resolve();python=Path(os.path.abspath(sys.argv[2]));source=Path(sys.argv[3]).resolve()
 root.mkdir(parents=True,exist_ok=True);status=root/'supervisor.json'
 if status.exists():raise SystemExit('Refusing to overwrite host supervision')
 start=time.monotonic();state=dict(status='running',start_utc=datetime.now(timezone.utc).isoformat(),supervisor_pid=os.getpid(),deadline_seconds=600,planned_updates=4,
