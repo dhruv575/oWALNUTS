@@ -435,8 +435,11 @@ coordinates) to 0.55 ms (253 coordinates) per draw per chain, serialised,
 most of it the callable's own numpy work, so use a `cfunc` on the tick
 path). The values are the functionals of `refresh`'s draws bit for bit
 and the draws do not depend on the functionals
-(`tests/test_warm_functionals.py`). Per tick, a P95 of next-period
-volatility on the fixed-lag window above:
+(`tests/test_warm_functionals.py`). The example below summarizes the posterior
+distribution of the **conditional median** next-period volatility scale on an
+SV window. Its P95 is not the posterior predictive P95: the functional omits
+the future innovation. It demonstrates the functional API, not a qualified
+quoting rule.
 
 ```python
 import numba
@@ -444,30 +447,53 @@ import numba
 rho = 0.95
 
 @numba.cfunc(owalnuts.numba_functional_signature(), nopython=True, error_model="numpy")
-def sigma_next(dim, q_ptr, out, n_out, user_data):      # q = [mu, log sigma, beta, z_1..z_n]
+def conditional_median_scale(dim, q_ptr, out, n_out, user_data):  # q = [mu, log sigma, beta, z_1..z_n]
     q = numba.carray(q_ptr, (dim,))
     mu, sigma = q[0], np.exp(q[1])
     h = mu + sigma / np.sqrt(1.0 - rho * rho) * q[3]
     for i in range(4, dim):
         h = mu + rho * (h - mu) + sigma * q[i]
-    out[0] = np.exp((mu + rho * (h - mu)) / 2.0)         # exp(h_{n+1} / 2)
+    out[0] = np.exp((mu + rho * (h - mu)) / 2.0)         # median(scale_next | position)
 
 window = 50                                            # SV state: [mu, log sigma, beta, z_1..z_window]
 dim = 3 + window
-quote = [owalnuts.from_cfunc_functional(sigma_next, 1)]
+summaries = [owalnuts.from_cfunc_functional(conditional_median_scale, 1)]
 with owalnuts.WarmSession(sv_target(y), state, seed=1000, threads=4) as session:
     for y_new in stream:
         y = np.append(y[1:], y_new)
-        state = session.state().remap(dim, lambda j: j if j < 3 else (j + 1 if j < dim - 1 else None),
-                                      fill=(0.0, 1.0))    # keep the three scales, slide the latents
+        old = session.state()
+        shifted = old.remap(dim, lambda j: j if j < 3 else (j + 1 if j < dim - 1 else None),
+                            fill=(0.0, 1.0))             # keep global parameters, shift innovations
+        positions = shifted.positions.copy()
+        positions[:, 3] = rho * old.positions[:, 3] + np.sqrt(1.0 - rho * rho) * old.positions[:, 4]
+        mass = shifted.mass_diagonal.copy()
+        mass[:, 3] = old.mass_diagonal[:, 3]              # boundary-role tuning heuristic
+        state = owalnuts.WarmState(positions, old.step_sizes, mass)
         session.retarget(sv_target(y), state)
-        chunk = session.refresh_functionals(50, quote)     # values (4, 50, 1); no draws kept
-        sigma_p50, sigma_p95 = chunk.quantile([0.5, 0.95], 0)
+        chunk = session.refresh_functionals(50, summaries)  # values (4, 50, 1); no draws kept
+        conditional_median_p50, conditional_median_p95 = chunk.quantile([0.5, 0.95], 0)
 ```
 
 (`sv_target` is the SV model as a `from_cfunc` target, as in
 `bench/warm_functionals_bench.py`; `chunk.warm_state()` is the next state
 when the draws are not kept.)
+
+The first innovation uses the stationary initial-state scale, whereas later
+innovations use the transition scale. The boundary correction above preserves
+the overlapping log-volatility path when the window slides; copying innovations
+alone does not. Carrying the old boundary mass is a tuning heuristic, not an
+exact covariance transformation. The new window still needs posterior refresh
+and accuracy checks; 50 transitions is illustrative.
+
+For a posterior draw, let `m = mu + rho * (h_last - mu)` and let `sigma` be
+the log-volatility innovation standard deviation. Then
+`h_next = m + sigma * epsilon`, with independent standard-normal `epsilon`.
+The conditional scale mean is `exp(m / 2 + sigma**2 / 8)`. For `s > 0`, the
+posterior predictive scale CDF is the posterior average of
+`Phi((2 * log(s) - m) / sigma)`; invert that averaged CDF for its P50 or P95.
+Quantiles of conditional medians, or averages of conditional quantiles, do not
+in general equal predictive quantiles. Predictive return quantiles additionally
+integrate the model's observation noise and location parameter.
 
 ## Example: stochastic volatility on the top-5 cryptocurrencies
 

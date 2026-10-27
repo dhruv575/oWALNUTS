@@ -14,6 +14,10 @@ state and follows the session seed rule, so call ``n`` of each does the
 same transitions; the functional values are checked against the
 functionals of the draws.
 
+The historical ``sigma_next`` function names below refer to the conditional
+median next-period scale, exp((mu + rho * (h_last - mu)) / 2). They omit future
+innovation noise; their quantiles are not posterior predictive scale quantiles.
+
     .venv\\Scripts\\python integrations\\python\\bench\\warm_functionals_bench.py [--calls 100] [--warmup-calls 10]
 """
 from __future__ import annotations
