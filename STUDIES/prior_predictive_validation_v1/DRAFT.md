@@ -168,3 +168,31 @@ explicitly set tune/draws/adaptation rather than inherited defaults, and validat
 chain/seed axes against the installed API. No reuse of rounded old output as a
 precision reference. The source route reduces uncertainty about feasibility but
 does not authorize a fit or promise timing/cache availability.
+
+## Completed bounded seed reservation audit
+
+SEED-AUDIT.json enumerates8929 distinct reserved numeric seed values, including
+base/chain inputs and splitmix64/automatic-restart derivations. All six registered
+worktrees returned no literal integer collisions in the bounded current
+project-owned source/protocol/study metadata scan. SEED-AUDIT-SUPPLEMENT.json
+separately checks the registered python-flow worktree using relative paths because
+it resides beneath main's excluded target directory. Broad initial scans were
+stopped as disproportionate; the completed pass used a60second shared search cap,
+plus a separately bounded30second nested-worktree correction (finished quickly).
+
+Scope includes ignored STUDIES text but excludes dependency trees, target/build/
+dist outputs, binary/raw arrays, text files over2MiB and compressed archive members.
+The scanner checks current decimal integer literals, not every historical Git
+revision or all dynamically constructed/hex-encoded seeds. Identical source copies
+were scanned per registered worktree, rather than counted as independent evidence.
+This is a documented project-scope reservation audit, not a universal proof of
+random-stream independence. The eight independent-engine seed slots are reserved;
+engine-specific derivation/API verification remains a final-freeze prerequisite.
+Reserve these exact values now to prevent another active agent from reusing them.
+
+Reference log predictive density MCSE must target log(mean integrated density):
+compute delta MCSE(mean integrated density)/mean density with appropriate chain
+MCSE, using scale stabilization to avoid overflow/underflow. Mean per-draw logpdf
+is a different quantity and can only be a mixing diagnostic, not a replacement
+for the score or its uncertainty. This requirement applies to candidate/reference
+corroboration and evaluator tests before any study data generation.
