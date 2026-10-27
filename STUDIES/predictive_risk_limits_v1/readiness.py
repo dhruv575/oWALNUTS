@@ -28,11 +28,15 @@ def run(spec,out,shard):
         backend,density,result['startup_seconds']=startup(spec,reference=True)
         small=literal(400);large=literal(4000)
         result['candidate']=tails(small,backend,time.perf_counter()+spec['bounds']['origin_seconds'])
-        result['reference']=tails(large,backend,time.perf_counter()+spec['bounds']['reference_origin_seconds'])
+        pipeline_start=time.perf_counter();deadline=pipeline_start+spec['bounds']['reference_origin_seconds']
+        result['reference']=tails(large,backend,deadline)
+        result['reference_precision']=precision(large,result['reference'],density,deadline)
+        result['candidate_precision']=precision(small,result['candidate'],density,deadline)
+        result['full_reference_pipeline_seconds']=time.perf_counter()-pipeline_start
+        result['precision_pass']=all(result[k]['status']=='available' for k in ['candidate_precision','reference_precision'])
+        if not result['precision_pass']:raise ValueError('Literal precision pipeline unavailable')
         result['equivalence_pass']=equivalence(small,backend,time.perf_counter()+60)
-        result['candidate_precision']=precision(small,result['candidate'],density,time.perf_counter()+60)
-        result['reference_precision']=precision(large,result['reference'],density,time.perf_counter()+60)
-        result['precision_pass']=True;result['literal_score']=score(result['candidate'],.001)
+        result['literal_score']=score(result['candidate'],.001)
         result['literal_baseline']=score(baseline(dict(status='ok',location=0.,scale=.01,df=5)),.001)
         result['status']='complete'
     except Exception as error:result['error']=repr(error)

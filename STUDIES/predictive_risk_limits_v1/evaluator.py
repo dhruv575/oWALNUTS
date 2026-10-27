@@ -54,10 +54,13 @@ def precision(draws,quantiles,density_module,deadline):
     import arviz as az
     out={}
     for name,q in [('long',quantiles['q05']),('short',quantiles['q95'])]:
-        remaining=deadline-time.perf_counter()
-        if remaining<=0:raise TimeoutError('Tail precision deadline')
-        v=density_module.evaluate_observation(draws,q,rho=.95,nu=5,orders=(64,128),chunk=512,deadline=time.monotonic()+remaining)
-        contributions=v['pit_by_chain_draw'];mcse=0. if np.ptp(contributions)==0 else float(np.asarray(az.mcse(contributions,method='mean')).item());density=float(np.exp(v['logpdf']))
-        if not np.isfinite([mcse,density]).all() or mcse<0 or density<=0 or not np.isfinite(mcse/density):raise ValueError('Unavailable quantile precision')
-        out[name]=dict(cdf_mcse=mcse,density_at_root=density,quantile_delta_mcse=mcse/density,cdf_at_root=v['pit'],cdf_by_chain=contributions.mean(axis=1).tolist())
-    return dict(status='available',tails=out)
+        try:
+            remaining=deadline-time.perf_counter()
+            if remaining<=0:raise TimeoutError('Tail precision deadline')
+            v=density_module.evaluate_observation(draws,q,rho=.95,nu=5,orders=(64,128),chunk=512,deadline=time.monotonic()+remaining)
+            contributions=v['pit_by_chain_draw'];mcse=0. if np.ptp(contributions)==0 else float(np.asarray(az.mcse(contributions,method='mean')).item());density=float(np.exp(v['logpdf']))
+            if not np.isfinite([mcse,density]).all() or mcse<0 or density<=0 or not np.isfinite(mcse/density):raise ValueError('Unavailable quantile precision')
+            out[name]=dict(status='available',cdf_mcse=mcse,density_at_root=density,quantile_delta_mcse=mcse/density,cdf_at_root=v['pit'],cdf_by_chain=contributions.mean(axis=1).tolist())
+        except Exception as error:out[name]=dict(status='unavailable',error=type(error).__name__,reason=str(error))
+    available=sum(v['status']=='available' for v in out.values())
+    return dict(status='available' if available==2 else 'partial' if available else 'unavailable',tails=out)

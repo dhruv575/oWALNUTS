@@ -2,12 +2,19 @@ import json,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
 import numpy as np
-from evaluator import baseline,score
+from evaluator import baseline,score,precision
 from inputs import origins,references,module
 from readiness import literal,equivalence
 from report import valid,load_rows,bootstrap
 
 class Tests(unittest.TestCase):
+    def test_partial_precision_preserved(self):
+        class Fake:
+            def evaluate_observation(self,draws,y,**kwargs):
+                if y>0:raise TimeoutError('fixed second-tail failure')
+                return dict(pit_by_chain_draw=np.full((4,20),.05),logpdf=0.,pit=.05)
+        result=precision(np.zeros((4,20,4)),dict(q05=-1,q95=1),Fake(),time.perf_counter()+20)
+        self.assertEqual(result['status'],'partial');self.assertEqual(result['tails']['long']['status'],'available');self.assertEqual(result['tails']['short']['status'],'unavailable')
     def test_sign_ties_and_negative_limits(self):
         q=dict(q05=.01,q95=.03);s=score(q,.02)
         self.assertAlmostEqual(s['long']['pinball'],.0005);self.assertEqual(s['long']['limit'],-.01)
