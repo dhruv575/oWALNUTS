@@ -34,7 +34,7 @@ All source/native/runtime/SDK bindings are checked before and after. Every gener
 
 ## Development admission evidence
 
-Corrected literal readiness completed in50.73seconds total: fresh candidate process25.59seconds for initialization and32 K400 updates; side process3.06seconds for32 NIG/oracle scores; independent reference process19.56seconds including compile,4x4000retained draws, evaluator and ArviZ. Peak observedRSS2.011GB; all owned processes drained and source/SDK/runtime bindings remained unchanged. The literal reference met the descriptive diagnostic thresholds. These timings support admission bounds but do not guarantee completion across untruncated prior-predictive parameters.
+Corrected literal readiness completed in50.73seconds total: fresh candidate process25.59seconds for initialization and32 K400 updates; side process3.06seconds for32 NIG/oracle scores; independent reference process21.37seconds (worker internal19.56seconds) including compile,4x4000retained draws, evaluator and ArviZ. Peak observedRSS2.011GB; all owned processes drained and source/SDK/runtime bindings remained unchanged. The literal reference met the descriptive diagnostic thresholds. These timings support admission bounds but do not guarantee completion across untruncated prior-predictive parameters.
 
 The earlier literal smoke failed when a bound chain_warnings method was stored instead of its return value; that attempt is preserved. The corrected adapter invokes the method and retains its structured records. No study RNG or study data were consumed by either development attempt.
 
