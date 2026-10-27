@@ -532,6 +532,9 @@ struct Row {
 /// `run_warm` per call with the session's seed rule (call `n` seeded
 /// `SEED + n * CHAINS`), chaining the state; returns the timings and the
 /// last call's draws.
+/// A timed run: its measurements and the final positions.
+type Timed = (Measure, Vec<Vec<f64>>);
+
 fn time_run_warm(
     target: &Sv,
     state0: &WarmState,

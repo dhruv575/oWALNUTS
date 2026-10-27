@@ -693,6 +693,65 @@ pub enum DiagonalMetricEstimator {
     GradientInformedOverlap,
 }
 
+/// The diagonal mass a chain starts warmup with, i.e. the metric of every
+/// transition before the first slow-window metric update (the identity for
+/// the sampler's own metrics). Research-only (`STUDIES/grad_init_metric_v1`,
+/// WP94; mechanism `STUDIES/sv_stuck_chains_v1`, WP89). Diagonal driver only.
+/// Off by default: [`Self::AsGiven`] leaves every run bit-identical.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub enum InitialMetric {
+    /// The diagonal the facade passes in (the shipped rule).
+    #[default]
+    AsGiven,
+    /// nutpie's initial mass matrix (nuts-rs 0.17.3, `mass_matrix/adapt.rs`
+    /// `Strategy::init` -> `DiagMassMatrix::update_diag_grad` ->
+    /// `cpu_math.rs` `array_update_var_inv_std_grad`: `variance_i =
+    /// 1 / clamp(|g_i|, 1e-20, 1e20)`, a non-finite value replaced by 1):
+    /// per chain, `mass_i = clamp(|g_i(start)|, lower, upper)` where `g` is
+    /// the log-density gradient at that chain's start; an entry that is not
+    /// finite after the clamp (a NaN gradient) becomes 1. The diagonal the
+    /// facade passes in is replaced. Applied once per chain in
+    /// `ChainRun::start_from`, after the start is chosen (the facade's
+    /// best-of-16 selection, or the trapped-chain restart's replacement
+    /// start, which is scaled from its own gradient the same way) and before
+    /// the initial-step search, so a configured search probes the scaled
+    /// metric; with this rule the multi-chain driver runs the search per
+    /// chain instead of sharing chain 0's. The slow-window updates, the
+    /// paper adaptation and the restart guard then proceed unchanged on the
+    /// scaled metric. Costs one target evaluation per chain start (counted in
+    /// the worst-case admission bound). Needs mass adaptation; the dense,
+    /// structured and continuation facades reject it.
+    GradientScaled {
+        /// Lower clamp of `|g_i|`; finite, positive.
+        lower: f64,
+        /// Upper clamp of `|g_i|`; finite, at least `lower`.
+        upper: f64,
+    },
+}
+
+impl InitialMetric {
+    /// nutpie's bounds: `clamp(|g_i|, 1e-20, 1e20)`.
+    pub const fn nutpie() -> Self {
+        Self::GradientScaled {
+            lower: 1e-20,
+            upper: 1e20,
+        }
+    }
+
+    #[cfg(feature = "research")]
+    fn validate(self) -> Result<(), Error> {
+        if let Self::GradientScaled { lower, upper } = self
+            && !(lower.is_finite() && upper.is_finite() && lower > 0.0 && upper >= lower)
+        {
+            return Err(Error::configuration(
+                "gradient-scaled initial metric bounds must be finite with 0 < lower <= upper",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// How the windowed dense covariance estimate is regularised before it is
 /// inverted and installed as the dense metric (dense facade only).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1405,6 +1464,7 @@ pub struct WarmupConfig {
     paper_adaptation: Option<PaperAdaptationConfig>,
     metric_regularization: DiagonalMetricRegularization,
     diagonal_metric_estimator: DiagonalMetricEstimator,
+    initial_metric: InitialMetric,
     dense_metric_regularization: DenseMetricRegularization,
     dense_warmup_seeding: DenseWarmupSeeding,
     dense_symmetrize_precision: bool,
@@ -1439,6 +1499,7 @@ impl Default for WarmupConfig {
             paper_adaptation: None,
             metric_regularization: DiagonalMetricRegularization::TowardUnit,
             diagonal_metric_estimator: DiagonalMetricEstimator::DrawVariance,
+            initial_metric: InitialMetric::AsGiven,
             dense_metric_regularization: DenseMetricRegularization::Stan,
             dense_warmup_seeding: DenseWarmupSeeding::PerTransition,
             dense_symmetrize_precision: true,
@@ -1572,6 +1633,19 @@ impl WarmupConfig {
     }
     pub fn diagonal_metric_estimator(&self) -> DiagonalMetricEstimator {
         self.diagonal_metric_estimator
+    }
+    /// Select the diagonal mass every chain starts warmup with; see
+    /// [`InitialMetric`]. Research-only (`STUDIES/grad_init_metric_v1`,
+    /// WP94). Diagonal driver only. Off by default
+    /// ([`InitialMetric::AsGiven`], bit-identical to a run without the call).
+    #[cfg(feature = "research")]
+    pub fn with_initial_metric(mut self, initial: InitialMetric) -> Result<Self, Error> {
+        initial.validate()?;
+        self.initial_metric = initial;
+        Ok(self)
+    }
+    pub fn initial_metric(&self) -> InitialMetric {
+        self.initial_metric
     }
     /// Select how the windowed dense covariance is regularised (dense
     /// adaptive facade only; ignored by every other facade).
@@ -1985,6 +2059,15 @@ fn reject_chain_rescue(config: &RunConfig, facade: &str) -> Result<(), Error> {
     }) {
         return Err(Error::configuration(format!(
             "a non-default diagonal metric estimator is not supported by the {facade} facade"
+        )));
+    }
+    if config
+        .warmup
+        .as_ref()
+        .is_some_and(|warmup| warmup.initial_metric != InitialMetric::AsGiven)
+    {
+        return Err(Error::configuration(format!(
+            "the gradient-scaled initial metric is not supported by the {facade} facade"
         )));
     }
     Ok(())
@@ -5612,9 +5695,27 @@ impl RunConfig {
             }
             None => 0,
         };
+        // WP94: the gradient-scaled initial metric evaluates the target once
+        // per chain start, and once more per restarted chain (at most
+        // `chains / 2`, as above).
+        let initial_metric_evaluations = match self
+            .warmup
+            .as_ref()
+            .map(|warmup| warmup.initial_metric)
+        {
+            Some(InitialMetric::GradientScaled { .. }) => {
+                let restarts = if restart_extra > 0 { chain_count.get() / 2 } else { 0 };
+                chain_count
+                    .get()
+                    .checked_add(restarts)
+                    .ok_or_else(Error::overflow)?
+            }
+            _ => 0,
+        };
         transition_evaluations
             .checked_add(searches)
             .and_then(|value| value.checked_add(restart_extra))
+            .and_then(|value| value.checked_add(initial_metric_evaluations))
             .ok_or_else(Error::overflow)
     }
 
@@ -9096,6 +9197,37 @@ impl<'a, T: Target> ChainRun<'a, T> {
             .discarded
             .checked_add(config.retained)
             .ok_or_else(Error::overflow)?;
+        // WP94: the gradient-scaled initial metric replaces the given diagonal
+        // once, here, from this chain's start (the facade's chosen start or a
+        // trapped-chain replacement start), before the step search below.
+        let scaled_mass = match config.warmup.as_ref().map(|warmup| warmup.initial_metric) {
+            Some(InitialMetric::GradientScaled { lower, upper }) => {
+                if persistent.is_some() {
+                    return Err(Error::configuration(
+                        "the gradient-scaled initial metric is not supported by the continuation-session facade",
+                    ));
+                }
+                if fixed_mass.is_some() {
+                    return Err(Error::configuration(
+                        "the gradient-scaled initial metric needs the diagonal driver",
+                    ));
+                }
+                if !config.warmup.as_ref().is_some_and(|warmup| warmup.adapt_mass) {
+                    return Err(Error::configuration(
+                        "the gradient-scaled initial metric needs mass adaptation",
+                    ));
+                }
+                Some(gradient_scaled_mass(
+                    target,
+                    &initial_position,
+                    lower,
+                    upper,
+                    control,
+                )?)
+            }
+            _ => None,
+        };
+        let mass = scaled_mass.as_ref().unwrap_or(mass);
         let initial_mass = mass.diagonal.clone();
         let active_mass = mass.clone();
         let inverse_mass = inverse_mass(&active_mass)?;
@@ -10360,6 +10492,38 @@ impl<'a, T: Target> ChainRun<'a, T> {
             },
         })
     }
+}
+
+/// nutpie's initial mass matrix at `position` (see
+/// [`InitialMetric::GradientScaled`]): `mass_i = clamp(|g_i|, lower, upper)`,
+/// 1 where that is not finite. One target evaluation, counted by the budget
+/// wrapper like any other; a target error here fails the chain.
+fn gradient_scaled_mass<T: Target>(
+    target: &T,
+    position: &[f64],
+    lower: f64,
+    upper: f64,
+    control: &ExecutionControl<'_>,
+) -> Result<DiagonalMass, Error> {
+    control.check().map_err(control_error)?;
+    let mut gradient = vec![f64::NAN; position.len()];
+    target
+        .log_density_gradient(position, &mut gradient)
+        .map_err(|source| Error {
+            kind: ErrorKind::Target,
+            message: "target evaluation failed while scaling the initial metric".into(),
+            chain: None,
+            transition: None,
+            target_source: Some(source),
+        })?;
+    let diagonal = gradient
+        .iter()
+        .map(|g| {
+            let mass = g.abs().clamp(lower, upper);
+            if mass.is_finite() { mass } else { 1.0 }
+        })
+        .collect();
+    DiagonalMass::from_diagonal(diagonal)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -12729,11 +12893,14 @@ fn sample_chains_validated<T: Target>(
         return Ok(output);
     }
     let failed_chain = AtomicUsize::new(usize::MAX);
+    // WP94: under the gradient-scaled initial metric every chain searches on
+    // its own metric; chain 0's search is not shared.
     let shared_initial_step_search = if let Some((warmup, search)) =
         config.warmup.as_ref().and_then(|warmup| {
             warmup
                 .initial_step_search
                 .as_ref()
+                .filter(|_| warmup.initial_metric == InitialMetric::AsGiven)
                 .map(|search| (warmup, search))
         }) {
         let control = ExecutionControl {
