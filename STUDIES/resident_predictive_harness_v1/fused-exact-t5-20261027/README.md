@@ -61,3 +61,14 @@ Original evidence is in run/, preflight.json and source/.../FUSED-MANIFEST.json.
 summary.json is a derived report; original outputs remain byte-preserved.
 CHECKSUMS.sha256 covers this packet except itself. Existing baseline infrastructure
 failure and previous smoke outputs remain untouched in host-development-20261027/.
+
+## Remaining work
+
+Fresh multi-seed, multi-stream tests must establish full-return posterior accuracy
+against trustworthy independent references and separately assess predictive
+calibration with meaningful forecast baselines. Neither follows from numerical
+equivalence on these four already-selected updates. Numerical summaries alone
+remain approximately0.66seconds, above the inherited0.4second research benchmark;
+further cost work requires its own bounded plan and must preserve correctness.
+No deployment readiness or profitability claim is supported. Parent confirmed the
+AWS instance stopped after verified artifact retrieval; no remote work remains.
