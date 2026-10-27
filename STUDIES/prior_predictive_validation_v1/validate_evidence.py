@@ -30,6 +30,7 @@ def validate(root,source_bindings):
     ledger=build_ledger(root);sentinels=sentinel_ledger(root)
     for entry in sentinels:
         r=entry.get('result') or {}
+        if r.get('candidate_integrity_error'):errors.append('candidate_reference_comparison_integrity')
         if r and any(r.get(k)!=entry[k] for k in ('index','stream','tick')):errors.append('reference_identity')
         for key in ('compact','score_arrays'):
             if key in r:

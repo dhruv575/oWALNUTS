@@ -39,6 +39,11 @@ class GlobalFixtures(unittest.TestCase):
  def test_draft_cannot_launch(self):
   with tempfile.TemporaryDirectory() as d:
    with self.assertRaises(ValueError):campaign({'status':'draft'},Path(d)/'run',lambda *args:self.fail('launched'))
+ def test_nonfinite_evidence_cannot_be_status_ok(self):
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/'stream-00';p.mkdir()
+   atomic(p/'candidate.json',dict(rows=[dict(tick=1,candidate_status='ok',forecast=dict(cdf=.5,logpdf=float('nan')))]))
+   with self.assertRaises(ValueError):build_ledger(d)
  def test_duplicate_origin_rejected(self):
   with tempfile.TemporaryDirectory() as d:rows=build_ledger(d)
   rows[1]=copy.deepcopy(rows[0])
