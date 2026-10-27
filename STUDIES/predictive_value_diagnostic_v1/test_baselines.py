@@ -1,7 +1,10 @@
 import unittest
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
 import numpy as np
 from scipy.optimize._numdiff import approx_derivative
-from baselines import objective, nig_ar1, fit_t5, ewma_t5, FLOOR
+from baselines import objective, nig_ar1, fit_t5, ewma_t5, score_distribution, FLOOR
 
 class BaselineTests(unittest.TestCase):
     def test_gradient(self):
@@ -49,5 +52,14 @@ class BaselineTests(unittest.TestCase):
 
     def test_deadline(self):
         with self.assertRaises(TimeoutError):fit_t5(np.arange(250.),deadline=0)
+
+    def test_nonfinite_optimizer_and_score_are_preserved(self):
+        invalid=SimpleNamespace(x=np.array([np.nan,np.nan]),success=False,message='fixture',nfev=1,nit=1)
+        with patch('baselines.minimize',return_value=invalid):
+            fit=fit_t5(np.arange(250.))
+        self.assertEqual(fit['status'],'unavailable');json.dumps(fit,allow_nan=False)
+        self.assertIsNone(fit['attempts'][0]['mean_nll'])
+        with patch('baselines.t.logpdf',return_value=np.nan):
+            with self.assertRaises(ValueError):score_distribution(0,1,5,0)
 
 if __name__=='__main__':unittest.main()

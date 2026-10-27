@@ -11,17 +11,35 @@ def summarize(directory):
     directory=Path(directory);answer=dict(scope='Retrospective descriptive diagnostic, already-inspected streams',datasets={})
     for dataset,seeds,bootstrap_seed in [('sim',[971201,971202,971203],27109701),('real',[971301,971302,971303],27109702)]:
         arms=['reference']+[f'warm_K200:{s}' for s in seeds]+BASELINES
-        logs=np.full((100,7),np.nan);pits=logs.copy()
+        logs=np.full((100,7),np.nan);pits=logs.copy();ledger=[];origin_status=[]
         for tick in range(1,101):
             path=directory/f'{dataset}-tick-{tick:03d}.json'
-            if not path.exists():continue
+            if not path.exists():
+                ledger.extend(dict(tick=tick,arm=name,status='not_started') for name in arms)
+                origin_status.append(dict(tick=tick,status='not_started'));continue
             value=json.loads(path.read_text())
             if value['dataset']!=dataset or value['tick']!=tick:raise ValueError('Origin identity mismatch')
+            seen=set();statuses=[]
             for row in value['arms']:
-                if row['status']!='ok':continue
                 name=row['arm']+(f":{row['seed']}" if row['seed'] is not None else '')
+                if name not in arms or name in seen:raise ValueError('Unknown or duplicate arm: '+name)
+                seen.add(name)
+                if row['status']!='ok':
+                    ledger.append(dict(tick=tick,arm=name,status='unavailable',reason=row.get('reason')))
+                    statuses.append('unavailable');continue
+                if not np.isfinite(row['logpdf']) or not np.isfinite(row['pit']) or not 0<=row['pit']<=1:
+                    raise ValueError('Invalid status-ok score')
                 column=arms.index(name);logs[tick-1,column]=row['logpdf'];pits[tick-1,column]=row['pit']
-        report=dict(planned_origins=100,arms={},paired_comparisons={})
+                ledger.append(dict(tick=tick,arm=name,status='ok'));statuses.append('ok')
+            active=value.get('active_arm',{})
+            active_name=active.get('arm','')+(f":{active['seed']}" if active.get('seed') is not None else '')
+            for name in arms:
+                if name not in seen:
+                    status='interrupted' if name==active_name else 'not_started'
+                    ledger.append(dict(tick=tick,arm=name,status=status));statuses.append(status)
+            origin_status.append(dict(tick=tick,status='complete' if statuses==['ok']*7 else 'incomplete'))
+        report=dict(planned_origins=100,planned_forecasts=700,forecast_status_ledger=ledger,
+                    origin_status_ledger=origin_status,arms={},paired_comparisons={})
         for column,name in enumerate(arms):
             good=np.isfinite(logs[:,column]);p=pits[:,column];valid=p[np.isfinite(p)]
             complete=bool(good.all())
