@@ -151,3 +151,20 @@ arithmetic/references/JIT. Prior draws may create far harder cases; this is not 
 wall-budget promise. Measure evaluator-only cost on frozen source fixtures first.
 Independent references need a separately justified explicit budget. Do not dilute
 32 streams or truncate their parameters to meet a desired success rate or runtime.
+
+## Independent reference source follow-up
+
+Parent supplied the more direct precedent `sv_stuck_chains_v1/run_study.py:221`:
+`nutpie.compile_stan_model(code=STAN.read_text())`, `.with_data(**stan_data(N))`,
+then `nutpie.sample(...chains=4,cores=4,seed=seed,save_warmup=True,
+progress_bar=False,store_mass_matrix=True)`. Its `models/sv.stan` includes both beta
+and generated h_last, with the required priors/rho/nu/stationary noncentered path.
+This is a credible implementation route, previously used with nutpie0.16.8;
+existing remote cache/package/compiler validity still requires actual verification.
+The historical extraction at lines246/269 keeps onlymu/log_sigma/h_last rounded
+to6 decimals, so it is NOT a usable saved-draw full-return reference as written.
+New code must retain full-precision posterior['beta'] as well as all three others,
+explicitly set tune/draws/adaptation rather than inherited defaults, and validate
+chain/seed axes against the installed API. No reuse of rounded old output as a
+precision reference. The source route reduces uncertainty about feasibility but
+does not authorize a fit or promise timing/cache availability.
