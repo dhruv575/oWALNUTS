@@ -28,14 +28,17 @@ def run_stream(data,engine_factory,evaluator,oracle,persist):
                 row['forecast']=score;row['candidate_status']='ok';row['evaluation_seconds']=time.perf_counter()-t
                 # Direct candidate cost excludes privileged-oracle scoring and persistence.
                 row['candidate_total_seconds']=time.perf_counter()-start
-                row['phase']='oracle';t=time.perf_counter()
-                try:
-                    privileged=oracle(data['parameters'].copy(),inputs['current_latent'],inputs['label'])
-                    if not np.isfinite([privileged['cdf'],privileged['logpdf']]).all() or not 0<=privileged['cdf']<=1:raise ValueError('invalid oracle output')
-                    row.update(oracle=privileged,oracle_status='ok',status='ok')
-                except Exception as exc:
-                    row.update(oracle_status='unavailable',oracle_error=repr(exc),status='partial')
-                row.update(oracle_seconds=time.perf_counter()-t,phase='complete')
+                if oracle is None:
+                    row.update(oracle_status='not_started',status='ok',phase='complete')
+                else:
+                    row['phase']='oracle';t=time.perf_counter()
+                    try:
+                        privileged=oracle(data['parameters'].copy(),inputs['current_latent'],inputs['label'])
+                        if not np.isfinite([privileged['cdf'],privileged['logpdf']]).all() or not 0<=privileged['cdf']<=1:raise ValueError('invalid oracle output')
+                        row.update(oracle=privileged,oracle_status='ok',status='ok')
+                    except Exception as exc:
+                        row.update(oracle_status='unavailable',oracle_error=repr(exc),status='partial')
+                    row.update(oracle_seconds=time.perf_counter()-t,phase='complete')
             except Exception as exc:
                 row.update(candidate_status='unavailable',error=repr(exc),elapsed_to_failure_seconds=time.perf_counter()-start)
                 raise

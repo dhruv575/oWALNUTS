@@ -17,8 +17,8 @@ def stan_data(window):
 def extract(trace):
     components=[]
     for name in ('mu','log_sigma','beta','h_last'):
-        a=np.asarray(trace.posterior[name].transpose('chain','draw'),dtype=float)
-        if a.shape!=(4,4000) or not np.isfinite(a).all():raise ValueError('invalid reference component '+name)
+        a=np.asarray(trace.posterior[name].transpose('chain','draw'))
+        if a.dtype!=np.dtype('float64') or a.shape!=(4,4000) or not np.isfinite(a).all():raise ValueError('invalid reference component '+name)
         components.append(a)
     draws=np.stack(components,axis=-1)
     divergence=np.asarray(trace.sample_stats['diverging'].transpose('chain','draw'))
@@ -32,7 +32,7 @@ def fit(nutpie,compiled,window,seed,validated_settings):
     api_inventory(nutpie)
     if validated_settings.get('api_and_target_verified') is not True:raise ValueError('reference API/target preflight incomplete')
     if not 0<=seed<2**32:raise ValueError('reserved interoperable seed out of range')
-    model=compiled.with_data(**stan_data(window))
+    model=compiled.with_data(seed=seed+1,**stan_data(window))
     trace=nutpie.sample(model,draws=4000,tune=2000,chains=4,cores=4,seed=seed,save_warmup=True,progress_bar=False,**validated_settings['engine_options'])
     return extract(trace)
 def log_density_mcse(log_integrated_density,mean_mcse):
