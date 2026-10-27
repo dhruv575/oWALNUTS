@@ -122,6 +122,6 @@ def batch_summary(spec,root):
         if path.exists():summaries[m]=json.loads(path.read_bytes());result['months'][m]=dict(summary_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),full_panel=summaries[m]['full_scientific_panel'])
         else:result['months'][m]=dict(full_panel=False)
     if len(summaries)==3 and all(v['full_scientific_panel'] for v in summaries.values()):
-        result.update(status='complete',origin_weighted_comparisons={key:sum(summaries[m]['comparisons'][key]['mean_advantage']*n for m,n in MONTHS)/4320 for key in summaries['2026-04']['comparisons']})
+        result.update(status='complete',origin_weighted_comparisons={key:sum(summaries[m]['comparisons'][key]['mean_advantage']*n for m,n in MONTHS)/4320 for key in summaries[MONTHS[0][0]]['comparisons']})
         result['origin_weighted_arms']={arm:dict(mean_width=sum(summaries[m]['arms'][arm]['mean_width']*n for m,n in MONTHS)/4320,tails={side:{key:sum(summaries[m]['arms'][arm]['tails'][side][key]*n for m,n in MONTHS)/4320 for key in ('mean_pinball','mean_limit','exceedance_rate','signed_exceedance_minus_05')} for side in SIDES}) for arm in ARMS}
     write(root/'aggregate.json',result);return result

@@ -1,10 +1,12 @@
 """Thin calendar/inference/tail dispatcher, with fixed admission and no retries."""
-import argparse,hashlib,importlib.metadata,json,os,sys,time
+import argparse,hashlib,importlib.metadata,importlib.util,json,os,sys,time
 from pathlib import Path
 from data_contract import MONTHS,load_sealed
 from tail_inputs import seal_inference
 from tail_worker import exclusive
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def module(path,name):
+    spec=importlib.util.spec_from_file_location(name,path);loaded=importlib.util.module_from_spec(spec);sys.modules[name]=loaded;spec.loader.exec_module(loaded);return loaded
 def admit(path,expected_status='frozen_scoring_authorized'):
     spec=json.loads(Path(path).read_bytes());draft=json.loads(Path(__file__).with_name('COMPUTE-DRAFT.json').read_bytes())
     if expected_status not in ('frozen_scoring_authorized','development_authorized') or spec.get('status')!=expected_status:raise ValueError('Study not authorized')

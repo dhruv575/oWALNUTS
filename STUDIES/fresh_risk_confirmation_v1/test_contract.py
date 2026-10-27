@@ -5,6 +5,21 @@ import data_contract as d
 from tail_inputs import seal_inference,Archive,origins,references
 
 class Contract(unittest.TestCase):
+    def test_actual_calendar_import_closure(self):
+        from reuse import calendar
+        root=Path(__file__).resolve().parents[1]/'fresh_real_value_v1'
+        for row in d.MONTHS:
+            modules=calendar(row['month'],root)
+            self.assertEqual(modules['worker'].ORIGINS,row['origins']);self.assertEqual(modules['reference'].TICKS,row['reference_ticks'])
+    def test_complete_new_calendar_aggregate(self):
+        import tail_report
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            for m,n in tail_report.MONTHS:
+                p=root/'reports'/m/'summary.json';p.parent.mkdir(parents=True)
+                arm=dict(mean_width=2.,tails={s:dict(mean_pinball=1.,mean_limit=1.,exceedance_rate=.05,signed_exceedance_minus_05=0.) for s in ('long','short')})
+                p.write_text(json.dumps(dict(full_scientific_panel=True,comparisons={'ewma_t5_long':dict(mean_advantage=.2)},arms={a:arm for a in tail_report.ARMS})))
+            result=tail_report.batch_summary({},root);self.assertEqual(result['status'],'complete');self.assertAlmostEqual(result['origin_weighted_comparisons']['ewma_t5_long'],.2)
     def test_complete_calendars_and_causality(self):
         bars=[dict(open_ms=1764028800000+i*d.HALF,close_available_ms=1764028800000+(i+1)*d.HALF,close=100+i*.01) for i in range(4608)]
         for row in d.MONTHS:
