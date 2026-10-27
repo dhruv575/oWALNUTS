@@ -17,6 +17,7 @@ def exclusive(path,value):
         handle.write('\n');handle.flush();os.fsync(handle.fileno())
 
 def verify(audit):
+    if original.digest(HERE/'FREEZE.json')!=audit['original_freeze_sha256']:raise ValueError('Original FREEZE changed')
     for name,expected in audit['original_files'].items():
         if original.digest(Path(audit['original_directory'])/name)!=expected:raise ValueError('Original output changed')
     freeze=json.loads((HERE/'FREEZE.json').read_bytes())
@@ -57,6 +58,7 @@ def run(out):
         for name in audit['completed']:
             raw=(Path(audit['original_directory'])/name).read_bytes()
             with (out/name).open('xb') as handle:handle.write(raw)
+            if original.digest(out/name)!=audit['original_files'][name]:raise ValueError('Copied evidence hash mismatch')
         streams={}
         for dataset in inventory['datasets']:
             raw=(original.SOURCE/dataset['data_file_relative_to_wp97']).read_bytes()
@@ -71,6 +73,10 @@ def run(out):
             state['new_completed'].append(name);state['new_sha256'][name]=original.digest(out/name)
             checkpoint(Path('progress.json'),state)
         verify(audit);original.check_deadline(deadline)
+        for name in audit['completed']:
+            if original.digest(out/name)!=audit['original_files'][name]:raise ValueError('Copied evidence changed')
+        for name,expected_hash in state['new_sha256'].items():
+            if original.digest(out/name)!=expected_hash:raise ValueError('Recovery evidence changed')
         if original.digest(Path(__file__))!=state['recovery_script_sha256'] or original.digest(HERE/'RECOVERY-AUDIT.json')!=state['audit_sha256']:
             raise ValueError('Recovery source changed')
         state['status']='recovered_complete'

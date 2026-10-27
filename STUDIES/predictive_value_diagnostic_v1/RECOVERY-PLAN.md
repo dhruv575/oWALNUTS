@@ -23,6 +23,14 @@ observed Windows reader/replacement conflict. Keep partial checkpoints and a
 separate terminal record on failure. No source or original output is overwritten.
 
 Revalidate original files and all frozen inputs before and after recovery. Record
+the original FREEZE byte hash and verify copied completed outputs both immediately
+and at the end. A separate recovery_view.py materializes completed origin files
+plus the latest valid partial-arm journal checkpoints into a new reporting view;
+its provenance manifest records every exact source hash. This preserves available
+partial arms and interrupted statuses if recovery itself fails, without modifying
+either attempt. The frozen summarizer then operates on that separate view.
+
+Record
 the recovery code/audit hashes and actual elapsed time. Report both the original
 failed attempt with 79 missing origins and the separately recovered combined panel.
 Do not call the original run successful or change any statistic, threshold, origin,
