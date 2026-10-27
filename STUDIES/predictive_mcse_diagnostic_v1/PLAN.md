@@ -46,3 +46,9 @@ keys, every replicate's errors and uncertainty, and aggregate tables. No
 post-outcome threshold or seed adjustment, and no automatic stopping rule is
 qualified by this diagnostic. Marginal coverage counts are descriptive, not
 family-wise guarantees across repeated adaptive checks.
+
+Pre-execution review clarification: also estimate mean-CDF MCSE at the true
+threshold, separate from the plug-in estimated quantile, to isolate the MCSE
+estimator from threshold error. Wald intervals are on the scale itself:
+q_hat +/- 1.96*SE(q_hat), without clipping or log transformation. Use
+f_scale(q)=2*f_H(2 log(q))/q and az.mcse(method="mean").
