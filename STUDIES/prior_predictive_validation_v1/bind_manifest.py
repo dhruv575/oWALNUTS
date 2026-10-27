@@ -28,7 +28,7 @@ def bind(bundle,preparation,smoke,output,authorize=False):
  if not compared:raise ValueError('Missing readiness source provenance')
  study=bundle/'STUDIES/prior_predictive_validation_v1';spec=read(study/'PROTOCOL-DRAFT.json')
  if spec['planned_streams']!=32 or spec['planned_updates_per_stream']!=32 or len(spec['reference_sentinels'])!=8:raise ValueError('Fixed scientific denominators changed')
- spec['status']='frozen_authorized' if authorize else 'frozen_pending_authorization';spec['sources']=sources
+ spec['status']='frozen_authorized' if authorize else 'frozen_pending_authorization';spec['sources']=sources;spec.pop('unresolved',None)
  sdk=Path('/home/ubuntu/.bridgestan/bridgestan-2.9.0');sdk_inventory_path=prep/'sdk-source-inventory.json'
  if sha(sdk_inventory_path)!=prepared['sdk_source_inventory_sha256']:raise ValueError('SDK inventory drift')
  sources.update({str(sdk/name):digest for name,digest in read(sdk_inventory_path).items()})
