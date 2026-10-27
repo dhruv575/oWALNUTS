@@ -5,7 +5,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 FILES = ["protocol.json", "PREREGISTRATION.md", "README.md", "LEDGER-ENTRY.md", "analyze.py", "checksums.py", "make_protocol.py",
-         "run_cells.py", ".gitignore", "models/data.json", "rust/Cargo.toml", "rust/Cargo.lock", "rust/src/main.rs"]
+         "run_cells.py", ".gitignore", "models/data.json", "rust/Cargo.toml", "rust/Cargo.lock", "rust/src/main.rs",
+         "posthoc/pf_lagnorm.py"]
 paths = [HERE / f for f in FILES if (HERE / f).exists()]
 paths += sorted(p for p in (HERE / "box").rglob("*") if p.is_file())
 paths += sorted(p for p in (HERE / "artifacts").rglob("*") if p.is_file())
