@@ -430,6 +430,14 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     bands. This strengthens short-run implementation evidence; longer horizons,
     conditional failures outside this test and incremental real-market value
     remain open. The matched generator does not settle the cheap-t5 comparison.
+    A separately predeclared [August historical comparison](../STUDIES/fresh_real_value_v1/README.md)
+    now completes all 1,488 origins and finds positive score gains over rolling
+    t5 (+0.1349 nats) and EWMA t5 (+0.0237), with all three predeclared block
+    intervals above zero. Eight independent posterior checks pass their
+    diagnostic gates. Median native-plus-observed-label cost is 389 ms, versus
+    4.86 ms and 0.166 ms for the controls. This supports incremental predictive
+    value for one historical month; generalization, the value of that extra
+    computation for AMM decisions, and profitability remain open.
 23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
     250-return SV model from scratch at every tick, with best-of-16 starts,
     left one chain frozen (warmup step collapsed to about 1e-6, log density

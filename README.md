@@ -1319,3 +1319,18 @@ claims explicitly.
   roots. This tests 32 updates per stream under a matching generator, not
   long-horizon reliability, incremental market value or profitability:
   [`prior_predictive_validation_v1`](STUDIES/prior_predictive_validation_v1/README.md).
+- [E62] A predeclared August 2026 BTC perpetual comparison provides **positive
+  historical predictive evidence against strong Student-t controls**. All 1,488
+  origins and 4,464 forecasts completed. Mean SV-minus-rolling-t5 log score is
+  +0.1349 nats per origin (95% descriptive 48-origin block interval
+  [0.0689, 0.2132]); SV-minus-EWMA is +0.0237 [0.0080, 0.0392]. Both remain
+  positive across all three predeclared block intervals; the mean gains also
+  remain positive after leaving out any one day. All eight independent
+  reference checks pass their diagnostic gates;
+  their largest observed log-score discrepancy is 0.0637 nats, with both
+  Monte Carlo uncertainties retained in the report. Native sampling plus
+  observed-label scoring costs median 389 ms (P95 514 ms), versus 4.86 ms
+  for rolling t5 and 0.166 ms for EWMA, excluding initialization and persistence.
+  This is one newly acquired historical month, not prospective evidence,
+  full-return quantile timing or profitability:
+  [`fresh_real_value_v1`](STUDIES/fresh_real_value_v1/README.md).
