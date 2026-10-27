@@ -1,4 +1,4 @@
-"""Development resident predictive processor. No qualification or quoting policy."""
+﻿"""Development resident predictive processor. No qualification or quoting policy."""
 import ctypes, os, dataclasses
 import argparse, hashlib, importlib.util, json, platform, sys, time
 from pathlib import Path
@@ -94,7 +94,7 @@ def main():
     if args.out.exists(): raise SystemExit('Refusing to overwrite output')
     args.out.mkdir(parents=True)
     result=dict(kind='development smoke only; no qualification',rows=[],platform=platform.platform(),
-        python=sys.version,native_defaults=owalnuts.DEFAULTS,tuning=dataclasses.asdict(owalnuts.Tuning(max_depth=3,max_refinement_levels=8)),memory_start=memory(),python_api=identity(owalnuts.__file__),versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__),
+        python=sys.version,native_defaults=dict(owalnuts.DEFAULTS),tuning=dataclasses.asdict(owalnuts.Tuning(max_depth=3,max_refinement_levels=8)),memory_start=memory(),python_api=identity(owalnuts.__file__),versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__),
         source=[identity(HERE/'harness.py'),identity(HERE/'sv_target.py'),identity(PROCESS)],
         native=[identity(p) for p in Path(owalnuts.__file__).parent.rglob('*') if p.suffix in ('.pyd','.so')],
         configuration=dict(N=12,K=8,chains=4,max_depth=3,seed=99371001,initial_seed=99371002,
@@ -124,3 +124,4 @@ def main():
         (args.out/'results.json').write_text(json.dumps(result,indent=2,default=lambda v:v.tolist() if isinstance(v,np.ndarray) else v.item() if isinstance(v,np.generic) else str(v)))
     print(json.dumps(dict(status=result['status'],rows=len(result['rows']))))
 if __name__=='__main__':main()
+
