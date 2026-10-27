@@ -17,10 +17,16 @@ def main():
         out=root/f'shard-{i:02d}';out.mkdir()
         command=['taskset','-c',str(i),spec['python'],spec['readiness_path'],'--manifest',str(manifest),'--out',str(out/'work'),'--shard',str(i)]
         result=execute(command,Path(spec['readiness_path']).parent,480,out,spec['bounds']['worker_rss_bytes'],spec['bounds']['output_bytes'],out/'worker.log',output_scan_interval=2)
+        result['literal_evidence_valid']=False
+        try:
+            evidence=json.loads((out/'work/readiness-final.json').read_bytes())
+            if evidence.get('status')!='complete' or evidence.get('candidate_draws')!=1600 or evidence.get('reference_draws')!=16000 or evidence.get('equivalence_pass') is not True or evidence.get('precision_pass') is not True or evidence.get('shard')!=i:raise ValueError('Literal evidence incomplete or mismatched')
+            result['literal_evidence_valid']=True
+        except Exception as exc:result['literal_evidence_error']=repr(exc)
         exclusive(out/'MONITOR.json',result)
         return dict(shard=i,**result)
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:jobs=list(pool.map(one,range(12)))
-    complete=all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) for j in jobs)
+    complete=all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) and j.get('literal_evidence_valid') is True for j in jobs)
     worker.admit(manifest,expected_status='development_authorized')
     exclusive(root/'READINESS-FINAL.json',dict(jobs=jobs,planned_jobs=12,complete=complete,market_inputs_used=False,source_runtime_postcheck=True))
     return 0 if complete else 1
