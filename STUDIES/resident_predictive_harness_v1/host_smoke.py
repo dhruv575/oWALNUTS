@@ -45,6 +45,7 @@ def main():
         result['data_identity']=identity(a.out/'data.json');save()
         started=time.perf_counter();compiled=compile_target();functional=compile_functional()
         result['compile_seconds']=time.perf_counter()-started
+        result['phase']='initial_fit';save()
         owner=TargetOwner(compiled,np.array(data[:250]));init=np.zeros((4,253));init[:,0]=mu0;init[:,1]=np.log(.2)
         started=time.perf_counter()
         fitted=owalnuts.sample(owner.target,253,init=init,chains=4,warmup=1000,draws=200,
@@ -57,17 +58,20 @@ def main():
         resident=Resident(compiled,functional,data[:250],fitted.warm_state(),seed=99371011,
             tuning=tuning,max_target_evaluations=None,admit_worst_case=True)
         for tick in range(1,5):
+            result['phase']='tick';result['in_progress_tick']=tick;save()
             row=resident.tick(data[249+tick],400);row['tick']=tick;row['new_observation']=data[249+tick]
             # Durable compact persistence is outside the directly measured tick, explicitly recorded.
+            result['rows'].append(row);result['in_progress_tick']=None;save()
             diskstart=time.perf_counter()
             if hasattr(resident,'last_values') and row.get('phase') in ('complete','summary'):
                 raw=a.out/f'tick-{tick:03d}.npy';np.save(raw,resident.last_values,allow_pickle=False);row['compact_identity']=identity(raw)
-            result['rows'].append(row);save()
-            row['persistence_seconds']=time.perf_counter()-diskstart;save()
+            save()
+            row['compact_and_first_save_seconds']=time.perf_counter()-diskstart;save()
             if row['status']!='ok':break
         result['status']='complete' if len(result['rows'])==4 and all(r['status']=='ok' for r in result['rows']) else 'failed'
     except Exception as exc:result.update(status='failed',error=repr(exc))
     finally:
         if resident is not None:resident.close()
+        result['unattempted_ticks']=[i for i in range(1,5) if i not in [r['tick'] for r in result['rows']] and i!=result.get('in_progress_tick')]
         result['memory_end']=memory();result['ended_utc']=datetime.now(timezone.utc).isoformat();save()
 if __name__=='__main__':main()
