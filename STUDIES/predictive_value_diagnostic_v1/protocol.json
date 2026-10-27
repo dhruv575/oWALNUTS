@@ -1,0 +1,25 @@
+{
+  "study": "predictive_value_diagnostic_v1",
+  "status": "design_fixed_execution_pending_code_review_and_authorization",
+  "scope": "Retrospective current-target predictive value and warm approximation impact on already-inspected WP97 streams; no qualification or trading claim",
+  "source_run_commit": "a355bae52233b9e5ede69953bb23fb899a43859f",
+  "source_evidence_archive_sha256": "19a89ac0ac401e0700d3140e33e71637658d0cc791a52806dc3eaa38013de595",
+  "inventory": "ORIGIN-INVENTORY.json",
+  "datasets": ["sim", "real"],
+  "ticks": {"first": 1, "last": 100, "exclude_tick_zero": true},
+  "indexing": {"N": 250, "observed": "y[:250+t]", "newly_assimilated": "y[249+t]", "next_label": "y[250+t]"},
+  "arms": {"reference": "original selected attempt and kept chains, full joint draws", "warm_K": 200, "sim_seeds": [971201, 971202, 971203], "real_seeds": [971301, 971302, 971303], "pooling": false, "thinning": false},
+  "model": {"rho": 0.95, "nu": 5, "fields": ["mu", "log_sigma", "beta", "h_last"]},
+  "quadrature": {"primary_order": 128, "check_order": 64, "chunk_draws": 512, "max_abs_logpdf_difference": 0.000001, "max_abs_pit_difference": 0.000001, "fallback": null},
+  "baselines": {
+    "nig_ar1": {"lookback_pairs": 256, "minimum_history": 20, "response_indices": "range(max(1,n-256),n)", "design": "[1,y[k-1]]", "forecast_design": "[1,y[n-1]]", "scaling": "training lag mean and population std; std<=1e-12 replaced by1", "a0": 3.0, "b0": 0.0002, "prior_variance": 100.0, "predictive_observation_noise": true},
+    "rolling_t5_mle": {"window": 250, "nu": 5, "starts": "mean/median locations crossed with std(ddof1)*sqrt(3/5) and MAD/t5.ppf(.75)", "scale_floor": 0.00000001, "solver": "L-BFGS-B", "maxiter": 500, "maxfun": 5000, "ftol": 1e-12, "gtol": 1e-8, "eligible_projected_gradient_inf": 0.00001, "failure": "unavailable, no post-outcome fallback"},
+    "ewma_t5": {"lambda": 0.94, "nu": 5, "initial_fit": "same MLE on first250 only", "location": "fixed initial MLE mu0", "v0": "5/3*s0^2", "update": "v_t=.94*v_previous+.06*(y[249+t]-mu0)^2", "scale": "max(1e-8,sqrt(3*v_t/5))"}
+  },
+  "precision": {"estimator": "ArviZ mcse(method=mean) preserving chain/draw axes", "logpdf": "mcse(exp(logg-max(logg)))/mean(exp(logg-max(logg)))", "pit": "mcse(per_draw_integrated_cdf)", "constant_trace_mcse": 0, "gates_outputs": false},
+  "bootstrap": {"method": "circular moving blocks of paired origin vectors", "lengths": [5, 10, 20], "replicates": 2000, "seeds": {"sim": 27109701, "real": 27109702}, "quantiles": [0.025, 0.975], "scope": "descriptive dependence sensitivity only, no significance gate"},
+  "missing": {"planned_origins_per_stream": 100, "full_panel_aggregate_requires_all": true, "available_pair_summary": "separate and explicitly denominated", "replacement": false},
+  "preflight": {"origins": [["sim", 1], ["real", 1]], "hard_seconds": 120, "reuse_completed_origins": true, "continuation_checks": "schema, numerical validity and resource budget only; never forecast-score values"},
+  "full_run": {"order": "ticks2..100, sim then real per tick", "hard_seconds_formula": "max(300,ceil(1.5*99*preflight_pair_seconds+120))", "maximum_allowed_seconds": 1800, "over_maximum": "do not launch; no panel shrink or faster rerun", "memory_bytes": 2147483648, "max_new_output_bytes": 52428800, "new_sampler_calls": 0, "initial_location": "local"},
+  "reporting": {"higher_log_score_is_better": true, "units": "nats per native log-return observation", "report_all_baselines": true, "seed_averaging": "never mix densities across seeds; any log-score average explicitly labeled", "pit_bins": 10, "pit_acf_lags": [1, 5], "pit_central_interval": [0.05, 0.95], "block_means": "ten consecutive10-origin blocks", "quantile_inversions": false}
+}
