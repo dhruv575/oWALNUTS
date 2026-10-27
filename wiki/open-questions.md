@@ -383,8 +383,12 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     stand cannot work (the posterior moves 3.4 % per tick), that K = 200
     without pooling is the passing configuration, and post hoc that a
     likelihood-reweighted pool with per-lag weight normalisation reaches
-    the rule at K = 20, H = 20 (7.9 ms); its preregistered confirmation on
-    the simulated and the real series is the next step; (b) a
+    the rule at K = 20, H = 20 (7.9 ms). The preregistered confirmation
+    [WP97](../STUDIES/pool_confirm_v1/README.md) qualifies K=200 with
+    exponential H=10/20 on both fixed datasets, but not K=20 or K=50.
+    Its target grows from 250 to 350 observations; applying its weights
+    unchanged to a sliding window would omit removal and boundary terms.
+    These results concern predictive scale and component latency; (b) a
     Rao-Blackwellised P95
     (the risk quote runs 0.4 pp low from the sample upper quantile); (c)
     a resident session so per-call overhead stops dominating K = 50 (WP91);
@@ -396,9 +400,16 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     cost; the observed precision loss is not detected by the cost trigger.
     See [the negative result](../STUDIES/warm_drift_v1/README.md).
     Post-hoc analytic predictive-CDF integration improves precision but
-    does not rescue the complete rule. The next question is the fixed
-    draw-budget/accuracy tradeoff and reliable uncertainty measurement,
-    not which re-adaptation policy to ship. A known Gaussian-chain
+    does not rescue the complete rule. A separate
+    [fixed-budget diagnostic](../STUDIES/warm_precision_diagnostic_v1/README.md)
+    reaches 159/160 sampled-origin accuracy at K=400 with analytic scale
+    quantiles and about 255 ms sampler time, on reused windows and one
+    fresh seed. It motivates fresh testing without qualifying a default.
+    A four-update [resident development test](../STUDIES/resident_predictive_harness_v1/host-development-20261027/README.md)
+    measures complete predictive-return updates at 2.44–2.46 seconds:
+    sampling takes about 0.24 seconds and checked GH64/128 integration
+    takes 2.20–2.22 seconds. Numerical-summary cost, fresh-data posterior
+    accuracy and reliable uncertainty measurement remain open. A known Gaussian-chain
     [MCSE diagnostic](../STUDIES/predictive_mcse_diagnostic_v1/README.md)
     shows why short-chain estimated MCSE alone cannot certify accuracy.
 23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
