@@ -19,7 +19,7 @@ def atomic(path, value):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['preflight', 'full'])
+    parser.add_argument('mode', choices=['preflight', 'full', 'recovery'])
     parser.add_argument('--study', type=Path, required=True)
     parser.add_argument('--python', required=True)
     parser.add_argument('--out', type=Path, required=True)
@@ -33,6 +33,13 @@ def main():
         if out.exists():
             raise FileExistsError(out)
         budget = 120
+    elif args.mode == 'recovery':
+        if out.exists():
+            raise FileExistsError(out)
+        audit = json.loads((study / 'RECOVERY-AUDIT.json').read_text())
+        budget = audit['remaining_seconds']
+        if budget != 308.172 or len(audit['remaining']) != 79:
+            raise ValueError('Recovery budget or fixed schedule mismatch')
     else:
         pilot = json.loads((out / 'preflight.json').read_text())
         budget = pilot['remaining_budget_seconds']
@@ -41,6 +48,8 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     command = [os.path.abspath(args.python), str(study / 'evaluate.py'),
                args.mode, '--out', str(out)]
+    if args.mode == 'recovery':
+        command = [os.path.abspath(args.python), str(study / 'recover.py'), '--out', str(out)]
     env = os.environ.copy()
     threads = {key: '1' for key in
                ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS')}
@@ -97,7 +106,7 @@ def main():
                 size += log.stat().st_size
                 state['observed_peak_owned_rss'] = max(state['observed_peak_owned_rss'], rss)
                 state['observed_output_bytes'] = max(state['observed_output_bytes'], size)
-                phase_file = out / (args.mode + '.json')
+                phase_file = out / ('recovery-start.json' if args.mode == 'recovery' else args.mode + '.json')
                 if phase_file.exists() and phase_start is None:
                     record = json.loads(phase_file.read_text())
                     if record['pid'] not in [p.pid for p in alive] or record['hard_seconds'] != budget:
@@ -146,7 +155,7 @@ def main():
         state['remaining_owned_pids'] = [p.pid for p in discover()]
         if state['remaining_owned_pids']:
             state['status'] = 'cleanup_failed'
-        phase_file = out / (args.mode + '.json')
+        phase_file = out / ('recovery-final.json' if args.mode == 'recovery' else args.mode + '.json')
         try:
             state['evaluator_status'] = json.loads(phase_file.read_text()).get('status') if phase_file.exists() else 'missing'
         except Exception as error:

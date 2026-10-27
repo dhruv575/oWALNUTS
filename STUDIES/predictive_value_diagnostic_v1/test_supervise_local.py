@@ -24,24 +24,35 @@ r['status']='complete';save()
 
 
 class SupervisorChecks(unittest.TestCase):
-    def exercise(self, kind):
+    def exercise(self, kind, mode='preflight'):
         FIXTURES.mkdir(parents=True, exist_ok=True)
         root = Path(tempfile.mkdtemp(prefix=kind+'-', dir=FIXTURES)).resolve()
         self.assertTrue(root.is_relative_to(FIXTURES.resolve()))
         study = root / 'source'; study.mkdir()
-        (study / 'evaluate.py').write_bytes(WORKER.encode())
+        worker = WORKER
+        if mode == 'recovery':
+            worker = worker.replace("p.add_argument('mode');", '').replace('hard_seconds=120', 'hard_seconds=308.172')
+            worker = worker.replace("save()\nif kind", "(out/'recovery-start.json').write_text(json.dumps(r))\nif kind")
+            worker = worker.replace("r['status']='complete';save()", "r['status']='recovered_complete';(out/'recovery-final.json').write_text(json.dumps(r))")
+            (study/'RECOVERY-AUDIT.json').write_text(json.dumps(dict(remaining_seconds=308.172, remaining=list(range(79)))))
+        (study / ('recover.py' if mode == 'recovery' else 'evaluate.py')).write_bytes(worker.encode())
         (study / 'kind.txt').write_text(kind)
         out = root / 'outputs'
         result = subprocess.run([sys.executable, str(HERE/'supervise_local.py'),
-                                 'preflight', '--study', str(study),
+                                 mode, '--study', str(study),
                                  '--python', sys.executable, '--out', str(out)],
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads((root/'outputs.preflight.supervisor.json').read_text())
+        report = json.loads((root/('outputs.'+mode+'.supervisor.json')).read_text())
         self.assertEqual(report['remaining_owned_pids'], [])
         if (out/'big.bin').exists():
             (out/'big.bin').unlink()  # Only this newly created fixture payload.
         return report
+
+    def test_recovery_entry_and_terminal(self):
+        result = self.exercise('complete', 'recovery')
+        self.assertEqual(result['evaluator_status'], 'recovered_complete')
+        self.assertEqual(result['phase_seconds'], 308.172)
 
     def test_normal_completion(self):
         result = self.exercise('complete')

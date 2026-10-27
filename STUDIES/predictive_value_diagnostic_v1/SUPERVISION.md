@@ -18,3 +18,10 @@ Supervisor records live alongside the output directory, allowing preflight to
 create a genuinely new directory. The terminal evaluator state, partial origin
 files and full planned-row summary establish evidence completeness; process
 exit alone does not establish valid predictions. Report sampled peak RSS as such.
+
+The separately documented recovery mode invokes recover.py in a new directory,
+accepts only the fixed 79-origin suffix and 308.172-second remaining allowance,
+and observes immutable recovery-start.json / recovery-final.json records.
+Verification and copying consume the same remaining processing allowance.
+Original failed-run artifacts remain untouched. The monitor does not decide
+continuation from forecast values and never automatically retries recovery.
