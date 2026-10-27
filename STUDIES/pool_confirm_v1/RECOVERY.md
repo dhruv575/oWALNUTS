@@ -1,9 +1,12 @@
 # WP97 recovery
 
-Local inspection on 2026-10-27 found the study at `c899cf95`, with smoke still
-pending in its preregistration and no local evidence cells. The remote lane is
-`/home/ubuntu/lanes/pool_confirm_v1`. Remote completion has not yet been inspected;
-do not infer it from directory dates or from the earlier agent's status text.
+Initial local inspection on 2026-10-27 found the study at `c899cf95`, with smoke
+still pending in its preregistration and no local evidence cells. Remote inspection
+then confirmed that only the smoke had run. Recovery completed all 22 evidence
+cells without reruns; [README.md](README.md) records the actual freeze, completed
+verdict and archive locations. The remote lane is
+`/home/ubuntu/lanes/pool_confirm_v1`. The procedure below preserves the recovery
+discipline; it is not an instruction to rerun this completed study.
 
 1. Inspect remote processes, lane logs, Git HEAD/status, the `prefreeze` directory,
    and `repo/STUDIES/pool_confirm_v1/artifacts` before running anything. Archive
