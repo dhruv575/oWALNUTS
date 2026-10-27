@@ -1,0 +1,31 @@
+[package]
+name = "grad-init-metric-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP94: the gradient-scaled initial metric (nutpie's initial mass matrix, WP89's nutpie_init) as a candidate default, with and without the WP90 trapped-chain guard, on the 22 v7 posteriors, the funnel and the WP84 SV model"
+
+[dependencies]
+# `research` for the research-only warmup option under test (`WarmupConfig::with_initial_metric`, WP94)
+# and the observe-only comparison observer of the SV cell. It changes no default: the `defaults` / `diag`
+# arms are `Sampler::new()` as shipped, in the same build.
+owalnuts = { path = "../..", features = ["research"] }
+owalnuts-bridgestan = { path = "../../integrations/bridgestan" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bin]]
+name = "pdb-cell"
+path = "src/bin/pdb_cell.rs"
+
+[[bin]]
+name = "sv-cell"
+path = "src/bin/sv_cell.rs"
+
+[[bin]]
+name = "funnel"
+path = "src/bin/funnel.rs"
+
+[profile.release]
+debug = false
+
+[workspace]
