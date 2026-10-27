@@ -41,7 +41,17 @@ def main():
     worker.admit(manifest,expected_status='development_authorized');complete=False;error=None
     try:
         terminal=json.loads((root/'work/readiness-final.json').read_bytes())
-        if terminal.get('status')!='complete':raise ValueError('Literal final evidence incomplete')
+        expected=dict(status='complete',native=32,references=4,reference_shape=[4,4000,4],candidate_tail_draws=1600,reference_tail_draws=16000,calendar_accounting=True)
+        if any(terminal.get(k)!=v for k,v in expected.items()):raise ValueError('Literal final evidence incomplete')
+        copies=[];compiler_sources=[]
+        for i in range(4):
+            reference=json.loads((root/'work'/f'reference-{i:02d}-final.json').read_bytes())
+            if reference.get('status')!='complete' or reference.get('reference_shape')!=[4,4000,4] or not reference.get('compiler_captures'):raise ValueError('Full literal reference provenance incomplete')
+            for capture in reference['compiler_captures']:
+                copy=Path(capture['copy_path']).resolve();source=Path(capture['source_path']).resolve()
+                if not copy.is_relative_to(root.resolve()) or not source.is_relative_to(root.resolve()) or not copy.is_file() or copy.is_symlink() or hashlib.sha256(copy.read_bytes()).hexdigest()!=capture['sha256']:raise ValueError('Captured compiler library identity or containment failure')
+                copies.append(str(copy));compiler_sources.append(str(source))
+        if len(set(copies))!=len(copies) or len(set(compiler_sources))!=len(compiler_sources):raise ValueError('Reference compiler workspaces aliased')
         complete=not unsafe and all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) for j in jobs)
     except Exception as exc:error=repr(exc)
     exclusive(root/'READINESS-FINAL.json',dict(jobs=jobs,planned_jobs=8,complete=complete,error=error,shared_sdk_products_unchanged=sdk_unchanged,source_runtime_postcheck=True,elapsed_seconds=time.monotonic()-start,market_inputs_used=False))
