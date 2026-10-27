@@ -9,6 +9,23 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Added
 
+- Research flag (WP94, `STUDIES/grad_init_metric_v1`): the gradient-scaled
+  initial metric, `WarmupConfig::with_initial_metric(InitialMetric::GradientScaled
+  { lower, upper })` (`InitialMetric::nutpie()` = nutpie's bounds 1e-20, 1e20;
+  `research` feature, off by default, `InitialMetric::AsGiven` bit-identical).
+  Per chain, once, in `ChainRun::start_from` after the start is chosen and
+  before the initial-step search, the diagonal mass the chain starts warmup
+  with becomes `mass_i = clamp(|g_i(start)|, lower, upper)` (1 where that is
+  not finite), nutpie's `update_diag_grad` rule (nuts-rs 0.17.3); a
+  trapped-chain replacement start is scaled from its own gradient the same
+  way, a configured step search then probes the scaled metric per chain
+  (chain 0's search is not shared), and the slow-window updates, the paper
+  adaptation and the restart guard proceed unchanged. One target evaluation
+  per chain start, counted in the worst-case admission bound; reported as
+  `RunMetadata::initial_mass_diagonal`. Needs mass adaptation; the dense,
+  structured and continuation facades reject it. WP89 measured that with this
+  initial metric oWALNUTS went from 8/480 to 1/240 trapped chains on the SV
+  model without the restart guard. `tests/grad_init_metric.rs`.
 - Resident warm session (WP91): `Sampler::start_warm_session(target,
   state) -> WarmSession<T>` keeps a worker thread that owns the target, a
   pool of `threads` Rayon workers and every per-chain configuration, mass
