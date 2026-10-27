@@ -57,7 +57,7 @@ class Checks(unittest.TestCase):
         np.testing.assert_allclose(compact.values,components(raw.samples),rtol=1e-14,atol=1e-14)
     def test_fail_closed_paths(self):
         def fake():
-            r=Resident.__new__(Resident);r.closed=False;r.y=np.array([1.,2.,3.]);r.compiled=None;r.functional=None;r.session=Mock()
+            r=Resident.__new__(Resident);r.backend=None;r.closed=False;r.y=np.array([1.,2.,3.]);r.compiled=None;r.functional=None;r.session=Mock()
             return r
         r=fake()
         row=r.tick(4.,0)
@@ -76,4 +76,26 @@ class Checks(unittest.TestCase):
         self.assertTrue(row['state_advanced']);self.assertTrue(r.closed);np.testing.assert_array_equal(r.y,[2,3,4])
         second=r.tick(5.,2);self.assertEqual(second['status'],'failed')
         self.assertEqual(r.session.refresh_functionals.call_count,1);np.testing.assert_array_equal(r.y,[2,3,4])
+    def test_explicit_backends_preserve_base_and_fixtures(self):
+        from numerical_backend import Backend,ConfiguredReturnCDF
+        original=processor.stdtr
+        scipy_backend=Backend();exact=Backend('exact_t5')
+        for m,sigma,beta in [([-10.],[.3],[.001]),([-11.,-8.8],[.2,1.4],[-.001,.002])]:
+            deadline=time.perf_counter()+20
+            frozen=processor.ReturnCDF(m,sigma,beta,5,128,deadline,67108864)
+            default=ConfiguredReturnCDF(m,sigma,beta,5,128,deadline,67108864,backend=scipy_backend)
+            candidate=ConfiguredReturnCDF(m,sigma,beta,5,128,deadline,67108864,backend=exact)
+            q=frozen.quantiles()['quantiles'];np.testing.assert_array_equal(default.quantiles()['quantiles'],q)
+            np.testing.assert_allclose(candidate.quantiles()['quantiles'],q,rtol=0,atol=1e-12)
+            for prob,x in zip((.05,.5,.95),q):
+                val,error=processor.independent_cdf(x,m,sigma,beta,5)
+                self.assertLess(abs(val-candidate(x)),1e-7)
+        self.assertIs(processor.stdtr,original)
+    def test_backend_rejection_and_failure(self):
+        from numerical_backend import Backend,ConfiguredReturnCDF
+        with self.assertRaises(ValueError):Backend('unreviewed')
+        with self.assertRaises(ValueError):ConfiguredReturnCDF([-10],[.2],[0],7,64,time.perf_counter()+1,1000,backend=Backend('exact_t5'))
+        bad=Backend();bad.cdf=lambda nu,x:np.full_like(x,np.nan)
+        c=ConfiguredReturnCDF([-10],[.2],[0],5,64,time.perf_counter()+1,1000,backend=bad)
+        with self.assertRaises(ValueError):c(0.)
 if __name__=='__main__':unittest.main()
