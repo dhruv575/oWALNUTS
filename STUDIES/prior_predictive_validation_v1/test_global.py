@@ -44,6 +44,23 @@ class GlobalFixtures(unittest.TestCase):
    p=Path(d)/'stream-00';p.mkdir()
    atomic(p/'candidate.json',dict(rows=[dict(tick=1,candidate_status='ok',forecast=dict(cdf=.5,logpdf=float('nan')))]))
    with self.assertRaises(ValueError):build_ledger(d)
+ def test_candidate_mcse_nan_and_shape_fail_closed(self):
+  import numpy as np
+  from worker import candidate_mcse
+  logs=np.zeros((4,400));pit=np.full((4,400),.5)
+  with self.assertRaises(ValueError):candidate_mcse(logs,pit,lambda a:float('nan'))
+  with self.assertRaises(ValueError):candidate_mcse(logs[:,:50],pit,lambda a:0.)
+  pit[0,0]=1.1
+  with self.assertRaises(ValueError):candidate_mcse(logs,pit,lambda a:0.)
+  pit[0,0]=.5
+  self.assertEqual(candidate_mcse(logs,pit,lambda a:0.)['status'],'available')
+ def test_literal_fixture_has_no_reserved_seed_or_generator(self):
+  from readiness import literal_data
+  from unittest.mock import patch
+  with patch('generator.generate',side_effect=AssertionError('Study generation forbidden')):
+   data=literal_data()
+  self.assertEqual(data['y'].shape,(283,));self.assertIsNone(data['seeds']['data'])
+  self.assertEqual(data['seeds']['initial'],993711000)
  def test_duplicate_origin_rejected(self):
   with tempfile.TemporaryDirectory() as d:rows=build_ledger(d)
   rows[1]=copy.deepcopy(rows[0])

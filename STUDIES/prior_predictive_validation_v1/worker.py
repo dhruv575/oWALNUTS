@@ -10,9 +10,9 @@ from baseline import score as baseline_score
 from ledger import build_ledger,sentinel_ledger
 from report import summarize
 
-def admit(path,kind):
+def admit(path,kind,expected_status='frozen_authorized'):
     spec=json.loads(Path(path).read_text())
-    if spec.get('status')!='frozen_authorized':raise ValueError('Draft cannot execute')
+    if spec.get('status')!=expected_status:raise ValueError('Manifest authorization mismatch')
     if sys.prefix!=spec['runtimes'][kind]['prefix']:raise ValueError('Unexpected interpreter prefix')
     for name,version in spec['runtimes'][kind]['packages'].items():
         if importlib.metadata.version(name)!=version:raise ValueError('Package drift '+name)
@@ -25,9 +25,9 @@ def admit(path,kind):
 def load_module(path,name):
     spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 
-def candidate(spec,root,stream):
+def candidate(spec,root,stream,data_override=None):
     directory=root/f'stream-{stream:02d}'
-    try:data=generate(stream);save_data(directory,data)
+    try:data=generate(stream) if data_override is None else data_override;save_data(directory,data)
     except Exception as exc:
         atomic(directory/'generation-failure.json',dict(status='failed',error=repr(exc),payload=getattr(exc,'payload',None)));raise
     evaluator=Evaluator(spec['evaluator']['path'],spec['evaluator']['sha256'],spec['evaluator']['call_cap_seconds'])
@@ -58,7 +58,7 @@ def sides(spec,root,stream):
     result['status']='complete' if all(r[a+'_status']=='ok' for r in result['rows'] for a in ['baseline','oracle']) else 'partial';atomic(path,result)
     return dict(status=result['status'])
 
-def reference(spec,root,index):
+def reference(spec,root,index,sample_seed_override=None):
     from sentinel_adapter import SENTINELS,fit,log_density_mcse
     import arviz as az
     stream,tick=SENTINELS[index];directory=root/f'sentinel-{index:02d}';directory.mkdir(exist_ok=True);path=directory/'reference.json'
@@ -80,7 +80,7 @@ def reference(spec,root,index):
             compiled=nutpie.compile_stan_model(code=stan.read_text(encoding='utf-8-sig'),cleanup=False)
         if not captures:raise ValueError('Compiled library provenance missing')
         result['compiler_captures']=captures;atomic(path,result)
-        draws,metadata=fit(nutpie,compiled,values['window'],302710000+index*1000,config)
+        draws,metadata=fit(nutpie,compiled,values['window'],302710000+index*1000 if sample_seed_override is None else sample_seed_override,config)
         raw=directory/'draws.npy';np.save(raw,draws,allow_pickle=False);result.update(compact=dict(file=raw.name,sha256=digest(raw)),metadata=metadata)
         evaluator=Evaluator(spec['evaluator']['path'],spec['evaluator']['sha256'],config['evaluation_cap_seconds']);score=evaluator(draws,values['label'])
         arrays=dict(logpdf=score['logpdf_by_chain_draw'],pit=score['pit_by_chain_draw'],scaled_density=score['density_mcse']['scaled_density']);np.savez_compressed(directory/'score-arrays.npz',**arrays)
@@ -100,7 +100,8 @@ def reference(spec,root,index):
                     import io
                     with np.load(io.BytesIO(raw_arrays),allow_pickle=False) as saved:
                         c_log=saved['row__forecast__logpdf_by_chain_draw'];c_pit=saved['row__forecast__pit_by_chain_draw']
-                        result['candidate_precision']=dict(logpdf_delta_mcse=log_density_mcse(c_log,mean_mcse)['delta_mcse'],pit_mcse=mean_mcse(c_pit),source_sha256=entry['sha256'],scope='descriptive; no qualification gate')
+                        result['candidate_precision']=candidate_mcse(c_log,c_pit,mean_mcse)
+                        result['candidate_precision'].update(source_sha256=entry['sha256'],scope='descriptive; no qualification gate')
     
         except Exception as exc:result['candidate_precision']=dict(status='unavailable',reason=repr(exc))
         variables={name:draws[:,:,i] for i,name in enumerate(['mu','log_sigma','beta','h_last'])};variables.update(pit=arrays['pit'],density=arrays['scaled_density'])
@@ -109,6 +110,13 @@ def reference(spec,root,index):
         result.update(status='complete',reference_diagnostics_pass=bool(good),diagnostics=metrics,precision=dict(logpdf_delta_mcse=precision['delta_mcse'],pit_mcse=pit_mcse),score={k:score[k] for k in ('cdf','logpdf','numerical')})
     except Exception as exc:result.update(status='failed',error=repr(exc))
     atomic(path,result);return dict(status=result['status'])
+
+def candidate_mcse(logpdf,pit,mean_mcse):
+    from sentinel_adapter import log_density_mcse
+    if logpdf.shape!=(4,400) or pit.shape!=(4,400) or not np.isfinite(pit).all() or np.any((pit<0)|(pit>1)):raise ValueError('Invalid candidate precision arrays')
+    lp=log_density_mcse(logpdf,mean_mcse)['delta_mcse'];p=mean_mcse(pit)
+    if not np.isfinite([lp,p]).all() or min(lp,p)<0:raise ValueError('Unavailable candidate precision')
+    return dict(status='available',logpdf_delta_mcse=lp,pit_mcse=p)
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('kind',choices=['candidate','sides','reference','report']);parser.add_argument('--id',type=int,default=0);parser.add_argument('--manifest',required=True);parser.add_argument('--root',type=Path,required=True);a=parser.parse_args()
