@@ -8,7 +8,7 @@ AMM quotes.
 
 | Paired logscore, nats/origin | Mean | Primary 48-bar block 95% interval |
 |---|---:|---:|
-| SV minus rolling250 t5 (primary) | 0.134925 | [0.068916, 0.213162] |
+| SV minus rolling 250-return t5 (primary) | 0.134925 | [0.068916, 0.213162] |
 | SV minus longer-history EWMA t5 (secondary) | 0.023670 | [0.008011, 0.039173] |
 
 All 1,488 origins and 4,464 arm scores are available, without retries, replacements,
@@ -23,18 +23,18 @@ it, while the secondary lower endpoint does not. No baseline winner was selected
 ![Frozen cumulative scores and primary intervals](figures/predictive-value.png)
 
 The fixed daily summaries favor SV on 26/31 days against rolling t5 and 21/31
-against EWMA. Leave-one-day-out means range 0.115745?0.140489 and
-0.021689?0.026897 respectively. All these summaries were specified before data
+against EWMA. Leave-one-day-out means range 0.115745 to 0.140489 and
+0.021689 to 0.026897 respectively. All these summaries were specified before data
 access. There is one market stream, not 1,488 independent market replications.
 
 ## Information and causal scope
 
 The calendar month was chosen without inspecting returns, volatility or news.
-The bounded metadata exposure audit found no known overlap with July26?August31;
+The bounded metadata exposure audit found no known overlap with July 26 through August 31;
 September and October data were already exposed. The acquisition sealed 37 daily
 responses/1,776 bars. Exact indexing uses 1,740 closes and 1,739 returns: initial
 250 returns, then 1,488 updates and next-return labels. The final label closes at
-September1 00:00 UTC. Historical bar-open interpretation and zero-lag close
+September 1 00:00 UTC. Historical bar-open interpretation and zero-lag close
 availability are conventions, not independently verified execution-time feeds;
 vendor revisions remain possible.
 
@@ -48,16 +48,16 @@ execution costs, adverse selection, fees or P&L was evaluated.
 
 SV PIT mean is 0.507177 (48-bar interval [0.496492,0.518432]); second moment is
 0.336110 ([0.323474,0.349475]). Its lower/upper 5% tail counts are 53/74 out of
-1,488; rolling t5 has 84/106 and EWMA 71/92. SV lag1/lag48 PIT correlations are
-?0.075358/0.019050. Marginal moment intervals containing uniform targets do not
+1,488; rolling t5 has 84/106 and EWMA 71/92. SV lag 1/lag 48 PIT correlations are
+-0.075358/0.019050. Marginal moment intervals containing uniform targets do not
 prove conditional calibration or serial independence. The frozen summary retains
 all histograms, costs, PIT summaries and baseline results.
 
 All eight fixed independent references completed and passed their original gates:
-maximum Rhat1.001237, minimum bulk ESS3632.9, minimum tail ESS4247.2, and zero
+maximum Rhat 1.001237, minimum bulk ESS 3632.9, minimum tail ESS 4247.2, and zero
 divergences. Their uncertainty is distinct from across-time predictive uncertainty.
 
-| Tick | Candidate ? reference logscore | Candidate delta MCSE | Reference delta MCSE | PIT difference |
+| Tick | Candidate minus reference logscore | Candidate delta MCSE | Reference delta MCSE | PIT difference |
 |---:|---:|---:|---:|---:|
 | 1 | -0.000116 | 0.003787 | 0.001142 | -0.000308 |
 | 213 | 0.000797 | 0.005723 | 0.001119 | 0.003258 |
@@ -68,17 +68,17 @@ divergences. Their uncertainty is distinct from across-time predictive uncertain
 | 1276 | 0.002438 | 0.002917 | 0.000949 | 0.002035 |
 | 1488 | -0.002270 | 0.008910 | 0.002158 | 0.000101 |
 
-The largest observed logscore discrepancy is ?0.063659 at tick851, with candidate
-MCSE0.040613 versus reference0.002147. Eight spots cannot certify the entire
+The largest observed logscore discrepancy is -0.063659 at tick 851, with candidate
+MCSE 0.040613 versus reference 0.002147. Eight spots cannot certify the entire
 path, and short-chain MCSE is a diagnostic, not an accuracy stopping rule. The
 measured K400 forecast advantage must not be silently relabeled an exact-posterior
 advantage. No reference replaced an observed candidate score.
 
 All 1,488 candidate GH64/128 comparisons passed unchanged tolerances: maximum
-aggregate logpdf difference1.78e-15 and PIT difference3.33e-16, with zero CDF
-roundoff clips. Native telemetry covers2,380,800 transitions: zero divergences,
-nonfinite energy errors or zero-density evaluations; maximum depth7. Raw stop
-codes were0:1,205,689 (outer U-turn),1:1 (recursive U-turn),4:1,175,110
+aggregate logpdf difference 1.78e-15 and PIT difference 3.33e-16, with zero CDF
+roundoff clips. Native telemetry covers 2,380,800 transitions: zero divergences,
+nonfinite energy errors or zero-density evaluations; maximum depth 7. Raw stop
+codes were 0: 1,205,689 (outer U-turn), 1: 1 (recursive U-turn), 4: 1,175,110
 (reverse-coarser accepted). Maximum finite absolute proposal energy error was
 15.63974; zero divergence flags do not mean every proposal had tiny error.
 
@@ -90,9 +90,9 @@ codes were0:1,205,689 (outer U-turn),1:1 (recursive U-turn),4:1,175,110
 | Rolling t5 fit + score | 0.004859 | 0.006409 | 0.008811 |
 | EWMA update + score | 0.000166 | 0.000186 | 0.000393 |
 
-SV's whole candidate phase took560.66s, including4.08s initialization and31.18s
-measured record I/O; its native/scoring totals were483.48/27.81s. The whole
-11-job campaign took744.06s with2.084GB sampled peak owned RSS and232.77MB
+SV's whole candidate phase took 560.66 s, including 4.08 s initialization and 31.18 s
+measured record I/O; its native/scoring totals were 483.48/27.81 s. The whole
+11-job campaign took 744.06 s with 2.084 GB sampled peak owned RSS and 232.77 MB
 outputs. These are measured CPU timings on the AWS host, not GPU acceleration,
 full predictive quantiles or complete application latency. The cheap controls
 remain substantially cheaper. Sampling/scoring was isolated from other research
@@ -101,8 +101,8 @@ compute; archive compression finished before the subsequent long campaign.
 The first readiness binder failed before sampling because a source helper was
 omitted from its bundle. The unchanged helper was added with explicit approval,
 and the complete fixed literal replay then passed. That infrastructure history
-is preserved separately; the scientific campaign itself ran once. All11 production
-jobs completed; supervisor exit0, execution_complete and all forecast counts were
+is preserved separately; the scientific campaign itself ran once. All 11 production
+jobs completed; supervisor exit 0, execution_complete and all forecast counts were
 checked separately from accounting completeness. Every owned process group drained.
 
 Authorized manifest SHA256:
@@ -111,8 +111,8 @@ Frozen summary SHA256:
 `5845f7802dd97852b8a09271136a5a9887c21f8a86afc4ecba93b55c41fde608`.
 Full archive SHA256:
 `309d1b61688d7c30bbb10ec0b474793f8752a9b24eae2492c1bb429a395481d7`.
-All14,025 archived file hashes verified locally; the original authorized manifest
-pre/post hash held. The frozen report also verified5,992 artifact references.
+All 14,025 archived file hashes verified locally; the original authorized manifest
+pre/post hash held. The frozen report also verified 5,992 artifact references.
 Archive: `C:/dev/owalnuts/target/fresh-real-production-20261027-evidence.tar.gz`.
 Local expanded evidence: `C:/dev/owalnuts/target/fresh-real-production-verified-20261027/fresh-real-readiness-20261027`.
 See [plan](PLAN-DRAFT.md), [exposure audit](EXPOSURE-AUDIT.md),
