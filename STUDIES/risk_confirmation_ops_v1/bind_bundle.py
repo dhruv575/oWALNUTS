@@ -25,7 +25,7 @@ def bind(bundle,remote,e64_manifest,e65_manifest,acquisition,out):
     for product in sdk['selected_hashes']:sources[sdk['root']+'/'+product['path']]=product['sha256']
     e62_root=old['e62_root']
     for name,want in json.loads((study/'REUSE-IDENTITIES.json').read_bytes())['sources'].items():
-        oldpath=e62_root+'/STUDIES/fresh_real_value_v1/'+name
+        oldpath=e62_root+'/'+name
         if old['sources'].get(oldpath)!=want:raise ValueError('Native dependency drift '+name)
     acquisition=json.loads(Path(acquisition).read_bytes());local=Path(acquisition['directory'])
     for name,key in (('terminal.json','terminal_sha256'),('protocol.json','protocol_sha256'),('bars.json','bars_sha256')):
