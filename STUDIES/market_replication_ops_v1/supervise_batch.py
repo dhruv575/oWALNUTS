@@ -1,4 +1,4 @@
-﻿"""External fixed-resource envelope for the three mandatory market months."""
+"""External fixed-resource envelope for the three mandatory market months."""
 import argparse,hashlib,json,sys
 from pathlib import Path
 from batch import load_worker
@@ -17,7 +17,7 @@ def main():
             value=state['month_accounting'][month['month']]
             if value.get('planned_origins')!=month['origins'] or value.get('planned_references')!=8 or value.get('accounting_complete')is not True or value.get('artifact_integrity',{}).get('integrity_ok')is not True:raise ValueError('Incomplete month accounting '+month['month'])
         result['evidence_complete']=result.get('status')=='exited' and result.get('exit_code')==0 and result.get('group_drained')is True and not result.get('orphaned_children_after_leader_exit') and state.get('job_accounting_complete')is True and state.get('all_launched_groups_drained')is True
-        result.update(execution_complete=state['execution_complete'],month_accounting=state['month_accounting'],evidence_complete_meaning='All fixed denominators and artifact integrity accounted; does not imply all forecasts available or scientific success',manifest_unchanged=True)
+        result.update(execution_complete=state['execution_complete'] and state['aggregate_written'] and state['aggregate_error'] is None,month_accounting=state['month_accounting'],evidence_complete_meaning='All fixed denominators and artifact integrity accounted; does not imply all forecasts available or scientific success',manifest_unchanged=True)
     except Exception as exc:result['accounting_error']=repr(exc)
     exclusive(root/'BATCH-SUPERVISION.json',result);return 0 if result['evidence_complete'] else 1
 if __name__=='__main__':raise SystemExit(main())

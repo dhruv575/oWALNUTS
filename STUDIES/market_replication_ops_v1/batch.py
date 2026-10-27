@@ -9,7 +9,7 @@ def drained(result):return result.get('group_drained')is True and not result.get
 def safe(result):
     return drained(result) and result.get('reason') not in ('rss_limit','output_limit','output_limit_final_scan') and not result.get('final_output_scan_error')
 
-def run(spec,root,launch,clock=time.monotonic,finalize=None):
+def run(spec,root,launch,clock=time.monotonic,finalize=None,aggregate=None):
     draft=json.loads(Path(__file__).with_name('OPS-DRAFT.json').read_bytes())
     if [{k:m[k] for k in ('month','origins')} for m in spec['months']]!=draft['months']:raise ValueError('Fixed month/count mismatch')
     if any(spec['bounds'].get(k)!=v for k,v in draft['bounds'].items()):raise ValueError('Fixed operational bounds mismatch')
@@ -44,8 +44,12 @@ def run(spec,root,launch,clock=time.monotonic,finalize=None):
                 try:month_accounting[month['month']]=finalize(spec,month['month'],root/month['month'],owned)
                 except Exception as exc:month_accounting[month['month']]=dict(accounting_complete=False,error=repr(exc))
             else:month_accounting[month['month']]=dict(accounting_complete=False,reason='unavailable_finalizer_or_deadline_or_undrained_group')
+        aggregate_result=None;aggregate_error=None
+        if aggregate is not None and all(j['status']=='not_started' or drained(j) for j in jobs) and clock()<deadline:
+            try:aggregate_result=aggregate(spec,root)
+            except Exception as exc:aggregate_error=repr(exc)
         execution=all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) for j in jobs)
-        state=dict(status='batch_finished',jobs=jobs,planned_jobs=33,planned_origins=sum(m['origins'] for m in months),planned_forecasts=3*sum(m['origins'] for m in months),planned_references=24,job_accounting_complete=len(jobs)==33 and all(j['status']!='running' for j in jobs),execution_complete=execution,month_accounting=month_accounting,all_launched_groups_drained=all(j['status']=='not_started' or drained(j) for j in jobs),elapsed_seconds=clock()-start,qualification=None)
+        state=dict(status='batch_finished',jobs=jobs,planned_jobs=33,planned_origins=sum(m['origins'] for m in months),planned_forecasts=3*sum(m['origins'] for m in months),planned_references=24,job_accounting_complete=len(jobs)==33 and all(j['status']!='running' for j in jobs),execution_complete=execution,month_accounting=month_accounting,aggregate_written=aggregate_result is not None,aggregate_error=aggregate_error,all_launched_groups_drained=all(j['status']=='not_started' or drained(j) for j in jobs),elapsed_seconds=clock()-start,qualification=None)
         exclusive(root/'BATCH-FINAL.json',state)
     return state
 
@@ -58,5 +62,5 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--manifest',required=True);p.add_argument('--out',required=True);a=p.parse_args();manifest=Path(a.manifest).absolute();raw=json.loads(manifest.read_bytes());worker=load_worker(raw['worker_path'],raw['sources'][raw['worker_path']]);spec=worker.admit(manifest)
     def launch(month,phase,index,root,cap,affinity):
         return execute(['taskset','-c',affinity,spec['python'],spec['worker_path'],phase,'--month',month,'--index',str(index),'--manifest',str(manifest),'--root',str(root)],Path(spec['worker_path']).parent,cap,root,spec['bounds']['rss_bytes'],spec['bounds']['output_bytes'],root/f'{phase}-{index:02d}.log',output_scan_interval=2)
-    result=run(spec,a.out,launch,finalize=worker.terminal_accounting);worker.admit(manifest);return 0 if result['job_accounting_complete'] else 1
+    result=run(spec,a.out,launch,finalize=worker.terminal_accounting,aggregate=worker.batch_summary);worker.admit(manifest);return 0 if result['job_accounting_complete'] else 1
 if __name__=='__main__':raise SystemExit(main())
