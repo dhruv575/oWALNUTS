@@ -63,4 +63,48 @@ class FixtureTests(unittest.TestCase):
             p=Path(tmp)/'draft.json';p.write_text('{"status":"draft"}')
             with self.assertRaises(ValueError):supervise(p,Path(tmp)/'out')
             self.assertFalse((Path(tmp)/'out').exists())
+    def test_generation_failure_preserves_parameters_without_replay(self):
+        class Fake:
+            calls=0
+            def normal(self,*args,**kwargs):
+                self.calls+=1
+                if 'size' in kwargs:return np.zeros(kwargs['size'])
+                return -10000. if self.calls==2 else args[0]
+            def standard_t(self,*args,**kwargs):return np.zeros(kwargs['size'])
+        rng=Fake()
+        with self.assertRaises(generator.GenerationFailure) as caught:generator.generate(0,lambda seed:rng)
+        payload=caught.exception.payload
+        self.assertEqual(payload['parameters']['log_sigma'],-10000.)
+        self.assertEqual(payload['phase'],'latent_and_returns');self.assertEqual(payload['stream'],0)
+        self.assertEqual(rng.calls,4)
+    def test_oracle_failure_preserves_all_candidate_scores(self):
+        engine=Mock();engine.advance.return_value=(np.zeros((4,400,4)),{});engine.initial={'known':'fit'}
+        result=run_stream(self.fixture(),lambda *args:engine,lambda *args:dict(cdf=.5,logpdf=0.),Mock(side_effect=ValueError('oracle integration')),lambda *args:None)
+        self.assertEqual(result['status'],'partial');self.assertEqual(result['valid_ticks'],32);self.assertEqual(result['oracle_valid_ticks'],0)
+        self.assertEqual(result['initial_fit'],{'known':'fit'});self.assertEqual(result['rows'][0]['candidate_status'],'ok')
+    def test_initial_session_failure_preserves_flat_native_telemetry(self):
+        from resident_adapter import InitializationFailure
+        ow=Mock();fit=Mock();fit.summary.return_value={};fit.config={};fit.chain_warnings=['fixture']
+        fit.chains=[dict(depth=[2],divergent=[False],trapped_chain_checks=[dict(replacement_seed=7)],work_total={'calls':12})]
+        ow.sample.return_value=fit;ow.WarmSession.side_effect=RuntimeError('session creation')
+        with self.assertRaises(InitializationFailure) as caught:DrawResident(ow,Mock(),np.zeros(250),dict(initial=2,warm=3))
+        info=caught.exception.payload['initial_fit']
+        self.assertEqual(info['chains'][0]['trapped_chain_checks'][0]['replacement_seed'],7)
+        self.assertEqual(info['chains'][0]['work_total'],{'calls':12});self.assertEqual(info['chain_warnings'],['fixture'])
+    def test_reference_beta_precision_and_chain_identity(self):
+        from sentinel_adapter import extract
+        from types import SimpleNamespace
+        class Col:
+            def __init__(self,a):self.a=a
+            def transpose(self,*names):
+                if names!=('chain','draw'):raise ValueError('axes')
+                return self.a
+        class Posterior(dict):pass
+        post=Posterior({name:Col(np.full((4,4000),i+1.234567890123)) for i,name in enumerate(['mu','log_sigma','beta','h_last'])})
+        post.coords={'chain':np.arange(4)};div=np.zeros((4,4000));trace=SimpleNamespace(posterior=post,sample_stats={'diverging':Col(div)})
+        draws,meta=extract(trace);self.assertEqual(draws.shape,(4,4000,4));self.assertEqual(draws[0,0,2],3.234567890123)
+        div[0,0]=.5
+        with self.assertRaises(ValueError):extract(trace)
+        div[0,0]=0.;post.coords['chain']=np.array([0,0,2,3])
+        with self.assertRaises(ValueError):extract(trace)
 if __name__=='__main__':unittest.main()

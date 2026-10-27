@@ -38,3 +38,22 @@ Tests executed locally with
 C:/dev/owalnuts/target/python-workflow-env/Scripts/python.exe -m unittest discover
 -s STUDIES/prior_predictive_validation_v1 -p test_scaffold.py -v
 Ten passed in0.013s; no sampler module was imported by these fixtures.
+
+## Review-driven failure-accounting refinements
+
+GenerationFailure now carries stream/seed, phase, acquired parameter values and
+error metadata, so a hard case can be archived without re-running its RNG.
+Candidate and oracle availability are separate: a valid candidate forecast remains
+in candidate PIT/logscore summaries if privileged-oracle integration fails. Oracle
+failure is recorded and subsequent candidate updates continue within the global
+cap. Full candidate and full oracle means each require their own complete planned
+panel; paired summaries require both. Never discard candidate scores solely for
+missing oracle/reference output.
+
+Initial fits now retain flat native diagnostic/work/guard fields (including nested
+trapped-chain replacement start/seed/cost data), not the nonexistent per-chain
+'diagnostics' aggregate. Initial metadata is persisted before first advance; if
+WarmSession creation fails, InitializationFailure carries the completed fit
+metadata. Sentinel extraction preserves full-precision beta and validates unique
+chain identities plus finite boolean/0–1 divergence indicators. Four additional
+deterministic tests cover these paths;14 fixture tests pass, no study sampling.
