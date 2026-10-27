@@ -37,7 +37,8 @@ def main():
     if members(child.pid):
      try:os.killpg(child.pid,signal.SIGKILL)
      except ProcessLookupError:pass
-   child.wait(timeout=3)
+   try:child.wait(timeout=3)
+   except subprocess.TimeoutExpired:record['status']='cleanup_failed'
    until=time.monotonic()+3
    while any(x[2]!='Z' for x in members(child.pid)) and time.monotonic()<until:time.sleep(.1)
    record['remaining_group']=members(child.pid);record['exit_code']=child.returncode

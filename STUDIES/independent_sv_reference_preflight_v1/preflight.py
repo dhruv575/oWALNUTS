@@ -11,12 +11,19 @@ def main():
  def save(): (out/'result.json').write_text(json.dumps(r,indent=2,allow_nan=False))
  save()
  try:
+  bundle=Path(__file__).parent
+  manifest=json.loads((bundle/'manifest.json').read_text())
+  for name,digest in manifest.items():
+   if sha(bundle/name)!=digest:raise RuntimeError('source manifest differs: '+name)
+  if os.path.abspath(sys.prefix)!='/home/ubuntu/venv':raise RuntimeError('unexpected shared interpreter prefix')
+  r['source_manifest']=manifest
   sdk=Path(a.bridgestan_sdk)
   if not (sdk/'Makefile').is_file():raise RuntimeError('preinstalled BridgeStan SDK required; downloads forbidden')
   os.environ['BRIDGESTAN']=str(sdk);os.environ['TMPDIR']=str(out/'tmp');(out/'tmp').mkdir()
   import tempfile;tempfile.tempdir=None
   import nutpie,bridgestan
   if nutpie.__version__!='0.16.8':raise RuntimeError('nutpie version differs')
+  r['runtime_binaries']={str(f):sha(f) for package in (nutpie,bridgestan) for f in Path(package.__file__).parent.rglob('*.so')}
   r['inventory']=dict(prefix=sys.prefix,executable=sys.executable,nutpie=nutpie.__version__,bridgestan=bridgestan.__version__,numpy=np.__version__,sdk=str(sdk),sdk_makefile_sha256=sha(sdk/'Makefile'),sample_signature=str(inspect.signature(nutpie.sample)),compile_signature=str(inspect.signature(nutpie.compile_stan_model)))
   for name,obj in [('sample',nutpie.sample),('compile',nutpie.compile_stan_model),('bridgestan_compile',bridgestan.compile_model)]:
    source=inspect.getsource(obj);(out/(name+'-installed.py')).write_text(source)

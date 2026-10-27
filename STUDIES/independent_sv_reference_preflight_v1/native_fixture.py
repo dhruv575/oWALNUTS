@@ -4,6 +4,7 @@ import numpy as np
 import owalnuts
 from common import fixture
 from sv_target_snapshot import compile_target
+if sys.prefix!='/home/ubuntu/lanes/resident-predictive-build-20261027/env':raise RuntimeError('native prefix differs')
 root=Path(sys.argv[1]); expected='db2c445a7a94da67d55d22d3b367c44544630655f07c88068e5456a2c7d93863'
 binaries=list(Path(owalnuts.__file__).parent.glob('*.so'))
 identity={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in binaries}
