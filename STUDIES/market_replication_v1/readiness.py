@@ -1,5 +1,5 @@
 """Fixed E61 literal engineering replay on April calendar, no market data."""
-import argparse,json,time
+import argparse,json,time,subprocess
 from pathlib import Path
 import numpy as np
 from worker import admit,exclusive,month_spec,terminal_accounting,batch_summary
@@ -16,6 +16,8 @@ def run(stage,manifest,root):
     exclusive(begin,state);month='2026-04';selected=month_spec(spec,month);m=calendar(month,spec['e62_root']);panel=root/month;panel.mkdir(exist_ok=True);y=literal_returns(selected['origins'])
     try:
         if stage=='candidate':
+            subprocess.run([spec['python'],'-m','unittest','discover','-s',spec['ops_root'],'-p','test_*.py','-v'],check=True,timeout=45)
+            state['ops_fixture_preflight']='passed'
             result=m['worker'].candidate(selected,y,panel,updates=32)
             if result['status']!='complete' or result['native_completed']!=32 or result['score_counts']['ok']!=32:raise ValueError('Literal candidate incomplete')
         elif stage=='baselines':
