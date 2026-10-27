@@ -4,7 +4,11 @@
 //! the interpreter is detached around every call so the worker can take
 //! the GIL for a callable's callbacks.
 use super::*;
-use owalnuts::sampler::{WarmChunk, WarmSession, WarmState};
+use owalnuts::sampler::{
+    Functional, FunctionalChunk, FunctionalError, Functionals, RawFunctional, RawFunctionalFn,
+    WarmChunk, WarmSession, WarmState,
+};
+use std::sync::Arc;
 
 enum Inner {
     Callable(WarmSession<PyTarget>),
@@ -98,6 +102,203 @@ fn chunk_dict<'py>(py: Python<'py>, chunk: WarmChunk, wall: f64) -> PyResult<Bou
     Ok(d)
 }
 
+/// A Python callable `f(position) -> ndarray` as a functional: the
+/// interpreter is attached once per retained draw (the GIL cost the
+/// package README documents); the result must be a contiguous float64
+/// array of `outputs` values, or a float when `outputs == 1`.
+struct PyFunctional {
+    callable: Py<PyAny>,
+    outputs: usize,
+}
+
+impl Functional for PyFunctional {
+    fn dimension(&self) -> usize {
+        self.outputs
+    }
+
+    fn evaluate(&self, position: &[f64], out: &mut [f64]) -> Result<(), FunctionalError> {
+        Python::attach(|py| {
+            let array = PyArray1::from_slice(py, position);
+            let result = self.callable.call1(py, (array,)).map_err(|e| {
+                let type_name = e
+                    .get_type(py)
+                    .name()
+                    .map(|n| n.to_string())
+                    .unwrap_or_default();
+                FunctionalError::new(format!("functional raised {type_name}: {}", e.value(py)))
+            })?;
+            let bound = result.into_bound(py);
+            if let Ok(values) = bound.extract::<PyReadonlyArray1<'_, f64>>() {
+                let slice = values.as_slice().map_err(|e| {
+                    FunctionalError::new(format!("functional result is not contiguous: {e}"))
+                })?;
+                if slice.len() != out.len() {
+                    return Err(FunctionalError::new(format!(
+                        "functional returned {} values; {} were declared",
+                        slice.len(),
+                        out.len()
+                    )));
+                }
+                out.copy_from_slice(slice);
+                return Ok(());
+            }
+            if out.len() == 1
+                && let Ok(value) = bound.extract::<f64>()
+            {
+                out[0] = value;
+                return Ok(());
+            }
+            Err(FunctionalError::new(format!(
+                "functional must return a contiguous float64 array of {} values (or a float for one output)",
+                out.len()
+            )))
+        })
+    }
+}
+
+/// A compiled C-ABI functional (`from_cfunc_functional`); the owner keeps
+/// the compiled object alive for the functional's life.
+struct OwnedCFuncFunctional {
+    raw: RawFunctional,
+    _owner: Py<PyAny>,
+}
+
+impl Functional for OwnedCFuncFunctional {
+    fn dimension(&self) -> usize {
+        self.raw.dimension()
+    }
+
+    fn evaluate(&self, position: &[f64], out: &mut [f64]) -> Result<(), FunctionalError> {
+        self.raw.evaluate(position, out)
+    }
+}
+
+/// Build the call's functionals from the package's normalised specs:
+/// `("callable", f, outputs, 0, 0)` or `("cfunc", owner, address, outputs,
+/// user_data)`.
+fn parse_functionals(
+    specs: Vec<(String, Py<PyAny>, usize, usize, usize)>,
+    retain_draws: bool,
+) -> PyResult<Functionals> {
+    let mut functionals = Functionals::new().retain_draws(retain_draws);
+    for (kind, object, a, b, c) in specs {
+        let functional: Arc<dyn Functional> = match kind.as_str() {
+            "callable" => Arc::new(PyFunctional {
+                callable: object,
+                outputs: a,
+            }),
+            "cfunc" => {
+                if a == 0 {
+                    return Err(value_error("address must be a nonzero cfunc address"));
+                }
+                // SAFETY: as `cfunc_target`: the caller passes the address of
+                // a compiled callback with the documented `RawFunctionalFn`
+                // ABI; `object` is the strong Python reference that keeps it
+                // alive for the functional's life.
+                let function: RawFunctionalFn =
+                    unsafe { std::mem::transmute::<usize, RawFunctionalFn>(a) };
+                // SAFETY: thread-safety, reentrancy, buffer discipline and
+                // `user_data` validity are the documented
+                // `from_cfunc_functional` contract.
+                let raw = unsafe { RawFunctional::new(b, function, c as *mut core::ffi::c_void) };
+                Arc::new(OwnedCFuncFunctional {
+                    raw,
+                    _owner: object,
+                })
+            }
+            other => {
+                return Err(value_error(format!("unknown functional kind {other:?}")));
+            }
+        };
+        functionals = functionals.with_arc(functional);
+    }
+    Ok(functionals)
+}
+
+fn functional_chunk_dict<'py>(
+    py: Python<'py>,
+    chunk: FunctionalChunk,
+    wall: f64,
+) -> PyResult<Bound<'py, PyDict>> {
+    let count = chunk.chains.len();
+    let outputs = chunk.outputs;
+    let mut values = Vec::with_capacity(count * chunk.draws * outputs);
+    let mut positions = Vec::with_capacity(count * chunk.dimension);
+    let mut samples = Vec::new();
+    let mut counts = Vec::with_capacity(count * outputs);
+    let mut means = Vec::with_capacity(count * outputs);
+    let mut m2s = Vec::with_capacity(count * outputs);
+    let mut mins = Vec::with_capacity(count * outputs);
+    let mut maxs = Vec::with_capacity(count * outputs);
+    let diagnostics = PyList::empty(py);
+    let metadata = PyList::empty(py);
+    let work = PyList::empty(py);
+    let retained = chunk.chains.iter().all(|chain| chain.samples.is_some());
+    for chain in &chunk.chains {
+        values.extend_from_slice(&chain.values);
+        positions.extend_from_slice(&chain.position);
+        if let Some(draws) = &chain.samples {
+            samples.extend_from_slice(draws);
+        }
+        for moments in &chain.moments {
+            counts.push(moments.count as u64);
+            means.push(moments.mean);
+            m2s.push(moments.m2);
+            mins.push(moments.min);
+            maxs.push(moments.max);
+        }
+        diagnostics.append(continuation::diagnostics_dict(py, &chain.diagnostics)?)?;
+        let m = PyDict::new(py);
+        m.set_item("effective_seed", chain.effective_seed)?;
+        m.set_item(
+            "mass_diagonal",
+            chain.mass_diagonal.clone().into_pyarray(py),
+        )?;
+        m.set_item("final_step_size", chain.step_size)?;
+        metadata.append(m)?;
+        work.append(work_totals(py, chain.telemetry.total())?)?;
+    }
+    let d = PyDict::new(py);
+    d.set_item(
+        "values",
+        values
+            .into_pyarray(py)
+            .reshape([count, chunk.draws, outputs])?,
+    )?;
+    d.set_item("offsets", chunk.offsets.clone())?;
+    let moments = PyDict::new(py);
+    moments.set_item("count", counts.into_pyarray(py).reshape([count, outputs])?)?;
+    moments.set_item("mean", means.into_pyarray(py).reshape([count, outputs])?)?;
+    moments.set_item("m2", m2s.into_pyarray(py).reshape([count, outputs])?)?;
+    moments.set_item("min", mins.into_pyarray(py).reshape([count, outputs])?)?;
+    moments.set_item("max", maxs.into_pyarray(py).reshape([count, outputs])?)?;
+    d.set_item("moments", moments)?;
+    d.set_item(
+        "positions",
+        positions
+            .into_pyarray(py)
+            .reshape([count, chunk.dimension])?,
+    )?;
+    if retained && count > 0 {
+        d.set_item(
+            "samples",
+            samples
+                .into_pyarray(py)
+                .reshape([count, chunk.draws, chunk.dimension])?,
+        )?;
+    } else {
+        d.set_item("samples", py.None())?;
+    }
+    d.set_item("diagnostics", diagnostics)?;
+    d.set_item("metadata", metadata)?;
+    d.set_item("work", work)?;
+    d.set_item("seed", chunk.seed)?;
+    d.set_item("call_index", chunk.call_index)?;
+    d.set_item("target_calls", chunk.target_calls)?;
+    d.set_item("wall_seconds", wall)?;
+    Ok(d)
+}
+
 fn state_tuple<'py>(py: Python<'py>, state: &WarmState) -> PyResult<Bound<'py, PyTuple>> {
     let chains = state.chain_count();
     let dimension = state.dimension();
@@ -135,6 +336,31 @@ impl PyWarmSession {
         }
         .map_err(facade_error)?;
         chunk_dict(py, chunk, start.elapsed().as_secs_f64())
+    }
+
+    /// `refresh(draws)` with functionals evaluated on every retained draw
+    /// inside the chain loop; `functionals` are the package's normalised
+    /// specs (see `parse_functionals`).
+    #[pyo3(signature = (draws, functionals, retain_draws=false))]
+    fn refresh_functionals<'py>(
+        &mut self,
+        py: Python<'py>,
+        draws: usize,
+        functionals: Vec<(String, Py<PyAny>, usize, usize, usize)>,
+        retain_draws: bool,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let functionals = parse_functionals(functionals, retain_draws)?;
+        let start = Instant::now();
+        let chunk = match &mut self.inner {
+            Inner::Callable(session) => {
+                py.detach(|| session.refresh_functionals(draws, &functionals))
+            }
+            Inner::CFunc(session) => {
+                py.detach(|| session.refresh_functionals(draws, &functionals))
+            }
+        }
+        .map_err(facade_error)?;
+        functional_chunk_dict(py, chunk, start.elapsed().as_secs_f64())
     }
 
     /// `(positions, step_sizes, mass_diagonals)` of the current state.

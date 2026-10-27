@@ -418,6 +418,57 @@ with owalnuts.WarmSession(make_target(y), result.warm_state(), seed=1000, thread
 (`shift_window(1, 1)` would also drop `mu`; the remap keeps coordinate 0
 and slides the latents.)
 
+When the tick needs a quote, not the draws, `refresh_functionals(draws,
+functionals)` (WP95) evaluates functions of the position on every retained
+draw inside the chain loop and returns a `FunctionalChunk`: `values` of
+shape `(chains, draws, outputs)`, streamed per-chain `moments`, the
+diagnostics, `positions` and `warm_state()`, but no draws
+(`retain_draws=True` keeps them), with `mean(i)`, `variance(i)` and
+`quantile(q, i)` pooled over every chain (or `per_chain=True`). A
+functional is a numba `cfunc` with the signature
+`numba_functional_signature()` (`void(intp dim, double* q, double* out,
+intp n_out, void* user_data)`, GIL-free, evaluated on the worker threads),
+or a Python callable `f(position) -> array` (its output count probed
+once; the interpreter is attached once per draw per chain, which on the
+SV targets of `bench/warm_functionals_bench.py` cost 0.16 ms (53
+coordinates) to 0.55 ms (253 coordinates) per draw per chain, serialised,
+most of it the callable's own numpy work, so use a `cfunc` on the tick
+path). The values are the functionals of `refresh`'s draws bit for bit
+and the draws do not depend on the functionals
+(`tests/test_warm_functionals.py`). Per tick, a P95 of next-period
+volatility on the fixed-lag window above:
+
+```python
+import numba
+
+rho = 0.95
+
+@numba.cfunc(owalnuts.numba_functional_signature(), nopython=True, error_model="numpy")
+def sigma_next(dim, q_ptr, out, n_out, user_data):      # q = [mu, log sigma, beta, z_1..z_n]
+    q = numba.carray(q_ptr, (dim,))
+    mu, sigma = q[0], np.exp(q[1])
+    h = mu + sigma / np.sqrt(1.0 - rho * rho) * q[3]
+    for i in range(4, dim):
+        h = mu + rho * (h - mu) + sigma * q[i]
+    out[0] = np.exp((mu + rho * (h - mu)) / 2.0)         # exp(h_{n+1} / 2)
+
+window = 50                                            # SV state: [mu, log sigma, beta, z_1..z_window]
+dim = 3 + window
+quote = [owalnuts.from_cfunc_functional(sigma_next, 1)]
+with owalnuts.WarmSession(sv_target(y), state, seed=1000, threads=4) as session:
+    for y_new in stream:
+        y = np.append(y[1:], y_new)
+        state = session.state().remap(dim, lambda j: j if j < 3 else (j + 1 if j < dim - 1 else None),
+                                      fill=(0.0, 1.0))    # keep the three scales, slide the latents
+        session.retarget(sv_target(y), state)
+        chunk = session.refresh_functionals(50, quote)     # values (4, 50, 1); no draws kept
+        sigma_p50, sigma_p95 = chunk.quantile([0.5, 0.95], 0)
+```
+
+(`sv_target` is the SV model as a `from_cfunc` target, as in
+`bench/warm_functionals_bench.py`; `chunk.warm_state()` is the next state
+when the draws are not kept.)
+
 ## Example: stochastic volatility on the top-5 cryptocurrencies
 
 `examples/crypto_sv.ipynb` (executed notebook) and `examples/crypto_sv.py`

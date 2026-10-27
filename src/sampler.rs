@@ -65,8 +65,11 @@
 pub use crate::walnutpie::session::{
     SessionChainChunk, SessionChunk, SessionHandle, SessionProgress,
 };
+pub use crate::walnutpie::warm_session::{
+    Functional, FunctionalChainChunk, FunctionalChunk, FunctionalError, FunctionalFn, Functionals,
+    OutputMoments, RawFunctional, RawFunctionalFn, WarmChainChunk, WarmChunk, WarmSession,
+};
 use crate::walnutpie::warm_session::{WarmBudget, WarmPlan, WarmSessionSetup};
-pub use crate::walnutpie::warm_session::{WarmChainChunk, WarmChunk, WarmSession};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -1258,6 +1261,43 @@ impl Sampler {
         target: T,
         state: WarmState,
     ) -> Result<WarmSession<T>, Error> {
+        let setup = self.warm_setup(&state)?;
+        crate::walnutpie::warm_session::spawn(target, state, setup)
+    }
+
+    /// Warm continuation with streaming functionals: [`Sampler::run_warm`]
+    /// with `functionals` evaluated on every retained draw inside the chain
+    /// loop, returning their values (and running moments) in a
+    /// [`FunctionalChunk`] instead of the draws (unless
+    /// [`Functionals::retain_draws`] is set). Chain `c` runs exactly as in
+    /// `run_warm` (seed `seed + c`), so the values are the functionals of
+    /// `run_warm`'s draws bit for bit and the diagnostics are the same;
+    /// the chunk is also call 0 of [`Sampler::start_warm_session`] followed
+    /// by [`WarmSession::refresh_functionals`] (`tests/warm_functionals.rs`).
+    /// Admission, limits and the ignored settings are as for `run_warm`;
+    /// the result's `seed` is this sampler's seed and its `call_index` 0.
+    /// A loop of such calls is better served by the session, which keeps
+    /// the pool and per-chain inputs resident.
+    pub fn run_warm_functionals<T: Target>(
+        &self,
+        target: &T,
+        state: &WarmState,
+        functionals: &Functionals,
+    ) -> Result<FunctionalChunk, Error> {
+        let setup = self.warm_setup(state)?;
+        crate::walnutpie::warm_session::run_warm_functionals_once(
+            target,
+            state,
+            setup,
+            self.draws,
+            functionals,
+        )
+    }
+
+    /// What the warm session and the one-shot functional run take from this
+    /// sampler for `state`: threads, base seed, budget rule, deadline,
+    /// timeout, cancellation and the per-chain recipe.
+    fn warm_setup(&self, state: &WarmState) -> Result<WarmSessionSetup, Error> {
         let chains = state.chain_count();
         if let Some(configured) = self.chains
             && configured != chains
@@ -1278,24 +1318,20 @@ impl Sampler {
             (None, true) => WarmBudget::WorstCase,
             (None, false) => WarmBudget::Unbudgeted,
         };
-        crate::walnutpie::warm_session::spawn(
-            target,
-            state,
-            WarmSessionSetup {
-                threads,
-                base_seed: self.seed,
-                budget,
-                deadline: self.limits.deadline,
-                timeout: self.limits.timeout,
-                external_cancellation: self.limits.cancellation.clone(),
-                recipe: WarmRecipe {
-                    seed: self.seed,
-                    tuning: self.tuning.clone(),
-                    limits: self.limits.clone(),
-                    cache_initial_evaluation: self.cache_initial_evaluation,
-                },
+        Ok(WarmSessionSetup {
+            threads,
+            base_seed: self.seed,
+            budget,
+            deadline: self.limits.deadline,
+            timeout: self.limits.timeout,
+            external_cancellation: self.limits.cancellation.clone(),
+            recipe: WarmRecipe {
+                seed: self.seed,
+                tuning: self.tuning.clone(),
+                limits: self.limits.clone(),
+                cache_initial_evaluation: self.cache_initial_evaluation,
             },
-        )
+        })
     }
 
     /// The structured paths have no budgeted admission variant: they are
@@ -2297,18 +2333,13 @@ impl WarmState {
         )
     }
 
-    /// Replace every chain's position with its last draw of `chunk`
-    /// (the session's bookkeeping after a successful call; the chunk has
-    /// the state's chain count and dimension).
-    pub(crate) fn set_positions_from_last_draws(&mut self, chunk: &WarmChunk) {
-        for (chain, result) in self.chains.iter_mut().zip(&chunk.chains) {
-            if let Some(last) = result
-                .samples
-                .len()
-                .checked_sub(self.dimension)
-                .and_then(|start| result.samples.get(start..))
-            {
-                chain.position.copy_from_slice(last);
+    /// Replace every chain's position with the given one (the session's
+    /// bookkeeping after a successful call: each chain's last draw, of the
+    /// state's dimension).
+    pub(crate) fn set_positions<'a>(&mut self, positions: impl IntoIterator<Item = &'a [f64]>) {
+        for (chain, position) in self.chains.iter_mut().zip(positions) {
+            if position.len() == self.dimension {
+                chain.position.copy_from_slice(position);
             }
         }
     }
