@@ -32,9 +32,10 @@ def paired_check(rows,summary,n):
     return result
 
 def initialization_summary(value):
-    telemetry=value.get('telemetry') or (value.get('failure') or {}).get('payload') or {}
+    payload=(value.get('failure') or {}).get('payload') or {}
+    telemetry=value.get('telemetry') or payload.get('initial_fit') or payload
     config=telemetry.get('config') or {};warmup=config.get('warmup');draws=config.get('draws');chains=[]
-    totals={k:collections.Counter() for k in ['work_discarded','work_retained','work_total']};guards=[]
+    totals={k:collections.Counter() for k in ['work_discarded','work_retained','work_total']};guards=[];missing_guard_chains=0
     for i,c in enumerate(telemetry.get('chains') or []):
         row=dict(chain=i,guard_checks=c.get('trapped_chain_checks'),warmup_end=c.get('warmup_end'),sampling_end=c.get('sampling_end'),array_health_available=False)
         divergence=c.get('divergent');depth=c.get('depth');stop=c.get('stop')
@@ -45,10 +46,11 @@ def initialization_summary(value):
         for key in totals:
             row[key]=c.get(key)
             if isinstance(c.get(key),dict):totals[key].update({k:v for k,v in c[key].items() if type(v)in(int,float)})
+        if c.get('trapped_chain_checks')is None:missing_guard_chains+=1
         guards.extend(c.get('trapped_chain_checks') or []);chains.append(row)
     return dict(status=value.get('status'),failure=value.get('failure'),engine_factory_seconds=value.get('engine_factory_seconds'),config=config,
         chain_warnings=telemetry.get('chain_warnings'),chains=chains,recorded_chains=len(chains),work_totals={k:dict(v) for k,v in totals.items()},
-        guard_checks=len(guards),guard_restarts=sum(g.get('restarted')is True for g in guards),
+        guard_checks_observed=len(guards),guard_restarts_observed=sum(g.get('restarted')is True for g in guards),missing_guard_chain_count=missing_guard_chains,guard_telemetry_complete=len(chains)==4 and missing_guard_chains==0,
         scope='Initial warmup/retained/guard telemetry is separate from per-update health; discarded work may include abandoned attempts and must not be called retained sampling')
 
 def audit(root):

@@ -24,5 +24,8 @@ class AuditFixtures(unittest.TestCase):
    value=audit(root);self.assertEqual(value['months'][0]['native_health']['recorded_ticks'],1);self.assertEqual(value['months'][0]['numerical']['recorded_scores'],0);self.assertTrue(value['months'][0]['ledger_missing'])
  def test_initial_warmup_retained_and_guard_work_separate(self):
   value=dict(status='complete',telemetry=dict(config=dict(warmup=2,draws=1),chains=[dict(divergent=[1,0,0],depth=[10,7,3],stop=[2,0,0],trapped_chain_checks=[dict(restarted=True)],work_discarded=dict(divergences=2,zero_density_evaluations=4),work_retained=dict(divergences=0,zero_density_evaluations=0),work_total=dict(divergences=2,zero_density_evaluations=4))]))
-  result=initialization_summary(value);self.assertEqual(result['chains'][0]['warmup_array_divergences'],1);self.assertEqual(result['chains'][0]['retained_array_divergences'],0);self.assertEqual(result['work_totals']['work_discarded']['divergences'],2);self.assertEqual(result['guard_restarts'],1)
+  result=initialization_summary(value);self.assertEqual(result['chains'][0]['warmup_array_divergences'],1);self.assertEqual(result['chains'][0]['retained_array_divergences'],0);self.assertEqual(result['work_totals']['work_discarded']['divergences'],2);self.assertEqual(result['guard_restarts_observed'],1)
+ def test_session_creation_failure_unwraps_initial_fit_and_marks_missing_guard(self):
+  value=dict(status='failed',failure=dict(payload=dict(phase='session_creation',initial_fit=dict(config=dict(warmup=1,draws=1),chains=[dict(divergent=[1,0])]))))
+  result=initialization_summary(value);self.assertEqual(result['recorded_chains'],1);self.assertEqual(result['chains'][0]['warmup_array_divergences'],1);self.assertEqual(result['missing_guard_chain_count'],1);self.assertFalse(result['guard_telemetry_complete'])
 if __name__=='__main__':unittest.main()
