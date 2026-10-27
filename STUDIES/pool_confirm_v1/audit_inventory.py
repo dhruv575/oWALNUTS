@@ -57,8 +57,14 @@ def audit(here, cells, hash_draws=False):
                 except json.JSONDecodeError as exc:
                     item["errors"].append(f"line {line_number}: {exc}")
                     continue
+                if not isinstance(record, dict):
+                    item["errors"].append(f"line {line_number}: record is not an object")
+                    continue
                 tick = record.get("tick")
-                if tick is None or tick < 0:
+                if not isinstance(tick, int) or isinstance(tick, bool):
+                    item["errors"].append(f"line {line_number}: invalid tick {tick!r}")
+                    continue
+                if tick < 0:
                     continue
                 item["records"] += 1
                 if tick in seen:
@@ -67,6 +73,11 @@ def audit(here, cells, hash_draws=False):
                 if tick not in expected:
                     item["unexpected_ticks"].append(tick)
                 status = record.get("status", "missing_status")
+                if not isinstance(status, str):
+                    item["errors"].append(f"tick {tick}: invalid status {status!r}")
+                    status = "invalid_status"
+                if status == "missing_status":
+                    item["errors"].append(f"tick {tick}: missing status")
                 item["status_counts"][status] = item["status_counts"].get(status, 0) + 1
                 if status != "ok":
                     continue
@@ -75,7 +86,11 @@ def audit(here, cells, hash_draws=False):
                     item["errors"].append(f"tick {tick}: missing draw filename")
                     continue
                 path = folder / name
-                expected_bytes = record["chains"] * record["draws"] * 4 * 4
+                shape = [record.get(k) for k in ("chains", "draws")]
+                if any(not isinstance(x, int) or isinstance(x, bool) or x <= 0 for x in shape):
+                    item["errors"].append(f"tick {tick}: invalid draw shape {shape}")
+                    continue
+                expected_bytes = shape[0] * shape[1] * 4 * 4
                 size = path.stat().st_size if path.exists() else None
                 entry = {"name": name, "bytes": size, "expected_bytes": expected_bytes}
                 if size != expected_bytes:
