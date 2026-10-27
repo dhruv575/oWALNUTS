@@ -273,6 +273,12 @@ architecture and operating system (see the `walnutpie` module documentation).
 - nutpie gap decomposition (WP80): the lead is sampling gradients per draw
   from a smaller effective step (installed inverse mass far from the
   posterior variance on some coordinates), not warmup and not ESS per draw.
+- Tick-amortised accuracy (WP93): pooling the last H ticks' warm draws as
+  they stand fails the quote rule at every K, because the posterior moves
+  3.4 % per tick; K = 200 without pooling remains the passing
+  configuration. A likelihood-reweighted pool with per-lag weight
+  normalisation (post hoc) reaches the rule at K = 20, H = 20 in 7.9 ms and
+  is queued for a preregistered confirmation.
 - Online SV quote benchmark v2 (WP88, on the warm API): K = 200 passes the
   2 % / 5 % quote rule on simulated data at N = 250 (78 ms median) and
   N = 1,000 (1.06 s), fails it on real BTC returns (83 % of ticks) on

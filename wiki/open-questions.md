@@ -376,8 +376,14 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     simulated data at N = 250 (78 ms) and N = 1,000 (1.06 s) and fails on
     real BTC bar-close returns (83 %, precision-bound: own P50 MCSE 1.25 %
     against 0.9 % simulated), calibrated and drift-free throughout. Open:
-    (a) the draws per quote needed on real returns, by pooling the last H
-    ticks' draws (WP93) rather than raising K; (b) a Rao-Blackwellised P95
+    (a) the draws per quote needed on real returns: WP93
+    (`STUDIES/tick_pooling_v1`) showed that pooling stale draws as they
+    stand cannot work (the posterior moves 3.4 % per tick), that K = 200
+    without pooling is the passing configuration, and post hoc that a
+    likelihood-reweighted pool with per-lag weight normalisation reaches
+    the rule at K = 20, H = 20 (7.9 ms); its preregistered confirmation on
+    the simulated and the real series is the next step; (b) a
+    Rao-Blackwellised P95
     (the risk quote runs 0.4 pp low from the sample upper quantile); (c)
     a resident session so per-call overhead stops dominating K = 50 (WP91);
     (d) metric drift over thousands of ticks and across a regime change

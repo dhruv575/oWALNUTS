@@ -1192,3 +1192,17 @@ provenance.
   `sample_warm` on a C-ABI target: 71 ms against 77 ms for the Rust cell:
   [`STUDIES/online_sv_quote_v2`](STUDIES/online_sv_quote_v2/README.md)
   (WP88).
+- [E56] Tick-amortised accuracy (Linux, WP84 series at N = 250, 100 ticks,
+  3 seeds, gated reference at every tick, 17 cells in 37 minutes): pooling
+  the last H ticks' warm draws as they stand does not let K fall below
+  200. The reference posterior's own sigma P50 moves 3.4 % per tick
+  (median; 9–16 % over 5–20 ticks) against a 2 % tolerance, so every
+  pooled configuration fails (10–32 % of ticks, nearly independent of K,
+  exponential weights beating uniform on 15/15 pairs) and only K = 200
+  without pooling passes (95.0 %, 78 ms); re-propagating stale draws with
+  fresh noise biases the P95 high. Post hoc, not preregistered: a
+  likelihood-reweighted pool with weights normalised within each lag puts
+  K = 20 with H = 20 at 95.0–95.3 % (7.9 ms per tick) and K = 50 at
+  95.7–97.3 % for H of 5 to 20; to be confirmed with the real series:
+  [`STUDIES/tick_pooling_v1`](STUDIES/tick_pooling_v1/README.md)
+  (WP93).
