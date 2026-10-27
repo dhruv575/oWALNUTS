@@ -209,5 +209,27 @@ Filled in before the freeze commit; see the freeze commit message for the hashes
   2.45 / 1.57 / 0.83 % at H = 1 (K = 20 / 50 / 200); the largest tolerance met is 2 / 5 % at K = 20, H = 20 and 1 / 2 % at
   K = 200, H >= 10. The laptop's pooling arithmetic (not a benchmark) was 3.8 ms at K = 20, H = 20, 6.0 ms at K = 50 and
   16.8 ms at K = 200, H = 20; P7's "< 15 ms at K = 200" stands as written for the box.
-* Smoke (`run_cells.py smoke`, diagnostic seeds, never scored): recorded below once run on the freed lane 3, before the first
-  evidence cell.
+* Smoke (`run_cells.py smoke`, diagnostic seeds, never scored): completed on 2026-10-27 at 04:17 UTC on the freed lane 3.
+  All six reference ticks (0..2 per dataset) passed the original gate on their first attempts, with four chains retained;
+  maximum h_next R-hat was 1.0001, median reference sampler walls 10.3 s sim and 28.0 s real. The three-tick warm cells
+  completed with no retained divergences; tick-0 fits needed one attempt and retained all four chains. Median library
+  times were 64.0 ms for K=200 sim and 26.4 ms for K=20 real. The smoke's warm tick 3 deliberately has no reference in
+  its diagnostic protocol, so the summary's missing-reference failure is not a failed sampling cell or evidence result.
+  Diagnostic outputs are preserved in `artifacts/prefreeze`; original sources, raw draws and logs were archived before
+  recovery, with archive SHA256 `d60e3a29e81840aff2dbca2f357f5688016ea8496518254f7a46a31c851471b0`.
+
+## Actual execution freeze and recovery (2026-10-27)
+
+The former agent stopped after the diagnostic smoke, before copying this preregistration or starting any evidence cell.
+Remote inspection at 16:33 UTC found a clean draft checkout at `ee32a28af90ad8ca965523ac4fef84600bd947d5` and no evidence
+artifacts directory. The protocol, Rust harness, library source, driver and original analyzer are unchanged from that
+draft. The existing release executable SHA256 is `7ef3556ce13e52866e0ce0f8012409a4444a1aae150acc4a95b8d675e9988828`;
+it is reused without a rebuild. Protocol SHA256 is `20c4a1e2afab05907ba7defca4e5b669b28cae7439120afe8c8a1decd570f0a3`.
+
+This disclosure and the unchanged protocol are committed before the first evidence cell. The sampler targets, seeds,
+cell order, estimator, gates, predictions and decision rule above are unchanged. Actual co-tenancy differs from the
+draft's WP94 description: WP94 and WP96 are no longer running. The two WP97 lanes share cores 8-15 only with each other;
+brief unrelated diagnostics may use cores 0-3. Retain this context with timing results; do not label the machine exclusive.
+NumPy is 2.5.4 and ArviZ 0.23.4. Each detached lane has PID/start/end/exit records and a 120-minute deadline, preserving
+any timeout or partial output as a result. Read-only inventory and supplemental reference diagnostics do not alter
+qualification. Full raw smoke remains under the remote recovery directory and a hash-verified local recovery archive.
