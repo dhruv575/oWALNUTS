@@ -3,7 +3,9 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import platform
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +53,8 @@ def load(path, rec, reference):
     if len(idx) != len(set(idx)) or any(c < 0 or c > 3 for c in idx):
         raise ValueError("invalid original chain identities")
     if reference:
+        if any(c >= rec["chains"] for c in idx):
+            raise ValueError("reference chain identity exceeds raw chain count")
         a = a[idx]
     if len(a) != len(idx) or not np.isfinite(a).all():
         raise ValueError("invalid draws/chain count")
@@ -109,6 +113,40 @@ def compute(a, idx, tick):
                 chain_medians_log_sigma=np.median(a[..., 1], axis=1).tolist(),
                 chain_medians_h_last=np.median(a[..., 2], axis=1).tolist(),
                 pooled_median_log_sigma=float(np.median(a[..., 1])), pooled_median_h_last=float(np.median(a[..., 2])))
+
+
+def compute_input(path, rec, reference, tick):
+    """Return no usable computation unless the input stays byte-identical."""
+    before = identity(path)
+    a, idx = load(path, rec, reference)
+    computed = compute(a, idx, tick)
+    after = identity(path)
+    if before != after:
+        raise ValueError("raw input changed during computation")
+    return computed, idx, before
+
+
+def ensure_drained(artifacts):
+    done = json.loads((artifacts/"DONE.json").read_text())
+    if platform.system() != "Linux":
+        return dict(checked=False, reason="Local replay outside the sampling host process namespace")
+    groups = {r["pid"] for r in done.get("cells", []) if r.get("pid")}
+    supervisor = done.get("supervisor_pid")
+    processes = subprocess.check_output(["ps", "-eo", "pid,pgid,stat,args"], text=True)
+    active = []
+    marker = str(artifacts.resolve()/"cells")
+    for line in processes.splitlines()[1:]:
+        parts = line.split(None, 3)
+        if len(parts) < 4:
+            continue
+        pid, pgid = map(int, parts[:2])
+        if pid == os.getpid() or parts[2].startswith("Z"):
+            continue
+        if pid == supervisor or pgid in groups or marker in parts[3]:
+            active.append(line)
+    if active:
+        raise RuntimeError("Owned sampling processes still active despite DONE: " + repr(active))
+    return dict(checked=True, supervisor_pid=supervisor, owned_process_groups=sorted(groups), active_owned_processes=[])
 
 
 def fixtures():
@@ -185,11 +223,12 @@ def main():
         raise SystemExit("Refusing existing analysis output")
     if not (args.artifacts/"DONE.json").exists():
         raise SystemExit("Sampling lanes must be drained before timed analysis")
+    drain_check = ensure_drained(args.artifacts)
     args.out.mkdir(parents=True)
     started = time.perf_counter()
     deadline = started + PROTO["analysis_seconds_cap"]
     result = dict(kind="fixed-budget single-seed diagnostic; no qualification", utc=datetime.now(timezone.utc).isoformat(),
-                  source=identity(Path(__file__)), protocol=identity(HERE/"protocol.json"), plan=identity(HERE/"PLAN.md"),
+                  source=identity(Path(__file__)), protocol=identity(HERE/"protocol.json"), plan=identity(HERE/"PLAN.md"), drain_check=drain_check,
                   environment=dict(python=platform.python_version(), platform=platform.platform(), numpy=np.__version__,
                                    scipy=scipy.__version__, arviz=az.__version__), fixtures=fixtures(), rows=[], references=[], cells=[], inputs=[])
     all_logs, all_log_errors = {}, {}
@@ -218,11 +257,11 @@ def main():
                 if ref_errors or rec["status"] != "ok":
                     raise ValueError("reference record invalid or original gate failed")
                 path = ref_cell/rec["file"]
-                a, idx = load(path, rec, True)
-                reference = compute(a, idx, tick)
-                result["inputs"].append(identity(path))
+                reference, idx, source_identity = compute_input(path, rec, True, tick)
+                result["inputs"].append(source_identity)
                 ref.update(status="ok", computed=reference, original_selection={k: rec.get(k) for k in ("kept", "flagged", "seed", "attempt", "rhat_h_next")})
-            except (ValueError, KeyError, OSError, TimeoutError) as exc:
+            except (ValueError, KeyError, IndexError, OSError, TimeoutError) as exc:
+                reference = None
                 ref.update(status="unavailable", error=str(exc))
             result["references"].append(ref)
             for cell in (c for c in PROTO["cells"] if c["stream"] == stream):
@@ -238,10 +277,9 @@ def main():
                     if rec.get("status") != "ok":
                         raise ValueError("warm tick failed")
                     path = args.artifacts/"cells"/cell["id"]/f"tick-{tick:04}.f32"
-                    a, idx = load(path, rec, False)
-                    computed = compute(a, idx, tick)
-                    result["inputs"].append(identity(path))
-                    stuck = [idx[c] for c in range(len(a)) if abs(computed["chain_medians_log_sigma"][c]-reference["pooled_median_log_sigma"]) > 1
+                    computed, idx, source_identity = compute_input(path, rec, False, tick)
+                    result["inputs"].append(source_identity)
+                    stuck = [idx[c] for c in range(len(idx)) if abs(computed["chain_medians_log_sigma"][c]-reference["pooled_median_log_sigma"]) > 1
                              or abs(computed["chain_medians_h_last"][c]-reference["pooled_median_h_last"]) > 2]
                     comparisons = {}
                     for est, num, den in (("noise_vs_noise", "noise", "noise"), ("noise_vs_cdf", "noise", "cdf"), ("cdf_vs_cdf", "cdf", "cdf")):
@@ -249,12 +287,24 @@ def main():
                         comparisons[est] = dict(errors=errors.tolist(), within_bands_no_stuck=bool(np.all(abs(errors) <= TOLS) and not stuck))
                     row.update(status="ok", computed=computed, comparisons=comparisons, stuck=stuck,
                                divergences=sum(rec.get("divergences", [])), sampler_seconds=rec["wall_seconds"], original_chain_ids=idx)
-                except (ValueError, KeyError, OSError, TimeoutError) as exc:
+                except (ValueError, KeyError, IndexError, OSError, TimeoutError) as exc:
                     row.update(status="unavailable", error=str(exc))
                 result["rows"].append(row)
     result["elapsed_seconds"] = time.perf_counter()-started
+    invalid_inputs = []
+    for item in result["inputs"]:
+        try:
+            if identity(Path(item["path"])) != item:
+                invalid_inputs.append(item["path"])
+        except OSError:
+            invalid_inputs.append(item["path"])
+    result["input_hashes_verified_after_analysis"] = not invalid_inputs
+    result["invalid_inputs"] = invalid_inputs
+    if invalid_inputs:
+        for row in result["rows"]:
+            row.update(status="unavailable", error="input integrity changed after analysis; no scores accepted")
     result["groups"] = summarize(result["rows"])
-    result["status"] = "complete" if all(r["status"] == "ok" for r in result["rows"]) else "partial"
+    result["status"] = "input_integrity_failure" if invalid_inputs else ("complete" if all(r["status"] == "ok" for r in result["rows"]) else "partial")
     (args.out/"results.json").write_text(json.dumps(result, indent=1, allow_nan=False)+"\n")
     (args.out/"summary.json").write_text(json.dumps({k: result[k] for k in ("status", "utc", "elapsed_seconds", "environment", "groups", "cells")}, indent=2, allow_nan=False)+"\n")
     print(json.dumps(dict(status=result["status"], warm_rows=len(result["rows"]), available=sum(r["status"] == "ok" for r in result["rows"]), seconds=result["elapsed_seconds"])))
