@@ -40,7 +40,13 @@ finally:
    state['returned_ticks']=[dict(tick=x['tick'],status=x['status']) for x in r.get('rows',[])]
    state['interrupted_tick']=r.get('in_progress_tick')
    state['never_started_ticks']=[i for i in range(1,5) if i not in [x['tick'] for x in r.get('rows',[])] and i!=r.get('in_progress_tick')]
-   if r.get('status')!='complete' and state['status']=='complete':state['status']='workload_failed'
-  except Exception as exc:state['result_read_error']=repr(exc)
- else:state['never_started_ticks']=[1,2,3,4]
+   complete=(r.get('status')=='complete' and [x.get('tick') for x in r.get('rows',[])]==[1,2,3,4] and all(x.get('status')=='ok' for x in r.get('rows',[])) and r.get('in_progress_tick') is None)
+   state['complete_evidence_verified']=complete
+   if not complete and state['status']=='complete':state['status']='workload_failed'
+  except Exception as exc:
+   state['result_read_error']=repr(exc);state['complete_evidence_verified']=False
+   if state['status']=='complete':state['status']='workload_failed'
+ else:
+  state['never_started_ticks']=[1,2,3,4];state['complete_evidence_verified']=False
+  if state['status']=='complete':state['status']='workload_failed'
  state.update(end_utc=datetime.now(timezone.utc).isoformat(),elapsed_seconds=time.monotonic()-start);save()

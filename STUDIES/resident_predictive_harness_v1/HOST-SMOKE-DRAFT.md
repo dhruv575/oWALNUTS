@@ -91,3 +91,9 @@ never-started are distinct. compact_and_first_save_seconds covers compact write,
 hash and first following JSON save; the final save of that timing field is excluded.
 The255th observation is a saved unused next-return label; four updates consume
 observations250..253. No predictive score uses that label in this smoke.
+
+Watchdog execution budget is600seconds, followed only by bounded group teardown
+(up to5seconds TERM grace plus5seconds post-KILL drain check). Teardown never
+authorizes additional work. Completion requires a parseable result with ordered
+ticks1..4 exactly once, all ok, no in-progress tick and complete workload status;
+missing, unreadable or partial evidence cannot produce supervisor completion.
