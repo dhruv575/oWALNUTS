@@ -18,6 +18,7 @@ from scipy.special import ndtr, ndtri
 
 HERE = Path(__file__).resolve().parent
 PROTO = json.loads((HERE / "protocol.json").read_text())
+REFERENCE_HASHES = json.loads((HERE/"REFERENCE-MANIFEST.json").read_text())["sha256"]
 PS = (.5, .95)
 TOLS = np.array([PROTO["tolerance_p50"], PROTO["tolerance_p95"]])
 ESTIMATORS = ("noise_vs_noise", "noise_vs_cdf", "cdf_vs_cdf")
@@ -118,6 +119,8 @@ def compute(a, idx, tick):
 def compute_input(path, rec, reference, tick):
     """Return no usable computation unless the input stays byte-identical."""
     before = identity(path)
+    if reference and before["sha256"] != REFERENCE_HASHES.get(path.parent.name+"/"+path.name):
+        raise ValueError("reference differs from previously audited WP96 evidence")
     a, idx = load(path, rec, reference)
     computed = compute(a, idx, tick)
     after = identity(path)
@@ -229,6 +232,7 @@ def main():
     deadline = started + PROTO["analysis_seconds_cap"]
     result = dict(kind="fixed-budget single-seed diagnostic; no qualification", utc=datetime.now(timezone.utc).isoformat(),
                   source=identity(Path(__file__)), protocol=identity(HERE/"protocol.json"), plan=identity(HERE/"PLAN.md"), drain_check=drain_check,
+                  reference_manifest=identity(HERE/"REFERENCE-MANIFEST.json"),
                   environment=dict(python=platform.python_version(), platform=platform.platform(), numpy=np.__version__,
                                    scipy=scipy.__version__, arviz=az.__version__), fixtures=fixtures(), rows=[], references=[], cells=[], inputs=[])
     all_logs, all_log_errors = {}, {}
@@ -246,7 +250,10 @@ def main():
         ref_cell = args.references/"cells"/("ref-"+stream)
         ref_recs, ref_errors = records(ref_cell/"ticks.jsonl")
         if (ref_cell/"ticks.jsonl").exists():
-            result["inputs"].append(identity(ref_cell/"ticks.jsonl"))
+            log_identity = identity(ref_cell/"ticks.jsonl")
+            result["inputs"].append(log_identity)
+            if log_identity["sha256"] != REFERENCE_HASHES.get(ref_cell.name+"/ticks.jsonl"):
+                ref_errors.append("reference log differs from previously audited WP96 evidence")
         for tick in range(25, 2001, 25):
             reference = None
             ref = dict(stream=stream, tick=tick, status="pending", record_errors=ref_errors)

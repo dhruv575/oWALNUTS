@@ -83,7 +83,9 @@ class AnalysisTest(unittest.TestCase):
                 return actual_identity(path)
 
             argv = ["analyze.py", "--artifacts", str(art), "--references", str(refs), "--out", str(out)]
-            with mock.patch("sys.argv", argv), mock.patch.object(a, "identity", side_effect=identity_with_failed_recheck):
+            reference_hashes = {"ref-shift/"+ref_path.name: actual_identity(ref_path)["sha256"],
+                                "ref-shift/ticks.jsonl": actual_identity(ref_cell/"ticks.jsonl")["sha256"]}
+            with mock.patch("sys.argv", argv), mock.patch.object(a, "REFERENCE_HASHES", reference_hashes), mock.patch.object(a, "identity", side_effect=identity_with_failed_recheck):
                 a.main()
             result = json.loads((out/"results.json").read_text())
             self.assertEqual(len(result["rows"]), 480)
