@@ -15,7 +15,7 @@ K transitions, compact transport, scale inversion and checked GH64/128 return
 inversion. Imports/JIT/initial fit are separate; JSON persistence is outside the
 tick timer. A 30-second numerical deadline and native evaluation cap bound smoke
 work but are not a hard whole-process watchdog. Failures stop the smoke; no quote
-is authorized. No memory-performance claim is made without a native RSS monitor.
+is authorized. Smoke03 includes native process peak memory; these tiny-workload measurements do not establish production memory behavior.
 
 Implementation must be committed before measured smoke. Run tests with the Python
 environment that provides owalnuts, NumPy, SciPy and numba:
@@ -34,10 +34,10 @@ window preservation, native compact output parity and independent quadrature.
 
 Development smoke01 is preserved: admission rejected the first refresh because
 the kernel's theoretical worst-case target bound exceeded two million evaluations.
-No predictive result was produced. The corrected development harness disables
-worst-case admission while preserving the same actual two-million evaluation
-limit; this is an admission setting change, not a higher compute budget. Smoke02
-uses the identical seeds/data and is a debugging rerun, not fresh evidence.
+No predictive result was produced. An attempted admission-setting change disabled
+admit_worst_case while retaining the two-million ceiling. It was ineffective:
+the explicit ceiling still participates in preflight admission. Smoke02 uses
+identical seeds/data and is a debugging rerun, not fresh evidence.
 
 Smoke02 also failed before sampling: the actual API always admits against an
 explicit evaluation cap. Disabling admit_worst_case does not bypass that check.
