@@ -2,7 +2,7 @@
 import argparse,hashlib,inspect,json,os,subprocess,sys,time,traceback
 from pathlib import Path
 import numpy as np
-from common import fixture,data,extract
+from common import fixture,data,extract,require_finite
 
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def main():
@@ -40,12 +40,14 @@ def main():
    for variant in (0,1,-1):
     _,q=fixture(n,variant);lp,g=model.log_density_gradient(q,propto=False,jacobian=True)
     expected=next(x for x in native['rows'] if x['n']==n and x['variant']==variant)
+    require_finite(lp,g,expected['lp'],expected['gradient'])
     error=float(np.max(np.abs(g-np.array(expected['gradient']))/(1+np.abs(g))));offsets.append(float(lp-expected['lp']))
     fd=[]
     for j in (range(15) if n==12 else [0,1,2,3,4,127,252]):
      h=1e-7 if j==2 else 1e-5;plus=q.copy();minus=q.copy();plus[j]+=h;minus[j]-=h
      numerical=(model.log_density(plus,propto=False,jacobian=True)-model.log_density(minus,propto=False,jacobian=True))/(2*h)
      fd.append(abs(numerical-g[j])/(1+abs(g[j])))
+    require_finite(error,fd,offsets)
     r['parity'].append(dict(n=n,variant=variant,lp_offset=offsets[-1],gradient_relative_error=error,finite_difference_error=float(max(fd))))
     if error>1e-8 or max(fd)>1e-5:raise RuntimeError('gradient parity failed')
    if np.ptp(offsets)>1e-8:raise RuntimeError('density offset not constant')
@@ -62,7 +64,9 @@ def main():
   joint,diag=extract(trace);np.save(out/'joint.npy',joint);trace.to_netcdf(out/'trace.nc')
   z=np.asarray(trace.posterior.z.transpose('chain','draw',...));mu=joint[:,:,0];sigma=np.exp(joint[:,:,1]);h=mu+sigma*z[:,:,0]/np.sqrt(1-.95**2)
   for j in range(1,12):h=mu+.95*(h-mu)+sigma*z[:,:,j]
+  require_finite(h,joint)
   err=float(np.max(abs(h-joint[:,:,3])))
+  require_finite(err)
   if err>1e-10:raise RuntimeError('terminal latent reconstruction failed')
   r.update(status='complete',phase='complete',diagnostics=diag,h_last_reconstruction_error=err,variables=list(trace.sample_stats),joint_sha256=sha(out/'joint.npy'),api_and_target_verified=True,engine_options={k:options[k] for k in ['target_accept','maxdepth','store_mass_matrix','low_rank_modified_mass_matrix','transform_adapt']},limitations=['Tiny fit is API/extraction validation, not convergence qualification.','Seed arguments and installed forwarding source recorded; internal chain seed derivation not independently audited.'])
  except BaseException as e:r.update(status='failed',error=repr(e),traceback=traceback.format_exc())

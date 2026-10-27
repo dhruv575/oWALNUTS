@@ -21,3 +21,7 @@ def extract(trace, draws=50):
     d=np.asarray(trace.sample_stats.diverging.transpose('chain','draw'))
     if d.shape!=(4,draws) or not np.isfinite(d).all() or not np.isin(d,[0,1]).all():raise ValueError('divergences')
     return np.stack(values,-1),dict(chain_ids=chains.tolist(),divergences=d.sum(1).astype(int).tolist())
+
+def require_finite(*values):
+    if not all(np.isfinite(np.asarray(v)).all() for v in values):
+        raise ValueError("nonfinite numerical comparison")
