@@ -1,0 +1,95 @@
+## Accuracy per arm, stream and half (frozen rule)
+
+A scored tick passes iff |P50 err| <= 2 % and |P95 err| <= 5 % against the gated reference and no chain is stuck; a half passes iff >= 95 % of its 80 scored ticks (2 seeds x 40) pass and every seed >= 90 %. Half 1 = ticks 25..1000, half 2 = ticks 1025..2000 (the regime-2 returns enter from tick 1001 on the shift stream). Drift = mean signed P50 error over the half's last 10 scored ticks minus its first 10 (pp, per seed; bound 0.5 pp reported, not gated).
+
+| policy | stream | half | scored | pass pooled | per seed | |P50 err| med / p95 | |P95 err| med / p95 | P95 signed mean | own MCSE P50 | ESS med | stuck | in ref 90 % | drift pp per seed | half |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| frozen | shift | half1 | 80 | 83.8 % | 80 % / 88 % | 0.89 % / 2.54 % | 1.45 % / 4.70 % | -0.15 % | 1.04 % | 971 | 0 | 90.0 % | +0.63, +0.16 | FAIL |
+| frozen | shift | half2 | 80 | 66.2 % | 65 % / 68 % | 1.13 % / 3.71 % | 2.47 % / 6.96 % | 0.25 % | 1.69 % | 957 | 0 | 89.9 % | +0.31, +0.41 | FAIL |
+| frozen | control | half1 | 80 | 86.2 % | 82 % / 90 % | 0.87 % / 2.66 % | 1.54 % / 4.68 % | -0.09 % | 1.04 % | 971 | 0 | 90.0 % | +0.59, +0.12 | FAIL |
+| frozen | control | half2 | 80 | 91.2 % | 90 % / 92 % | 0.70 % / 1.93 % | 1.96 % / 5.21 % | -0.55 % | 1.22 % | 1005 | 0 | 90.0 % | -0.78, +0.18 | FAIL |
+| m100 | shift | half1 | 80 | 87.5 % | 88 % / 88 % | 0.75 % / 2.02 % | 1.57 % / 5.56 % | -0.35 % | 1.00 % | 1015 | 0 | 90.2 % | -0.49, +0.37 | FAIL |
+| m100 | shift | half2 | 80 | 71.2 % | 75 % / 68 % | 0.89 % / 2.80 % | 2.50 % / 8.23 % | -0.37 % | 1.65 % | 964 | 0 | 90.1 % | +0.42, +0.88 | FAIL |
+| m100 | control | half1 | 80 | 88.8 % | 88 % / 90 % | 0.63 % / 1.89 % | 1.54 % / 5.16 % | -0.30 % | 1.00 % | 1015 | 0 | 90.1 % | -0.53, +0.32 | FAIL |
+| m100 | control | half2 | 80 | 82.5 % | 88 % / 78 % | 0.71 % / 2.68 % | 1.78 % / 5.18 % | -0.07 % | 1.16 % | 1023 | 0 | 89.7 % | -0.78, +0.79 | FAIL |
+| m500 | shift | half1 | 80 | 88.8 % | 80 % / 98 % | 0.65 % / 2.47 % | 1.56 % / 4.95 % | -0.34 % | 1.03 % | 1002 | 0 | 90.1 % | +0.38, +0.49 | FAIL |
+| m500 | shift | half2 | 80 | 60.0 % | 52 % / 68 % | 1.02 % / 6.92 % | 2.65 % / 7.65 % | -0.08 % | 1.78 % | 912 | 0 | 90.1 % | +3.16, +1.35 | FAIL |
+| m500 | control | half1 | 80 | 88.8 % | 80 % / 98 % | 0.61 % / 2.45 % | 1.57 % / 5.43 % | -0.28 % | 1.03 % | 1002 | 0 | 90.1 % | +0.34, +0.45 | FAIL |
+| m500 | control | half2 | 80 | 86.2 % | 78 % / 95 % | 0.76 % / 2.74 % | 1.87 % / 5.42 % | -0.31 % | 1.20 % | 1038 | 0 | 90.1 % | -0.63, +0.79 | FAIL |
+| trig | shift | half1 | 80 | 86.2 % | 80 % / 92 % | 0.89 % / 2.54 % | 1.45 % / 4.21 % | -0.22 % | 1.04 % | 990 | 0 | 90.1 % | +0.63, +0.16 | FAIL |
+| trig | shift | half2 | 80 | 62.5 % | 65 % / 60 % | 1.37 % / 3.71 % | 2.40 % / 6.96 % | -0.28 % | 1.62 % | 1003 | 0 | 89.9 % | +0.31, +0.11 | FAIL |
+| trig | control | half1 | 80 | 87.5 % | 82 % / 92 % | 0.87 % / 2.66 % | 1.53 % / 4.16 % | -0.16 % | 1.04 % | 990 | 0 | 90.1 % | +0.59, +0.11 | FAIL |
+| trig | control | half2 | 80 | 90.0 % | 90 % / 90 % | 0.71 % / 1.90 % | 2.21 % / 6.83 % | -0.32 % | 1.16 % | 1024 | 0 | 90.0 % | -0.78, +0.54 | FAIL |
+
+Verdict: {"frozen_holds": false, "policies_passing_both_streams": [], "per_policy": {"frozen": {"shift": false, "control": false}, "m100": {"shift": false, "control": false}, "m500": {"shift": false, "control": false}, "trig": {"shift": false, "control": false}}, "per_half": {"frozen": {"shift": {"half1": false, "half2": false}, "control": {"half1": false, "half2": false}}, "m100": {"shift": {"half1": false, "half2": false}, "control": {"half1": false, "half2": false}}, "m500": {"shift": {"half1": false, "half2": false}, "control": {"half1": false, "half2": false}}, "trig": {"shift": {"half1": false, "half2": false}, "control": {"half1": false, "half2": false}}}}
+
+## Latency and re-adaptation per arm and stream (all 2,000 ticks; tick 0 excluded)
+
+| policy | stream | median s | P99 s | max s | < 0.4 s | median half 1 | median half 2 | re-adaptations per seed | re-adapt tick median s | re-adapt tick max s | first re-adapt after the shift | re-adapt chain fallbacks | re-adapt errors | cost ratio by 250-tick block (seed 1) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| frozen | shift | 0.129 | 0.157 | 0.167 | 100.0 % | 0.129 | 0.129 | [0, 0] | n/a | n/a | [None, None] | 0 | 0 | 0.98, 0.92, 0.94, 0.86, 0.87, 0.94, 0.94, 0.91 |
+| frozen | control | 0.128 | 0.171 | 0.195 | 100.0 % | 0.128 | 0.129 | [0, 0] | n/a | n/a | [None, None] | 0 | 0 | 0.98, 0.92, 0.94, 0.86, 0.89, 0.95, 0.95, 0.92 |
+| m100 | shift | 0.306 | 0.585 | 1.150 | 59.9 % | 0.353 | 0.286 | [20, 20] | 0.860 | 1.150 | [1100, 1100] | 0 | 0 | 1.70, 2.51, 2.83, 2.97, 3.13, 1.79, 1.93, 2.13 |
+| m100 | control | 0.285 | 0.556 | 1.043 | 67.3 % | 0.313 | 0.282 | [20, 20] | 0.809 | 1.043 | [1100, 1100] | 0 | 0 | 1.70, 2.51, 2.83, 2.97, 2.57, 2.07, 2.14, 2.32 |
+| m500 | shift | 0.263 | 0.534 | 1.036 | 67.0 % | 0.258 | 0.488 | [4, 4] | 0.899 | 1.036 | [1500, 1500] | 0 | 0 | 0.98, 0.93, 2.44, 2.06, 3.58, 3.25, 1.04, 0.66 |
+| m500 | control | 0.273 | 0.528 | 1.041 | 67.0 % | 0.259 | 0.501 | [4, 4] | 0.910 | 1.041 | [1500, 1500] | 0 | 0 | 0.98, 0.93, 2.44, 2.06, 3.65, 3.30, 2.09, 1.92 |
+| trig | shift | 0.303 | 0.533 | 0.918 | 72.8 % | 0.126 | 0.314 | [0, 1] | 0.918 | 0.918 | [None, None] | 0 | 0 | 0.98, 0.92, 0.94, 0.86, 0.87, 0.94, 0.94, 0.91 |
+| trig | control | 0.317 | 0.529 | 0.953 | 72.8 % | 0.131 | 0.320 | [0, 1] | 0.953 | 0.953 | [None, None] | 0 | 0 | 0.98, 0.92, 0.94, 0.86, 0.89, 0.95, 0.95, 0.92 |
+
+## Trigger arm: firing ticks (trailing cost > 1.5 x post-adaptation baseline, or > 5 % unchanged positions)
+
+| stream | seed | fired at ticks | max trailing/baseline ratio | re-adaptations |
+|---|---|---|---|---|
+| shift | 960101 | [] | 1.004 | 0 |
+| shift | 960102 | [913] | 1.000 | 1 |
+| control | 960101 | [] | 1.004 | 0 |
+| control | 960102 | [913] | 1.000 | 1 |
+
+## Gated reference (4 x 2,000/20,000 on the tick's 250-return window)
+
+| stream | ticks planned | ok | gate failed (both seeds) | second seed used | ticks with a flagged chain dropped | min chains kept | max R-hat(h_next) | rel. MCSE P50 med / max (half 1) | (half 2) | rel. MCSE P95 med / max (half 1) | (half 2) | min ESS | median wall s | total min |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| shift | 81 | 81 | 0 | 0 | 5 | 3 | 1.0002 | 0.09 % / 0.16 % | 0.17 % / 0.23 % | 0.22 % / 0.29 % | 0.35 % / 0.52 % | 57189 | 9.107 | 28.7 |
+| control | 81 | 81 | 0 | 1 | 6 | 3 | 1.0002 | 0.10 % / 0.15 % | 0.11 % / 0.20 % | 0.24 % / 0.34 % | 0.25 % / 0.36 % | 45472 | 9.164 | 35.5 |
+
+## Tick-0 fits (4 x 1,000/1,000 at defaults; outside the latency statistics)
+
+| cell | wall s | flagged chains | kept | tick-0 P50 err | tick-0 P95 err | accurate |
+|---|---|---|---|---|---|---|
+| warm-frozen-shift-s960101 | 2.758 | [] | [0, 1, 2, 3] | -0.73 % | 2.46 % | True |
+| warm-m100-shift-s960101 | 2.750 | [] | [0, 1, 2, 3] | -0.73 % | 2.46 % | True |
+| warm-m500-shift-s960101 | 2.756 | [] | [0, 1, 2, 3] | -0.73 % | 2.46 % | True |
+| warm-trig-shift-s960101 | 2.784 | [] | [0, 1, 2, 3] | -0.73 % | 2.46 % | True |
+| warm-frozen-shift-s960102 | 2.862 | [] | [0, 1, 2, 3] | 0.32 % | 1.13 % | True |
+| warm-m100-shift-s960102 | 2.870 | [] | [0, 1, 2, 3] | 0.32 % | 1.13 % | True |
+| warm-m500-shift-s960102 | 2.981 | [] | [0, 1, 2, 3] | 0.32 % | 1.13 % | True |
+| warm-trig-shift-s960102 | 2.862 | [] | [0, 1, 2, 3] | 0.32 % | 1.13 % | True |
+| warm-frozen-control-s960101 | 2.770 | [] | [0, 1, 2, 3] | -0.60 % | 2.33 % | True |
+| warm-m100-control-s960101 | 2.769 | [] | [0, 1, 2, 3] | -0.60 % | 2.33 % | True |
+| warm-m500-control-s960101 | 2.759 | [] | [0, 1, 2, 3] | -0.60 % | 2.33 % | True |
+| warm-trig-control-s960101 | 2.747 | [] | [0, 1, 2, 3] | -0.60 % | 2.33 % | True |
+| warm-frozen-control-s960102 | 2.886 | [] | [0, 1, 2, 3] | 0.46 % | 1.00 % | True |
+| warm-m100-control-s960102 | 2.851 | [] | [0, 1, 2, 3] | 0.46 % | 1.00 % | True |
+| warm-m500-control-s960102 | 2.887 | [] | [0, 1, 2, 3] | 0.46 % | 1.00 % | True |
+| warm-trig-control-s960102 | 2.903 | [] | [0, 1, 2, 3] | 0.46 % | 1.00 % | True |
+
+## Per-cell step ratio (mean 2^-level) and cost ratio by 250-tick block
+
+| cell | cost ratio per block (vs ticks 1-20) | step ratio per block | max unchanged fraction |
+|---|---|---|---|
+| warm-frozen-shift-s960101 | 0.98, 0.92, 0.94, 0.86, 0.87, 0.94, 0.94, 0.91 | 0.994, 0.980, 0.988, 0.958, 0.958, 1.000, 1.000, 0.968 | 0.0650 |
+| warm-m100-shift-s960101 | 1.70, 2.51, 2.83, 2.97, 3.13, 1.79, 1.93, 2.13 | 0.990, 0.989, 0.993, 0.977, 0.982, 0.982, 0.980, 0.950 | 0.1075 |
+| warm-m500-shift-s960101 | 0.98, 0.93, 2.44, 2.06, 3.58, 3.25, 1.04, 0.66 | 0.994, 0.980, 0.995, 0.972, 0.990, 1.000, 0.952, 0.768 | 0.2800 |
+| warm-trig-shift-s960101 | 0.98, 0.92, 0.94, 0.86, 0.87, 0.94, 0.94, 0.91 | 0.994, 0.980, 0.988, 0.958, 0.958, 1.000, 1.000, 0.968 | 0.0650 |
+| warm-frozen-shift-s960102 | 0.97, 0.88, 0.90, 0.81, 0.81, 0.87, 0.87, 0.83 | 0.991, 0.976, 0.985, 0.954, 0.954, 1.000, 1.000, 0.965 | 0.0825 |
+| warm-m100-shift-s960102 | 1.72, 2.54, 2.76, 3.45, 3.47, 1.90, 1.89, 2.29 | 0.990, 0.985, 0.995, 0.982, 0.982, 0.983, 0.977, 0.946 | 0.1250 |
+| warm-m500-shift-s960102 | 0.97, 0.89, 2.94, 2.25, 3.42, 3.26, 1.65, 0.95 | 0.991, 0.976, 0.997, 0.980, 0.988, 1.000, 0.970, 0.822 | 0.2137 |
+| warm-trig-shift-s960102 | 0.97, 0.88, 0.90, 2.05, 3.84, 3.65, 3.68, 3.60 | 0.991, 0.976, 0.985, 0.969, 0.993, 1.000, 1.000, 0.996 | 0.0663 |
+| warm-frozen-control-s960101 | 0.98, 0.92, 0.94, 0.86, 0.89, 0.95, 0.95, 0.92 | 0.994, 0.980, 0.988, 0.958, 0.967, 0.999, 0.996, 0.979 | 0.0587 |
+| warm-m100-control-s960101 | 1.70, 2.51, 2.83, 2.97, 2.57, 2.07, 2.14, 2.32 | 0.990, 0.989, 0.993, 0.977, 0.982, 0.981, 0.986, 0.978 | 0.0387 |
+| warm-m500-control-s960101 | 0.98, 0.93, 2.44, 2.06, 3.65, 3.30, 2.09, 1.92 | 0.994, 0.980, 0.995, 0.972, 0.994, 1.000, 0.979, 0.949 | 0.0825 |
+| warm-trig-control-s960101 | 0.98, 0.92, 0.94, 0.86, 0.89, 0.95, 0.95, 0.92 | 0.994, 0.980, 0.988, 0.958, 0.967, 0.999, 0.996, 0.979 | 0.0587 |
+| warm-frozen-control-s960102 | 0.97, 0.88, 0.90, 0.81, 0.83, 0.91, 0.91, 0.87 | 0.991, 0.976, 0.985, 0.954, 0.962, 0.999, 0.994, 0.976 | 0.0762 |
+| warm-m100-control-s960102 | 1.72, 2.54, 2.76, 3.45, 3.21, 2.30, 2.20, 2.24 | 0.990, 0.985, 0.995, 0.982, 0.986, 0.990, 0.987, 0.982 | 0.0400 |
+| warm-m500-control-s960102 | 0.97, 0.89, 2.94, 2.25, 3.48, 3.33, 2.15, 1.99 | 0.991, 0.976, 0.997, 0.980, 0.992, 1.000, 0.983, 0.954 | 0.0737 |
+| warm-trig-control-s960102 | 0.97, 0.88, 0.90, 2.05, 3.93, 3.82, 3.84, 3.80 | 0.991, 0.976, 0.985, 0.969, 0.996, 1.000, 1.000, 0.998 | 0.0663 |
