@@ -1,5 +1,5 @@
 """Development resident predictive processor. No qualification or quoting policy."""
-import ctypes, os
+import ctypes, os, dataclasses
 import argparse, hashlib, importlib.util, json, platform, sys, time
 from pathlib import Path
 import numpy as np
@@ -65,7 +65,7 @@ class Resident:
         self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
         self.owner=TargetOwner(compiled,self.y)
         self.session=owalnuts.WarmSession(self.owner.target,state,seed=seed,threads=4,
-            tuning=owalnuts.Tuning(max_depth=3),max_target_evaluations=2000000,admit_worst_case=False)
+            tuning=owalnuts.Tuning(max_depth=3,max_refinement_levels=8),max_target_evaluations=2000000,admit_worst_case=False)
     def tick(self,y_new,k):
         start=time.perf_counter(); row={'status':'failed','k':k}
         try:
@@ -94,7 +94,7 @@ def main():
     if args.out.exists(): raise SystemExit('Refusing to overwrite output')
     args.out.mkdir(parents=True)
     result=dict(kind='development smoke only; no qualification',rows=[],platform=platform.platform(),
-        python=sys.version,memory_start=memory(),python_api=identity(owalnuts.__file__),versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__),
+        python=sys.version,native_defaults=owalnuts.DEFAULTS,tuning=dataclasses.asdict(owalnuts.Tuning(max_depth=3,max_refinement_levels=8)),memory_start=memory(),python_api=identity(owalnuts.__file__),versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__),
         source=[identity(HERE/'harness.py'),identity(HERE/'sv_target.py'),identity(PROCESS)],
         native=[identity(p) for p in Path(owalnuts.__file__).parent.rglob('*') if p.suffix in ('.pyd','.so')],
         configuration=dict(N=12,K=8,chains=4,max_depth=3,seed=99371001,initial_seed=99371002,
@@ -109,7 +109,7 @@ def main():
         started=time.perf_counter(); compiled=compile_target(); functional=compile_functional()
         owner=TargetOwner(compiled,y[:12]); init=np.zeros((4,15));init[:,0]=2*np.log(.005);init[:,1]=np.log(.2)
         fitted=owalnuts.sample(owner.target,15,init=init,chains=4,warmup=100,draws=10,
-            seed=99371002,threads=4,tuning=owalnuts.Tuning(max_depth=3))
+            seed=99371002,threads=4,tuning=owalnuts.Tuning(max_depth=3,max_refinement_levels=8))
         resident=Resident(compiled,functional,y[:12],fitted.warm_state())
         result['initialization_seconds']=time.perf_counter()-started
         for tick in range(1,5):

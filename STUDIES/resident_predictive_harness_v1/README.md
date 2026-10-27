@@ -46,3 +46,21 @@ two-million evaluation cap and data/seeds. This is a changed development sampler
 not a practical accuracy candidate. Structured diagnostics and native process
 memory are now recorded; callback keep_alive retains (compiled,array) without a
 self-cycle. The first two failure records remain unchanged.
+
+Smoke03 completed all four updates. Direct complete tick times were 130.13,
+111.11, 142.96 and155.28ms; N12/K8/depth3 means these are not N250/K400
+feasibility or accuracy evidence. GH64/128 checks passed and structured diagnostic
+arrays, effective per-chain seeds, target calls and work counters are preserved.
+Actual child Python peak working set was150,917,120 bytes; peak commitment
+1,146,896,384 bytes. These are process measurements, not quadrature-cache size.
+
+Installed native SHA256 was
+6f06427db8c968164e0a38cd4f25d5892fa53a422b34f4f79c6831447a81fd85.
+The development smoke used max_depth3 and the installed default refinement cap8.
+An immediate post-smoke defaults snapshot is preserved separately without editing
+the run output. Current code explicitly pins refinement cap8 and records the full
+runtime Tuning/default map; that reporting-only update has not been smoke-rerun.
+All five focused tests passed before smoke03. No Linux timing or independent
+posterior reference fit was launched. K400 from the separate precision diagnostic
+is a possible future candidate, not a qualification result or a return-accuracy
+conclusion.
