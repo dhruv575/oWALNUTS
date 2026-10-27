@@ -1,0 +1,21 @@
+[package]
+name = "warm-drift-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WP96: frozen vs periodically / trigger re-adapted warm continuation on a fixed-lag SV window across a regime change"
+
+[dependencies]
+owalnuts = { path = "../../.." }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bin]]
+name = "wp96"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[workspace]

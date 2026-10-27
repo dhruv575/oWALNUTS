@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Write protocol.json (the machine-readable preregistration; wins on any discrepancy with PREREGISTRATION.md)."""
+import json
+from pathlib import Path
+
+N, TICKS, K, EVERY, SHIFT_TICK = 250, 2000, 200, 25, 1000
+SEEDS = [960101, 960102]
+STREAMS = ["shift", "control"]
+POLICIES = [("frozen", "frozen"), ("m100", "every:100"), ("m500", "every:500"), ("trig", "trigger")]
+ref_ticks = list(range(0, TICKS + 1, EVERY))
+half1 = [t for t in ref_ticks if 1 <= t <= SHIFT_TICK]
+half2 = [t for t in ref_ticks if t > SHIFT_TICK]
+
+cells = []
+for lane, stream in ((3, "shift"), (4, "control")):
+    cells.append(dict(id=f"ref-{stream}", arm="ref", stream=stream, lane=lane, ticks=ref_ticks))
+    for seed in SEEDS:
+        for name, policy in POLICIES:
+            cells.append(dict(id=f"warm-{name}-{stream}-s{seed}", arm="warm", stream=stream, policy=policy, policy_name=name,
+                              K=K, seed=seed, ticks=TICKS, lane=lane))
+
+proto = dict(
+    wp="WP96", ledger_id="WP96-WARM-DRIFT-V1",
+    base="main f4a01ba6 (WP87 warm API; WP88 merged; WP90 trap guard not yet the default)",
+    question="Does the frozen warm continuation (step and diagonal metric fixed at the tick-0 fit) degrade the 2 %/5 % "
+             "sigma_next quote over 2,000 ticks and across a regime change on a fixed-lag SV window, and does a cheap "
+             "periodic or drift-triggered re-adaptation fix it?",
+    model=dict(source="WP84/WP88 price-only SV target, density code copied verbatim (STUDIES/online_sv_quote_v2/rust/src/main.rs)",
+               rho=0.95, nu=5, coordinates="[mu, log_sigma, beta, z[n]]",
+               priors="mu~N(2 log 0.005,1), log_sigma~N(log 0.2,0.5), beta~N(0,0.002), z~N(0,1)"),
+    data=dict(generator="simulate.py", seed=96096, returns=N + TICKS, truth_h=N + TICKS + 1,
+              regime1=dict(mu=-10.596634733096073, sigma_h=0.2, beta=0.0),
+              regime2=dict(mu=-9.596634733096073, sigma_h=0.4, beta=0.0),
+              shift_return_index=N + SHIFT_TICK, shift_tick=SHIFT_TICK,
+              streams=dict(shift="models/data-shift.json (regime 2 from return index 1250, i.e. entering at tick 1001)",
+                           control="models/data-control.json (same innovations, regime 1 throughout)")),
+    stream=dict(N=N, ticks=TICKS, window="tick t conditions on returns [t, t + N) (fixed lag; the oldest return leaves, one enters)",
+                why_fixed_lag="the growing model (dimension 2,253 at tick 2,000) would cost about 1 s per warm tick and "
+                              "4 min per reference tick, 3-4 h on two lanes; the fixed window keeps the regime change "
+                              "fully visible (window entirely regime 2 from tick 1,250) at 80 ms per tick",
+                remap="shift_window (harness): z'_0 = rho z_0 + sqrt(1 - rho^2) z_1, z'_i = z_{i+1} (i >= 1), z'_{N-1} = 0 "
+                      "(mass 1); masses: first latent keeps mass[3], the rest shift, new one 1; step unchanged; "
+                      "preserves h_1..h_{N-1} exactly (checked by `wp96 remapcheck` before the freeze)"),
+    arms=dict(K=K, chains=4, tick0="4 x 1,000/1,000 at defaults, best-of-16 starts, chain gate (WarmupStep/SampledLogDensity chains dropped; < 2 left = cell failed)",
+              warm="Sampler::run_warm with draws(K) each tick; seed = seed*1_000_003 + 16*tick (chain c on +c)",
+              policies={
+                  "frozen": "never re-adapt (WP88's passing configuration)",
+                  "m100": "re-adapt at every tick t with t % 100 == 0",
+                  "m500": "re-adapt at every tick t with t % 500 == 0",
+                  "trig": "re-adapt when the cost trigger fires (see trigger)"},
+              readapt=dict(what="Sampler::run, warmup 200, draws 1, chains = carried chains, from the current positions, "
+                                "Metric::Diagonal{adapt: true, initial: elementwise geometric mean of the carried per-chain mass "
+                                "diagonals}, Adaptation default (dual averaging 0.8), seed tick_seed + 8; warm_state() replaces the "
+                                "carried state; a chain flagged WarmupStep/SampledLogDensity keeps its pre-re-adaptation state "
+                                "(per-chain fallback, counted); on a run error the state is unchanged (counted)",
+                           timed="the re-adaptation and the K-draw refresh of that tick are both inside the tick's wall"),
+              trigger=dict(statistic="C_t = mean target evaluations per transition over the tick's chains x K transitions "
+                                     "(run_warm's TransitionDiagnostics::target_evaluations); U_t = fraction of transitions with "
+                                     "position_changed() == false",
+                           why_not_acceptance="run_warm runs retained transitions without acceptance capture, so "
+                                              "TransitionDiagnostics::acceptance_statistic() is None there; the cost per "
+                                              "transition is the quantity a frozen step/metric mismatch raises in both directions "
+                                              "(refinement when too coarse, longer trajectories when too fine) and is what sets the latency",
+                           baseline="mean C over ticks a+1..a+20, a = latest adaptation tick (0 = the tick-0 fit)",
+                           trailing="mean C (and U) over ticks t-20..t-1",
+                           armed="at tick t once t - 1 >= a + 40 (so re-adaptations are at least 41 ticks apart)",
+                           fires="trailing C > 1.5 x baseline C, or trailing U > 0.05; evaluated at the start of tick t, a firing re-adapts at tick t",
+                           constants=dict(TRAIL=20, BASE=20, COST_RATIO=1.5, UNCHANGED_FRAC=0.05))),
+    reference=dict(arm="oWALNUTS defaults 4 x 2,000/20,000 on the tick's window, best-of-16 starts, Limits::admit_worst_case + max_result_bytes_unchecked(2 GiB)",
+                   gate="drop chains named by a WarmupStep or SampledLogDensity chain warning; pass iff >= min_chains remain AND rank R-hat(h_next) over the remaining chains <= max_rhat (arviz)",
+                   min_chains=3, max_rhat=1.01, attempts=2, attempt_seed_step=5000,
+                   seed_base=dict(shift=969450, control=969500),
+                   seed_rule="attempt a at tick t: seed_base*10000 + t + 5000*a; attempt 1 only when attempt 0 fails the gate (part of the cell definition, not a rerun)",
+                   gate_failed="a tick failing both attempts is unscored and counts as a FAILED tick for every arm scored there",
+                   every=EVERY, ticks=ref_ticks,
+                   one_per_stream="the reference depends on the data only, so it runs once per stream (not per arm seed): "
+                                  "the same 162 fits the task's 41 x 2 x 2 would cost, spent on twice the scored ticks per half"),
+    quantities=dict(h_next="mu + rho (h_last - mu) + exp(log_sigma) eps, eps[c,j] = default_rng(eps_seed_base+tick).normal(size=(4,20000))[c,j] (chain index c of the arm or reference)",
+                    eps_seed_base=9600000, sigma_next="exp(h_next/2)", gated=["P50 (half-spread)", "P95 (risk quote)"],
+                    reported=["P5", "mean", "own quantile MCSE of P50/P95 (arviz)", "bulk ESS of h_next", "R-hat(h_next)",
+                              "fraction of draws inside the reference 90 % interval", "coverage of the true h_next by the arm's 90 % interval"]),
+    accuracy=dict(tolerance_p50=0.02, tolerance_p95=0.05,
+                  stuck_chain="median log_sigma more than 1.0 from the gated reference's median, or median h_last more than 2.0 away (WP84 census rule)",
+                  tick_pass="|P50 err| <= 2 % AND |P95 err| <= 5 % AND no stuck chain (no latency condition in the pass; latency is reported)",
+                  scored_ticks=dict(half1=half1, half2=half2, tick0="scored and reported separately"),
+                  half_pass="per (arm, stream, half): pooled over the two seeds >= 95 % of scored ticks pass (>= 76/80) AND every seed >= 90 % (>= 36/40)",
+                  arm_pass="an arm passes a stream iff it passes both halves"),
+    drift=dict(statistic="per (arm, stream, seed, half): mean signed P50 error over the half's last 10 scored ticks minus its first 10",
+               bound=0.005, role="reported with the bound flag, not part of the pass (10-tick windows have an sd of about 0.3 pp at K = 200)"),
+    latency=dict(definition="wall per tick from new-target construction (including shift_window and any re-adaptation) to run_warm returned and warm_state() taken; writing draws excluded",
+                 reported=["median", "P99", "max", "share under 0.4 s", "median over re-adaptation ticks", "half-1 vs half-2 median"],
+                 over="all 2,000 ticks (tick 0 separately)"),
+    decision=dict(rule="the README may say 'the frozen warm path holds for 2,000 ticks and across a regime change' only if the "
+                       "frozen arm passes both halves on both streams (every seed >= 90 %, pooled >= 95 %); otherwise it names "
+                       "the re-adaptation policy (or policies) that passes both halves on both streams, with its latency median and P99"),
+    seeds=dict(arms=SEEDS, reference=dict(shift=969450, control=969500), data=96096,
+               diagnostic="99096x (smoke only, not evidence)",
+               verified="960101, 960102, 969450, 969500 grep-unused on main; 96096 (given) occurs only as a float substring"),
+    budget=dict(lane_minutes_expected=95, wall_expected="about 1 h on two lanes after the build; 2 h cap",
+                breakdown="reference 81 ticks x ~12 s x 2 streams = 32 min; 16 warm cells x ~3-4 min = 60 min"),
+    execution=dict(box="c7a.4xlarge owalnuts-bench, lanes 3 (cores 8-11, shift stream) and 4 (cores 12-15, control), taskset-pinned, "
+                       "RAYON_NUM_THREADS=4, OMP_NUM_THREADS=1, co-tenanted (WP93 on cores 0-7): walls are 'pinned, co-tenanted'",
+                   order="lane 3: ref-shift, then warm cells seed 960101 (frozen, m100, m500, trig), then seed 960102; lane 4 the same on control",
+                   rule="cells sequential within a lane, each started once, never rerun; failures are results"),
+    cells=cells,
+)
+Path(__file__).resolve().parent.joinpath("protocol.json").write_text(json.dumps(proto, indent=1) + "\n", encoding="utf-8")
+print(len(cells), "cells;", len(ref_ticks), "reference ticks per stream;", len(half1), "+", len(half2), "scored per half")
