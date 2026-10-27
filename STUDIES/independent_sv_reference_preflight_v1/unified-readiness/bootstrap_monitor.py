@@ -43,7 +43,7 @@ def execute(command,cwd,cap,output_root,rss_limit,byte_limit,log_path,ownership_
     if reason:result.update(status='terminated',reason=reason);break
     if process.poll() is not None:
      result.update(status='exited',exit_code=process.returncode)
-     if members:result['orphaned_children_after_leader_exit']=True
+     if owned():result['orphaned_children_after_leader_exit']=True
      break
     time.sleep(.1)
  except Exception as exc:result.update(status='failed',error=repr(exc))
