@@ -317,13 +317,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// `run_warm` per call with the session's seed rule (call `n` seeded
 /// `SEED + n * CHAINS`), chaining the state; returns the timings and the
 /// last call's draws.
+/// A timed run: its measurements and the final positions.
+type Timed = (Measure, Vec<Vec<f64>>);
+
 fn time_run_warm(
     target: &Sv,
     state0: &WarmState,
     threads: usize,
     draws: usize,
     options: &Options,
-) -> Result<(Measure, Vec<Vec<f64>>), Box<dyn Error>> {
+) -> Result<Timed, Box<dyn Error>> {
     let mut state = state0.clone();
     let mut measure = Measure {
         walls: Vec::with_capacity(options.calls),
@@ -358,7 +361,7 @@ fn time_session(
     threads: usize,
     draws: usize,
     options: &Options,
-) -> Result<(Measure, Vec<Vec<f64>>), Box<dyn Error>> {
+) -> Result<Timed, Box<dyn Error>> {
     let mut session = Sampler::new()
         .seed(SEED)
         .threads(threads)
