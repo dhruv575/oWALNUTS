@@ -122,4 +122,5 @@ def batch_summary(spec,root):
         else:result['months'][m]=dict(full_panel=False)
     if len(summaries)==3 and all(v['full_scientific_panel'] for v in summaries.values()):
         result.update(status='complete',origin_weighted_comparisons={key:sum(summaries[m]['comparisons'][key]['mean_advantage']*n for m,n in MONTHS)/4368 for key in summaries['2026-04']['comparisons']})
+        result['origin_weighted_arms']={arm:dict(mean_width=sum(summaries[m]['arms'][arm]['mean_width']*n for m,n in MONTHS)/4368,tails={side:{key:sum(summaries[m]['arms'][arm]['tails'][side][key]*n for m,n in MONTHS)/4368 for key in ('mean_pinball','mean_limit','exceedance_rate','signed_exceedance_minus_05')} for side in SIDES}) for arm in ARMS}
     write(root/'aggregate.json',result);return result
