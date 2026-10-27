@@ -449,6 +449,14 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     horizon and loss: whether the extra computation improves risk or quoting
     decisions after inventory costs, fills and adverse selection. Price-bar
     log scores alone cannot answer that question or establish profitability.
+    The [stored-draw tail-risk diagnostic](../STUDIES/predictive_risk_limits_v1/README.md)
+    now finds positive mean pinball advantages in all 12 comparisons, but primary
+    intervals exclude zero for only five of six rolling-t5 comparisons and none
+    of the six EWMA comparisons. This retrospective reuse does not resolve the
+    incremental risk-decision benefit over the cheap adaptive control. The
+    [decision-contract note](../STUDIES/amm_decision_contract_v1/README.md) also
+    separates finite risk quantiles and bounded losses from expected price/P&L
+    moments, which the current t5 log-return model does not supply as finite values.
     The [fresh long-horizon K400 follow-up](../STUDIES/long_horizon_k400_v1/README.md)
     also completes four 2,000-update lanes and 18 reliable references on one
     paired control/volatility-shift path. Maximum grid CDF error is 0.003574

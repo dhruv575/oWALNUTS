@@ -34,6 +34,8 @@ zero; strict exceedances exclude equality.
 
 ## All twelve paired comparisons
 
+![All twelve frozen tail-loss comparisons](figures/tail-loss.png)
+
 Positive advantage is baseline pinball loss minus SV pinball loss. Values below
 are multiplied by 1,000,000 for readability; they retain log-return loss units.
 Intervals are the prespecified 95% paired circular-bootstrap intervals from

@@ -1366,3 +1366,18 @@ claims explicitly.
   timing, AMM decision value or profitability evidence. All 40,648 archived
   files were independently hash-verified, and the AWS instance was stopped:
   [`market_replication_v1`](STUDIES/market_replication_v1/README.md).
+- [E65] Reusing E64's stored draws, full predictive P5/P95 log-return risk
+  limits have lower mean pinball loss in all 12 month/tail/baseline comparisons.
+  Primary 48-origin block intervals exclude zero for five of six rolling-t5
+  comparisons, but **none of the six EWMA comparisons**. May short risk versus
+  rolling t5 remains unresolved. All 4,368 origins and 24 reference precision
+  comparisons complete. This is retrospective exploratory evidence, not fresh
+  confirmation. Cached-draw tail arithmetic takes about 569 ms per origin under
+  12-worker load; the full batch takes 242 seconds. These timings exclude native
+  inference and do not measure quote latency. The extra risk-decision value over
+  cheap EWMA remains uncertain:
+  [`predictive_risk_limits_v1`](STUDIES/predictive_risk_limits_v1/README.md).
+  A separate [decision-contract note](STUDIES/amm_decision_contract_v1/README.md)
+  establishes why the current t5 log-return model has infinite expected price,
+  while finite quantiles and bounded losses remain well-defined. Expected-dollar
+  P&L and risk-limit scores require distinct claims.
