@@ -2,8 +2,11 @@
 
 Status: design for review, not authorization to fetch outcomes, run sampling,
 restart AWS or create a service. No August returns have been inspected. Final
-implementation/runtime/source/seed bindings and parent/reviewer approval precede
-acquisition. Existing studies and user edits remain unchanged.
+method settings and acquisition source/runtime bindings plus parent/reviewer
+approval precede acquisition. Compute implementation/seed/runtime bindings precede
+scoring. Acquired raw values remain quarantined and uninspected between these
+two admissions; no method changes may be informed by those values. Existing
+studies and user edits remain unchanged.
 
 ## Question and scope
 
@@ -32,9 +35,10 @@ the failed attempt and require a separately recorded recovery decision.
 
 Require exactly48 unique ordered timestamps per day on the30-minute grid, equal
 OHLC array lengths, positive finite prices, finite nonnegative volume and coherent
-OHLC inequalities. Reject missing, duplicate, revised-overlap or out-of-order bars;
+OHLC inequalities. Reject missing, internally duplicate/conflicting or out-of-order bars;
 no forward-fill, interpolation, aggregation substitute or gap-dependent shortening.
-If a scheduled bar cannot be validated, report acquisition incomplete and do not
+Historical vendor revisions cannot be detected by a single nonoverlapping fetch;
+retain this limitation. If a scheduled bar cannot be validated, report acquisition incomplete and do not
 run the scored campaign. Any extra returned timestamp is a schema failure.
 
 Let C(t) be the close of the bar opening t-30minutes. Define R(t)=log C(t)-log
@@ -107,6 +111,9 @@ indices apply to all methods/comparisons. Report2.5/97.5 percentiles, all31 dail
 paired means, cumulative paired scores and fixed leave-one-day-out sensitivity.
 These are dependent-series descriptive uncertainty estimates, not1488 iid tests;
 circular boundaries/stationarity assumptions and one-month scope remain limits.
+The12–48hour blocks do not guarantee robustness to dependence induced by the
+250-return window or longer market memory; show all fixed sensitivities without
+selecting the narrowest interval or claiming long-memory robustness.
 
 Report PIT ten-bin counts, mean, second moment, .05/.95 tails, central90 event
 coverage and lag1/lag48 correlation for every arm. Use the same time-block index
@@ -137,7 +144,9 @@ Keep all1488 scheduled origins and4464 planned forecasts in the status ledger,
 plus8 reference slots. Candidate failure poisons/stops its continuation; later
 candidate origins remain not_started. Baseline phases run independently on valid
 acquired data even if candidate sampling fails. Numerical failures retain raw
-draws/diagnostics and missing scores; no clipping/replacing/fabricated penalty.
+draws/diagnostics and missing scores; no outcome clipping/replacing/fabricated penalty.
+The unchanged numerical kernel's counted CDF roundoff correction within32machine
+epsilons remains allowed and recorded; it is not an outcome-dependent adjustment.
 Full-panel paired means/intervals are null if any required score is unavailable;
 available-pair summaries must be separate and explicitly denominated. Preserve
 every attempted and unattempted origin, never shrink the panel to survivors.
@@ -162,14 +171,19 @@ trigger a smaller dataset or another fit. Serialize cores0–3, BLAS threads1.
 Use the shared reviewed linear resident loop being prepared separately: immutable
 per-tick rows/draws and bounded progress, no rewriting/re-hashing all previous
 tick files. Retain full4x400x4 compact joint draws at every origin (~76MiB float64),
-score arrays and native diagnostics. Exact implementation and literal-fixture
-resource admission must be frozen before acquisition. No new study-data timing
+score arrays and native diagnostics. Exact compute implementation and literal-fixture
+resource admission must be frozen before scoring; acquisition may proceed under
+its separately frozen source and this locked method plan while compute deployment
+is prepared, with outcomes still uninspected. No new study-data timing
 pilot; reuse E61/runtime evidence or fixed literal fixtures, without choosing
 settings from August outcomes. Parent owns AWS lifecycle/automatic stop guard.
 
-Before execution: reviewer agrees this plan, bounded freshness claim and exact
-acquisition contract; final seed/source/runtime/protocol hashes are committed;
-causal/gap/denominator/scoring/cost fixtures pass; fixed resource envelope is
-accepted. Parent authorizes acquisition and one campaign. No persistent collector
+Before acquisition: reviewer agrees this locked method plan, bounded freshness
+claim and exact acquisition contract; acquisition source/runtime/protocol hashes
+are committed and gap fixtures pass. Parent separately authorizes one local
+acquisition under an external300-second cap. Before scoring: final combined seed
+audit and compute source/runtime bindings are committed; causal/denominator/scoring/
+cost fixtures pass; the fixed resource envelope is accepted and parent authorizes
+one campaign. No persistent collector
 or service is proposed. A genuine future-window live evaluation remains a separate
 later protocol if stronger forward-looking evidence is needed.
