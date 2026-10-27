@@ -62,31 +62,47 @@ def summarize(values,deadline):
 
 class Resident:
     def __init__(self,compiled,functional,y,state,seed=99371001):
-        self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
+        self.closed=False; self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
         self.owner=TargetOwner(compiled,self.y)
         self.session=owalnuts.WarmSession(self.owner.target,state,seed=seed,threads=4,
             tuning=owalnuts.Tuning(max_depth=3,max_refinement_levels=8),max_target_evaluations=2000000,admit_worst_case=False)
     def tick(self,y_new,k):
-        start=time.perf_counter(); row={'status':'failed','k':k}
+        start=time.perf_counter(); row={'status':'failed','k':k,'phase':'validate','state_advanced':False}
+        if self.closed:
+            row.update(error='Resident session is closed/poisoned',total_seconds=time.perf_counter()-start)
+            return row
         try:
-            if not np.isfinite(y_new): raise ValueError('nonfinite observation')
-            self.y=np.append(self.y[1:],y_new)
+            if isinstance(k,bool) or not isinstance(k,(int,np.integer)) or k<=0:
+                raise ValueError('K must be a positive integer')
+            if np.ndim(y_new)!=0 or not np.isfinite(y_new): raise ValueError('nonfinite/scalar observation')
+            next_y=np.append(self.y[1:],y_new)
+            row['phase']='prepare'
             state=remap(self.session.state())
-            owner=TargetOwner(self.compiled,self.y)
-            self.session.retarget(owner.target,state); self.owner=owner
+            owner=TargetOwner(self.compiled,next_y)
+            row['phase']='retarget'; row['state_advanced']='uncertain'
+            self.session.retarget(owner.target,state)
+            self.owner=owner; self.y=next_y; row['state_advanced']=True
             preparation=time.perf_counter()-start
+            row['phase']='sample'
             chunk=self.session.refresh_functionals(k,[self.functional])
             sampling_end=time.perf_counter()
+            row.update(chain_ids=list(range(chunk.values.shape[0])),shape=list(chunk.values.shape),
+                preparation_seconds=preparation,sampling_seconds=sampling_end-start-preparation,
+                seed=int(chunk.seed),diagnostics=chunk.diagnostics,metadata=chunk.metadata,
+                work=chunk.work,target_calls=int(chunk.target_calls),call_index=int(chunk.call_index))
+            row['phase']='summary'
             row.update(summarize(chunk.values,start+30))
-            row.update(status='ok',chain_ids=list(range(chunk.values.shape[0])),shape=list(chunk.values.shape),
-                       preparation_seconds=preparation,sampling_seconds=sampling_end-start-preparation,
-                       summary_seconds=time.perf_counter()-sampling_end,seed=int(chunk.seed),
-                       diagnostics=chunk.diagnostics,metadata=chunk.metadata,work=chunk.work,target_calls=int(chunk.target_calls),call_index=int(chunk.call_index))
+            row.update(status='ok',phase='complete',summary_seconds=time.perf_counter()-sampling_end)
         except Exception as exc:
             row['error']=repr(exc)
+            try:self.close()
+            except Exception as closing:row['close_error']=repr(closing)
         row['total_seconds']=time.perf_counter()-start
         return row
-    def close(self): self.session.close()
+    def close(self):
+        if not self.closed:
+            self.closed=True
+            self.session.close()
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--out',type=Path,required=True)
