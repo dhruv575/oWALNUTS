@@ -20,7 +20,7 @@ def campaign(manifest,root):
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
             futures=[pool.submit(job,'lane',i,b['lane_job_seconds'],spec['protocol']['affinities'][i],end) for i in range(4)]
             for f in futures:jobs.append(f.result())
-        drained=all(x.get('group_drained',True) for x in jobs)
+        drained=all(x.get('group_drained',True) and not x.get('orphaned_children_after_leader_exit') for x in jobs)
         end=min(deadline,time.monotonic()+b['reference_phase_seconds'])
         for i in range(18):
             value=job('reference',i,b['reference_job_seconds'],'0-3',end) if drained else dict(kind='reference',index=i,status='not_started',reason='prior_cleanup_failed')
@@ -28,7 +28,7 @@ def campaign(manifest,root):
     else:
         jobs.extend(dict(kind=k,index=i,status='not_started',reason='data_unavailable') for k,n in [('lane',4),('reference',18)] for i in range(n))
     exclusive(root/'JOBS.json',jobs)
-    report=job('analysis',0,b['analysis_seconds'],'0-3',deadline);exclusive(root/'ANALYSIS-JOB.json',report)
+    report=job('analysis',0,b['analysis_seconds'],'0-3',deadline) if all(x.get('group_drained',True) and not x.get('orphaned_children_after_leader_exit') for x in jobs) else dict(kind='analysis',index=0,status='not_started',reason='prior_cleanup_failed');exclusive(root/'ANALYSIS-JOB.json',report)
     admit(manifest)
     exclusive(root/'CAMPAIGN.json',dict(status='finished',planned_jobs=24,jobs=len(jobs)+1,postrun_bindings_match=True,analysis_successful=report.get('exit_code')==0 and report.get('status')=='exited' and report.get('group_drained') and not report.get('orphaned_children_after_leader_exit'),all_owned_groups_drained=all(x.get('group_drained',True) and not x.get('orphaned_children_after_leader_exit') for x in jobs+[report])))
 

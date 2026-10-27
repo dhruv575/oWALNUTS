@@ -11,7 +11,9 @@ def finite(x):return isinstance(x,(int,float)) and math.isfinite(x)
 def average(values):return sum(values)/len(values) if values and all(finite(x) for x in values) else None
 
 def analyze(root,p):
-    root=Path(root);updates=[];checkpoints=[];queries=[];scales=[];references={};targets=canonical_targets(p['checkpoints'])
+    root=Path(root);from integrity import audit
+    integrity=audit(root);exclusive(root/'INTEGRITY.json',integrity)
+    updates=[];checkpoints=[];queries=[];scales=[];references={};targets=canonical_targets(p['checkpoints'])
     for i,key in enumerate(targets):references[key]=read(root/'references'/f'{i:02d}'/'RESULT.json')
     records={}
     for variant in p['variants']:
@@ -64,5 +66,5 @@ def analyze(root,p):
     for rep in range(2):
         a=[records[('control',rep,t)] for t in range(1,1001)];b=[records[('shift',rep,t)] for t in range(1,1001)];observed=[(x,y) for x,y in zip(a,b) if x and y and x.get('native_status')==y.get('native_status')=='ok'];mismatches=[i+1 for i,(x,y) in enumerate(zip(a,b)) if x and y and x.get('compact_value_sha256')!=y.get('compact_value_sha256')];prefix.append(dict(replicate=rep,planned=1000,paired_observed=len(observed),mismatch_ticks=mismatches,all_identical=len(observed)==1000 and not mismatches))
     for name,value in [('UPDATE-LEDGER',updates),('CHECKPOINT-LEDGER',checkpoints),('QUERY-COMPARISONS',queries),('SCALE-COMPARISONS',scales),('DRIFT-CONTRASTS',contrasts),('PAIRED-DRIFT-CONTRASTS',paired),('PAIRED-PREFIX',prefix),('REPLICATE-DIFFERENCES',replicate_differences)]:exclusive(root/(name+'.json'),value)
-    summary=dict(status='evidence_complete',qualification=None,planned_updates=8000,observed_successful_native=sum(x['native_status']=='ok' for x in updates),planned_checkpoints=44,planned_query_comparisons=264,available_query_comparisons=sum(x['status']=='available' for x in queries),reliable_query_comparisons=sum(x['reliable_comparison_available'] for x in queries),planned_scale_comparisons=88,available_scale_comparisons=sum(x['status']=='available' for x in scales),planned_unique_references=18,completed_unique_references=sum((x or {}).get('status')=='complete' for x in references.values()),limitations='One paired data path and two sampler replicates; common pre-shift targets are duplicates, not independent evidence. MCSE is descriptive; no population drift inference or old scale-qualification rule.')
-    exclusive(root/'SUMMARY.json',summary);return dict(status='complete')
+    summary=dict(status='accounting_complete',accounting_complete=True,integrity_ok=integrity['integrity_ok'],qualification=None,planned_updates=8000,observed_successful_native=sum(x['native_status']=='ok' for x in updates),planned_checkpoints=44,planned_query_comparisons=264,available_query_comparisons=sum(x['status']=='available' for x in queries),reliable_query_comparisons=sum(x['reliable_comparison_available'] for x in queries),planned_scale_comparisons=88,available_scale_comparisons=sum(x['status']=='available' for x in scales),planned_unique_references=18,completed_unique_references=sum((x or {}).get('status')=='complete' for x in references.values()),limitations='One paired data path and two sampler replicates; common pre-shift targets are duplicates, not independent evidence. MCSE is descriptive; no population drift inference or old scale-qualification rule.')
+    exclusive(root/'SUMMARY.json',summary);return dict(status='complete' if integrity['integrity_ok'] else 'failed',integrity_ok=integrity['integrity_ok'])
