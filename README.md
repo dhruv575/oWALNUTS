@@ -1304,3 +1304,18 @@ claims explicitly.
   not fresh market generalization, pooled H10/H20 return qualification or
   profitability evidence:
   [`predictive_value_diagnostic_v1`](STUDIES/predictive_value_diagnostic_v1/README.md).
+- [E61] Fresh prior-predictive validation of the fixed-window K=400 resident
+  path: **short-run predictive behavior is consistent with the known model**.
+  All 32 independent streams, 1,024 forecast origins and eight fixed independent
+  references completed without exclusions. Candidate PIT mean is 0.5104, with a
+  descriptive whole-stream bootstrap interval [0.4937, 0.5280]; the uniform
+  target lies within the frozen 19-point calibration envelope. All eight
+  references pass the predefined mixing/precision checks. Their largest checked
+  candidate probability difference is 0.00094, and largest log-score difference
+  is 0.0137 nats; the report retains both Monte Carlo uncertainties.
+  Retained warm transitions have zero divergences across 1,638,400 draws;
+  adaptation-stage adverse events are reported separately. Median observed-label
+  probability/log-density update cost is 257 ms (P95 510 ms), excluding quantile
+  roots. This tests 32 updates per stream under a matching generator, not
+  long-horizon reliability, incremental market value or profitability:
+  [`prior_predictive_validation_v1`](STUDIES/prior_predictive_validation_v1/README.md).
