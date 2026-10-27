@@ -68,7 +68,8 @@ def run(spec,root,launch,clock=time.monotonic,finalize=None,aggregate=None):
             except Exception as exc:summary_error=repr(exc)
         state=dict(jobs=jobs,planned_jobs=27,planned_candidate_origins=4368,planned_reference_origins=24,
             job_accounting_complete=len(jobs)==27 and all(j['status']!='running' for j in jobs),
-            execution_complete=all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) for j in jobs),
+            execution_complete=all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) for j in jobs) and accounting is not None and accounting.get('accounting_complete') is True and accounting.get('artifact_integrity',{}).get('integrity_ok') is True and accounting_error is None and summary is not None and summary_error is None,
+            all_jobs_successful=all(j.get('status')=='exited' and j.get('exit_code')==0 and safe(j) for j in jobs),
             all_launched_groups_drained=all_drained,accounting=accounting,accounting_error=accounting_error,
             aggregate_written=summary is not None,aggregate_error=summary_error,elapsed_seconds=clock()-start,qualification=None)
         exclusive(root/'BATCH-FINAL.json',state)

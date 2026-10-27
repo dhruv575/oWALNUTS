@@ -20,7 +20,7 @@ def main():
         if manifest.read_bytes()!=original:raise ValueError('Manifest bytes changed')
         accounting=state['accounting']
         if not isinstance(accounting,dict) or accounting.get('accounting_complete') is not True or accounting.get('planned_candidate_origins')!=4368 or accounting.get('planned_reference_origins')!=24 or accounting.get('artifact_integrity',{}).get('integrity_ok') is not True:raise ValueError('Incomplete fixed accounting or artifact integrity')
-        result['evidence_complete']=result.get('status')=='exited' and result.get('exit_code')==0 and safe(result) and state.get('job_accounting_complete') is True and state.get('all_launched_groups_drained') is True
+        result['evidence_complete']=result.get('status')=='exited' and result.get('exit_code')==0 and safe(result) and state.get('job_accounting_complete') is True and state.get('all_launched_groups_drained') is True and state.get('aggregate_written') is True and state.get('aggregate_error') is None
         result.update(execution_complete=result['evidence_complete'] and state['execution_complete'] and state['aggregate_written'] and state['aggregate_error'] is None,accounting=accounting,manifest_unchanged=True,evidence_complete_meaning='Fixed denominators and artifact integrity accounted; not a numerical or scientific pass')
     except Exception as exc:result['accounting_error']=repr(exc)
     exclusive(root/'BATCH-SUPERVISION.json',result)
