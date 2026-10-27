@@ -144,9 +144,10 @@ every attempted and unattempted origin, never shrink the panel to survivors.
 
 ## Seeds, resources and final admission
 
-Proposed new initial/warm bases2026102708000000/2026102709000000; independent
+Proposed new initial/warm bases2026102711000000/2026102712000000; independent
 reference bases302711000+1000*i for i0..7, model-data seedbase+1; bootstrap seed
-2026102710000000. These are proposals, not yet reserved: audit all public/derived
+2026102713000000. These namespaces are reserved between the active design agents,
+but their full collision audit is pending: audit all public/derived
 chain/restart seeds against existing manifests and active worktrees before freeze.
 No market outcomes are randomized, resampled to select periods, or regenerated.
 
