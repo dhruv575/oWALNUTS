@@ -165,7 +165,8 @@ def analyze_cell(c, refs):
             else:
                 scored.append(score_tick(cell, r, t, ref, stream))
         ok = [s for s in scored if s["ok"]]
-        early, late = [s["e50"] for s in ok if s["tick"] <= ticks[9]], [s["e50"] for s in ok if s["tick"] >= ticks[-10]]
+        w = max(1, min(10, len(ticks) // 2))  # 10-tick windows in the study; shorter only on a smoke protocol
+        early, late = [s["e50"] for s in ok if s["tick"] <= ticks[w - 1]], [s["e50"] for s in ok if s["tick"] >= ticks[-w]]
         drift = float(np.mean(late) - np.mean(early)) if early and late else None
         row[half] = dict(scored=len(scored), accurate=int(sum(s["accurate"] for s in scored)),
                          stuck_ticks=int(sum(1 for s in scored if s["stuck"])), unscored=int(sum(1 for s in scored if not s["ok"])),

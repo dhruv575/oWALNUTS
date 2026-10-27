@@ -151,9 +151,9 @@ within a lane, the two lanes in parallel; a started cell is never rerun; failure
 Seeds 960101, 960102, 969450, 969500 were grep-verified unused on main; 96096 (given by the task)
 occurs only as a float substring in two artifacts; diagnostic seeds 99096x are smoke-only.
 
-Budget, from the WP88 walls on this box: reference 81 x ~12 s x 2 = 32 min; warm cells 2,000 x
-~80 ms + tick 0 + re-adaptations = 3–4 min each, 16 cells = 60 min; about 95 lane-minutes, about
-1 h wall on two lanes after the build, under a 2 h cap. Raw draws: 81 x 9.6 KB per warm cell and
+Budget, from the smoke walls on this box: reference 81 x ~15 s (fit plus the gate's R-hat) = 20 min
+per stream; warm cells 2,000 x ~0.14 s + tick 0 + re-adaptations = 5 min each, 8 per lane = 40 min;
+about 60 min per lane, the two lanes in parallel, so about 1 h wall after the build, under a 2 h cap. Raw draws: 81 x 9.6 KB per warm cell and
 78 MB per reference cell (checksummed, not committed).
 
 ## Predictions (written before any evidence cell)
@@ -164,9 +164,10 @@ Budget, from the WP88 walls on this box: reference 81 x ~12 s x 2 = 32 min; warm
   0.9 %); its cost ratio C in ticks 1,250–2,000 is 1.3–3x the ticks 1–20 baseline and its half-2
   median latency 1.3–2.5x its half-1 median. No stuck chain (the frozen kernel is a valid MCMC
   transition; the loss is efficiency, not bias).
-* **P2 m100.** Passes both halves on both streams. Median latency 75–95 ms, P99 0.4–1.0 s
-  (under 1 s), the 20 re-adaptation ticks 0.3–0.9 s each; 0–2 re-adaptations fall back a flagged
-  chain over the 80 re-adaptations.
+* **P2 m100.** Passes both halves on both streams. Median latency 0.10–0.20 s co-tenanted (the
+  smoke measured 0.13–0.15 s), P99 0.5–1.0 s (under 1 s), the 20 re-adaptation ticks 0.5–0.9 s
+  each; 0–2 re-adaptations fall back a flagged chain over the 80 re-adaptations; its cost per
+  transition after a re-adaptation is 1.2–2x the frozen kernel's (the smoke's 1.4–1.75x).
 * **P3 m500.** Passes half 1 on both streams and half 2 on the control; **fails half 2 on the shift
   stream** (pooled 70–92 %), because its 19 scored ticks 1,025–1,475 run on the regime-1 metric.
 * **P4 trig.** On the shift stream the trigger fires first at a tick in 1,030–1,200 on both seeds
@@ -184,7 +185,33 @@ Budget, from the WP88 walls on this box: reference 81 x ~12 s x 2 = 32 min; warm
 
 ## Pre-freeze disclosures (not evidence)
 
-(filled in after the smoke, before the freeze commit)
+Smoke on the box (`box/smoke.sh`, diagnostic seeds 990961–990964, draft commit `2b9e26ce`):
+
+* **Remap check** (`wp96 remapcheck`, n = 250, two chains with distinct positions and masses):
+  `shift_window` reproduces h_1..h_249 as h'_0..h'_248 with a maximum relative error of **0.0**
+  (bit-exact), masses and steps carried as specified (`artifacts/prefreeze/remapcheck.json`).
+* **Gated reference** through the gate code path, 7 ticks per stream (every 10th tick to 60):
+  14/14 ok at attempt 0; one control tick dropped a `WarmupStep`-flagged chain (3 kept, R-hat
+  1.0001); median wall 9.1 s per tick, driver wall 15.2 s (the h_next R-hat on 4 x 20,000 draws
+  adds about 6 s per tick); floor 0.11–0.13 % (P50) / 0.25–0.27 % (P95).
+* **Warm cells**, 60 ticks x 8 cells per lane, re-adaptation every 20 / 40 ticks in place of 100 /
+  500: every cell exited 0, 16/16 tick-0 fits clean (no flagged chain) and accurate at tick 0
+  (|P50 err| <= 0.6 %, |P95 err| <= 3.0 %), no stuck chain, no divergence, 0.896–0.903 of warm draws
+  inside the reference 90 % interval. Warm tick wall 0.13–0.15 s median (both lanes running the
+  smoke at once; WP88 measured 78 ms alone on its queue), re-adaptation ticks 0.55–0.71 s. The
+  trigger's trailing/baseline cost ratio stayed within 1.010 on both streams over 60 ticks and
+  never fired; the unchanged-position fraction was 0.1–1.6 %, so the 5 % stuck threshold is above
+  the baseline noise.
+* **Observation that shaped no change**: after a 200-warmup re-adaptation the cost per transition
+  rose to 1.4–1.75x the tick-0 kernel's (a diagonal estimated from the final 50-draw window is
+  noisier than the tick-0 fit's), while the h_next ESS per tick was slightly higher (1,141–1,161 vs
+  1,045). The task fixed warmup 200; the study measures whether that cheap re-adaptation helps the
+  quote. Reported, not acted on.
+* `analyze.py` crashed on the smoke's 3-tick halves (the 10-tick drift windows indexed past the
+  list); fixed before the freeze so the window shrinks on short halves (pipeline only; the study's
+  40-tick halves use 10-tick windows as specified). Rerun on the same smoke cells; the tables
+  printed.
+* No laptop timing is used anywhere.
 
 ## Execution
 
