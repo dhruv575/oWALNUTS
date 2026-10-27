@@ -408,7 +408,12 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     A four-update [resident development test](../STUDIES/resident_predictive_harness_v1/host-development-20261027/README.md)
     measures complete predictive-return updates at 2.44–2.46 seconds:
     sampling takes about 0.24 seconds and checked GH64/128 integration
-    takes 2.20–2.22 seconds. Numerical-summary cost, fresh-data posterior
+    takes 2.20–2.22 seconds. A validated exact Student-t5 CDF reduces that
+    arithmetic to about 0.66 seconds. A separate opt-in fused development
+    run takes about 0.90 seconds with byte-identical posterior draws and
+    matching quantiles, still above the inherited 0.4-second benchmark.
+    This is a four-update cost comparison, not fresh accuracy qualification.
+    Numerical-summary cost, fresh-data posterior
     accuracy and reliable uncertainty measurement remain open. A known Gaussian-chain
     [MCSE diagnostic](../STUDIES/predictive_mcse_diagnostic_v1/README.md)
     shows why short-chain estimated MCSE alone cannot certify accuracy.
