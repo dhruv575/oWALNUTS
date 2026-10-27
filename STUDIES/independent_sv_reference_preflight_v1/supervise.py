@@ -14,9 +14,17 @@ def members(group):
   except (OSError,ValueError,IndexError):pass
  return rows
 
+def output_bytes(root):
+ total=0
+ for path in root.rglob("*"):
+  try:
+   if path.is_file() and not path.is_symlink():total+=path.stat().st_size
+  except FileNotFoundError:pass
+ return total
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--python',required=True);p.add_argument('--native-python',required=True);p.add_argument('--bridgestan-sdk',required=True);a=p.parse_args()
- root=Path(a.root).absolute();root.mkdir(exist_ok=False);start=time.monotonic();record=dict(status='running',limit_seconds=600,rss_limit_bytes=4*1024**3,peak_sampled_group_rss=0)
+ root=Path(a.root).absolute();root.mkdir(exist_ok=False);start=time.monotonic();record=dict(status='running',limit_seconds=600,rss_limit_bytes=4*1024**3,peak_sampled_group_rss=0,output_limit_bytes=1024**3,peak_sampled_output_bytes=0)
  command=[os.path.abspath(a.python),str(Path(__file__).with_name('preflight.py')),'--output',str(root/'work'),'--native-python',os.path.abspath(a.native_python),'--bridgestan-sdk',a.bridgestan_sdk]
  with (root/'stdout.log').open('wb') as log:
   child=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,start_new_session=True);record.update(pid=child.pid,command=command)
@@ -24,6 +32,8 @@ def main():
   try:
    while child.poll() is None:
     rss=sum(x[1] for x in members(child.pid));record['peak_sampled_group_rss']=max(rss,record['peak_sampled_group_rss'])
+    size=output_bytes(root);record['peak_sampled_output_bytes']=max(size,record['peak_sampled_output_bytes'])
+    if size>record['output_limit_bytes']:record['status']='output_limit';break
     if rss>record['rss_limit_bytes']:record['status']='memory_limit';break
     if time.monotonic()-start>=600:record['status']='timeout';break
     time.sleep(.2)
