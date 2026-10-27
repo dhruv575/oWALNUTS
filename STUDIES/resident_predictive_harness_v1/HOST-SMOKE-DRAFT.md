@@ -83,3 +83,11 @@ exceeding0.4s are useful negative findings. Do not lower GH order after seeing t
 Passing0.4s is only a four-update development observation; it cannot qualify an
 AMM, validate returned probabilities or demonstrate profitability. Stop the instance
 after verified artifact retrieval once all other authorized work has drained.
+
+Evidence bookkeeping clarification before execution: an in-progress tick marker is
+saved before native work, and each returned row is saved before compact persistence.
+All4planned updates remain the denominator: completed, failed, interrupted and
+never-started are distinct. compact_and_first_save_seconds covers compact write,
+hash and first following JSON save; the final save of that timing field is excluded.
+The255th observation is a saved unused next-return label; four updates consume
+observations250..253. No predictive score uses that label in this smoke.
