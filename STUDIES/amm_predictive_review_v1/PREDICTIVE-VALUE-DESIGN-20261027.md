@@ -86,8 +86,21 @@ v0=(5/3)*s0^2; after each newly observed return update
 v_t=.94*v_(t-1)+.06*(y[250+t-1]-mu0)^2.
 Forecast location stays mu0 and Student-t scale is sqrt(3*v_t/5), with the same
 explicit floor. The5/3 factor is essential: Student-t5 scale is not standard deviation.
-Optional control: freeze the initial mu0/s0 Student-t5 forecast throughout.
-No lambda, window, floor, fitting rule or baseline is chosen from scored outcomes.
+Third primary baseline: reuse the existing exact Normal-Inverse-Gamma AR1 price
+forecast, replacing the optional static t5 control. With n=250+t observed returns,
+training target indices are k=max(1,n-256),...,n-1; predictors are [1,y[k-1]] and
+responses y[k]. Forecast design is [1,y[n-1]]. The first origin has250mature pairs,
+then at most256; the existing minimum-history20 requirement is satisfied.
+Standardize the lag predictor only using training mean/population sd (ddof0);
+replace sd<=1e-12 by1 exactly as the original implementation. Never standardize
+using the forecast outcome or rescale the response. Use a0=3,b0=.0002, prior
+coefficient covariance100*sigma_noise^2*I, in the standardized design. The posterior
+predictive Student-t has df=2*a and scale=sqrt((b/a)*(1+x_new*V*x_new)); the1+
+observation-noise term is required. The conditional-mean credible distribution is
+not the forecast distribution. The positive residual expression for b avoids
+cancellation. Sources: market_uncertainty_v1/historical_evaluation/evaluate.py
+and forecast_baseline/forecast.py. No lambda, window, floor, fitting rule or
+baseline is chosen from scored outcomes; report all three, not the winner alone.
 
 MLE negative log likelihood gradients for residual r=y-mu and scale s are
  d/dmu=-(nu+1)*sum r/(nu*s^2+r^2),
@@ -122,3 +135,14 @@ costly quantile inversions. No iid PIT/KS test. Better coverage alone can be bou
 by overly broad forecasts; proper log score supplies the accompanying sharpness
 penalty. A larger future fresh synthetic/multi-stream or chronological holdout
 study is necessary before a calibration claim.
+
+## Prior-evidence context
+
+The parallel source audit found older SV forecasts improving historical interval
+scores versus this exact NIG baseline, but that older SV target uses rho=.9 and
+an intercept-plus-lag design, versus currentrho=.95/intercept-only. Those results
+do not transfer automatically to the current posterior. All later archived real
+labels were previously exposed to forecast studies; do not describe an artifact
+screen as fresh discovery of market value. Its narrow question is whether the
+current target and its warm approximation retain forecast value against the fixed
+causal benchmarks, with proper log-score and PIT accounting.
