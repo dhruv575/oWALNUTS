@@ -438,6 +438,17 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     4.86 ms and 0.166 ms for the controls. This supports incremental predictive
     value for one historical month; generalization, the value of that extra
     computation for AMM decisions, and profitability remain open.
+    The [fresh long-horizon K400 follow-up](../STUDIES/long_horizon_k400_v1/README.md)
+    also completes four 2,000-update lanes and 18 reliable references on one
+    paired control/volatility-shift path. Maximum grid CDF error is 0.003574
+    and log-density error is 0.05984 nats; scale P50/P95 relative errors reach
+    2.28%/4.95%.
+    Early-to-late discrepancies vary in sign across the two sampling seeds.
+    This supplies bounded long-run evidence without qualifying the old WP96
+    rule or proving no drift. More paths, conditional accuracy and the cost
+    of reliable functional precision remain open. A separate corrected artifact
+    audit recovered integrity after a path-classification bug; original failed
+    audit outputs remain preserved and no scientific computation was rerun.
 23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
     250-return SV model from scratch at every tick, with best-of-16 starts,
     left one chain frozen (warmup step collapsed to about 1e-6, log density

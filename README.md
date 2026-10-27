@@ -1334,3 +1334,20 @@ claims explicitly.
   This is one newly acquired historical month, not prospective evidence,
   full-return quantile timing or profitability:
   [`fresh_real_value_v1`](STUDIES/fresh_real_value_v1/README.md).
+- [E63] A fresh paired-path K400 follow-up completes **8,000 updates across four
+  2,000-update lanes**, including a predeclared volatility shift. All 44
+  checkpoints and 18 independent references are available; all 264 query
+  comparisons have reliable references. Maximum grid CDF discrepancy is 0.003574
+  and maximum log-density discrepancy is 0.05984 nats, with both methods' Monte
+  Carlo uncertainties reported. Maximum predictive-scale P50/P95 relative
+  errors are 2.28%/4.95%; this different study does not inherit the old WP96
+  qualification rule. Early-to-late contrasts have mixed signs across sampling
+  seeds. One underlying path cannot establish the absence of long-term drift.
+  Retained warm updates have zero divergences across 12.8 million transitions;
+  initialization warmup events are reported separately. Median native update
+  cost is 247 ms under four-lane co-tenancy, excluding complete quantile work.
+  The original integrity checker failed on an ancestor-directory classification
+  bug. A separate corrected audit verified all 8,234 referenced artifacts and
+  all 8,638 archive hashes; the original failure is preserved, with no scientific
+  rerun:
+  [`long_horizon_k400_v1`](STUDIES/long_horizon_k400_v1/README.md).
