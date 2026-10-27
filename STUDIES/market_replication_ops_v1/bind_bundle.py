@@ -1,4 +1,4 @@
-﻿"""Offline binding to exact prior runtime/source identities and opaque acquisition hashes."""
+"""Offline binding to exact prior runtime/source identities and opaque acquisition hashes."""
 import argparse,hashlib,json
 from pathlib import Path
 
@@ -28,7 +28,7 @@ def bind(bundle,remote,prior_e62,prior_e63,acquisition,output):
         if sha(directory/name)!=acq[key]:raise ValueError('Sealed input bytes changed '+name)
     if sha(acq['supervisor_final_path'])!=acq['supervisor_final_sha256']:raise ValueError('Acquisition admission identity changed')
     # Hash only: this binder never parses bars/returns or invokes a generator/model.
-    acq['directory']=remote+'/acquisition';acq['supervisor_final_path']=remote+'/acquisition-supervisor-final.json'
+    acq['directory']=remote.rsplit('/',1)[0]+'/acquisition';acq['supervisor_final_path']=remote.rsplit('/',1)[0]+'/acquisition-supervisor-final.json'
     draft.update(status='frozen_scoring_pending_authorization',runtime=old['runtime'],python=old['python'],sources=sources,dependencies=old['dependencies'],reference=old['reference'],e62_root=e62_root,worker_path=remote+'/STUDIES/market_replication_v1/worker.py',ops_root=remote+'/STUDIES/market_replication_ops_v1',acquisition=acq,provenance=dict(prior_e62_manifest_sha256=sha(prior_e62),prior_e63_manifest_sha256=sha(prior_e63),bundle_inventory_sha256=sha(bundle/'BUNDLE-MANIFEST.json'),seed_reservation_sha256=sha(ops/'SEED-RESERVATIONS.json'),seed_source_audit_sha256=sha(ops/'SEED-SOURCE-AUDIT.json'),acquisition_bindings_sha256=sha(acquisition),binder_sha256=sha(__file__)))
     out=Path(output);out.mkdir(exist_ok=False)
     with (out/'PRODUCTION-PENDING.json').open('x') as f:json.dump(draft,f,indent=2);f.write('\n')
