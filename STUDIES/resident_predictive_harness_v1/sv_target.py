@@ -69,7 +69,7 @@ class TargetOwner:
             raise ValueError('invalid data window')
         self.compiled = compiled
         self.target = owalnuts.CFuncTarget(compiled.address, len(self.y)+3,
-            user_data=self.y.ctypes.data, keep_alive=self)
+            user_data=self.y.ctypes.data, keep_alive=(compiled,self.y))
 
 def components(q):
     q=np.asarray(q); mu=q[...,0]; sigma=np.exp(q[...,1])

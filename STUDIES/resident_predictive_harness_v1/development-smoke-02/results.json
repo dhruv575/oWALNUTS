@@ -1,0 +1,63 @@
+{
+  "kind": "development smoke only; no qualification",
+  "rows": [
+    {
+      "status": "failed",
+      "k": 8,
+      "error": "RuntimeError('owalnuts ResourceLimit: target-evaluation bound exceeds its resource limit')",
+      "total_seconds": 0.002897100057452917,
+      "tick": 1,
+      "new_observation": 0.007856996503315214
+    }
+  ],
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.16 (main, Aug 14 2026, 15:34:35) [MSC v.1944 64 bit (AMD64)]",
+  "versions": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "numba": "0.67.0"
+  },
+  "source": [
+    {
+      "path": "C:\\dev\\owalnuts-wt\\amm-functional-audit\\STUDIES\\resident_predictive_harness_v1\\harness.py",
+      "sha256": "0ea7ea059ba37700199a5cd8734d372f10747cdd8739b4b3e125ed077d59ac47"
+    },
+    {
+      "path": "C:\\dev\\owalnuts-wt\\amm-functional-audit\\STUDIES\\resident_predictive_harness_v1\\sv_target.py",
+      "sha256": "7fdcc333dacaa881691d91f3d741d73fa56a659fff0c20bff09cee1f989c1fd3"
+    },
+    {
+      "path": "C:\\dev\\owalnuts-wt\\amm-functional-audit\\STUDIES\\amm_predictive_review_v1\\predictive-return-smoke\\process.py",
+      "sha256": "fffc989bb6b59f4f2f055b1199f9e391fc49a5a97ea3fc436b1a348bb88875fd"
+    }
+  ],
+  "native": [
+    {
+      "path": "C:\\dev\\owalnuts\\integrations\\python\\python\\owalnuts\\_owalnuts.pyd",
+      "sha256": "6f06427db8c968164e0a38cd4f25d5892fa53a422b34f4f79c6831447a81fd85"
+    }
+  ],
+  "configuration": {
+    "N": 12,
+    "K": 8,
+    "chains": 4,
+    "max_depth": 8,
+    "seed": 99371001,
+    "initial_seed": 99371002,
+    "data_seed": 99371003,
+    "append_innovation": 0,
+    "mass_append": 1,
+    "numerical_nodes": [
+      64,
+      128
+    ],
+    "max_target_evaluations": 2000000,
+    "admit_worst_case": false,
+    "initial_warmup": 100,
+    "initial_draws": 10,
+    "early_shift_update": 2
+  },
+  "limitations": "Different development seeds/initialization/API seed schedule from WP96; tiny N; no posterior accuracy claim",
+  "initialization_seconds": 2.5163945999229327,
+  "status": "failed"
+}
