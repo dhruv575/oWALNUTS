@@ -31,6 +31,26 @@ def paired_check(rows,summary,n):
             if (mean is None)!=(want is None) or mean is not None and abs(mean-want)>1e-12:raise ValueError('Frozen paired mean mismatch')
     return result
 
+def initialization_summary(value):
+    telemetry=value.get('telemetry') or (value.get('failure') or {}).get('payload') or {}
+    config=telemetry.get('config') or {};warmup=config.get('warmup');draws=config.get('draws');chains=[]
+    totals={k:collections.Counter() for k in ['work_discarded','work_retained','work_total']};guards=[]
+    for i,c in enumerate(telemetry.get('chains') or []):
+        row=dict(chain=i,guard_checks=c.get('trapped_chain_checks'),warmup_end=c.get('warmup_end'),sampling_end=c.get('sampling_end'),array_health_available=False)
+        divergence=c.get('divergent');depth=c.get('depth');stop=c.get('stop')
+        if type(warmup)is int and type(draws)is int and isinstance(divergence,list) and len(divergence)==warmup+draws and all(v in [0,1,False,True] for v in divergence):
+            row.update(array_health_available=True,warmup_array_divergences=sum(divergence[:warmup]),retained_array_divergences=sum(divergence[warmup:]))
+            if isinstance(depth,list) and len(depth)==warmup+draws:row.update(warmup_maximum_depth=max(depth[:warmup],default=None),retained_maximum_depth=max(depth[warmup:],default=None))
+            if isinstance(stop,list) and len(stop)==warmup+draws:row.update(warmup_stop_counts=dict(collections.Counter(map(str,stop[:warmup]))),retained_stop_counts=dict(collections.Counter(map(str,stop[warmup:]))))
+        for key in totals:
+            row[key]=c.get(key)
+            if isinstance(c.get(key),dict):totals[key].update({k:v for k,v in c[key].items() if type(v)in(int,float)})
+        guards.extend(c.get('trapped_chain_checks') or []);chains.append(row)
+    return dict(status=value.get('status'),failure=value.get('failure'),engine_factory_seconds=value.get('engine_factory_seconds'),config=config,
+        chain_warnings=telemetry.get('chain_warnings'),chains=chains,recorded_chains=len(chains),work_totals={k:dict(v) for k,v in totals.items()},
+        guard_checks=len(guards),guard_restarts=sum(g.get('restarted')is True for g in guards),
+        scope='Initial warmup/retained/guard telemetry is separate from per-update health; discarded work may include abandoned attempts and must not be called retained sampling')
+
 def audit(root):
     root=Path(root).resolve();start=time.monotonic();hashes={};bytes_read=0
     def read(path):
@@ -49,6 +69,7 @@ def audit(root):
         lp=folder/'ledger.json'
         if not lp.exists():lp=folder/'terminal-ledger.json'
         item=dict(month=month,planned_origins=n,ledger_missing=not lp.exists(),summary_missing=summary is None)
+        initial=folder/'candidate/INITIAL.json';item['initialization']=initialization_summary(read(initial)) if initial.exists() else dict(status='not_recorded')
         if lp.exists():item['ledger_check']=paired_check(read(lp),summary,n)
         if summary:
             item['paired']=summary['paired'];item['arms']=summary['arms'];item['references']=summary['references'];item['artifact_integrity']=summary['artifact_integrity']

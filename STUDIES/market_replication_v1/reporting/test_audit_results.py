@@ -1,6 +1,6 @@
 import unittest,json,tempfile
 from pathlib import Path
-from audit_results import paired_check,audit
+from audit_results import paired_check,audit,initialization_summary
 class AuditFixtures(unittest.TestCase):
  def rows(self):return [dict(tick=i,arms={a:dict(status='ok',logpdf=float(j),pit=.5) for j,a in enumerate(['candidate','rolling_t5','ewma_t5'])}) for i in range(1,4)]
  def test_missing_pair_preserves_denominator(self):
@@ -22,4 +22,7 @@ class AuditFixtures(unittest.TestCase):
    root=Path(d);batch=root/'batch';batch.mkdir();(root/'BATCH-SUPERVISION.json').write_text(json.dumps(dict(group_drained=True,remaining_owned_pids=[])));(batch/'BATCH-FINAL.json').write_text(json.dumps(dict(jobs=[])))
    folder=batch/'2026-04/candidate/records';folder.mkdir(parents=True);(folder/'000001.json').write_text(json.dumps(dict(tick=1,native_health=None,score=None,native_status='failed',score_status='unavailable')))
    value=audit(root);self.assertEqual(value['months'][0]['native_health']['recorded_ticks'],1);self.assertEqual(value['months'][0]['numerical']['recorded_scores'],0);self.assertTrue(value['months'][0]['ledger_missing'])
+ def test_initial_warmup_retained_and_guard_work_separate(self):
+  value=dict(status='complete',telemetry=dict(config=dict(warmup=2,draws=1),chains=[dict(divergent=[1,0,0],depth=[10,7,3],stop=[2,0,0],trapped_chain_checks=[dict(restarted=True)],work_discarded=dict(divergences=2,zero_density_evaluations=4),work_retained=dict(divergences=0,zero_density_evaluations=0),work_total=dict(divergences=2,zero_density_evaluations=4))]))
+  result=initialization_summary(value);self.assertEqual(result['chains'][0]['warmup_array_divergences'],1);self.assertEqual(result['chains'][0]['retained_array_divergences'],0);self.assertEqual(result['work_totals']['work_discarded']['divergences'],2);self.assertEqual(result['guard_restarts'],1)
 if __name__=='__main__':unittest.main()
