@@ -1,0 +1,85 @@
+{
+  "study": "warm_precision_diagnostic_v1",
+  "kind": "fixed-budget diagnostic, one fresh seed on reused data; not qualification",
+  "source_repo": "/home/ubuntu/lanes/warm_drift_v1/repo",
+  "source_commit": "9210c9471b2eacc1e1528455720239863bae76f0",
+  "sampler_seed": 99271021,
+  "window": 250,
+  "ticks": 2000,
+  "save_every": 25,
+  "policy": "frozen",
+  "sampling_seconds_cap": 3600,
+  "artifact_bytes_cap": 1000000000,
+  "analysis_seconds_cap": 300,
+  "eps_seed_base": 9600000,
+  "rho": 0.95,
+  "tolerance_p50": 0.02,
+  "tolerance_p95": 0.05,
+  "reference_artifacts": "/home/ubuntu/lanes/warm_drift_v1/repo/STUDIES/warm_drift_v1/artifacts",
+  "inputs": {
+    "binary": {
+      "path": "/home/ubuntu/lanes/warm_drift_v1/work/target/release/wp96",
+      "sha256": "5cbfbe9b7ebbeec525cad92560612a37738a1368233baea6f8bea913d95fb3c8"
+    },
+    "data_shift": {
+      "path": "/home/ubuntu/lanes/warm_drift_v1/repo/STUDIES/warm_drift_v1/models/data-shift.json",
+      "sha256": "f83323234a80942119a273ccfcab02c5ad1648245fb0b1eb36169375ca0fbf06"
+    },
+    "data_control": {
+      "path": "/home/ubuntu/lanes/warm_drift_v1/repo/STUDIES/warm_drift_v1/models/data-control.json",
+      "sha256": "8c1b9e9cfd7766220b1eae470bffb91801207d205778887151cc974a05fe42ab"
+    },
+    "original_protocol": {
+      "path": "/home/ubuntu/lanes/warm_drift_v1/repo/STUDIES/warm_drift_v1/protocol.json",
+      "sha256": "d86c800cc729348543d057fcd18ca0475f7d37fc70068e9cd74b881db59e7b6d"
+    },
+    "original_harness": {
+      "path": "/home/ubuntu/lanes/warm_drift_v1/repo/STUDIES/warm_drift_v1/rust/src/main.rs",
+      "sha256": "ec540e0f880e778c00dc3758fa52e886e81cc307d4ca0514e7277feff35d19ca"
+    }
+  },
+  "cells": [
+    {
+      "id": "warm-K200-shift-s99271021",
+      "lane": "A",
+      "stream": "shift",
+      "cores": "0-3",
+      "K": 200
+    },
+    {
+      "id": "warm-K400-shift-s99271021",
+      "lane": "A",
+      "stream": "shift",
+      "cores": "0-3",
+      "K": 400
+    },
+    {
+      "id": "warm-K800-shift-s99271021",
+      "lane": "A",
+      "stream": "shift",
+      "cores": "0-3",
+      "K": 800
+    },
+    {
+      "id": "warm-K200-control-s99271021",
+      "lane": "B",
+      "stream": "control",
+      "cores": "4-7",
+      "K": 200
+    },
+    {
+      "id": "warm-K400-control-s99271021",
+      "lane": "B",
+      "stream": "control",
+      "cores": "4-7",
+      "K": 400
+    },
+    {
+      "id": "warm-K800-control-s99271021",
+      "lane": "B",
+      "stream": "control",
+      "cores": "4-7",
+      "K": 800
+    }
+  ]
+}
