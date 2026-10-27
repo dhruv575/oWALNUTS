@@ -413,10 +413,19 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     and applied as the sampler default (`DEFAULT_TRAPPED_CHAIN_RESTART`,
     opt-out `WarmupConfig::without_trapped_chain_restart`). The frozen-chain
     part of this item is closed.
-    Open: a gradient-scaled initial metric as a cause-level fix (nutpie's;
-    the `nutpie_init` arm gave 1/240 without any restart), and whether
-    CmdStan-style uniform starts should be warned against for stiff
-    latent-path models. See items 12 and 19.
+    WP94 (`STUDIES/grad_init_metric_v1`) then tested nutpie's
+    gradient-scaled initial metric as the cause-level fix: 1.15x per
+    gradient on average and 11 of 15 guard firings gone on the SV model,
+    but passes 96 against 101 on the house set, 4/480 SV chains still
+    trapped without the guard, and on lotka_volterra the scaled metric
+    lifts a stuck chain's step above the guard's cut without freeing it.
+    Not qualified; research flag `WarmupConfig::with_initial_metric`.
+    Open: a bounded variant (clamp the start gradient to a plausible scale
+    range, or blend with the identity) paired with a trap signal that does
+    not depend on the step ratio alone (log density against the chain
+    median, or zero movement), and whether CmdStan-style uniform starts
+    should be warned against for stiff latent-path models. See items 12
+    and 19.
 
 Closed lines, so they are not reopened: reverse-coarsening as truncation
 (WP34 to WP39B); coarsest-first reverse order (WP37B); Appendix C as the

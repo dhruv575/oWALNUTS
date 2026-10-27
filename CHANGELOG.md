@@ -206,6 +206,24 @@ architecture and operating system (see the `walnutpie` module documentation).
   trapped-chain step rule at the close of the n-th non-empty slow window
   instead of the first (WP89, `STUDIES/sv_stuck_chains_v1`,
   `tests/trapped_chain_restart.rs`).
+- Research flag (WP94, `STUDIES/grad_init_metric_v1`): the gradient-scaled
+  initial metric, `WarmupConfig::with_initial_metric(InitialMetric::GradientScaled
+  { lower, upper })` (`InitialMetric::nutpie()` = nutpie's bounds 1e-20, 1e20;
+  `research` feature, off by default, `InitialMetric::AsGiven` bit-identical).
+  Per chain, once, after the start is chosen and before the initial-step
+  search, the diagonal mass the chain starts warmup with becomes
+  `mass_i = clamp(|g_i(start)|, lower, upper)` (1 where that is not finite),
+  nutpie's `update_diag_grad` rule (nuts-rs 0.17.3); a trapped-chain
+  replacement start is scaled from its own gradient the same way; the
+  slow-window updates, the paper adaptation and the restart guard proceed
+  unchanged. One target evaluation per chain start, counted in the
+  worst-case admission bound; reported as `RunMetadata::initial_mass_diagonal`.
+  Needs mass adaptation; the dense, structured and continuation facades
+  reject it. Not qualified as a default (WP94: 1.15x geomean per gradient
+  but passes 96 vs 101 on 22 posteriors x 6 seeds, warmup gradients 0.87x,
+  and on the SV model 4/480 chains still trap without the guard); a start
+  gradient far from the typical set is not a scale (initial masses of
+  1e5–1e8 on kilpisjarvi, sblrc, GLMM). `tests/grad_init_metric.rs`.
 - Research-only `DiagonalMetricRegularization::StanLowAnchor` and
   `StanCoordinateCap` (feature `research`, WP81,
   `STUDIES/diagonal_metric_shrinkage_v1`): Stan's rule with its `1e-3`

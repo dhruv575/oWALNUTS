@@ -1228,3 +1228,21 @@ provenance.
   95.7–97.3 % for H of 5 to 20; to be confirmed with the real series:
   [`STUDIES/tick_pooling_v1`](STUDIES/tick_pooling_v1/README.md)
   (WP93).
+- [E57] nutpie's gradient-scaled initial metric as a default (Linux, 22 v7
+  posteriors x 6 fresh seeds x {defaults, with the initial metric, with it
+  and the guard off}, funnel 30 seeds, SV model 120 seeds; 906 cells in
+  68 minutes): **not qualified**. Headline ESS per gradient 1.15x geomean
+  (paired median 1.08 [1.04, 1.14]; accel_gp 2.98x, radon 2.11x, centred
+  Eight Schools 1.63x) but passes 96 against 101, warmup gradients 0.87x
+  with gates lost on six models (hmm_drive_0 6 to 4, one_comp, mesquite,
+  gp_pois_regr, lotka_volterra, seeds), no new divergences, funnel P5
+  within 1 s.e. On the SV model the cause-level fix removes 11 of the
+  guard's 15 firings and halves warmup gradients, but 4/480 chains still
+  trap without the guard (the rule asked for at most 1). On lotka_volterra
+  it lifts a stuck chain's step above the guard's 1 % cut without freeing
+  it, so the guard no longer fires there. A start gradient far from the
+  typical set is not a scale (initial masses of 1e5–1e8 on three models).
+  The flag stays research; the next candidate is a bounded variant with a
+  guard signal that survives a scaled metric:
+  [`STUDIES/grad_init_metric_v1`](STUDIES/grad_init_metric_v1/README.md)
+  (WP94).

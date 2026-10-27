@@ -104,7 +104,10 @@ const RETAINED: usize = 200;
 
 #[test]
 fn default_is_as_given_and_explicit_as_given_is_bit_identical() {
-    assert_eq!(WarmupConfig::default().initial_metric(), InitialMetric::AsGiven);
+    assert_eq!(
+        WarmupConfig::default().initial_metric(),
+        InitialMetric::AsGiven
+    );
     assert_eq!(InitialMetric::default(), InitialMetric::AsGiven);
     assert_eq!(
         InitialMetric::nutpie(),
@@ -116,7 +119,14 @@ fn default_is_as_given_and_explicit_as_given_is_bit_identical() {
     let mass = DiagonalMass::identity(nz(SCALES.len()));
     let starts = starts(4);
     for threads in [1, 4] {
-        let plain = sample_chains(&Scaled, &starts, &mass, &config(None, 300, RETAINED), nz(threads)).unwrap();
+        let plain = sample_chains(
+            &Scaled,
+            &starts,
+            &mass,
+            &config(None, 300, RETAINED),
+            nz(threads),
+        )
+        .unwrap();
         let explicit = sample_chains(
             &Scaled,
             &starts,
@@ -125,14 +135,21 @@ fn default_is_as_given_and_explicit_as_given_is_bit_identical() {
             nz(threads),
         )
         .unwrap();
-        assert_eq!(fingerprint(&plain, RETAINED), fingerprint(&explicit, RETAINED));
+        assert_eq!(
+            fingerprint(&plain, RETAINED),
+            fingerprint(&explicit, RETAINED)
+        );
         for chain in explicit.chains() {
             assert_eq!(chain.metadata().initial_mass_diagonal(), mass.diagonal());
         }
     }
     assert_eq!(
-        config(None, 1000, 100).worst_case_target_evaluations(nz(4)).unwrap(),
-        config(Some(InitialMetric::AsGiven), 1000, 100).worst_case_target_evaluations(nz(4)).unwrap()
+        config(None, 1000, 100)
+            .worst_case_target_evaluations(nz(4))
+            .unwrap(),
+        config(Some(InitialMetric::AsGiven), 1000, 100)
+            .worst_case_target_evaluations(nz(4))
+            .unwrap()
     );
 }
 
@@ -153,7 +170,10 @@ fn gradient_scaled_initial_mass_is_the_clamped_absolute_start_gradient_per_chain
         assert_eq!(output.chains().len(), 4);
         for (chain, start) in output.chains().iter().zip(&starts) {
             let expected = expected_mass(start, 1e-20, 1e20);
-            assert_eq!(chain.metadata().initial_mass_diagonal(), expected.as_slice());
+            assert_eq!(
+                chain.metadata().initial_mass_diagonal(),
+                expected.as_slice()
+            );
             // The scaled start metric is far from the identity on the badly scaled coordinates.
             assert!(expected[0] > 10.0 && expected[3] < 0.1, "{expected:?}");
             // Adaptation then moved on from it.
@@ -163,7 +183,14 @@ fn gradient_scaled_initial_mass_is_the_clamped_absolute_start_gradient_per_chain
     }
     assert_eq!(runs[0], runs[1], "thread count must not change the draws");
     // The initial metric changes the draws (it is not a no-op).
-    let plain = sample_chains(&Scaled, &starts, &identity, &config(None, 300, RETAINED), nz(1)).unwrap();
+    let plain = sample_chains(
+        &Scaled,
+        &starts,
+        &identity,
+        &config(None, 300, RETAINED),
+        nz(1),
+    )
+    .unwrap();
     assert_ne!(fingerprint(&plain, RETAINED), runs[0]);
 }
 
@@ -177,12 +204,21 @@ fn single_chain_run_completes_and_the_clamp_bounds_apply() {
         lower: 1e-3,
         upper: 2.0,
     };
-    let output = sample(&Scaled, &start, &identity, &config(Some(rule), 300, RETAINED)).unwrap();
+    let output = sample(
+        &Scaled,
+        &start,
+        &identity,
+        &config(Some(rule), 300, RETAINED),
+    )
+    .unwrap();
     let expected = expected_mass(&start, 1e-3, 2.0);
     assert_eq!(expected[0], 1e-3);
     assert_eq!(expected[1], 2.0);
     assert_eq!(expected[2], 1.0);
-    assert_eq!(output.metadata().initial_mass_diagonal(), expected.as_slice());
+    assert_eq!(
+        output.metadata().initial_mass_diagonal(),
+        expected.as_slice()
+    );
     assert!(output.sample(RETAINED - 1).is_some());
 }
 
@@ -246,14 +282,22 @@ fn admission_bound_counts_one_evaluation_per_chain_start_and_per_possible_restar
             .with_warmup(warmup(initial).with_trapped_chain_restart(DEFAULT_TRAPPED_CHAIN_RESTART))
     };
     assert_eq!(
-        guarded(Some(InitialMetric::nutpie())).worst_case_target_evaluations(nz(4)).unwrap(),
+        guarded(Some(InitialMetric::nutpie()))
+            .worst_case_target_evaluations(nz(4))
+            .unwrap(),
         guarded(None).worst_case_target_evaluations(nz(4)).unwrap() + 4 + 2
     );
 }
 
 #[test]
 fn validation_and_facade_rejections() {
-    for (lower, upper) in [(0.0, 1.0), (2.0, 1.0), (f64::NAN, 1.0), (1.0, f64::INFINITY), (-1.0, 1.0)] {
+    for (lower, upper) in [
+        (0.0, 1.0),
+        (2.0, 1.0),
+        (f64::NAN, 1.0),
+        (1.0, f64::INFINITY),
+        (-1.0, 1.0),
+    ] {
         let error = WarmupConfig::new(0.8)
             .unwrap()
             .with_initial_metric(InitialMetric::GradientScaled { lower, upper })
@@ -269,7 +313,13 @@ fn validation_and_facade_rejections() {
     // Dense facade.
     let dense = DenseMass::from_matrix(
         (0..SCALES.len() * SCALES.len())
-            .map(|k| if k % (SCALES.len() + 1) == 0 { 1.0 } else { 0.0 })
+            .map(|k| {
+                if k % (SCALES.len() + 1) == 0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
             .collect(),
         SCALES.len(),
     )

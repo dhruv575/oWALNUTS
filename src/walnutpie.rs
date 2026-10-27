@@ -5698,20 +5698,21 @@ impl RunConfig {
         // WP94: the gradient-scaled initial metric evaluates the target once
         // per chain start, and once more per restarted chain (at most
         // `chains / 2`, as above).
-        let initial_metric_evaluations = match self
-            .warmup
-            .as_ref()
-            .map(|warmup| warmup.initial_metric)
-        {
-            Some(InitialMetric::GradientScaled { .. }) => {
-                let restarts = if restart_extra > 0 { chain_count.get() / 2 } else { 0 };
-                chain_count
-                    .get()
-                    .checked_add(restarts)
-                    .ok_or_else(Error::overflow)?
-            }
-            _ => 0,
-        };
+        let initial_metric_evaluations =
+            match self.warmup.as_ref().map(|warmup| warmup.initial_metric) {
+                Some(InitialMetric::GradientScaled { .. }) => {
+                    let restarts = if restart_extra > 0 {
+                        chain_count.get() / 2
+                    } else {
+                        0
+                    };
+                    chain_count
+                        .get()
+                        .checked_add(restarts)
+                        .ok_or_else(Error::overflow)?
+                }
+                _ => 0,
+            };
         transition_evaluations
             .checked_add(searches)
             .and_then(|value| value.checked_add(restart_extra))
@@ -9212,7 +9213,11 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         "the gradient-scaled initial metric needs the diagonal driver",
                     ));
                 }
-                if !config.warmup.as_ref().is_some_and(|warmup| warmup.adapt_mass) {
+                if !config
+                    .warmup
+                    .as_ref()
+                    .is_some_and(|warmup| warmup.adapt_mass)
+                {
                     return Err(Error::configuration(
                         "the gradient-scaled initial metric needs mass adaptation",
                     ));
