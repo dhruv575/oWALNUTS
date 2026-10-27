@@ -16,9 +16,13 @@ def generate(stream,rng_factory=np.random.default_rng):
     mu=float(rng.normal(2*math.log(.005),1.));ls=float(rng.normal(math.log(.2),.5));beta=float(rng.normal(0.,.002))
     z=np.asarray(rng.normal(size=283),dtype=float);innovation=np.asarray(rng.standard_t(5,size=283),dtype=float)
     with np.errstate(over='raise',invalid='raise',under='ignore'):
-        sigma=np.exp(ls);h=np.empty(283);h[0]=mu+sigma*z[0]/math.sqrt(1-RHO*RHO)
+        sigma=np.exp(ls)
+        if not np.isfinite(sigma) or sigma<=0:raise ValueError("nonrepresentable innovation scale; preserve failed stream")
+        h=np.empty(283);h[0]=mu+sigma*z[0]/math.sqrt(1-RHO*RHO)
         for i in range(1,283):h[i]=mu+RHO*(h[i-1]-mu)+sigma*z[i]
-        y=beta+np.exp(h/2)*innovation
+        scales=np.exp(h/2)
+        if not np.isfinite(scales).all() or np.any(scales<=0):raise ValueError("nonrepresentable return scale; preserve failed stream")
+        y=beta+scales*innovation
     if not np.isfinite([mu,ls,beta]).all() or not np.isfinite(h).all() or not np.isfinite(y).all():raise ValueError('nonfinite generated stream; preserve failure, never regenerate')
     return dict(stream=stream,seeds=seeds(stream),parameters=dict(mu=mu,log_sigma=ls,beta=beta),h=h,y=y)
 
