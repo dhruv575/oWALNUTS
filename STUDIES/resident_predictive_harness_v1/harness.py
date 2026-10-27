@@ -6,6 +6,7 @@ import numpy as np
 from scipy.optimize import brentq
 from scipy.special import ndtr
 import scipy, numba, owalnuts
+from numerical_backend import Backend,ConfiguredReturnCDF
 from sv_target import TargetOwner, compile_target, compile_functional, remap, RHO
 HERE=Path(__file__).resolve().parent
 PROCESS=HERE.parent/'amm_predictive_review_v1/predictive-return-smoke/process.py'
@@ -38,7 +39,7 @@ def memory():
 def identity(path):
     path=Path(path); return dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
 
-def summarize(values,deadline):
+def summarize(values,deadline,backend=None):
     a=np.asarray(values,dtype=float)
     if a.ndim!=3 or a.shape[-1]!=4 or not np.isfinite(a).all():
         raise ValueError('invalid compact components')
@@ -51,17 +52,19 @@ def summarize(values,deadline):
     hq=[brentq(lambda x:cdf_h(x)-p,lo,hi,xtol=1e-12) for p in (.5,.95)]
     scale=np.exp(np.array(hq)/2)
     if not np.isfinite(scale).all() or np.any(scale<=0): raise ValueError('scale overflow')
-    cdfs=[processor.ReturnCDF(m,sigma,a[:,2],5,n,deadline,64*1024*1024) for n in (64,128)]
+    backend=backend or Backend()
+    cdfs=[ConfiguredReturnCDF(m,sigma,a[:,2],5,n,deadline,64*1024*1024,backend=backend) for n in (64,128)]
     rules=[c.quantiles() for c in cdfs]
     discrepancy=max(abs(cdfs[0](q)-p) for p,q in zip(processor.PS,rules[1]['quantiles']))
     width=rules[1]['quantiles'][2]-rules[1]['quantiles'][0]
     endpoint=max(abs(x-y)/width for x,y in zip(rules[0]['quantiles'],rules[1]['quantiles']))
     if discrepancy>1e-6 or endpoint>1e-6: raise ValueError('64/128 numerical disagreement')
     return dict(scale_p50_p95=scale.tolist(),return_p5_p50_p95=rules[1]['quantiles'],
-        numerical=dict(nodes=[64,128],cdf_discrepancy=discrepancy,normalized_endpoint_difference=endpoint,rules=rules))
+        numerical=dict(backend=backend.metadata,nodes=[64,128],cdf_discrepancy=discrepancy,normalized_endpoint_difference=endpoint,rules=rules))
 
 class Resident:
-    def __init__(self,compiled,functional,y,state,seed=99371001,tuning=None,max_target_evaluations=2000000,admit_worst_case=False):
+    def __init__(self,compiled,functional,y,state,seed=99371001,tuning=None,max_target_evaluations=2000000,admit_worst_case=False,numerical_backend="scipy"):
+        self.backend=Backend(numerical_backend)
         self.closed=False; self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
         self.owner=TargetOwner(compiled,self.y)
         self.session=owalnuts.WarmSession(self.owner.target,state,seed=seed,threads=4,
@@ -92,7 +95,7 @@ class Resident:
                 seed=int(chunk.seed),diagnostics=chunk.diagnostics,metadata=chunk.metadata,
                 work=chunk.work,target_calls=int(chunk.target_calls),call_index=int(chunk.call_index))
             row['phase']='summary'
-            row.update(summarize(chunk.values,start+30))
+            row.update(summarize(chunk.values,start+30,backend=self.backend))
             row.update(status='ok',phase='complete',summary_seconds=time.perf_counter()-sampling_end)
         except Exception as exc:
             row['error']=repr(exc)
