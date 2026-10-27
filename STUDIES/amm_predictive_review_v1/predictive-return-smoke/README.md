@@ -1,8 +1,9 @@
-# Full predictive-return processor: fixture validation only
+# Full predictive-return processor: one-origin numerical smoke
 
 Prepared for a **single fixed WP97 reference origin**, `ref-real-lo` tick 2.
-No WP97 draws have been processed by this package. No sampler or remote compute
-was run. A measured one-origin smoke must precede any multi-origin plan.
+That one-origin smoke subsequently completed on a verified snapshot of an already
+finished reference origin: see `real-tick002-smoke/README.md`. No new sampler or
+remote compute was run by this processor. No multi-origin analysis was performed.
 
 The processor preserves the joint posterior of mu, log_sigma, beta and h_last,
 integrates future Gaussian volatility innovation with 64/128-node Gauss-Hermite
@@ -17,6 +18,12 @@ disagreement was **2.30e-12**; maximum reported adaptive-quadrature error was
 9.11e-13. Two known symmetric conditional distributions also reproduce their
 location exactly at the median. Validation took 0.070 seconds locally; this
 does not predict the cost of an 80,000-component posterior mixture.
+
+The measured full-size origin took 68.51 seconds locally and agreed between
+64/128 nodes well inside the diagnostic tolerance. This establishes numerical
+feasibility for that origin only; actual process peak RSS was not captured
+successfully by the external launch-process monitor. Cache allocations and that
+instrumentation limitation are preserved in the smoke report.
 
 ## Bounded processing
 
