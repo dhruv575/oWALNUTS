@@ -69,8 +69,9 @@ def summarize(rows, exact_var, p):
     center = (passed/n + 1.96**2/(2*n))/(1+1.96**2/n)
     half = 1.96*np.sqrt((passed/n)*(1-passed/n)/n + 1.96**2/(4*n*n))/(1+1.96**2/n)
     return dict(completed=n, planned=REPS, wald_covered=passed,
-                wald_coverage=passed/n, coverage_wilson95=[center-half, center+half],
-                cdf_mean_variance_empirical_over_exact=float(np.var(values('cdf_at_true'), ddof=1)/exact_var),
+                wald_coverage_conditional_on_valid=passed/n, coverage_wilson95_conditional_on_valid=[center-half, center+half],
+                wald_coverage_planned_denominator=passed/REPS, invalid_or_uncomputed=REPS-n,
+                cdf_mean_variance_empirical_over_exact=(float(np.var(values('cdf_at_true'), ddof=1)/exact_var) if n > 1 else None),
                 true_threshold_mcse_over_exact_median=float(np.median(values('cdf_mcse_at_true'))/np.sqrt(exact_var)),
                 true_threshold_mcse_variance_over_exact_mean=float(np.mean(values('cdf_mcse_at_true')**2)/exact_var),
                 analytic_relative_rmse=float(np.sqrt(np.mean(values('relative_error_analytic')**2))),
