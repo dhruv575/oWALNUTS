@@ -56,13 +56,15 @@ def run_lane(y,*,updates,seeds,score_ticks,retain_ticks,engine_factory,score_hoo
     if not scored<=retained or any(type(t)is not int or not 1<=t<=updates for t in retained):raise ValueError('scored ticks must be retained planned ticks')
     root=Path(output);root.mkdir(parents=True,exist_ok=False);(root/'records').mkdir();(root/'draws').mkdir();(root/'arrays').mkdir();(root/'native').mkdir()
     exclusive(root/'PLAN.json',dict(updates=updates,window=window,k=k,seeds=seeds,score_ticks=sorted(scored),retain_ticks=sorted(retained),y_shape=list(y.shape),y_sha256=digest_bytes(y.tobytes(order='C'))))
-    started=time.perf_counter();engine=None;native_completed=0;score_counts={'ok':0,'partial':0,'unavailable':0};attempted=0;terminal_error=None;io_seconds=0.;native_seconds=0.;scoring_seconds=0.
+    started=time.perf_counter();engine=None;native_completed=0;score_counts={'ok':0,'partial':0,'unavailable':0};attempted=0;terminal_error=None;initialization_seconds=None;io_seconds=0.;native_seconds=0.;scoring_seconds=0.
     journal=(root/'progress.jsonl').open('xb')
     def event(value):journal.write(encoded(value));journal.flush();os.fsync(journal.fileno())
     event(dict(event='initialization_started'))
     try:
-        engine=engine_factory(y[:window].copy(),dict(seeds))
-        exclusive(root/'INITIAL.json',dict(status='complete',telemetry=getattr(engine,'initial',None)))
+        init_start=time.perf_counter()
+        try:engine=engine_factory(y[:window].copy(),dict(seeds))
+        finally:initialization_seconds=time.perf_counter()-init_start
+        exclusive(root/'INITIAL.json',dict(status='complete',telemetry=getattr(engine,'initial',None),engine_factory_seconds=initialization_seconds))
         event(dict(event='initialization_complete'))
         for tick in range(1,updates+1):
             attempted=tick;current=window-1+tick;label_index=window+tick;conditioning=y[tick:window+tick].copy();tick_start=time.perf_counter()
@@ -128,6 +130,6 @@ def run_lane(y,*,updates,seeds,score_ticks,retain_ticks,engine_factory,score_hoo
             try:engine.close()
             except Exception as exc:close_error=repr(exc)
         journal.close()
-        result=dict(status='failed' if terminal_error or close_error else 'complete' if score_counts['partial']==score_counts['unavailable']==0 else 'partial_scores',planned_updates=updates,attempted_updates=attempted,native_completed=native_completed,planned_scores=len(scored),score_counts=score_counts,unattempted_from=attempted+1 if attempted<updates else None,terminal_error=terminal_error,close_error=close_error,native_seconds=native_seconds,scoring_seconds=scoring_seconds,record_io_seconds=io_seconds,elapsed_seconds=time.perf_counter()-started,timing_scope='Whole elapsed includes all progress/record I/O; per-tick journal totals end after immutable record, before its completion journal append.')
+        result=dict(status='failed' if terminal_error or close_error else 'complete' if score_counts['partial']==score_counts['unavailable']==0 else 'partial_scores',planned_updates=updates,attempted_updates=attempted,native_completed=native_completed,planned_scores=len(scored),score_counts=score_counts,unattempted_from=attempted+1 if attempted<updates else None,terminal_error=terminal_error,close_error=close_error,initialization_seconds=initialization_seconds,native_seconds=native_seconds,scoring_seconds=scoring_seconds,record_io_seconds=io_seconds,elapsed_seconds=time.perf_counter()-started,timing_scope='Whole elapsed includes all progress/record I/O; per-tick journal totals end after immutable record, before its completion journal append.')
         exclusive(root/'DONE.json',result)
     return result
