@@ -23,6 +23,8 @@ Each stream contributes 100 next-return outcomes, ticks1..100. At tick t the
 posterior sees y[:250+t] and scores y[250+t]. The full joint reference and three
 separate K200 warm seeds are compared with all three frozen causal baselines.
 No pooling, thinning, seed-density mixture or quantile inversion was used.
+These are unpooled H1 K200 forecasts, not WP97's reweighted H10/H20 forecasts;
+the return-distribution accuracy findings do not transfer to those pooled forecasts.
 
 The recovered panel has 200/200 origins and 1400/1400 valid forecasts. All800
 posterior forecasts meet the original GH64/128 log-density and PIT tolerances:
