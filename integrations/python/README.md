@@ -351,10 +351,15 @@ tuning=replace(tuning, step_size=step_sizes[c]))`
 (`tests/test_warm_continuation.py`). It does not re-adapt, it carries
 diagonal metrics only (a structured-mass result raises), the fill of new
 coordinates is yours to choose, and the library does not validate that `k`
-draws reach any accuracy: in WP84, 50–200 draws per chain stayed calibrated
-over 100 ticks (20–80 ms per tick on a 250-return SV model) but did not reach
+draws reach any accuracy: in WP84, 50–200 draws per chain kept about 90% of
+draws inside reference 90% intervals over 100 ticks (20–80 ms per tick on a
+250-return SV model) but did not reach
 the R-hat 1.01 / reference-MCSE bar. `ContinuationChunk.warm_state()` gives
 the same state from a session.
+
+Reference-interval occupancy measures agreement with a posterior reference.
+Predictive calibration requires evaluating forecasts against realized outcomes;
+neither this occupancy statistic nor the warm API supplies that validation.
 
 ```python
 import numpy as np, owalnuts

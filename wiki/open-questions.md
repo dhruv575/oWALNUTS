@@ -375,7 +375,9 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     (`STUDIES/online_sv_quote_v2`) ran the rule on it: K = 200 passes on
     simulated data at N = 250 (78 ms) and N = 1,000 (1.06 s) and fails on
     real BTC bar-close returns (83 %, precision-bound: own P50 MCSE 1.25 %
-    against 0.9 % simulated), calibrated and drift-free throughout. Open:
+    against 0.9 % simulated), with reference-interval occupancy near 90%
+    and no common signed drift. This occupancy does not establish predictive
+    calibration. Open:
     (a) the draws per quote needed on real returns: WP93
     (`STUDIES/tick_pooling_v1`) showed that pooling stale draws as they
     stand cannot work (the posterior moves 3.4 % per tick), that K = 200

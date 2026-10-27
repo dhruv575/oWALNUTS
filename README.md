@@ -197,8 +197,9 @@ frozen step and metric (chain `c` is bit-identical to the single-chain
 re-adapt, it carries identity/diagonal metrics only (dense and structured
 runs error), the fill of new coordinates is the caller's decision, and the
 library does not validate that `k` draws refresh the posterior to any
-accuracy: on the 250-return SV model of WP84, 50–200 draws per chain stayed
-calibrated over 100 ticks (20–80 ms per tick) but did not reach the R-hat
+accuracy: on the 250-return SV model of WP84, 50–200 draws per chain kept
+about 90% of draws inside reference 90% intervals over 100 ticks (20–80 ms
+per tick) but did not reach the R-hat
 1.01 / reference-MCSE bar; scored against the quote itself (post hoc), 200
 draws per chain kept the next-period sigma P50 within 2 % and the P95
 within 5 % of the reference on 97 % / 98 % of ticks, 50 draws on 74 % /
@@ -685,6 +686,14 @@ See [SECURITY.md](SECURITY.md) for scope. MIT; see [LICENSE](LICENSE),
 provenance.
 
 ## Evidence
+
+Terminology clarification (2026-10-27): early online-SV entries use
+"calibrated" for the proportion of warm draws inside reference-posterior
+intervals. That statistic measures reference-interval occupancy. Predictive
+calibration requires comparison with realized outcomes, and full posterior
+agreement requires additional checks. The historical measurements below
+are unchanged; WP96 and the predictive-functional diagnostics separate these
+claims explicitly.
 
 - [E1] Funnel tail mass 0.0474 vs 0.0478, reference 0.0477, `v8` 0.0971:
   [`STUDIES/funnel_bias_fix_v1`](STUDIES/funnel_bias_fix_v1/README.md)
