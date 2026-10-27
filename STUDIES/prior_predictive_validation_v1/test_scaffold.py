@@ -84,13 +84,17 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(result['initial_fit'],{'known':'fit'});self.assertEqual(result['rows'][0]['candidate_status'],'ok')
     def test_initial_session_failure_preserves_flat_native_telemetry(self):
         from resident_adapter import InitializationFailure
-        ow=Mock();fit=Mock();fit.summary.return_value={};fit.config={};fit.chain_warnings=['fixture']
+        ow=Mock();fit=Mock();fit.summary.return_value={};fit.config={};fit.chain_warnings.return_value=[dict(chain=2,check='fixture',value=1.1)]
         fit.chains=[dict(depth=[2],divergent=[False],trapped_chain_checks=[dict(replacement_seed=7)],work_total={'calls':12})]
         ow.sample.return_value=fit;ow.WarmSession.side_effect=RuntimeError('session creation')
         with self.assertRaises(InitializationFailure) as caught:DrawResident(ow,Mock(),np.zeros(250),dict(initial=2,warm=3))
         info=caught.exception.payload['initial_fit']
         self.assertEqual(info['chains'][0]['trapped_chain_checks'][0]['replacement_seed'],7)
-        self.assertEqual(info['chains'][0]['work_total'],{'calls':12});self.assertEqual(info['chain_warnings'],['fixture'])
+        self.assertEqual(info['chains'][0]['work_total'],{'calls':12});self.assertEqual(info['chain_warnings'],[dict(chain=2,check='fixture',value=1.1)])
+        fit.chain_warnings.assert_called_once_with()
+        import json
+        from evidence import safe
+        json.dumps(safe(info),allow_nan=False)
     def test_reference_beta_precision_and_chain_identity(self):
         from sentinel_adapter import extract
         from types import SimpleNamespace
