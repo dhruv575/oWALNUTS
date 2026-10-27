@@ -196,16 +196,58 @@ class WarmState:
         each at ``position`` with mass ``mass`` (the WP84 rule for a new
         latent: its prior median 0 and prior variance 1). Step sizes are
         unchanged; ``dim`` must be at least the current dimension. Whether
-        the fill is a sensible start is the caller's decision."""
+        the fill is a sensible start is the caller's decision. A
+        ``shift_window(0, dim - self.dim, position, mass)``."""
         dim = int(dim)
         if dim < self.dim:
             raise ValueError(f"cannot extend a warm state of dimension {self.dim} to the smaller dimension {dim}")
-        extra = dim - self.dim
-        return WarmState(
-            positions=np.concatenate([self.positions, np.full((self.chains, extra), float(position))], axis=1),
-            step_sizes=self.step_sizes.copy(),
-            mass_diagonal=np.concatenate([self.mass_diagonal, np.full((self.chains, extra), float(mass))], axis=1),
-        )
+        return self.shift_window(0, dim - self.dim, position=position, mass=mass)
+
+    def remap(self, dim: int, map: Callable[[int], "int | None"], fill: Any = (0.0, 1.0)) -> "WarmState":
+        """Rebuild every chain onto ``dim`` coordinates
+        (``WarmState::remap`` in Rust): new coordinate ``j`` carries old
+        coordinate ``map(j)`` (position and mass copied; it must be below
+        the current dimension) or, when ``map(j)`` is ``None``, the
+        ``(position, mass)`` of ``fill`` -- a pair of floats, or a callable
+        ``fill(chain, j)`` returning one. Step sizes are unchanged;
+        coordinates may be dropped, reordered or duplicated. ``extend_to``
+        is the identity on the old coordinates; ``shift_window`` is the
+        fixed-lag case."""
+        dim = int(dim)
+        if dim < 1:
+            raise ValueError("dim must be positive")
+        sources = [map(j) for j in range(dim)]
+        for source in sources:
+            if source is not None and not 0 <= int(source) < self.dim:
+                raise ValueError(f"remap refers to coordinate {source} of a warm state of dimension {self.dim}")
+        positions = np.empty((self.chains, dim), dtype=np.float64)
+        mass = np.empty((self.chains, dim), dtype=np.float64)
+        for j, source in enumerate(sources):
+            if source is not None:
+                positions[:, j] = self.positions[:, int(source)]
+                mass[:, j] = self.mass_diagonal[:, int(source)]
+            elif callable(fill):
+                for chain in range(self.chains):
+                    positions[chain, j], mass[chain, j] = fill(chain, j)
+            else:
+                positions[:, j], mass[:, j] = float(fill[0]), float(fill[1])
+        return WarmState(positions=positions, step_sizes=self.step_sizes.copy(), mass_diagonal=mass)
+
+    def shift_window(self, drop_front: int, append: int, position: float = 0.0, mass: float = 1.0,
+                     fill: Any = None) -> "WarmState":
+        """The fixed-lag window move (``WarmState::shift_window`` in Rust):
+        drop the first ``drop_front`` coordinates, keep the rest in order,
+        and append ``append`` new ones at ``(position, mass)`` -- or, with
+        ``fill``, at what ``fill(chain, j)`` returns. The new dimension
+        ``dim - drop_front + append`` must be positive."""
+        drop_front, append = int(drop_front), int(append)
+        if drop_front < 0 or append < 0:
+            raise ValueError("drop_front and append must be nonnegative")
+        if drop_front > self.dim:
+            raise ValueError(f"cannot drop {drop_front} coordinates from a warm state of dimension {self.dim}")
+        kept = self.dim - drop_front
+        return self.remap(kept + append, lambda j: j + drop_front if j < kept else None,
+                          fill if fill is not None else (position, mass))
 
 
 @dataclass
@@ -952,6 +994,189 @@ def start_session(
     return CFuncSession(inner)
 
 
+@dataclass
+class WarmChunk:
+    """The draws of one ``WarmSession.refresh`` call: ``samples`` is
+    ``(chains, draws, dim)``; ``diagnostics`` and ``metadata`` are per
+    chain (``metadata[c]`` has ``effective_seed``, ``final_step_size`` and
+    ``mass_diagonal``); ``work[c]`` is the chain's kernel work totals for
+    this call; ``seed`` is the call's base seed and ``call_index`` its
+    zero-based index; ``target_calls`` is the kernel's gradient count
+    summed over chains."""
+    samples: np.ndarray
+    diagnostics: list[dict[str, Any]]
+    metadata: list[dict[str, Any]]
+    work: list[dict[str, Any]]
+    seed: int
+    call_index: int
+    target_calls: int
+    wall_seconds: float
+
+    def warm_state(self) -> "WarmState":
+        """The state at the end of this call (what ``WarmSession.state()``
+        holds after it)."""
+        return WarmState(
+            positions=np.ascontiguousarray(self.samples[:, -1, :], dtype=np.float64),
+            step_sizes=np.array([m["final_step_size"] for m in self.metadata], dtype=np.float64),
+            mass_diagonal=np.stack([np.asarray(m["mass_diagonal"], dtype=np.float64) for m in self.metadata]),
+        )
+
+
+class WarmSession:
+    """A resident warm-continuation session (``Sampler::start_warm_session``
+    / ``WarmSession`` in Rust): the target, a pool of ``threads`` workers
+    and every per-chain configuration stay alive across ``refresh`` calls.
+
+    ``WarmSession(target, state, *, seed, threads, tuning, ...)`` takes a
+    callable or a ``CFuncTarget`` and a ``WarmState`` of its dimension.
+    ``refresh(draws)`` runs ``draws`` transitions per chain from the
+    current state and returns a ``WarmChunk``; ``state()`` is the current
+    ``WarmState``; ``retarget(target, state)`` swaps the target and state
+    (a new dimension is allowed, the chain count must be the session's;
+    the per-tick call after ``state.shift_window(...)`` or
+    ``state.extend_to(...)``); ``close()`` joins the worker (also on
+    leaving a ``with`` block).
+
+    Seed rule: call ``n`` (``session.calls`` before the call) uses the base
+    seed ``seed + n * chains``, and chain ``c`` of it seed ``seed + n *
+    chains + c``, so call ``n`` is bit-identical to ``sample_warm(target,
+    state_n, draws=k, seed=seed + n * chains, ...)`` on the state before
+    the call (``tests/test_warm_continuation.py``). ``retarget`` does not
+    reset the counter.
+
+    Per call, the kernel allocates one draw buffer and one diagnostics
+    vector per chain, handed over in the chunk; no pool is built and
+    nothing is re-adapted or re-validated beyond admission. Limits apply
+    per call. An execution error (budget exhausted, deadline,
+    cancellation, a fatal target error) makes the session terminal; an
+    error before any target call (``draws=0``, a refused admission, a
+    ``retarget`` whose state does not fit) leaves it as it was. A Python
+    callable is serialised by the GIL; use a ``CFuncTarget`` for real
+    parallel chains. Dropping a session cancels without waiting; the
+    worker keeps the target until its last callback has returned.
+    """
+
+    def __init__(
+        self,
+        target: "LogpGrad | CFuncTarget",
+        state: WarmState,
+        *,
+        seed: int = 0,
+        threads: int = 1,
+        tuning: Tuning = Tuning(),
+        nonfinite: str = "zero_density",
+        max_target_evaluations: int | None = None,
+        max_depth_stop_limit: int | None = None,
+        admit_worst_case: bool = True,
+        coerce: bool = True,
+        cache_initial_evaluation: bool | None = None,
+    ):
+        if not isinstance(state, WarmState):
+            raise TypeError("state must be a WarmState (SampleResult.warm_state())")
+        if isinstance(threads, bool) or not isinstance(threads, (int, np.integer)) or threads < 1:
+            raise ValueError("threads must be a positive integer")
+        cfg = _config_dict(
+            warmup=0, draws=1, seed=seed, threads=threads, tuning=tuning,
+            adaptation=None, mass=None, max_target_evaluations=max_target_evaluations,
+            max_depth_stop_limit=max_depth_stop_limit, admit_worst_case=admit_worst_case,
+            cache_initial_evaluation=cache_initial_evaluation,
+        )
+        self._nonfinite = nonfinite
+        self._coerce = coerce
+        self._seed = int(seed)
+        self._chains = state.chains
+        if isinstance(target, StanTarget):
+            raise TypeError("WarmSession supports callables and CFuncTarget; pass the StanTarget as a callable")
+        if isinstance(target, CFuncTarget):
+            if target.dim != state.dim:
+                raise ValueError(f"CFuncTarget dim {target.dim} != warm state dim {state.dim}")
+            self._cfunc = True
+            self._inner = _owalnuts.start_warm_session_cfunc(
+                target, target.address, target.dim, state.positions, state.step_sizes, state.mass_diagonal,
+                cfg, target.user_data, list(target.parameter_names) if target.parameter_names else None,
+            )
+        else:
+            self._cfunc = False
+            fn = wrap_callable(target) if coerce else target
+            self._inner = _owalnuts.start_warm_session_callable(
+                fn, state.positions, state.step_sizes, state.mass_diagonal, cfg, nonfinite,
+            )
+
+    def refresh(self, draws: int) -> WarmChunk:
+        """Run ``draws`` transitions per chain from the current state."""
+        if isinstance(draws, bool) or not isinstance(draws, (int, np.integer)) or draws < 1:
+            raise ValueError("draws must be a positive integer")
+        return WarmChunk(**self._inner.refresh(int(draws)))
+
+    def state(self) -> WarmState:
+        """The current state: every chain's position after the last call,
+        with the carried step sizes and masses."""
+        positions, step_sizes, mass = self._inner.state()
+        return WarmState(positions=positions, step_sizes=step_sizes, mass_diagonal=mass)
+
+    def retarget(self, target: "LogpGrad | CFuncTarget", state: WarmState) -> None:
+        """Swap the target and the state (same kind of target as the
+        session was started with: callable or ``CFuncTarget``)."""
+        if not isinstance(state, WarmState):
+            raise TypeError("state must be a WarmState")
+        if state.chains != self._chains:
+            raise ValueError(f"state has {state.chains} chains; the session has {self._chains}")
+        if isinstance(target, CFuncTarget):
+            if not self._cfunc:
+                raise TypeError("this session was started on a callable; retarget with a callable")
+            if target.dim != state.dim:
+                raise ValueError(f"CFuncTarget dim {target.dim} != warm state dim {state.dim}")
+            self._inner.retarget_cfunc(
+                target, target.address, target.dim, state.positions, state.step_sizes, state.mass_diagonal,
+                target.user_data, list(target.parameter_names) if target.parameter_names else None,
+            )
+            return
+        if self._cfunc:
+            raise TypeError("this session was started on a CFuncTarget; retarget with a CFuncTarget")
+        if isinstance(target, StanTarget):
+            raise TypeError("WarmSession supports callables and CFuncTarget; pass the StanTarget as a callable")
+        fn = wrap_callable(target) if self._coerce else target
+        self._inner.retarget_callable(fn, state.positions, state.step_sizes, state.mass_diagonal, self._nonfinite)
+
+    @property
+    def calls(self) -> int:
+        """Calls completed so far (the index of the next call)."""
+        return int(self._inner.calls())
+
+    @property
+    def chains(self) -> int:
+        return self._chains
+
+    @property
+    def threads(self) -> int:
+        return int(self._inner.threads())
+
+    @property
+    def terminal(self) -> bool:
+        """Whether an execution error has ended the session."""
+        return bool(self._inner.is_terminal())
+
+    def seed_for_call(self, call: int) -> int:
+        """The base seed of call ``call``: ``seed + call * chains``."""
+        return int(self._inner.seed_for_call(int(call)))
+
+    @property
+    def next_seed(self) -> int:
+        return int(self._inner.next_seed())
+
+    def cancel(self) -> None:
+        self._inner.cancel()
+
+    def close(self) -> None:
+        self._inner.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
 def sample_warm(
     logp_and_grad: "LogpGrad | CFuncTarget",
     state: WarmState,
@@ -1601,7 +1826,7 @@ __all__ = [
     "ALGORITHM_REVISION", "PAPER_ADAPTATION_REVISION", "STOP_CODES", "DEFAULTS", "HAS_STAN", "ZeroDensityError",
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
     "summary", "format_summary", "uniform_starts", "best_of_starts", "START_RULES", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
-    "start_session", "CFuncSession", "ContinuationChunk", "WarmState", "sample_warm",
+    "start_session", "CFuncSession", "ContinuationChunk", "WarmState", "sample_warm", "WarmSession", "WarmChunk",
     "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",

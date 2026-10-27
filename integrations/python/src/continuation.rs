@@ -3,9 +3,9 @@
 use super::*;
 use owalnuts::sampler::{SessionChunk, SessionHandle};
 
-struct OwnedCFunc {
-    raw: RawTarget,
-    _owner: Py<PyAny>,
+pub(super) struct OwnedCFunc {
+    pub(super) raw: RawTarget,
+    pub(super) _owner: Py<PyAny>,
 }
 impl Target for OwnedCFunc {
     fn dimension(&self) -> usize {
@@ -24,6 +24,93 @@ pub(super) struct CFuncSession {
     handle: SessionHandle,
 }
 
+/// One chain's per-transition diagnostics as arrays (`depth`, `stop`,
+/// `target_evaluations`, ...), shared by the continuation and warm
+/// sessions.
+pub(super) fn diagnostics_dict<'py>(
+    py: Python<'py>,
+    diagnostics: &[owalnuts::walnutpie::TransitionDiagnostics],
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item(
+        "depth",
+        diagnostics
+            .iter()
+            .map(|v| v.depth() as u32)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "stop",
+        diagnostics
+            .iter()
+            .map(|v| stop_code(v.stop()))
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "target_evaluations",
+        diagnostics
+            .iter()
+            .map(|v| v.target_evaluations())
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "divergent",
+        diagnostics
+            .iter()
+            .map(|v| v.divergent())
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "max_abs_energy_error",
+        diagnostics
+            .iter()
+            .map(|v| v.maximum_absolute_energy_error())
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "leaves_built",
+        diagnostics
+            .iter()
+            .map(|v| v.leaves_built() as u32)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "selected_refinement_level",
+        diagnostics
+            .iter()
+            .map(|v| {
+                v.selected_refinement_level()
+                    .map(|level| level as i32)
+                    .unwrap_or(-1)
+            })
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "zero_density_evaluations",
+        diagnostics
+            .iter()
+            .map(|v| v.zero_density_evaluations() as u32)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    d.set_item(
+        "trajectory_macro_length",
+        diagnostics
+            .iter()
+            .map(|v| v.trajectory_macro_length())
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+    )?;
+    Ok(d)
+}
+
 fn chunk_dict<'py>(
     py: Python<'py>,
     chunk: SessionChunk,
@@ -37,93 +124,7 @@ fn chunk_dict<'py>(
     let metadata = PyList::empty(py);
     for chain in &chunk.chains {
         flat.extend_from_slice(&chain.samples);
-        let d = PyDict::new(py);
-        d.set_item(
-            "depth",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.depth() as u32)
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "stop",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| stop_code(v.stop()))
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "target_evaluations",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.target_evaluations())
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "divergent",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.divergent())
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "max_abs_energy_error",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.maximum_absolute_energy_error())
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "leaves_built",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.leaves_built() as u32)
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "selected_refinement_level",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| {
-                    v.selected_refinement_level()
-                        .map(|level| level as i32)
-                        .unwrap_or(-1)
-                })
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "zero_density_evaluations",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.zero_density_evaluations() as u32)
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        d.set_item(
-            "trajectory_macro_length",
-            chain
-                .diagnostics
-                .iter()
-                .map(|v| v.trajectory_macro_length())
-                .collect::<Vec<_>>()
-                .into_pyarray(py),
-        )?;
-        diagnostics.append(d)?;
+        diagnostics.append(diagnostics_dict(py, &chain.diagnostics)?)?;
         let work = PyDict::new(py);
         work.set_item("retained", work_totals(py, chain.telemetry.retained())?)?;
         work.set_item("discarded", work_totals(py, chain.telemetry.discarded())?)?;

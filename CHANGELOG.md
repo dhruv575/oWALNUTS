@@ -9,6 +9,61 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ### Added
 
+- Resident warm session (WP91): `Sampler::start_warm_session(target,
+  state) -> WarmSession<T>` keeps a worker thread that owns the target, a
+  pool of `threads` Rayon workers and every per-chain configuration, mass
+  and position alive across calls. `refresh(draws) -> WarmChunk` runs
+  `draws` transitions per chain from the current state and hands back the
+  kernel's own per-chain draw and diagnostics buffers (no copy; nothing
+  else is allocated or re-validated beyond `run_warm`'s admission checks);
+  `state() -> &WarmState`; `retarget(target, state)` swaps the target and
+  state (a new dimension is allowed; the per-tick call); `close()` joins,
+  `cancel()` and `Drop` never block. Seed rule: call `n` uses the base seed
+  `seed + n * chains` and chain `c` of it `seed + n * chains + c`, so call
+  `n` is bit-identical to `Sampler::new().draws(k).seed(seed + n *
+  chains).run_warm(&target, &state_n)` on the state before the call;
+  `retarget` does not reset the counter (`tests/warm_session.rs`). Limits
+  apply per call; an execution error makes the session terminal, an error
+  before any target call (zero draws, a refused admission, a retarget that
+  does not fit) leaves it as it was. Python: `owalnuts.WarmSession(target,
+  state, *, seed, threads, tuning, ...)` for callables and `CFuncTarget`,
+  with `refresh(draws) -> WarmChunk`, `state()`, `retarget(target,
+  state)`, `close()` and the context manager, and the same bit-identity
+  and fixed-lag tests (`integrations/python/tests/test_warm_session.py`).
+- `WarmState::remap(dimension, map, fill)`: new coordinate `j` carries old
+  coordinate `map(j)` (position and mass copied) or, for `None`, the
+  `(position, mass)` of `fill(chain, j)`; coordinates may be dropped,
+  reordered or duplicated. `WarmState::shift_window(drop_front, append,
+  fill)` is the fixed-lag case (drop the oldest coordinates, keep the rest
+  in order, append new ones); `extend_with` / `extend_to` are now the
+  identity-on-old-coordinates case of `remap` and are tested to agree with
+  it. Python: `WarmState.remap(dim, map, fill)` and
+  `WarmState.shift_window(drop_front, append, position, mass, fill)`.
+- `examples/warm_session_bench.rs`: `run_warm` against `WarmSession::refresh`
+  on a hand-written Student-t stochastic-volatility target (the WP84
+  shape, N = 250 returns, 253 coordinates, and a 50-latent fixed-lag
+  window, 53 coordinates), 4 chains, `threads` 4 and 1, K in {5, 10, 50},
+  200 timed calls after 20 warm-up calls, both arms following the session
+  seed rule from the same state so their draws are checked bit for bit.
+  Numbers from one laptop run (contended machine, indicative; median /
+  P95 wall per call, 4 chains, release build): on the 253-coordinate
+  target, `run_warm` versus the session at 4 threads was 2.07 / 3.12 ms
+  versus 1.62 / 2.95 ms at K = 5, 3.56 / 4.79 versus 2.96 / 4.47 at K = 10,
+  and 19.5 / 23.9 versus 19.8 / 57.2 at K = 50 (302, 600 and 2,984
+  gradients per call, 11.7 us each in a tight loop); on the 53-coordinate
+  window at 4 threads, 0.70 / 0.89 versus 0.37 / 0.50 ms at K = 5, 1.07 /
+  1.31 versus 0.67 / 0.92 at K = 10, and 4.28 / 4.94 versus 3.53 / 4.07 at
+  K = 50 (276, 554 and 2,744 gradients, 1.7 us each); at one thread the
+  two are within noise of each other on both targets (window: 1.04 versus
+  1.00 ms at K = 5, 9.8 versus 10.3 ms at K = 50). So the per-call
+  overhead `run_warm` pays and the session removes is about 0.3-0.5 ms
+  with a 4-thread pool (the scoped pool build and teardown, result
+  assembly and re-validation) and under 0.1 ms single-threaded; the rest
+  of a call is kernel work (its gradients plus its own per-transition
+  workspace), which a resident session cannot reduce. A sub-millisecond
+  refresh therefore needs few transitions on a small window, not less
+  overhead: the 53-coordinate window reaches 0.37 ms at K = 5.
+
 - Warm continuation API (WP87, after WP84 `STUDIES/online_sv_quote_v1`):
   `sampler::WarmState` / `WarmChain` (per chain: position, step size,
   diagonal mass `M`), `Posterior::warm_state()` and
