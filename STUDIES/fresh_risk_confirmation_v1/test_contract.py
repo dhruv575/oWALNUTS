@@ -45,4 +45,11 @@ class Contract(unittest.TestCase):
             r=tail_report.terminal_accounting(s,root,[])
             self.assertEqual(r['planned_candidate_origins'],4320);self.assertEqual(r['planned_arm_origins'],12960);self.assertEqual(r['valid_arm_origins'],0)
             a=tail_report.batch_summary(s,root);self.assertEqual(a['status'],'incomplete');self.assertIsNone(a['origin_weighted_comparisons'])
+    def test_empty_unified_accounting(self):
+        import worker
+        with tempfile.TemporaryDirectory() as folder:
+            spec=dict(e62_root=str(Path(__file__).resolve().parents[1]/'fresh_real_value_v1'))
+            result=worker.terminal_accounting(spec,folder,[])
+            self.assertTrue(result['accounting_complete']);self.assertTrue(result['artifact_integrity']['integrity_ok'])
+            self.assertEqual(result['planned_origins'],4320);self.assertEqual(result['tail']['valid_arm_origins'],0)
 if __name__=='__main__':unittest.main()
