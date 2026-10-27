@@ -191,6 +191,33 @@ within 5 % of the reference on 97 % / 98 % of ticks, 50 draws on 74 % /
 78 %. Python: `result.warm_state()`,
 `state.extend_to(dim)`, `owalnuts.sample_warm(target, state, draws=k, seed=s)`.
 
+For a loop of such refreshes, `Sampler::new().seed(s).threads(t)
+.start_warm_session(target, state)` (WP91) keeps the worker thread, a
+pool of `t` workers and every per-chain input resident: `refresh(k)` runs
+`k` transitions per chain and hands back the kernel's own draw buffers,
+`state()` is the current state, `retarget(new_target, new_state)` swaps
+both (a new dimension is allowed) and `close()` joins. Call `n` of a
+session is bit-identical to `run_warm` with seed `s + n * chains` on the
+state before the call (`tests/warm_session.rs`). `WarmState::remap(dim,
+map, fill)` rebuilds the state for a new coordinate layout (new coordinate
+`j` carries old coordinate `map(j)` or the fill), and
+`WarmState::shift_window(drop_front, append, fill)` is the fixed-lag move
+(drop the oldest latents, append new ones at the prior fill), so a
+constant-dimension window and the growing WP88 state are both one call.
+One laptop run of `examples/warm_session_bench.rs` (contended machine,
+indicative; median wall per call, 4 chains x 4 threads, release): on the
+WP84 shape (253 coordinates) `run_warm` 2.1 ms versus the session 1.6 ms
+at 5 transitions per chain, 3.6 versus 3.0 ms at 10, 19.5 versus 19.8 ms
+at 50; on a 50-latent fixed-lag window (53 coordinates) 0.70 versus 0.37
+ms at 5, 1.07 versus 0.67 ms at 10, 4.3 versus 3.5 ms at 50; single-
+threaded the two are within noise. The removable per-call overhead is
+about 0.3-0.5 ms with a 4-thread pool; the rest is the kernel's own work
+(300-3,000 gradients per call at 1.7-12 us each), so a sub-millisecond
+refresh comes from few transitions on a small window (the 53-coordinate
+window at K = 5), not from the session alone. Python: `owalnuts.WarmSession(target, state, seed=s,
+threads=t)`, `session.refresh(k)`, `session.retarget(target, state)`,
+`state.shift_window(1, 1)`.
+
 ## Where it shines
 
 Every number below is from a preregistered, checksummed study in

@@ -372,6 +372,44 @@ for tick, y_new in enumerate(np.random.default_rng(1).normal(size=100)):
     quote = refreshed.samples[:, :, 0].mean()
 ```
 
+For a loop of refreshes, `WarmSession` keeps the target, a pool of
+`threads` workers and every per-chain input resident across calls (WP91):
+`refresh(draws)` returns a `WarmChunk` (`samples` of shape `(chains,
+draws, dim)`, per-chain `diagnostics` and `metadata`, the call's `seed`
+and `target_calls`), `state()` is the current `WarmState`,
+`retarget(target, state)` swaps both (a new dimension is allowed) and
+`close()` joins (also on leaving a `with` block). Call `n` is bit-identical
+to `sample_warm(target, state_n, draws=k, seed=seed + n * chains)` on the
+state before the call (`tests/test_warm_session.py`). `WarmState.remap(dim,
+map, fill)` rebuilds the state for a new coordinate layout and
+`WarmState.shift_window(drop_front, append, position, mass)` is the
+fixed-lag move: drop the oldest latents, append new ones at the prior fill.
+In the Rust microbenchmark (`examples/warm_session_bench.rs`, one
+contended laptop, 4 chains x 4 threads) the session saved about 0.3-0.5 ms
+per call over `run_warm` (a 53-coordinate window: 0.37 ms versus 0.70 ms at
+5 transitions per chain); the rest of a call is kernel work. The Python
+transport adds its own per-call cost on top (array conversion, and the GIL
+for callables).
+
+```python
+window = 50                                # fixed-lag window: [mu, z_1..z_50]
+y = np.random.default_rng(0).normal(size=window)
+result = owalnuts.sample(make_target(y), 1 + window, warmup=1000, draws=1000, seed=1)
+
+with owalnuts.WarmSession(make_target(y), result.warm_state(), seed=1000, threads=4) as session:
+    for y_new in np.random.default_rng(1).normal(size=20):
+        y = np.append(y[1:], y_new)                                   # slide the data window
+        state = session.state().remap(1 + window,                     # keep mu, drop z_1, shift, append z_new
+                                      lambda j: 0 if j == 0 else (j + 1 if j < window else None),
+                                      fill=(0.0, 1.0))
+        session.retarget(make_target(y), state)
+        chunk = session.refresh(50)                                   # 50 transitions per chain
+        quote = chunk.samples[:, :, 0].mean()
+```
+
+(`shift_window(1, 1)` would also drop `mu`; the remap keeps coordinate 0
+and slides the latents.)
+
 ## Example: stochastic volatility on the top-5 cryptocurrencies
 
 `examples/crypto_sv.ipynb` (executed notebook) and `examples/crypto_sv.py`
