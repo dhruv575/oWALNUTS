@@ -1,0 +1,46 @@
+{
+  "note": "Read immediately after smoke03 in the same installed environment; not recorded by original smoke",
+  "defaults": {
+    "algorithm_revision": "walnutpie-warmup-telemetry-tau0.6-m1-r2-e1-d3-v10",
+    "paper_adaptation_revision": "walnutpie-paper-adaptation-kquantile-gamma-v4",
+    "step_size": 0.5,
+    "max_depth": 10,
+    "min_micro_steps": 1,
+    "max_refinement_levels": 8,
+    "max_error": 1.0,
+    "divergence_threshold": 1000.0,
+    "u_turn_rule": "momentum_sum",
+    "exhaustion_rule": "stop",
+    "warmup_exhaustion_rule": "accept_unless_divergent",
+    "metric_regularization": "stan",
+    "chain_rescue": null,
+    "trapped_chain_restart": {
+      "step_ratio": 0.01,
+      "check_window": 0,
+      "minimum_chains": 3,
+      "minimum_window_transitions": 10,
+      "candidates": 16,
+      "radius": 2.0,
+      "max_attempts": 100
+    },
+    "target_accept": 0.8,
+    "adapt_mass": true,
+    "init_radius": 2.0,
+    "init_max_attempts": 100,
+    "init_candidates": 16,
+    "init": "best_of",
+    "cache_initial_evaluation": true,
+    "admit_worst_case": true
+  },
+  "tuning": {
+    "step_size": 0.5,
+    "max_depth": 3,
+    "min_micro_steps": 1,
+    "max_refinement_levels": 8,
+    "max_error": 1.0,
+    "divergence_threshold": 1000.0,
+    "u_turn_rule": null,
+    "exhaustion_rule": null
+  },
+  "native_sha256": "6f06427db8c968164e0a38cd4f25d5892fa53a422b34f4f79c6831447a81fd85"
+}
