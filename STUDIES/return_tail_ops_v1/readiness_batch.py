@@ -1,5 +1,5 @@
 """Twelve concurrent full-size literal arithmetic checks; no market inputs."""
-import argparse,concurrent.futures,json,subprocess
+import argparse,concurrent.futures,json,subprocess,time
 from pathlib import Path
 from batch import load_worker,safe
 from evidence_io import exclusive
@@ -11,7 +11,12 @@ def main():
     root=Path(a.out);root.mkdir(exist_ok=False);here=Path(__file__).resolve().parent
     # Fixtures are part of the fixed readiness budget, before any literal arithmetic.
     with (root/'fixtures.log').open('xb') as log:
+        fixture_start=time.monotonic()
         tested=subprocess.run([spec['python'],'-m','unittest','discover','-s',str(here),'-p','test_*.py','-v'],stdout=log,stderr=subprocess.STDOUT,timeout=45)
+        if tested.returncode==0:
+            remaining=45-(time.monotonic()-fixture_start)
+            if remaining<=0:raise TimeoutError('Fixed fixture budget')
+            tested=subprocess.run([spec['python'],'-m','unittest','discover','-s',str(Path(spec['worker_path']).parent),'-p','test_*.py','-v'],stdout=log,stderr=subprocess.STDOUT,timeout=remaining)
     if tested.returncode:raise RuntimeError('Operational fixtures failed')
     def one(i):
         out=root/f'shard-{i:02d}';out.mkdir()
