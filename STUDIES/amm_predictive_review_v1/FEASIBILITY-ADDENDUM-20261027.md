@@ -1,4 +1,4 @@
-﻿# Fresh qualification feasibility addendum — 2026-10-27
+ï»¿# Fresh qualification feasibility addendum â€” 2026-10-27
 
 Design review only. This is not a preregistration, seed reservation, authorization
 of a run, or a replacement for the original studies. No sampling or benchmarking
@@ -120,3 +120,59 @@ and a causal rolling Student-t baseline; do not treat serial labels as independe
 replications or equate posterior-reference agreement with calibration. Neither
 study establishes executable quotes, inventory control, adverse-selection protection,
 profitability, or deployment readiness.
+
+## Minimal resident implementation scope (proposed ownership)
+
+Implement only new files under `STUDIES/resident_predictive_harness_v1/` in an
+isolated worktree; do not change sampler kernels or the active WP96/WP97 runners.
+Suggested files: `harness.py`, `sv_target.py`, `test_harness.py`, and a README with
+an explicit diagnostic-only scope. Reuse public APIs and the existing reviewed
+numerical routines with pinned source hashes; avoid copying an untracked variant.
+
+Source pointers:
+
+- `integrations/python/src/warm_session.rs`: public resident `WarmSession`, retarget,
+  refresh_functionals, output transport and seed behavior.
+- `integrations/python/bench/warm_functionals_bench.py`: GIL-free numba SV target
+  and C functional examples; audit its actual priors/settings against WP96 rather
+  than assuming the benchmark is the identical posterior.
+- `integrations/python/README.md`: corrected fixed-window remap and `WarmState`
+  construction; `integrations/python/tests/test_warm_functionals.py` and
+  `test_warm_session.py`: established public API parity examples.
+- `STUDIES/online_sv_quote_v2/models/sv.stan`: independent stationary-boundary
+  Student-t SV target. Pin source and exact n/y/rho/nu/mu_mean/mu_sd/log_sigma_mean/
+  log_sigma_sd/beta_sd values for every reference; validate target log density and
+  gradients on fixed finite positions before trusting independent fits.
+
+A single C functional should return four values per retained draw: mu, log_sigma,
+beta and h_last reconstructed from all noncentered innovations. Keep original
+chain identity, dimensions and all diagnostic metadata; use no post hoc chain
+selection. `refresh_functionals(K, ...)` avoids retaining full latent draws while
+preserving joint predictive components. Derive m=mu+rho*(h_last-mu) and sigma from
+these components; calculate analytic scale P50/P95 and integrated return P5/P50/P95
+in the same resident Python call. Return numerical-order/residual/fallback metadata
+and an explicit failure status, not a quote on failed integration.
+
+For each chain, keep coordinates 0..2, shift later innovations left, fill the new
+innovation at the frozen prior value, and set new z0=rho*old_z0+sqrt(1-rho^2)*old_z1.
+Carry step sizes and explicitly document the diagonal mass heuristic (the old
+boundary-role mass for new z0); validate overlap-path equality. This initialization
+preserves retained latent values, not posterior stationarity. Use the exact same
+mapping as the chosen frozen comparator or call the change a new candidate.
+
+The measured tick starts before constructing the new window/target and ends after
+all required quantiles, numerical checks and diagnostics have been returned to the
+caller. Include state extraction/remap, retarget, native sampling, compact-value
+conversion and all CDF/Brent work. Record subordinate timings only for attribution;
+measure total directly with a monotonic clock. Report JIT/initial fit separately
+and disclose whether imports, logging and durable storage are included. Track
+actual process peak RSS, initialization failures and all unsuccessful tick times.
+
+Meaningful local tests before any sampling study: four-field C functional versus
+explicit latent reconstruction; window overlap identity; fixed-seed refresh versus
+refresh_functionals sample/value parity; exact known-parameter scale fixture and
+return quadrature versus independent integration; and numerical failure propagation.
+Only a tiny development smoke is justified after these pass; its purpose is to
+establish implementation and budget, not accuracy qualification. Freeze native
+build hash, feature/default settings (including tree depth), threads and complete
+configuration so a new Python build cannot silently change the old runner's kernel.

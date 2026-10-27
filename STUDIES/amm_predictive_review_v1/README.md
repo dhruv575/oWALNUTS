@@ -68,21 +68,16 @@ WP88/WP96 compact draws omit beta, so full return prediction cannot be recovered
 from those files. WP97 stores beta; the proposed full-return diagnostic is scoped
 accordingly.
 
-## Recovery status at packaging, 2026-10-27
+## Recovery update: 2026-10-27, 17:20 UTC
 
-The user authorized restarting the box and autonomous research. The start API
-failed because the `owalnuts` AWS CLI session expired; the instance was last
-confirmed stopped. No new remote experiment is running on our behalf. Sign-in
-approval is pending solely because the signing-in-to-aws skill explicitly requires
-approval before initiating its authentication flow.
+Authentication was renewed and the existing CPU c7a.4xlarge instance is running.
+WP96 was recovered and independently reproduced: all original policies fail their
+frozen qualification. Its supplemental analytic-CDF diagnostics preserve that
+verdict. WP97 and the separate fixed-budget precision diagnostic are active as of
+this timestamp; this is a dated status, not a claim they remain active indefinitely.
+The instance backstop is 19:35:51 UTC.
 
-- Instance: `i-05c712c79c74ae7f8`, region `us-east-2`, profile `owalnuts`.
-- Next: renew login, start the existing instance, discover its **new public IP**,
-  inspect active jobs and idle-shutdown behavior, then recover the two study lanes.
-  The historical address `18.218.209.216` must not be assumed current after restart.
-- WP96 recovery-ready branch: `wt/warm-drift`, commit `7319378e`.
-- WP97 recovery-ready branch: `wt/pool-confirm`, commit `4cd64116`.
-
-Recovery readiness does not establish completion of either remote study. Preserve
-the original run records, verify downloaded hashes, then analyze the original
-protocols and supplemental diagnostics before choosing subsequent compute.
+Instance `i-05c712c79c74ae7f8`, region `us-east-2`, profile `owalnuts`; current
+restart address `3.22.233.143`. Rediscover the public address after future restarts.
+See [the feasibility addendum](FEASIBILITY-ADDENDUM-20261027.md) for prerequisites
+and limitations of another fresh study. No qualification was launched by this review.
