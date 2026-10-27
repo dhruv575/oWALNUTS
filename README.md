@@ -1290,3 +1290,17 @@ claims explicitly.
   not complete return prediction, executable quotes or profitability.
   Growing-history weights cannot be reused unchanged in a sliding window:
   [`STUDIES/pool_confirm_v1`](STUDIES/pool_confirm_v1/README.md).
+- [E60] Retrospective full-return predictive scoring on the two already-inspected
+  WP97 streams: **unpooled K=200 closely tracks long-reference forecasts, but
+  added predictive value over strong cheap controls remains inconclusive**.
+  Across 200 next-return outcomes and 1,400 valid forecasts, reference mean
+  log-score gains over NIG AR1 are +0.071/+0.222 nats (simulated/real), versus
+  +0.006/+0.005 for rolling Student-t5 and +0.010/+0.033 for EWMA Student-t5.
+  Every predeclared block-bootstrap interval for the latter two controls spans
+  zero. Mean absolute warm/reference PIT differences are about 0.0009-0.0011.
+  The original run failed after 121 origins; a separately reviewed recovery
+  reused those exact outputs and computed only the remaining 79. Both attempts
+  are preserved. This is descriptive evidence on reused dependent streams,
+  not fresh market generalization, pooled H10/H20 return qualification or
+  profitability evidence:
+  [`predictive_value_diagnostic_v1`](STUDIES/predictive_value_diagnostic_v1/README.md).
