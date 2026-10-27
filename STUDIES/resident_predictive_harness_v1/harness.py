@@ -61,11 +61,11 @@ def summarize(values,deadline):
         numerical=dict(nodes=[64,128],cdf_discrepancy=discrepancy,normalized_endpoint_difference=endpoint,rules=rules))
 
 class Resident:
-    def __init__(self,compiled,functional,y,state,seed=99371001):
+    def __init__(self,compiled,functional,y,state,seed=99371001,tuning=None,max_target_evaluations=2000000,admit_worst_case=False):
         self.closed=False; self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
         self.owner=TargetOwner(compiled,self.y)
         self.session=owalnuts.WarmSession(self.owner.target,state,seed=seed,threads=4,
-            tuning=owalnuts.Tuning(max_depth=3,max_refinement_levels=8),max_target_evaluations=2000000,admit_worst_case=False)
+            tuning=tuning or owalnuts.Tuning(max_depth=3,max_refinement_levels=8),max_target_evaluations=max_target_evaluations,admit_worst_case=admit_worst_case)
     def tick(self,y_new,k):
         start=time.perf_counter(); row={'status':'failed','k':k,'phase':'validate','state_advanced':False}
         if self.closed:
@@ -86,6 +86,7 @@ class Resident:
             row['phase']='sample'
             chunk=self.session.refresh_functionals(k,[self.functional])
             sampling_end=time.perf_counter()
+            self.last_values=np.array(chunk.values,copy=True)
             row.update(chain_ids=list(range(chunk.values.shape[0])),shape=list(chunk.values.shape),
                 preparation_seconds=preparation,sampling_seconds=sampling_end-start-preparation,
                 seed=int(chunk.seed),diagnostics=chunk.diagnostics,metadata=chunk.metadata,

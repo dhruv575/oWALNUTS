@@ -69,8 +69,8 @@ installation, not a preexisting editable checkout.
 
 Measure each total tick directly from new-window construction through final
 validated outputs. Include target owner/remap/retarget, native refresh, compact
-transport, scale and return inversion, checks and telemetry serialization into the
-returned record; durable disk writing is reported separately. Preserve structured
+transport, scale and return inversion, checks and telemetry assembly into the
+returned record; JSON serialization and durable disk writing are reported separately. Preserve structured
 per-chain diagnostics, effective seeds, target calls and work. Record process
 getrusage peakRSS and supervisor wall/exit/timeout independently; explicitly report
 whether child processes exist. Save each completed update immediately, plus terminal
