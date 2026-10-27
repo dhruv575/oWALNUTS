@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unbundle the branch and build the harness (release). Built before the lanes were free: nice -n 10, 4 jobs, cores 8-15.
-set -e
+set -eo pipefail
 . $(dirname $0)/env.sh
 cd $L
 if [ ! -d repo ]; then git clone -q ~/owalnuts repo; fi
