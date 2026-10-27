@@ -20,12 +20,14 @@ def paired_check(rows,summary,n):
         if summary:
             if summary['status_counts'][a]!=dict(counts[a]):raise ValueError('Frozen status counts mismatch')
             want=summary['arms'][a]['logscore']['full_mean']
+            if want is not None and (type(want)not in (int,float) or not math.isfinite(want)):raise ValueError('Nonfinite/nonnumeric frozen mean')
             if (mean is None)!=(want is None) or mean is not None and abs(mean-want)>1e-12:raise ValueError('Frozen arm mean mismatch')
     for baseline in ARMS[1:]:
         pairs=[r['arms']['candidate']['logpdf']-r['arms'][baseline]['logpdf'] for r in rows if r['arms']['candidate']['status']=='ok' and r['arms'][baseline]['status']=='ok']
         mean=math.fsum(pairs)/n if len(pairs)==n else None;name='candidate_minus_'+baseline;result['paired_means'][name]=dict(available_pairs=len(pairs),full_mean=mean)
         if summary:
             want=summary['paired'][name]['full_mean']
+            if want is not None and (type(want)not in (int,float) or not math.isfinite(want)):raise ValueError('Nonfinite/nonnumeric frozen mean')
             if (mean is None)!=(want is None) or mean is not None and abs(mean-want)>1e-12:raise ValueError('Frozen paired mean mismatch')
     return result
 
@@ -56,7 +58,7 @@ def audit(root):
         records={p.name:p for p in (folder/'candidate/native').glob('*.json')};records.update({p.name:p for p in (folder/'candidate/records').glob('*.json')})
         for path in sorted(records.values()):
             value=read(path);health['recorded_ticks']+=1
-            for h in value.get('native_health',[]):
+            for h in (value.get('native_health') or []):
                 health['recorded_chain_updates']+=1
                 for key in ['transitions','divergences','nonfinite_energy_errors','zero_density_evaluations']:
                     if h.get(key)is None:missing[key]+=1
@@ -64,7 +66,7 @@ def audit(root):
                 for key in ['maximum_depth','maximum_finite_abs_energy_error']:
                     if h.get(key)is not None:health[key]=max(health[key] if health[key]is not None else h[key],h[key])
                 stops.update(h.get('stop_counts',{}))
-            num=value.get('score',{}).get('numerical')
+            num=(value.get('score') or {}).get('numerical')
             if num:
                 numeric['recorded_scores']+=1
                 for dest,src in [('max_logpdf_order_difference','logpdf_absolute_difference'),('max_pit_order_difference','pit_absolute_difference')]:numeric[dest]=max(numeric[dest] or 0,num[src])
