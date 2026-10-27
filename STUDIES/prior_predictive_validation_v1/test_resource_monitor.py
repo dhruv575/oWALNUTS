@@ -11,7 +11,7 @@ class ProcessFixtures(unittest.TestCase):
    self.assertTrue(result['group_drained'],result);self.assertEqual(result['remaining_owned_pids'],[])
    return result
  def test_normal(self):
-  r=self.run_fixture('print("fixture")');self.assertEqual(r['exit_code'],0);self.assertEqual(r['status'],'exited')
+  r=self.run_fixture('print("fixture")');self.assertEqual(r['exit_code'],0);self.assertEqual(r['status'],'exited');self.assertFalse(r.get('orphaned_children_after_leader_exit',False))
  def test_child_survives_leader_exit(self):
   r=self.run_fixture('import subprocess,sys\nsubprocess.Popen([sys.executable,"-c","import time;time.sleep(30)"],start_new_session=True)')
   self.assertTrue(r['orphaned_children_after_leader_exit']);self.assertLess(r['elapsed_seconds'],3)
