@@ -9,14 +9,15 @@ def module(path,name):
 def exclusive(path,value):
     with Path(path).open('x',encoding='utf-8') as handle:json.dump(value,handle,indent=2,allow_nan=False);handle.write('\n')
 
-def admit(path):
+def admit(path,expected_status='frozen_scoring_authorized'):
     spec=json.loads(Path(path).read_bytes())
-    if spec.get('status')!='frozen_scoring_authorized':raise ValueError('Replication scoring not authorized')
+    if expected_status not in ['frozen_scoring_authorized','development_authorized'] or spec.get('status')!=expected_status:raise ValueError('Replication scoring not authorized')
     from data_contract import MONTHS
     if len(spec['months'])!=3:raise ValueError('All3 panels required')
     for i,(actual,want)in enumerate(zip(spec['months'],MONTHS)):
         if any(actual.get(k)!=v for k,v in want.items()):raise ValueError('Fixed month contract changed')
         seeds=dict(candidate=dict(initial=2026102801000000+100000*i,warm=2026102802000000+100000*i),references=[502710000+100000*i+1000*j for j in range(8)],bootstrap=2026102803000000+100000*i)
+        if expected_status=='development_authorized':seeds=dict(candidate=dict(initial=993711000,warm=993712000),references=[993713000]*8,bootstrap=17)
         if actual['seeds']!=seeds:raise ValueError('Reserved month seeds changed')
     if spec['K']!=400 or spec['window']!=250:raise ValueError('Fixed K/window changed')
     draft=json.loads(Path(__file__).with_name('COMPUTE-DRAFT.json').read_bytes())
@@ -37,6 +38,9 @@ def terminal_accounting(spec,month,root,jobs):
     from reuse import calendar
     modules=calendar(month,spec['e62_root']);root=Path(root);root.mkdir(parents=True,exist_ok=True)
     rows=modules['ledger'].build(root);refs=modules['ledger'].references(root);integrity=modules['ledger'].validate_artifacts(root)
+    for row in rows:
+        for arm in row['arms'].values():
+            if arm['status']=='ok' and (not __import__('math').isfinite(arm['logpdf']) or not __import__('math').isfinite(arm['pit']) or not 0<=arm['pit']<=1):raise ValueError('Invalid status-ok terminal score')
     n=modules['contract']['origins'];valid={arm:sum(r['arms'][arm]['status']=='ok' for r in rows) for arm in ['candidate','rolling_t5','ewma_t5']}
     expected={(p,i) for p,count in [('candidate',1),('baselines',1),('reference',8),('report',1)] for i in range(count)}
     identities=[(j['phase'],j['index']) for j in jobs]
@@ -46,6 +50,10 @@ def terminal_accounting(spec,month,root,jobs):
       planned_origins=n,planned_forecasts=n*3,planned_references=8,valid_scores=valid,all_planned_forecasts_available=all(v==n for v in valid.values()),
       references_complete=sum(r['status']=='complete' for r in refs),reference_diagnostics_pass=sum(r.get('reference_diagnostics_pass')is True for r in refs),artifact_integrity=integrity,qualification=None)
     exclusive(root/'terminal-ledger.json',rows);exclusive(root/'terminal-references.json',refs);exclusive(root/'terminal-validation.json',validation);return validation
+
+def batch_summary(spec,batchroot):
+    from aggregate import batch_summary as summarize
+    return summarize(spec,batchroot)
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('phase',choices=['candidate','baselines','reference','report']);parser.add_argument('--month',required=True);parser.add_argument('--index',type=int,default=0);parser.add_argument('--manifest',required=True);parser.add_argument('--root',type=Path,required=True);args=parser.parse_args()
