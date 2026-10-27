@@ -417,6 +417,14 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     accuracy and reliable uncertainty measurement remain open. A known Gaussian-chain
     [MCSE diagnostic](../STUDIES/predictive_mcse_diagnostic_v1/README.md)
     shows why short-chain estimated MCSE alone cannot certify accuracy.
+    A [retrospective full-return scoring diagnostic](../STUDIES/predictive_value_diagnostic_v1/README.md)
+    now finds small unpooled K200/reference forecast differences on 200 reused
+    origins. Reference gains over rolling/EWMA Student-t controls are small and
+    all predeclared block intervals span zero, despite gains over NIG AR1.
+    Thus approximation fidelity and incremental predictive value are separate
+    questions; further speed work alone does not establish the need for SV.
+    Fresh prior-predictive calibration remains pending and, because its
+    generator matches the SV model, cannot establish real-market value.
 23. **Stuck chains on repeated refits** (WP84 post hoc). Re-fitting the
     250-return SV model from scratch at every tick, with best-of-16 starts,
     left one chain frozen (warmup step collapsed to about 1e-6, log density
