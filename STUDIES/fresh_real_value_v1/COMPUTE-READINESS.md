@@ -9,8 +9,8 @@ continues after arithmetic failures, stops after native failure, and preserves
 immutable per-tick records. The E60 baseline snapshot is byte-identical; incremental
 EWMA is checked against its full-history recurrence. The shared monitor from
 281033bb keeps process/RSS/deadline polling frequent, scans output every2seconds,
-and checks final bytes after draining. Original shared test sources are copied
-unchanged, with import aliases pointing at the pinned snapshots.
+and checks final bytes after draining. Shared test sources retain upstream hashes; the subprocess fixture import is
+renamed to its snapshot module, with aliases pointing at pinned implementations.
 
 Eleven production jobs are fixed: candidate, independent baseline phase, eight
 references, report. All1488 origins/4464 arm slots and eight reference slots remain
