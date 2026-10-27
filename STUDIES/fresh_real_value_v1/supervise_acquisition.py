@@ -78,6 +78,9 @@ def supervise(command,cwd,out,*,seconds=300,rss_limit=512*1024**2,output_limit=6
         if finish_check is not None:
             try:state.update(finish_check())
             except Exception as error:state.update(bindings_held=False,admission_error=repr(error))
+        if 'sealed_acquisition_admitted' in state:
+            state['sealed_acquisition_admitted']=bool(state['sealed_acquisition_admitted'] and
+                state['status']=='exited' and state.get('exit_code')==0 and not state['remaining_owned_pids'])
         exclusive(final_path,state)
     return state
 

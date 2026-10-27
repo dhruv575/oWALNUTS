@@ -1,6 +1,6 @@
 {
   "status": "frozen_pending_parent_launch_authorization",
-  "frozen_at_utc": "2026-10-27T20:15:44.781723+00:00",
+  "frozen_at_utc": "2026-10-27T20:19:39.626224+00:00",
   "scope": "Acquisition-only collector/supervisor/method freeze; rawvalues remain quarantined until separate full scoring freeze",
   "files": {
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
@@ -10,10 +10,10 @@
     "exposure_inventory.py": "2b14bc4bc5f9ac652b11e17c59911173a72b0fa89e486276a91ffb503f56a055",
     "acquire.py": "aea1dfafe7ceddfb78814e154f1190dd950ee21cb851b5865230affc5667493d",
     "test_acquire.py": "5131f0777d683945c9a0cdbb506a90b2f0f35f30d27bcb53e7601b464281f7fe",
-    "supervise_acquisition.py": "992cb633d289eb61bf110adb29103304ef940431042f448ba9b51e4fee8bfec7",
-    "test_supervise_acquisition.py": "9a2c75b64f85da44046a39cc12372df74c6fa03da043ccb8c005b6f8357d1a7b",
+    "supervise_acquisition.py": "a6925f3e54f9539a88ff533c6ca2b7bc813e5c876364d2f3fbd618b2df49ff31",
+    "test_supervise_acquisition.py": "81e7624e31392dd06e7b6f3261f893b80358ff64b424ac354262cec48da4d60b",
     "ACQUISITION-DRAFT.json": "f2a02add3b11006bca8b612ada07c7765bf930dd346e958aedf15ae8f9ad97a6",
-    "ACQUISITION-PENDING.json": "adb215dff3323c154ab7e435fd6d03e20b0fcec7b43c5c23191e43d957b418b8",
+    "ACQUISITION-PENDING.json": "e96026edbba16e31c996695346569d7a9d6d42d716e5b54033e026bfa62760b5",
     "ACQUISITION-ADMISSION.md": "dcef60a23641e2d9ed884f79a0c0dcee5f1d17aba18cc6aa58349b72414ca4a8"
   },
   "runtime": {
@@ -24,7 +24,7 @@
     "base_executable_sha256": "624b66d8178129ac5611f3cf32adf440ea0b7dc6b1bde60c5677d7ebc62e635d",
     "psutil": "7.2.2"
   },
-  "fixtures": "6 deterministic tests pass:4collector and normal/descendant-timeout supervisor; no network or market data",
+  "fixtures": "4 collector fixtures and3 supervisor fixtures pass; failed-exit and timed-out complete-looking outputs cannot be admitted",
   "external_limits": {
     "hard_seconds": 300,
     "startup_allowance_seconds": 0,
@@ -35,5 +35,7 @@
   "supersedes_pre_supervisor_freeze_sha256": "4ff18414ff455bd079b7604c1fd793f9e9551c63ab8dded3351223a2df76da11",
   "superseded_commit": "6a0dc237",
   "launch_control": "Parent creates new immutable authorized protocol by changing pendingstatus only; all other acquisition/method/source/runtime settings unchanged",
-  "no_market_data_endpoint_called": true
+  "no_market_data_endpoint_called": true,
+  "supersedes_admission_fix_freeze_sha256": "e20e8eb6e364535d4abcad7566d994feaa98ebda153fefdfa1f02afbf28e8dcc",
+  "admission_fix": "Durable admitted flag also requires exited/exit0/drained; no scientific method or collector changes"
 }

@@ -3,6 +3,16 @@ from pathlib import Path
 from supervise_acquisition import supervise
 
 class SupervisorFixtures(unittest.TestCase):
+    def test_complete_looking_files_cannot_override_failed_monitor(self):
+        for tail,seconds in [('raise SystemExit(1)',5),('import time;time.sleep(30)',.8)]:
+            with tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);out=root/'out'
+                code="import pathlib,json,sys; p=pathlib.Path(sys.argv[1]);p.mkdir();(p/'terminal.json').write_text(json.dumps({'complete':True,'completed_requests':[]}));"+tail
+                result=supervise([sys.executable,'-c',code,str(out)],root,out,seconds=seconds,finish_check=lambda:dict(sealed_acquisition_admitted=True))
+                self.assertFalse(result['sealed_acquisition_admitted'])
+                final=json.loads((root/'out.supervisor.final.json').read_bytes())
+                self.assertFalse(final['sealed_acquisition_admitted'])
+
     def test_normal_process(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);out=root/'out'
