@@ -1,4 +1,5 @@
 """Development resident predictive processor. No qualification or quoting policy."""
+import ctypes, os
 import argparse, hashlib, importlib.util, json, platform, sys, time
 from pathlib import Path
 import numpy as np
@@ -10,6 +11,29 @@ HERE=Path(__file__).resolve().parent
 PROCESS=HERE.parent/'amm_predictive_review_v1/predictive-return-smoke/process.py'
 spec=importlib.util.spec_from_file_location('review_return_processor',PROCESS)
 processor=importlib.util.module_from_spec(spec); spec.loader.exec_module(processor)
+
+def memory():
+    if os.name!='nt':
+        import resource
+        return dict(pid=os.getpid(),status='measured',method='resource.getrusage',peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*(1 if sys.platform=='darwin' else 1024))
+    from ctypes import wintypes
+    class Counters(ctypes.Structure):
+        _fields_=[('cb',wintypes.DWORD),('PageFaultCount',wintypes.DWORD)]+[
+            (name,ctypes.c_size_t) for name in ('PeakWorkingSetSize','WorkingSetSize',
+            'QuotaPeakPagedPoolUsage','QuotaPagedPoolUsage','QuotaPeakNonPagedPoolUsage',
+            'QuotaNonPagedPoolUsage','PagefileUsage','PeakPagefileUsage','PrivateUsage')]
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    psapi=ctypes.WinDLL('psapi',use_last_error=True)
+    kernel.GetCurrentProcess.restype=wintypes.HANDLE
+    psapi.GetProcessMemoryInfo.argtypes=[wintypes.HANDLE,ctypes.POINTER(Counters),wintypes.DWORD]
+    psapi.GetProcessMemoryInfo.restype=wintypes.BOOL
+    counters=Counters()
+    counters.cb=ctypes.sizeof(counters)
+    if not psapi.GetProcessMemoryInfo(kernel.GetCurrentProcess(),ctypes.byref(counters),counters.cb):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return dict(pid=os.getpid(),status='measured',method='in-process GetProcessMemoryInfo',
+        peak_working_set_bytes=counters.PeakWorkingSetSize,current_working_set_bytes=counters.WorkingSetSize,
+        private_usage_bytes=counters.PrivateUsage,peak_pagefile_usage_bytes=counters.PeakPagefileUsage)
 
 def identity(path):
     path=Path(path); return dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
@@ -41,7 +65,7 @@ class Resident:
         self.compiled=compiled; self.functional=functional; self.y=np.array(y,copy=True)
         self.owner=TargetOwner(compiled,self.y)
         self.session=owalnuts.WarmSession(self.owner.target,state,seed=seed,threads=4,
-            tuning=owalnuts.Tuning(max_depth=8),max_target_evaluations=2000000,admit_worst_case=False)
+            tuning=owalnuts.Tuning(max_depth=3),max_target_evaluations=2000000,admit_worst_case=False)
     def tick(self,y_new,k):
         start=time.perf_counter(); row={'status':'failed','k':k}
         try:
@@ -57,7 +81,7 @@ class Resident:
             row.update(status='ok',chain_ids=list(range(chunk.values.shape[0])),shape=list(chunk.values.shape),
                        preparation_seconds=preparation,sampling_seconds=sampling_end-start-preparation,
                        summary_seconds=time.perf_counter()-sampling_end,seed=int(chunk.seed),
-                       diagnostics_repr=repr(chunk.diagnostics),metadata_repr=repr(chunk.metadata))
+                       diagnostics=chunk.diagnostics,metadata=chunk.metadata,work=chunk.work,target_calls=int(chunk.target_calls),call_index=int(chunk.call_index))
         except Exception as exc:
             row['error']=repr(exc)
         row['total_seconds']=time.perf_counter()-start
@@ -70,10 +94,10 @@ def main():
     if args.out.exists(): raise SystemExit('Refusing to overwrite output')
     args.out.mkdir(parents=True)
     result=dict(kind='development smoke only; no qualification',rows=[],platform=platform.platform(),
-        python=sys.version,versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__),
+        python=sys.version,memory_start=memory(),python_api=identity(owalnuts.__file__),versions=dict(numpy=np.__version__,scipy=scipy.__version__,numba=numba.__version__),
         source=[identity(HERE/'harness.py'),identity(HERE/'sv_target.py'),identity(PROCESS)],
-        native=[identity(p) for p in Path(owalnuts.__file__).parent.rglob('*.pyd')],
-        configuration=dict(N=12,K=8,chains=4,max_depth=8,seed=99371001,initial_seed=99371002,
+        native=[identity(p) for p in Path(owalnuts.__file__).parent.rglob('*') if p.suffix in ('.pyd','.so')],
+        configuration=dict(N=12,K=8,chains=4,max_depth=3,seed=99371001,initial_seed=99371002,
         data_seed=99371003,append_innovation=0,mass_append=1,numerical_nodes=[64,128],
         max_target_evaluations=2000000,admit_worst_case=False,
         initial_warmup=100,initial_draws=10,early_shift_update=2),
@@ -85,17 +109,18 @@ def main():
         started=time.perf_counter(); compiled=compile_target(); functional=compile_functional()
         owner=TargetOwner(compiled,y[:12]); init=np.zeros((4,15));init[:,0]=2*np.log(.005);init[:,1]=np.log(.2)
         fitted=owalnuts.sample(owner.target,15,init=init,chains=4,warmup=100,draws=10,
-            seed=99371002,threads=4,tuning=owalnuts.Tuning(max_depth=8))
+            seed=99371002,threads=4,tuning=owalnuts.Tuning(max_depth=3))
         resident=Resident(compiled,functional,y[:12],fitted.warm_state())
         result['initialization_seconds']=time.perf_counter()-started
         for tick in range(1,5):
             row=resident.tick(y[11+tick],8);row['tick']=tick;row['new_observation']=float(y[11+tick]);result['rows'].append(row)
-            (args.out/'results.json').write_text(json.dumps(result,indent=2))
+            (args.out/'results.json').write_text(json.dumps(result,indent=2,default=lambda v:v.tolist() if isinstance(v,np.ndarray) else v.item() if isinstance(v,np.generic) else str(v)))
             if row['status']!='ok': break
         result['status']='complete' if len(result['rows'])==4 and all(r['status']=='ok' for r in result['rows']) else 'failed'
     except Exception as exc: result.update(status='failed',error=repr(exc))
     finally:
         if resident is not None: resident.close()
-        (args.out/'results.json').write_text(json.dumps(result,indent=2))
+        result['memory_end']=memory()
+        (args.out/'results.json').write_text(json.dumps(result,indent=2,default=lambda v:v.tolist() if isinstance(v,np.ndarray) else v.item() if isinstance(v,np.generic) else str(v)))
     print(json.dumps(dict(status=result['status'],rows=len(result['rows']))))
 if __name__=='__main__':main()

@@ -38,3 +38,11 @@ No predictive result was produced. The corrected development harness disables
 worst-case admission while preserving the same actual two-million evaluation
 limit; this is an admission setting change, not a higher compute budget. Smoke02
 uses the identical seeds/data and is a debugging rerun, not fresh evidence.
+
+Smoke02 also failed before sampling: the actual API always admits against an
+explicit evaluation cap. Disabling admit_worst_case does not bypass that check.
+Smoke03 changes the development tree-depth cap from8 to3, retaining the same
+two-million evaluation cap and data/seeds. This is a changed development sampler,
+not a practical accuracy candidate. Structured diagnostics and native process
+memory are now recorded; callback keep_alive retains (compiled,array) without a
+self-cycle. The first two failure records remain unchanged.
