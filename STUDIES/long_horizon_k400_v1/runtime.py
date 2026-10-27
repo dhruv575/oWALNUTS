@@ -9,9 +9,9 @@ def module(path,name):
     try:
         spec=importlib.util.spec_from_file_location(name,p);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
     finally:sys.path.pop(0)
-def admit(path):
+def admit(path,readiness=False):
     spec=json.loads(Path(path).read_text());runtime=spec['runtime']
-    if spec.get('status')!='frozen_authorized':raise ValueError('No data/sampling authorization')
+    if spec.get('status') not in (('literal_readiness_authorized',) if readiness else ('frozen_authorized',)):raise ValueError('No data/sampling authorization')
     if sys.prefix!=runtime['prefix']:raise ValueError('Runtime prefix mismatch')
     for name,v in runtime['packages'].items():
         if importlib.metadata.version(name)!=v:raise ValueError('Runtime package mismatch '+name)

@@ -70,4 +70,4 @@ def reference_reliability(draws,scored,divergences):
                 complete=False
                 if name in ('mu','log_sigma','beta','h_last'):globals_good=False
         metrics[name]=v
-    return dict(reliable=bool(complete and sum(divergences)==0),observed_label_reliable=bool(label_good and globals_good and sum(divergences)==0),metrics=metrics,divergences=divergences,scope='Primary query CDF/density and global/endpoint reliability; secondary scale uncertainty reported separately')
+    return dict(global_reliable=bool(globals_good and sum(divergences)==0),reliable=bool(complete and sum(divergences)==0),observed_label_reliable=bool(label_good and globals_good and sum(divergences)==0),metrics=metrics,divergences=divergences,scope='Primary query CDF/density and global/endpoint reliability; secondary scale uncertainty reported separately')
