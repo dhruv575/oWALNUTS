@@ -41,7 +41,7 @@ architecture and operating system (see the `walnutpie` module documentation).
   workspace is unchanged and dominates what a call allocates (about 7 KiB
   per gradient, 22 MB per 50-transition call on that target, freed within
   the call). `examples/warm_session_bench.rs` gains the functional arm
-  (`sigma_next = exp(h_{n+1} / 2)` from the latent recursion, and the last
+  (the conditional median next-period scale, excluding future innovation, and the last
   five latents) and a counting global allocator. One laptop run (quiet
   machine, indicative; median wall per call, 4 chains, release, counting
   allocator on for every arm): on the 53-coordinate window at 4 threads, `refresh` versus `refresh_functionals` was 0.39 / 0.59 versus 0.38 / 0.55 ms (median / P95) at K = 5, 0.68 / 0.84 versus 0.70 / 0.82 at K = 10 and 3.2 / 3.5 versus 3.5 / 4.5 at K = 50 (`run_warm` 0.75, 1.03 and 3.6 ms), and at one thread 0.90 versus 0.84, 1.55 versus 1.55 and 7.9 versus 9.8 ms; on the 253-coordinate target at 4 threads 1.0 versus 1.0 ms at K = 5, 1.8 versus 2.0 at K = 10 and 13.6 versus 13.2 at K = 50, and at one thread 4.4 versus 4.6, 8.7 versus 9.3 and 41 versus 36 ms (that target's 4-thread medians moved by up to 2x between two runs on this laptop; in both runs the two arms stayed within each other's noise, as expected: the two functionals cost one pass over the latents per draw against about 60 gradients per transition). Peak live bytes

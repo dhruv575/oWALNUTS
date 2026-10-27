@@ -10,7 +10,7 @@
 //! `Posterior` per call), once as `WarmSession::refresh` (resident
 //! worker, pool and per-chain inputs) and once as
 //! `WarmSession::refresh_functionals` with two functionals (the
-//! next-period volatility `sigma_next = exp(h_{n+1} / 2)` and the last
+//! conditional median next-period scale `exp((mu + rho * (h_n - mu)) / 2)` and the last
 //! five latents: six outputs per draw, no draws retained). All start
 //! from the same state and follow the session's seed rule, so call `n` of
 //! each does the same transitions; the last draws are checked bit for bit
@@ -303,9 +303,10 @@ fn kib(bytes: usize) -> f64 {
     bytes as f64 / 1024.0
 }
 
-/// The quote functionals: `sigma_next = exp(h_{n+1} / 2)` with
-/// `h_{n+1} = mu + rho (h_n - mu)` from the latent recursion of `Sv`
-/// (one output), and the last five latents `z_{n-4..n}` (five outputs).
+/// Benchmark functionals: the conditional median next-period scale
+/// `exp((mu + rho * (h_n - mu)) / 2)` (one output), and the last five
+/// latents `z_{n-4..n}` (five outputs). Future innovation noise is omitted;
+/// quantiles of this functional are not posterior predictive scale quantiles.
 fn quote_functionals(rho: f64) -> Functionals {
     Functionals::new()
         .with(FunctionalFn::new(1, move |q: &[f64], out: &mut [f64]| {
