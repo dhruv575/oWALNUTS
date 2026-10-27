@@ -565,6 +565,59 @@ def from_cfunc(
     )
 
 
+#: The numba signature string of a ``from_cfunc_functional`` callback:
+#: ``void(intp dim, const double* q, double* out, intp n_out, void* user_data)``.
+RAW_FUNCTIONAL_SIGNATURE = "void(intp, double*, double*, intp, void*)"
+
+
+@dataclass(frozen=True)
+class CFuncFunctional:
+    """A compiled C-ABI functional for ``WarmSession.refresh_functionals``:
+    GIL-free, evaluated on the chain's worker thread for every retained
+    draw.
+
+    ``address`` is a function with the exact ABI
+    ``void(intp dim, const double* q, double* out, intp n_out, void* user_data)``
+    (``RAW_FUNCTIONAL_SIGNATURE``; ``numba_functional_signature()``) that
+    writes its ``outputs`` values into ``out[:n_out]``. ``keep_alive`` holds
+    the compiled object for the functional's life.
+    """
+
+    address: int
+    outputs: int
+    user_data: int = 0
+    keep_alive: Any = None
+
+
+def numba_functional_signature():
+    """The numba signature object matching ``RAW_FUNCTIONAL_SIGNATURE``."""
+    from numba import types
+
+    return types.void(
+        types.intp,
+        types.CPointer(types.float64),
+        types.CPointer(types.float64),
+        types.intp,
+        types.voidptr,
+    )
+
+
+def from_cfunc_functional(cfunc_or_address: Any, outputs: int, *, user_data: int = 0) -> CFuncFunctional:
+    """Wrap a numba/Cython ``cfunc`` (or a raw address) as a GIL-free
+    functional with ``outputs`` outputs.
+
+    The callback must be thread-safe, reentrant, deterministic in the
+    position, write every element of ``out[:n_out]`` and never raise
+    across the ABI (compile numba ``cfunc``s and their ``njit`` helpers
+    with ``error_model="numpy"``, as for ``from_cfunc``).
+    """
+    address = getattr(cfunc_or_address, "address", cfunc_or_address)
+    if isinstance(outputs, bool) or not isinstance(outputs, (int, np.integer)) or outputs < 0:
+        raise ValueError("outputs must be a non-negative integer")
+    return CFuncFunctional(address=int(address), outputs=int(outputs), user_data=int(user_data),
+                           keep_alive=cfunc_or_address)
+
+
 # ── Stan models (BridgeStan) ─────────────────────────────────────────────
 
 _WINDOWS_STAN_UNSUPPORTED = (
@@ -1022,6 +1075,99 @@ class WarmChunk:
         )
 
 
+@dataclass
+class FunctionalChunk:
+    """The functional values of one ``WarmSession.refresh_functionals``
+    call (``owalnuts::sampler::FunctionalChunk`` in Rust): ``values`` is
+    ``(chains, draws, outputs)``, output ``j`` of functional ``k`` being
+    column ``offsets[k] + j``; ``moments`` holds the streamed per-chain
+    ``count``, ``mean``, ``m2`` (sum of squared deviations), ``min`` and
+    ``max`` of every output, each ``(chains, outputs)``; ``positions`` is
+    every chain's last draw ``(chains, dim)``; ``samples`` is the draws
+    ``(chains, draws, dim)`` only with ``retain_draws=True``, else
+    ``None``. ``diagnostics``, ``metadata``, ``work``, ``seed``,
+    ``call_index`` and ``target_calls`` are as on ``WarmChunk``.
+
+    ``mean``, ``variance`` and ``quantile`` pool every chain's draws into
+    one sample (``per_chain=True`` gives one value per chain);
+    ``quantile`` is ``numpy.quantile``'s default linear interpolation, the
+    same rule the Rust ``FunctionalChunk::quantile`` applies."""
+    values: np.ndarray
+    offsets: tuple[int, ...]
+    moments: dict[str, np.ndarray]
+    positions: np.ndarray
+    samples: np.ndarray | None
+    diagnostics: list[dict[str, Any]]
+    metadata: list[dict[str, Any]]
+    work: list[dict[str, Any]]
+    seed: int
+    call_index: int
+    target_calls: int
+    wall_seconds: float
+
+    def __post_init__(self) -> None:
+        self.offsets = tuple(int(o) for o in self.offsets)
+
+    @property
+    def chains(self) -> int:
+        return int(self.values.shape[0])
+
+    @property
+    def draws(self) -> int:
+        return int(self.values.shape[1])
+
+    @property
+    def outputs(self) -> int:
+        return int(self.values.shape[2])
+
+    def output(self, output: int) -> np.ndarray:
+        """Output ``output`` of every draw, ``(chains, draws)`` (a view)."""
+        return self.values[:, :, self._output(output)]
+
+    def functional(self, functional: int) -> np.ndarray:
+        """All outputs of functional ``functional``, ``(chains, draws, n)`` (a view)."""
+        if not 0 <= functional < len(self.offsets) - 1:
+            raise IndexError(f"functional {functional} out of range ({len(self.offsets) - 1} functionals)")
+        return self.values[:, :, self.offsets[functional]:self.offsets[functional + 1]]
+
+    def mean(self, output: int, *, per_chain: bool = False) -> float | np.ndarray:
+        """The mean of ``output`` over every chain's draws (or per chain)."""
+        values = self.output(output)
+        return values.mean(axis=1) if per_chain else float(values.mean())
+
+    def variance(self, output: int, *, per_chain: bool = False) -> float | np.ndarray:
+        """The sample variance (``ddof=1``) of ``output``, pooled or per chain."""
+        values = self.output(output)
+        return values.var(axis=1, ddof=1) if per_chain else float(values.var(ddof=1))
+
+    def quantile(self, q: float | Sequence[float], output: int, *, per_chain: bool = False):
+        """The ``q``-quantile(s) of ``output`` over every chain's draws
+        pooled (``numpy.quantile(values.ravel(), q)``), or per chain."""
+        values = self.output(output)
+        return np.quantile(values, q, axis=1) if per_chain else np.quantile(values.reshape(-1), q)
+
+    def warm_state(self) -> "WarmState":
+        """The state at the end of this call (what ``WarmSession.state()``
+        holds after it)."""
+        return WarmState(
+            positions=np.ascontiguousarray(self.positions, dtype=np.float64),
+            step_sizes=np.array([m["final_step_size"] for m in self.metadata], dtype=np.float64),
+            mass_diagonal=np.stack([np.asarray(m["mass_diagonal"], dtype=np.float64) for m in self.metadata]),
+        )
+
+    def _output(self, output: int) -> int:
+        if isinstance(output, bool) or not isinstance(output, (int, np.integer)) or not 0 <= output < self.outputs:
+            raise IndexError(f"output {output} out of range ({self.outputs} outputs)")
+        return int(output)
+
+
+def _wrap_functional(fn: Callable[[np.ndarray], Any]) -> Callable[[np.ndarray], np.ndarray]:
+    def functional(q: np.ndarray) -> np.ndarray:
+        return np.ascontiguousarray(fn(q), dtype=np.float64).reshape(-1)
+
+    return functional
+
+
 class WarmSession:
     """A resident warm-continuation session (``Sampler::start_warm_session``
     / ``WarmSession`` in Rust): the target, a pool of ``threads`` workers
@@ -1054,6 +1200,22 @@ class WarmSession:
     callable is serialised by the GIL; use a ``CFuncTarget`` for real
     parallel chains. Dropping a session cancels without waiting; the
     worker keeps the target until its last callback has returned.
+
+    ``refresh_functionals(draws, functionals)`` is ``refresh`` with
+    functions of the position evaluated on every retained draw inside the
+    chain loop, returning a ``FunctionalChunk`` of their values (and
+    streamed moments) instead of the draws: the memory and transport cost
+    of a quote is then ``draws x outputs`` per chain, not ``draws x dim``.
+    A functional is a Python callable ``f(position) -> array`` (its
+    output count is probed once on the current state; it attaches the
+    interpreter once per draw per chain, so it costs about as much as a
+    callable target's gradient and serialises chains on the GIL), a
+    ``(callable, outputs)`` pair (no probe), or a ``CFuncFunctional``
+    from ``from_cfunc_functional`` (GIL-free). The values equal the
+    functionals of ``refresh``'s draws under the same seed bit for bit,
+    and the draws and diagnostics do not depend on the functionals
+    (``tests/test_warm_functionals.py``). A functional that raises or
+    returns the wrong length ends the call and the session.
     """
 
     def __init__(
@@ -1107,6 +1269,42 @@ class WarmSession:
         if isinstance(draws, bool) or not isinstance(draws, (int, np.integer)) or draws < 1:
             raise ValueError("draws must be a positive integer")
         return WarmChunk(**self._inner.refresh(int(draws)))
+
+    def refresh_functionals(
+        self,
+        draws: int,
+        functionals: "Sequence[Callable[[np.ndarray], Any] | tuple[Callable[[np.ndarray], Any], int] | CFuncFunctional]",
+        *,
+        retain_draws: bool = False,
+    ) -> FunctionalChunk:
+        """Run ``draws`` transitions per chain as ``refresh`` does, evaluating
+        ``functionals`` on every retained draw and returning their values
+        (``retain_draws=True`` also keeps the draws)."""
+        if isinstance(draws, bool) or not isinstance(draws, (int, np.integer)) or draws < 1:
+            raise ValueError("draws must be a positive integer")
+        if isinstance(functionals, (str, bytes)) or callable(functionals) or isinstance(functionals, CFuncFunctional):
+            raise TypeError("functionals must be a sequence of callables, (callable, outputs) pairs or CFuncFunctional")
+        specs = []
+        probe = None
+        for item in functionals:
+            if isinstance(item, CFuncFunctional):
+                specs.append(("cfunc", item, int(item.address), int(item.outputs), int(item.user_data)))
+                continue
+            if isinstance(item, tuple):
+                if len(item) != 2 or not callable(item[0]):
+                    raise TypeError("a functional pair must be (callable, outputs)")
+                fn, outputs = item
+                if isinstance(outputs, bool) or not isinstance(outputs, (int, np.integer)) or outputs < 0:
+                    raise ValueError("outputs must be a non-negative integer")
+                specs.append(("callable", _wrap_functional(fn), int(outputs), 0, 0))
+                continue
+            if not callable(item):
+                raise TypeError("a functional must be a callable, a (callable, outputs) pair or a CFuncFunctional")
+            if probe is None:
+                probe = self.state().positions[0]
+            wrapped = _wrap_functional(item)
+            specs.append(("callable", wrapped, int(wrapped(probe).shape[0]), 0, 0))
+        return FunctionalChunk(**self._inner.refresh_functionals(int(draws), specs, bool(retain_draws)))
 
     def state(self) -> WarmState:
         """The current state: every chain's position after the last call,
@@ -1827,6 +2025,7 @@ __all__ = [
     "PaperAdaptation", "Tuning", "Adaptation", "SampleResult", "sample", "preflight",
     "summary", "format_summary", "uniform_starts", "best_of_starts", "START_RULES", "__version__", "CFuncTarget", "from_cfunc", "numba_raw_signature",
     "start_session", "CFuncSession", "ContinuationChunk", "WarmState", "sample_warm", "WarmSession", "WarmChunk",
+    "FunctionalChunk", "CFuncFunctional", "from_cfunc_functional", "numba_functional_signature", "RAW_FUNCTIONAL_SIGNATURE",
     "StanTarget", "from_stan",
     "tridiagonal_cholesky", "tridiagonal_precision_mass", "diagonal_block",
     "from_numpy", "from_jax", "from_torch", "from_pymc", "to_inferencedata", "wrap_callable",
