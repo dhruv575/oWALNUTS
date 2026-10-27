@@ -200,3 +200,39 @@ CDF/log-density cost and independent reference fits must be measured separately
 on a fixed source-only fixture first. Parent should choose a concrete bounded
 run after that preflight; no AWS restart, data generation or sampling is authorized
 by this note. Preserve every planned stream/tick and failures under the chosen cap.
+
+## Stronger tail-exposure check and exact cheap comparator
+
+A subsequent targeted metadata audit closes the remaining distinction between
+training exposure and outcome scoring: `historical-baseline-evaluation-v1/evidence.zip`
+member `5/result.json` contains331/331 proposed tail origin IDs for BOTH
+price_only and price_plus_flow, each with status forecast and non-null scores.
+The matching origin formula is1789574400000+index*1800000 for index351..681.
+Therefore every value in the proposed331-return tail was already a scored label,
+not merely55 SV-origin labels. The55 count above remains correct for the SV
+three-hour schedule; the baseline ran every half-hour. No new outcome values
+were needed for this coverage audit. That archive's RESULTS.md reports all2880
+model/origin outcomes retained across September and432 scored final-phase pairs.
+
+The exact cheap price comparator is fully specified by
+`market_uncertainty_v1/historical_evaluation/evaluate.py:forecast` and
+`market_uncertainty_v1/forecast_baseline/forecast.py:posterior,distribution`:
+rolling256 origins, at least20 matured labels; design[1,lagged return]; lag feature
+centered/scaled using training data only (constant-column fallback sd1). Gaussian
+regression with beta|s²~N(0,100s²I), s²~InverseGamma(a0=3,b0=.0002).
+V=(I/100+X'X)^-1, m=VX'y, a=3+n/2,
+b=.0002+.5*(sum((y-Xm)^2)+m'm/100). Exact next-return predictive is Student-t
+with df2a, centerx'm and scale sqrt((b/a)*(1+x'Vx)). Thus uncertainty in both
+coefficients and observation variance is included; this is a strong, very cheap
+causal benchmark rather than a plug-in Gaussian. Flow variant adds signed amount
+imbalance and log1p(total amount), with no archived incremental proper-score gain.
+
+Use a separately frozen implementation to adapt this baseline to the precise
+current window/target. Preserve the archived baseline unchanged; explicitly state
+whether comparison uses its original rolling256 or a matched250 window. Do not
+retune a0,b0,prior variance or lag specification on the prospective evaluation.
+Current warm/exact-numerical comparisons should separately ask (1) whether fast
+inference preserves full-return predictions of the same target and (2) whether
+that target improves proper scores over cheap causal alternatives. The prior
+positive SV studies do not settle either question for the new target, and repeating
+their same-data model-selection experiment would add little independent evidence.
