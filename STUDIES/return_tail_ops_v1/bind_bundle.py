@@ -26,6 +26,8 @@ def bind(bundle,remote_root,e64,remote_input,output):
     for path,want in json.loads((study/'DEPENDENCY-INVENTORY.json').read_bytes()).items():
         if source.get(remote_root+'/'+path)!=want:raise ValueError('Frozen dependency mismatch '+path)
     if remote_root+'/STUDIES/market_replication_v1/acquire.py' not in source:raise ValueError('Transitive calendar validator absent')
+    acquire_hashes={value for name,value in old['sources'].items() if name.endswith('/STUDIES/market_replication_v1/acquire.py')}
+    if acquire_hashes!={source[remote_root+'/STUDIES/market_replication_v1/acquire.py']}:raise ValueError('Transitive calendar validator differs from executed E64')
     draft.update(status='frozen_pending_authorization',python=old['python'],runtime=old['runtime'],sources=source,dependencies=dependencies,
         worker_path=remote_root+'/STUDIES/predictive_risk_limits_v1/worker.py',readiness_path=remote_root+'/STUDIES/predictive_risk_limits_v1/readiness.py',ops_root=remote_root+'/STUDIES/return_tail_ops_v1',
         input=dict(root=remote_input.rstrip('/'),inventory_sha256=sha(e64/'ARTIFACTS.sha256'),original_manifest_sha256=sha(e64/'PRODUCTION-AUTHORIZED.json')),
