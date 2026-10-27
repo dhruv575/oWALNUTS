@@ -1,0 +1,5770 @@
+{
+  "kind": "post-hoc estimator diagnostic only; no qualification verdict changed",
+  "created_utc": "2026-10-27T16:36:17.321239+00:00",
+  "planned_reference_origins": 6,
+  "planned_warm_rows": 54,
+  "plan": {
+    "path": "C:\\dev\\owalnuts-wt\\amm-functional-audit\\STUDIES\\amm_predictive_review_v1\\scale-cdf-diagnostic\\PLAN.md",
+    "bytes": 3875,
+    "sha256": "b001bfebe151174a473be4402fe0b13d9036fe18727b508442da0ee6b948d85a"
+  },
+  "source": {
+    "path": "C:\\dev\\owalnuts-wt\\amm-functional-audit\\STUDIES\\amm_predictive_review_v1\\scale-cdf-diagnostic\\analyze.py",
+    "bytes": 12234,
+    "sha256": "1f7f93fe2434c787897dfc647724af9ed33034d5b80e9627cf7eec96a60edd24"
+  },
+  "environment": {
+    "python": "3.14.7 (tags/v3.14.7:823f032, Aug  5 2026, 10:51:32) [MSC v.1944 64 bit (AMD64)]",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "arviz": "0.23.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64"
+  },
+  "local_timing_caveat": "Local postprocessing only, no sampling or production latency measurement",
+  "numerical_fixtures": [
+    {
+      "sigma": 0.2,
+      "identical_components": 1,
+      "max_relative_error": 8.881784197001252e-16,
+      "max_residual": 4.440892098500626e-16
+    },
+    {
+      "sigma": 0.2,
+      "identical_components": 7,
+      "max_relative_error": 8.881784197001252e-16,
+      "max_residual": 3.3306690738754696e-16
+    },
+    {
+      "sigma": 0.4,
+      "identical_components": 1,
+      "max_relative_error": 0.0,
+      "max_residual": 0.0
+    },
+    {
+      "sigma": 0.4,
+      "identical_components": 7,
+      "max_relative_error": 0.0,
+      "max_residual": 1.1102230246251565e-16
+    },
+    {
+      "sigma": 1.4,
+      "identical_components": 1,
+      "max_relative_error": 0.0,
+      "max_residual": 0.0
+    },
+    {
+      "sigma": 1.4,
+      "identical_components": 7,
+      "max_relative_error": 8.881784197001252e-16,
+      "max_residual": 1.1102230246251565e-16
+    }
+  ],
+  "origins": [
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "reference": {
+        "deterministic": {
+          "p50": 0.006083402638172231,
+          "p95": 0.008835839925818744,
+          "logvol_roots": [
+            -10.204382190220768,
+            -9.457878219449537
+          ],
+          "residuals": [
+            2.1649348980190553e-15,
+            3.1308289294429414e-13
+          ],
+          "logvol_bracket": [
+            -17.655381988638325,
+            -3.9311320661129363
+          ],
+          "solver_seconds": 0.025473699904978275,
+          "processing_seconds": 0.042628000024706125
+        },
+        "original_noise": {
+          "p50": 0.006085056020455895,
+          "p95": 0.00883195707457273,
+          "processing_seconds": 0.0022004999918863177
+        },
+        "chains": 4,
+        "draws_per_chain": 20000,
+        "original_noise_chain_rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "reference_uncertainty": {
+          "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+          "quantiles": [
+            {
+              "probability": 0.5,
+              "cdf_mcse": 0.0012633044321320468,
+              "scale_density": 307.40349509967353,
+              "quantile_mcse": 4.109596840212987e-06,
+              "relative_quantile_mcse": 0.0006755424693453667
+            },
+            {
+              "probability": 0.95,
+              "cdf_mcse": 0.0006731803885923757,
+              "scale_density": 46.349300768529574,
+              "quantile_mcse": 1.4524067837706288e-05,
+              "relative_quantile_mcse": 0.0016437676507998148
+            }
+          ],
+          "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+        },
+        "original_noise_vs_deterministic_relative": [
+          0.0002717857722074335,
+          -0.00043944336685741714
+        ]
+      },
+      "original_reference_metadata": {
+        "attempt": 0,
+        "seed": 889450002,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "flagged": [],
+        "rhat_h_next": 1.00004631142922
+      },
+      "local_total_processing_seconds": 0.09374040004331619
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "reference": {
+        "deterministic": {
+          "p50": 0.004678393668340025,
+          "p95": 0.006707066649359647,
+          "logvol_roots": [
+            -10.729600922462556,
+            -10.009187169261057
+          ],
+          "residuals": [
+            1.127986593019159e-13,
+            1.283417816466681e-13
+          ],
+          "logvol_bracket": [
+            -17.082452552720692,
+            -4.074064272607104
+          ],
+          "solver_seconds": 0.022291500004939735,
+          "processing_seconds": 0.03825700003653765
+        },
+        "original_noise": {
+          "p50": 0.004681331964386871,
+          "p95": 0.006699960275693296,
+          "processing_seconds": 0.0019401999888941646
+        },
+        "chains": 4,
+        "draws_per_chain": 20000,
+        "original_noise_chain_rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "reference_uncertainty": {
+          "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+          "quantiles": [
+            {
+              "probability": 0.5,
+              "cdf_mcse": 0.0011923283317124013,
+              "scale_density": 391.95493139058004,
+              "quantile_mcse": 3.042003649455951e-06,
+              "relative_quantile_mcse": 0.0006502239582876544
+            },
+            {
+              "probability": 0.95,
+              "cdf_mcse": 0.0006500152142432552,
+              "scale_density": 65.34650270006317,
+              "quantile_mcse": 9.947207385019349e-06,
+              "relative_quantile_mcse": 0.0014830935646016061
+            }
+          ],
+          "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+        },
+        "original_noise_vs_deterministic_relative": [
+          0.0006280566055674175,
+          -0.0010595352689732884
+        ]
+      },
+      "original_reference_metadata": {
+        "attempt": 0,
+        "seed": 889450050,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "flagged": [],
+        "rhat_h_next": 1.000053729927905
+      },
+      "local_total_processing_seconds": 0.08301669999491423
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "reference": {
+        "deterministic": {
+          "p50": 0.005130018362784288,
+          "p95": 0.007271856127779349,
+          "logvol_roots": [
+            -10.545292080631501,
+            -9.847487413422908
+          ],
+          "residuals": [
+            1.3561374245796287e-13,
+            1.468825061579082e-13
+          ],
+          "logvol_bracket": [
+            -16.27557189223269,
+            -5.219250869425806
+          ],
+          "solver_seconds": 0.02053199999500066,
+          "processing_seconds": 0.03588300000410527
+        },
+        "original_noise": {
+          "p50": 0.005128781903913056,
+          "p95": 0.007275509694001661,
+          "processing_seconds": 0.0020445999689400196
+        },
+        "chains": 4,
+        "draws_per_chain": 20000,
+        "original_noise_chain_rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "reference_uncertainty": {
+          "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+          "quantiles": [
+            {
+              "probability": 0.5,
+              "cdf_mcse": 0.0011321937887614813,
+              "scale_density": 374.2113521673452,
+              "quantile_mcse": 3.025546344877241e-06,
+              "relative_quantile_mcse": 0.0005897730048738351
+            },
+            {
+              "probability": 0.95,
+              "cdf_mcse": 0.0006585043011032547,
+              "scale_density": 62.137287929236074,
+              "quantile_mcse": 1.0597570686592894e-05,
+              "relative_quantile_mcse": 0.0014573405331974217
+            }
+          ],
+          "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+        },
+        "original_noise_vs_deterministic_relative": [
+          -0.0002410242583538169,
+          0.0005024255373198283
+        ]
+      },
+      "original_reference_metadata": {
+        "attempt": 0,
+        "seed": 889450100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "flagged": [],
+        "rhat_h_next": 1.000032899798168
+      },
+      "local_total_processing_seconds": 0.0801675000693649
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "reference": {
+        "deterministic": {
+          "p50": 0.0025040384571612087,
+          "p95": 0.0042601537418692475,
+          "logvol_roots": [
+            -11.97970093514201,
+            -10.91690005942281
+          ],
+          "residuals": [
+            1.5109025142123755e-12,
+            8.149037000748649e-14
+          ],
+          "logvol_bracket": [
+            -21.614204984233485,
+            0.06474767222345079
+          ],
+          "solver_seconds": 0.02307290001772344,
+          "processing_seconds": 0.039012900087982416
+        },
+        "original_noise": {
+          "p50": 0.002506967654967207,
+          "p95": 0.004262621800530666,
+          "processing_seconds": 0.002115699928253889
+        },
+        "chains": 4,
+        "draws_per_chain": 20000,
+        "original_noise_chain_rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "reference_uncertainty": {
+          "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+          "quantiles": [
+            {
+              "probability": 0.5,
+              "cdf_mcse": 0.001270178627758346,
+              "scale_density": 537.5304679557366,
+              "quantile_mcse": 2.3629890833703215e-06,
+              "relative_quantile_mcse": 0.0009436712429924926
+            },
+            {
+              "probability": 0.95,
+              "cdf_mcse": 0.0006010423491886993,
+              "scale_density": 66.75435022907533,
+              "quantile_mcse": 9.003792968190875e-06,
+              "relative_quantile_mcse": 0.0021134901493579054
+            }
+          ],
+          "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+        },
+        "original_noise_vs_deterministic_relative": [
+          0.0011697894645432694,
+          0.0005793355852776738
+        ]
+      },
+      "original_reference_metadata": {
+        "attempt": 0,
+        "seed": 889500002,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "flagged": [],
+        "rhat_h_next": 1.0000115898677366
+      },
+      "local_total_processing_seconds": 0.08935329993255436
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "reference": {
+        "deterministic": {
+          "p50": 0.0018507907655565445,
+          "p95": 0.0030707877253141067,
+          "logvol_roots": [
+            -12.584284580754682,
+            -11.571642324491835
+          ],
+          "residuals": [
+            1.1102230246251565e-16,
+            1.5543122344752192e-15
+          ],
+          "logvol_bracket": [
+            -23.13614787928703,
+            -4.146784824079509
+          ],
+          "solver_seconds": 0.02246720006223768,
+          "processing_seconds": 0.038164000026881695
+        },
+        "original_noise": {
+          "p50": 0.001852484953735363,
+          "p95": 0.003072924489730323,
+          "processing_seconds": 0.002054999931715429
+        },
+        "chains": 4,
+        "draws_per_chain": 20000,
+        "original_noise_chain_rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "reference_uncertainty": {
+          "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+          "quantiles": [
+            {
+              "probability": 0.5,
+              "cdf_mcse": 0.001341554588194275,
+              "scale_density": 714.9294576179007,
+              "quantile_mcse": 1.8764852586495028e-06,
+              "relative_quantile_mcse": 0.0010138829810322895
+            },
+            {
+              "probability": 0.95,
+              "cdf_mcse": 0.0006412192775456391,
+              "scale_density": 102.16444309330274,
+              "quantile_mcse": 6.276344862566705e-06,
+              "relative_quantile_mcse": 0.002043887570224251
+            }
+          ],
+          "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+        },
+        "original_noise_vs_deterministic_relative": [
+          0.0009153861205424274,
+          0.0006958359246398427
+        ]
+      },
+      "original_reference_metadata": {
+        "attempt": 0,
+        "seed": 889500050,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "flagged": [],
+        "rhat_h_next": 0.9999800439135043
+      },
+      "local_total_processing_seconds": 0.08253480005078018
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "reference": {
+        "deterministic": {
+          "p50": 0.0017321065094249796,
+          "p95": 0.00287342936945141,
+          "logvol_roots": [
+            -12.716833951367144,
+            -11.704498120580478
+          ],
+          "residuals": [
+            0.0,
+            3.3306690738754696e-16
+          ],
+          "logvol_bracket": [
+            -22.528347142901012,
+            -4.022795428258805
+          ],
+          "solver_seconds": 0.020575299975462258,
+          "processing_seconds": 0.03652019996661693
+        },
+        "original_noise": {
+          "p50": 0.0017351132664186221,
+          "p95": 0.0028774174492811905,
+          "processing_seconds": 0.002368199988268316
+        },
+        "chains": 4,
+        "draws_per_chain": 20000,
+        "original_noise_chain_rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "reference_uncertainty": {
+          "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+          "quantiles": [
+            {
+              "probability": 0.5,
+              "cdf_mcse": 0.0013264675794399466,
+              "scale_density": 747.6892883487949,
+              "quantile_mcse": 1.7740893177289352e-06,
+              "relative_quantile_mcse": 0.0010242380061939106
+            },
+            {
+              "probability": 0.95,
+              "cdf_mcse": 0.0006362467401145193,
+              "scale_density": 111.86968783364641,
+              "quantile_mcse": 5.687391754061541e-06,
+              "relative_quantile_mcse": 0.001979304525291801
+            }
+          ],
+          "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+        },
+        "original_noise_vs_deterministic_relative": [
+          0.0017358961341475965,
+          0.001387916429121061
+        ]
+      },
+      "original_reference_metadata": {
+        "attempt": 0,
+        "seed": 889500100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "flagged": [],
+        "rhat_h_next": 1.0000124806875272
+      },
+      "local_total_processing_seconds": 0.08189859997946769
+    }
+  ],
+  "rows": [
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 50,
+      "seed": 880101,
+      "cell": "warm50-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006231147633186223,
+        "p95": 0.009130329100490189,
+        "logvol_roots": [
+          -10.156389504726386,
+          -9.392307077938046
+        ],
+        "residuals": [
+          3.3306690738754696e-16,
+          0.0
+        ],
+        "logvol_bracket": [
+          -14.669981036129855,
+          -5.7602854901984815
+        ],
+        "solver_seconds": 0.00012430001515895128,
+        "processing_seconds": 0.0003176999744027853,
+        "relative_errors": [
+          0.024286571808829427,
+          0.033328939539854385
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0062234052551128575,
+        "p95": 0.009221920969981942,
+        "processing_seconds": 0.0009399000555276871,
+        "relative_errors": [
+          0.023013866624927326,
+          0.043694888930145837
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.031676885
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 50,
+      "seed": 880102,
+      "cell": "warm50-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006021932671766456,
+        "p95": 0.00840055363817325,
+        "logvol_roots": [
+          -10.224694058725271,
+          -9.558915331996905
+        ],
+        "residuals": [
+          4.440892098500626e-16,
+          4.318767565791859e-13
+        ],
+        "logvol_bracket": [
+          -16.56299113599845,
+          -5.916206938342373
+        ],
+        "solver_seconds": 0.0001498999772593379,
+        "processing_seconds": 0.0004053999437019229,
+        "relative_errors": [
+          -0.010104536895201188,
+          -0.049263713614091986
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006024505090417466,
+        "p95": 0.008432852742996237,
+        "processing_seconds": 0.0007854000432416797,
+        "relative_errors": [
+          -0.009681678372757019,
+          -0.04560824847504985
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.032138964
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 50,
+      "seed": 880103,
+      "cell": "warm50-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006234257063006354,
+        "p95": 0.008464086532772851,
+        "logvol_roots": [
+          -10.155391725685783,
+          -9.543846360584345
+        ],
+        "residuals": [
+          5.551115123125783e-16,
+          1.667554982986985e-13
+        ],
+        "logvol_bracket": [
+          -14.176451984244471,
+          -5.189890960285774
+        ],
+        "solver_seconds": 0.00012949993833899498,
+        "processing_seconds": 0.00027489999774843454,
+        "relative_errors": [
+          0.02479770513421853,
+          -0.0420733508265142
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0062787999648288365,
+        "p95": 0.00829429803120081,
+        "processing_seconds": 0.0007502000080421567,
+        "relative_errors": [
+          0.03211974256488026,
+          -0.06128923782735396
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.030164207
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 100,
+      "seed": 880101,
+      "cell": "warm100-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006074259103201787,
+        "p95": 0.008944831834611866,
+        "logvol_roots": [
+          -10.207390511027478,
+          -9.433358724259545
+        ],
+        "residuals": [
+          6.994405055138486e-15,
+          9.103828801926284e-15
+        ],
+        "logvol_bracket": [
+          -14.970732986581785,
+          -5.758427746482461
+        ],
+        "solver_seconds": 0.00018770003225654364,
+        "processing_seconds": 0.00038870004937052727,
+        "relative_errors": [
+          -0.0015030297210758548,
+          0.012335206353687012
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006087146813968996,
+        "p95": 0.008994820007850193,
+        "processing_seconds": 0.0008240999886766076,
+        "relative_errors": [
+          0.000615473941059097,
+          0.017992639450936876
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.032373234
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 100,
+      "seed": 880102,
+      "cell": "warm100-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.00604487894564195,
+        "p95": 0.008744762758693897,
+        "logvol_roots": [
+          -10.21708764130145,
+          -9.478600599347716
+        ],
+        "residuals": [
+          1.928235349168972e-12,
+          0.0
+        ],
+        "logvol_bracket": [
+          -16.537019368569354,
+          -5.753711053781454
+        ],
+        "solver_seconds": 0.00020700006280094385,
+        "processing_seconds": 0.00045080005656927824,
+        "relative_errors": [
+          -0.0063325896412892435,
+          -0.010307697727605425
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006101894974837149,
+        "p95": 0.008856316149681224,
+        "processing_seconds": 0.0007920999778434634,
+        "relative_errors": [
+          0.003039801532925157,
+          0.0023174054797718835
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.035134529
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 100,
+      "seed": 880103,
+      "cell": "warm100-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006139515478120105,
+        "p95": 0.008577483857402635,
+        "logvol_roots": [
+          -10.186018904590238,
+          -9.517229330406808
+        ],
+        "residuals": [
+          0.0,
+          0.0
+        ],
+        "logvol_bracket": [
+          -14.461899556984347,
+          -5.190038531674867
+        ],
+        "solver_seconds": 0.00016930000856518745,
+        "processing_seconds": 0.00036890001501888037,
+        "relative_errors": [
+          0.009223923400331291,
+          -0.02923955963271585
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006076140957334399,
+        "p95": 0.008543381715229122,
+        "processing_seconds": 0.0007650000043213367,
+        "relative_errors": [
+          -0.0011936873604693199,
+          -0.03309908430267572
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.035860377
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 200,
+      "seed": 880101,
+      "cell": "warm200-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006097910462092937,
+        "p95": 0.008791334046036749,
+        "logvol_roots": [
+          -10.199618227366887,
+          -9.467977620391755
+        ],
+        "residuals": [
+          3.3306690738754696e-16,
+          7.771561172376096e-16
+        ],
+        "logvol_bracket": [
+          -15.033385713407313,
+          -5.755879355104512
+        ],
+        "solver_seconds": 0.0002835000632330775,
+        "processing_seconds": 0.0005413000471889973,
+        "relative_errors": [
+          0.002384820598536619,
+          -0.005036972167405063
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006082759125189673,
+        "p95": 0.008738068811548566,
+        "processing_seconds": 0.0007688999176025391,
+        "relative_errors": [
+          -0.00010578175091024988,
+          -0.011065288087042657
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.064095159
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 200,
+      "seed": 880102,
+      "cell": "warm200-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006047281378079078,
+        "p95": 0.00862653564225457,
+        "logvol_roots": [
+          -10.216292933853179,
+          -9.505824572868276
+        ],
+        "residuals": [
+          1.4525047831170923e-12,
+          1.9095836023552692e-14
+        ],
+        "logvol_bracket": [
+          -16.631553669900118,
+          -5.753711053781454
+        ],
+        "solver_seconds": 0.0003063000040128827,
+        "processing_seconds": 0.0006011000368744135,
+        "relative_errors": [
+          -0.00593767373977494,
+          -0.023688102695543112
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006038770854105073,
+        "p95": 0.008689014290114809,
+        "processing_seconds": 0.0007831000257283449,
+        "relative_errors": [
+          -0.007336648044155791,
+          -0.0166170547380452
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.064426679
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 2,
+      "K": 200,
+      "seed": 880103,
+      "cell": "warm200-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.006105304826494489,
+        "p95": 0.008555246548132571,
+        "logvol_roots": [
+          -10.197194484072467,
+          -9.522421105735345
+        ],
+        "residuals": [
+          1.6042722705833512e-14,
+          2.220446049250313e-16
+        ],
+        "logvol_bracket": [
+          -14.951802633159803,
+          -5.18933682053142
+        ],
+        "solver_seconds": 0.00030529999639838934,
+        "processing_seconds": 0.0006240999791771173,
+        "relative_errors": [
+          0.0036003187073012644,
+          -0.03175627671414305
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.006110750173076681,
+        "p95": 0.008542651948871131,
+        "processing_seconds": 0.0010925999376922846,
+        "relative_errors": [
+          0.00449543397519836,
+          -0.03318167592544363
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0012633044321320468,
+            "scale_density": 307.40349509967353,
+            "quantile_mcse": 4.109596840212987e-06,
+            "relative_quantile_mcse": 0.0006755424693453667
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006731803885923757,
+            "scale_density": 46.349300768529574,
+            "quantile_mcse": 1.4524067837706288e-05,
+            "relative_quantile_mcse": 0.0016437676507998148
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.079946699
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 50,
+      "seed": 880101,
+      "cell": "warm50-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004658792610282508,
+        "p95": 0.0064830068052630805,
+        "logvol_roots": [
+          -10.737997921843561,
+          -10.077141726161772
+        ],
+        "residuals": [
+          1.1524114995609125e-13,
+          1.6653345369377348e-15
+        ],
+        "logvol_bracket": [
+          -15.62356351918758,
+          -6.335908387495547
+        ],
+        "solver_seconds": 0.00024399999529123306,
+        "processing_seconds": 0.00044249999336898327,
+        "relative_errors": [
+          -0.004189698312513368,
+          -0.03340653311056008
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004646877121762594,
+        "p95": 0.006729857184338624,
+        "processing_seconds": 0.0009047000203281641,
+        "relative_errors": [
+          -0.006736617055275285,
+          0.0033979884456869502
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.018618977
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 50,
+      "seed": 880102,
+      "cell": "warm50-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004623653594335214,
+        "p95": 0.006709431138393629,
+        "logvol_roots": [
+          -10.753140130276403,
+          -10.008482219550375
+        ],
+        "residuals": [
+          7.460698725481052e-14,
+          0.0
+        ],
+        "logvol_bracket": [
+          -15.104915463954939,
+          -6.076389954119738
+        ],
+        "solver_seconds": 0.000125400023534894,
+        "processing_seconds": 0.00027790002059191465,
+        "relative_errors": [
+          -0.011700613049143826,
+          0.0003525369819021851
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004670284720245258,
+        "p95": 0.006689671977812495,
+        "processing_seconds": 0.0007660000119358301,
+        "relative_errors": [
+          -0.0017332761348500814,
+          -0.00259348422440564
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.019329747
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 50,
+      "seed": 880103,
+      "cell": "warm50-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004690159695084578,
+        "p95": 0.006840652874760478,
+        "logvol_roots": [
+          -10.724577293957996,
+          -9.969744204752617
+        ],
+        "residuals": [
+          1.0513812043200232e-13,
+          0.0
+        ],
+        "logvol_bracket": [
+          -15.003057396420594,
+          -6.064638888827208
+        ],
+        "solver_seconds": 0.0001308000646531582,
+        "processing_seconds": 0.0003220000071451068,
+        "relative_errors": [
+          0.0025149715006191897,
+          0.019917235415214618
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004744936131496225,
+        "p95": 0.00712401314493112,
+        "processing_seconds": 0.000790799967944622,
+        "relative_errors": [
+          0.01422335696256427,
+          0.06216525306354015
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.018606338
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 100,
+      "seed": 880101,
+      "cell": "warm100-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0047124214095853574,
+        "p95": 0.006489430290983204,
+        "logvol_roots": [
+          -10.715106806716271,
+          -10.075161069420883
+        ],
+        "residuals": [
+          4.496403249731884e-15,
+          1.0769163338864018e-14
+        ],
+        "logvol_bracket": [
+          -15.623562994282484,
+          -5.643087930345291
+        ],
+        "solver_seconds": 0.00017580005805939436,
+        "processing_seconds": 0.0003720999229699373,
+        "relative_errors": [
+          0.007273381347877361,
+          -0.0324488140276975
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004725805112282466,
+        "p95": 0.006556263398685371,
+        "processing_seconds": 0.0007702000439167023,
+        "relative_errors": [
+          0.010134128785118435,
+          -0.022484233206281568
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.036734336
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 100,
+      "seed": 880102,
+      "cell": "warm100-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004694147589057571,
+        "p95": 0.006823281634556952,
+        "logvol_roots": [
+          -10.722877479963293,
+          -9.97482948953658
+        ],
+        "residuals": [
+          1.1102230246251565e-16,
+          5.095923683029469e-13
+        ],
+        "logvol_bracket": [
+          -15.302382826122287,
+          -6.076513978996516
+        ],
+        "solver_seconds": 0.00015680002979934216,
+        "processing_seconds": 0.00033459998667240143,
+        "relative_errors": [
+          0.003367378171733826,
+          0.01732724472156555
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004686707201897238,
+        "p95": 0.006801785085438036,
+        "processing_seconds": 0.0008434000192210078,
+        "relative_errors": [
+          0.0017770059867925347,
+          0.014122185007276133
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.038007584
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 100,
+      "seed": 880103,
+      "cell": "warm100-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004663049850882899,
+        "p95": 0.006627857796879994,
+        "logvol_roots": [
+          -10.736171140962377,
+          -10.032947269108877
+        ],
+        "residuals": [
+          6.661338147750939e-16,
+          4.551914400963142e-15
+        ],
+        "logvol_bracket": [
+          -15.269863259417745,
+          -5.4623220251076585
+        ],
+        "solver_seconds": 0.00017710006795823574,
+        "processing_seconds": 0.00036859989631921053,
+        "relative_errors": [
+          -0.003279719182454066,
+          -0.011809760752446885
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004669142342038997,
+        "p95": 0.006641703444862963,
+        "processing_seconds": 0.0007741000736132264,
+        "relative_errors": [
+          -0.0019774578534581533,
+          -0.009745423433793476
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.037586094
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 200,
+      "seed": 880101,
+      "cell": "warm200-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004684359332474149,
+        "p95": 0.006603250005819495,
+        "logvol_roots": [
+          -10.727052242628353,
+          -10.040386652054112
+        ],
+        "residuals": [
+          2.415734279281878e-12,
+          8.471001677889944e-14
+        ],
+        "logvol_bracket": [
+          -16.091288597373527,
+          -5.60223002272075
+        ],
+        "solver_seconds": 0.0002666000509634614,
+        "processing_seconds": 0.0005673000123351812,
+        "relative_errors": [
+          0.0012751522332323795,
+          -0.015478695675413379
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004685589339476364,
+        "p95": 0.006743482376823626,
+        "processing_seconds": 0.0007909999694675207,
+        "relative_errors": [
+          0.0015380644824811718,
+          0.005429456626535156
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.073921972
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 200,
+      "seed": 880102,
+      "cell": "warm200-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0046371019597872265,
+        "p95": 0.006798029914491057,
+        "logvol_roots": [
+          -10.747331371011798,
+          -9.982244854467547
+        ],
+        "residuals": [
+          3.774758283725532e-15,
+          0.0
+        ],
+        "logvol_bracket": [
+          -15.479427549966392,
+          -5.770559648916118
+        ],
+        "solver_seconds": 0.0002764000091701746,
+        "processing_seconds": 0.0005342001095414162,
+        "relative_errors": [
+          -0.00882604403990861,
+          0.013562302253265157
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004647134308979997,
+        "p95": 0.00686337121260242,
+        "processing_seconds": 0.0007627001032233238,
+        "relative_errors": [
+          -0.006681643652941993,
+          0.02330445952221094
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.076341426
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 50,
+      "K": 200,
+      "seed": 880103,
+      "cell": "warm200-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.004687881970136273,
+        "p95": 0.0067497664514683765,
+        "logvol_roots": [
+          -10.72554880808617,
+          -9.996494748957495
+        ],
+        "residuals": [
+          1.1102230246251565e-16,
+          1.1102230246251565e-16
+        ],
+        "logvol_bracket": [
+          -15.346309091681837,
+          -5.4623220251076585
+        ],
+        "solver_seconds": 0.00028359994757920504,
+        "processing_seconds": 0.000539699918590486,
+        "relative_errors": [
+          0.0020281110288895565,
+          0.006366390009379996
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.004673506248271906,
+        "p95": 0.006804714493003604,
+        "processing_seconds": 0.0007766999769955873,
+        "relative_errors": [
+          -0.0010446790959884877,
+          0.014558949351320294
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011923283317124013,
+            "scale_density": 391.95493139058004,
+            "quantile_mcse": 3.042003649455951e-06,
+            "relative_quantile_mcse": 0.0006502239582876544
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006500152142432552,
+            "scale_density": 65.34650270006317,
+            "quantile_mcse": 9.947207385019349e-06,
+            "relative_quantile_mcse": 0.0014830935646016061
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.075304418
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 50,
+      "seed": 880101,
+      "cell": "warm50-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005218251955033671,
+        "p95": 0.007104562757672688,
+        "logvol_roots": [
+          -10.511185615370406,
+          -9.894036118830067
+        ],
+        "residuals": [
+          5.551115123125783e-16,
+          9.992007221626409e-16
+        ],
+        "logvol_bracket": [
+          -15.23525889354205,
+          -7.045292856683213
+        ],
+        "solver_seconds": 0.00014460005331784487,
+        "processing_seconds": 0.0003179999766871333,
+        "relative_errors": [
+          0.01719946908757164,
+          -0.023005594055633294
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005183772319483609,
+        "p95": 0.006966910890920984,
+        "processing_seconds": 0.0009827999165281653,
+        "relative_errors": [
+          0.01047831662539056,
+          -0.041934993143420085
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.021277803
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 50,
+      "seed": 880102,
+      "cell": "warm50-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005168716703322359,
+        "p95": 0.007353490877143581,
+        "logvol_roots": [
+          -10.530261682267453,
+          -9.825160258477723
+        ],
+        "residuals": [
+          1.3855583347321954e-13,
+          3.6692870963861424e-13
+        ],
+        "logvol_bracket": [
+          -16.971943906585594,
+          -5.994833511869714
+        ],
+        "solver_seconds": 0.0001487999688833952,
+        "processing_seconds": 0.0003301999531686306,
+        "relative_errors": [
+          0.0075435091653488495,
+          0.0112261227298458
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005225933427731717,
+        "p95": 0.007230759171102833,
+        "processing_seconds": 0.0008526999736204743,
+        "relative_errors": [
+          0.018696826826828605,
+          -0.0056515084944435134
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.021718703
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 50,
+      "seed": 880103,
+      "cell": "warm50-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005042911266887993,
+        "p95": 0.006842264657182989,
+        "logvol_roots": [
+          -10.57954346269029,
+          -9.969273023829045
+        ],
+        "residuals": [
+          2.5678348336555246e-12,
+          0.0
+        ],
+        "logvol_bracket": [
+          -14.457316536502864,
+          -6.8214507894638565
+        ],
+        "solver_seconds": 0.00011119991540908813,
+        "processing_seconds": 0.0002674999414011836,
+        "relative_errors": [
+          -0.01697987994121286,
+          -0.059075903462290635
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0049658647180200865,
+        "p95": 0.006605170014744154,
+        "processing_seconds": 0.0008040000684559345,
+        "relative_errors": [
+          -0.03199864662377305,
+          -0.09168032223415079
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.021136243
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 100,
+      "seed": 880101,
+      "cell": "warm100-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005171802442932985,
+        "p95": 0.007435162320979631,
+        "logvol_roots": [
+          -10.529068032448299,
+          -9.803069734600626
+        ],
+        "residuals": [
+          9.620082508376981e-14,
+          3.352873534367973e-14
+        ],
+        "logvol_bracket": [
+          -14.794173099537403,
+          -6.943981338935386
+        ],
+        "solver_seconds": 0.00016840000171214342,
+        "processing_seconds": 0.0003603999502956867,
+        "relative_errors": [
+          0.008145015708290515,
+          0.022457291554000003
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005160041599356886,
+        "p95": 0.0073938692605588245,
+        "processing_seconds": 0.0008592000231146812,
+        "relative_errors": [
+          0.0058524618138604545,
+          0.01677881556448435
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.042967196
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 100,
+      "seed": 880102,
+      "cell": "warm100-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005102335555513978,
+        "p95": 0.007249505024682464,
+        "logvol_roots": [
+          -10.55611378403667,
+          -9.85364416980763
+        ],
+        "residuals": [
+          9.336420525585254e-13,
+          0.0
+        ],
+        "logvol_bracket": [
+          -15.162053385022578,
+          -5.983436493785659
+        ],
+        "solver_seconds": 0.0001647999742999673,
+        "processing_seconds": 0.0004406999796628952,
+        "relative_errors": [
+          -0.0053962394113702405,
+          -0.003073644844471146
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005168275219706879,
+        "p95": 0.007232475242076527,
+        "processing_seconds": 0.0009567999513819814,
+        "relative_errors": [
+          0.007457450289091616,
+          -0.005415520468341262
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.043937644
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 100,
+      "seed": 880103,
+      "cell": "warm100-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005109061491170984,
+        "p95": 0.007287646485211263,
+        "logvol_roots": [
+          -10.553479105706593,
+          -9.843149253241847
+        ],
+        "residuals": [
+          5.551115123125783e-16,
+          5.581091144790662e-13
+        ],
+        "logvol_bracket": [
+          -15.14475339667889,
+          -5.5974040847249205
+        ],
+        "solver_seconds": 0.0001770000671967864,
+        "processing_seconds": 0.00036289996933192015,
+        "relative_errors": [
+          -0.004085145535800749,
+          0.0021714342465595227
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005116105634820263,
+        "p95": 0.007545868873883038,
+        "processing_seconds": 0.0007919000927358866,
+        "relative_errors": [
+          -0.0027120230338656404,
+          0.03768126614289402
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.042727355
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 200,
+      "seed": 880101,
+      "cell": "warm200-sim-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0052123179856200155,
+        "p95": 0.007286585845617227,
+        "logvol_roots": [
+          -10.51346122258558,
+          -9.843440353197394
+        ],
+        "residuals": [
+          8.326672684688674e-16,
+          0.0
+        ],
+        "logvol_bracket": [
+          -16.210678592113922,
+          -6.069786355895659
+        ],
+        "solver_seconds": 0.0002921000123023987,
+        "processing_seconds": 0.0005931999767199159,
+        "relative_errors": [
+          0.016042754044073293,
+          0.0020255788314635925
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005188059078349705,
+        "p95": 0.0072555073485983035,
+        "processing_seconds": 0.0008403999963775277,
+        "relative_errors": [
+          0.011313939144248275,
+          -0.0022482264354201087
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.086089251
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 200,
+      "seed": 880102,
+      "cell": "warm200-sim-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.005142497543164687,
+        "p95": 0.007217184365838222,
+        "logvol_roots": [
+          -10.540432828376861,
+          -9.862580758337874
+        ],
+        "residuals": [
+          1.587618925213974e-14,
+          6.072919944699606e-14
+        ],
+        "logvol_bracket": [
+          -16.18863145143367,
+          -5.982930480996494
+        ],
+        "solver_seconds": 0.0003027999773621559,
+        "processing_seconds": 0.0005946999881416559,
+        "relative_errors": [
+          0.0024325800607127857,
+          -0.007518267823296676
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005129820964884549,
+        "p95": 0.0071414663925732265,
+        "processing_seconds": 0.0007920000934973359,
+        "relative_errors": [
+          -3.847898502096214e-05,
+          -0.017930736378023004
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.099665755
+      }
+    },
+    {
+      "dataset": "sim",
+      "tick": 100,
+      "K": 200,
+      "seed": 880103,
+      "cell": "warm200-sim-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0051315495561633255,
+        "p95": 0.00726856385130845,
+        "logvol_roots": [
+          -10.544695215356137,
+          -9.848393102950967
+        ],
+        "residuals": [
+          7.771561172376096e-16,
+          1.1102230246251565e-16
+        ],
+        "logvol_bracket": [
+          -15.14475430266949,
+          -5.5974040847249205
+        ],
+        "solver_seconds": 0.0002875999780371785,
+        "processing_seconds": 0.000544500071555376,
+        "relative_errors": [
+          0.00029847717313158384,
+          -0.0004527422453149965
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.005154141803983995,
+        "p95": 0.007221953951331753,
+        "processing_seconds": 0.000775399967096746,
+        "relative_errors": [
+          0.0047024083529039196,
+          -0.006862371253051114
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0011321937887614813,
+            "scale_density": 374.2113521673452,
+            "quantile_mcse": 3.025546344877241e-06,
+            "relative_quantile_mcse": 0.0005897730048738351
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006585043011032547,
+            "scale_density": 62.137287929236074,
+            "quantile_mcse": 1.0597570686592894e-05,
+            "relative_quantile_mcse": 0.0014573405331974217
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.093513388
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 50,
+      "seed": 880101,
+      "cell": "warm50-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.002621619858743566,
+        "p95": 0.004525025019282791,
+        "logvol_roots": [
+          -11.887925771122452,
+          -10.796264345444529
+        ],
+        "residuals": [
+          4.829470157119431e-15,
+          1.3322676295501878e-15
+        ],
+        "logvol_bracket": [
+          -18.878477285949707,
+          -4.336331464202881
+        ],
+        "solver_seconds": 0.00013960001524537802,
+        "processing_seconds": 0.00032860005740076303,
+        "relative_errors": [
+          0.046956707572158196,
+          0.06217411235898829
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.002596045810360656,
+        "p95": 0.0042740473887014595,
+        "processing_seconds": 0.0008327999385073781,
+        "relative_errors": [
+          0.03674358632005781,
+          0.0032613017449731885
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.064329259
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 50,
+      "seed": 880102,
+      "cell": "warm50-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0025145315843019154,
+        "p95": 0.004208108073517198,
+        "logvol_roots": [
+          -11.971337483126817,
+          -10.941484242012942
+        ],
+        "residuals": [
+          2.0080603846395206e-12,
+          0.0
+        ],
+        "logvol_bracket": [
+          -19.162736791958835,
+          -5.025121189509728
+        ],
+        "solver_seconds": 0.00012809992767870426,
+        "processing_seconds": 0.0003074000123888254,
+        "relative_errors": [
+          0.004190481624073206,
+          -0.012216852138583478
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.002508862343729855,
+        "p95": 0.004201504980258507,
+        "processing_seconds": 0.0008059999672695994,
+        "relative_errors": [
+          0.001926442684955898,
+          -0.013766818092580513
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.089011673
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 50,
+      "seed": 880103,
+      "cell": "warm50-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0024915792275374484,
+        "p95": 0.004215672565874777,
+        "logvol_roots": [
+          -11.989677083232737,
+          -10.937892270799676
+        ],
+        "residuals": [
+          6.045164369083977e-14,
+          2.8765878568037806e-13
+        ],
+        "logvol_bracket": [
+          -18.722996955662044,
+          -4.781366460493975
+        ],
+        "solver_seconds": 0.00013499998021870852,
+        "processing_seconds": 0.0003024999750778079,
+        "relative_errors": [
+          -0.004975654262868279,
+          -0.010441213789376902
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0024623993655151118,
+        "p95": 0.004190376760504823,
+        "processing_seconds": 0.0008906000293791294,
+        "relative_errors": [
+          -0.016628774820536374,
+          -0.016378981978666274
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.089606504
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 100,
+      "seed": 880101,
+      "cell": "warm100-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.002558709715246802,
+        "p95": 0.0043588882753696455,
+        "logvol_roots": [
+          -11.93650433006378,
+          -10.871076473696395
+        ],
+        "residuals": [
+          4.9960036108132044e-15,
+          2.220446049250313e-16
+        ],
+        "logvol_bracket": [
+          -19.244578441774458,
+          -4.0622532041911175
+        ],
+        "solver_seconds": 0.00019299995619803667,
+        "processing_seconds": 0.00040110002737492323,
+        "relative_errors": [
+          0.021833234201831475,
+          0.023176284116233736
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0025407911480404693,
+        "p95": 0.00425507818449961,
+        "processing_seconds": 0.0007816000143066049,
+        "relative_errors": [
+          0.014677366784904278,
+          -0.0011914023946494323
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.133107647
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 100,
+      "seed": 880102,
+      "cell": "warm100-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0024899693207585416,
+        "p95": 0.00444863899736382,
+        "logvol_roots": [
+          -11.99096977912386,
+          -10.830314145745229
+        ],
+        "residuals": [
+          1.0402789740737717e-13,
+          0.0
+        ],
+        "logvol_bracket": [
+          -20.026768792186907,
+          -3.5569672248063267
+        ],
+        "solver_seconds": 0.00017909996677190065,
+        "processing_seconds": 0.000493300030939281,
+        "relative_errors": [
+          -0.005618578405787389,
+          0.04424376839786781
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.002474400178356909,
+        "p95": 0.004501084678968116,
+        "processing_seconds": 0.0008071999764069915,
+        "relative_errors": [
+          -0.011836191540724239,
+          0.05655451697223346
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.130050785
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 100,
+      "seed": 880103,
+      "cell": "warm100-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0025246273296604593,
+        "p95": 0.004203839228703043,
+        "logvol_roots": [
+          -11.963323638722592,
+          -10.943514138315065
+        ],
+        "residuals": [
+          1.6653345369377348e-16,
+          1.7763568394002505e-15
+        ],
+        "logvol_bracket": [
+          -18.78444952227902,
+          -4.485887579058039
+        ],
+        "solver_seconds": 0.00020350003615021706,
+        "processing_seconds": 0.00041420001070946455,
+        "relative_errors": [
+          0.008222266890657748,
+          -0.013218892222771172
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.002482415953303314,
+        "p95": 0.004294337741588828,
+        "processing_seconds": 0.0007751999655738473,
+        "relative_errors": [
+          -0.008635052627110174,
+          0.008024123491980228
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.152459915
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 200,
+      "seed": 880101,
+      "cell": "warm200-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0024914170636026758,
+        "p95": 0.004229884576489837,
+        "logvol_roots": [
+          -11.9898072570682,
+          -10.931161146356159
+        ],
+        "residuals": [
+          3.4416913763379853e-15,
+          1.1102230246251565e-16
+        ],
+        "logvol_bracket": [
+          -19.244578441774458,
+          -4.0622532041911175
+        ],
+        "solver_seconds": 0.0003182999789714813,
+        "processing_seconds": 0.0006190999411046505,
+        "relative_errors": [
+          -0.005040415223032002,
+          -0.007105181459044929
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.002499323399274578,
+        "p95": 0.004218888691130413,
+        "processing_seconds": 0.000811800011433661,
+        "relative_errors": [
+          -0.0018829814187342198,
+          -0.00968628205439559
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.254345658
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 200,
+      "seed": 880102,
+      "cell": "warm200-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0025024417973459547,
+        "p95": 0.0043563997020271035,
+        "logvol_roots": [
+          -11.98097660969836,
+          -10.872218638323258
+        ],
+        "residuals": [
+          1.528221993396528e-13,
+          9.658940314238862e-15
+        ],
+        "logvol_bracket": [
+          -19.353686342705178,
+          -2.621469119038446
+        ],
+        "solver_seconds": 0.00027799990493804216,
+        "processing_seconds": 0.000548899988643825,
+        "relative_errors": [
+          -0.0006376339032205802,
+          0.02259213305189922
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0025074780007519324,
+        "p95": 0.004382064316477945,
+        "processing_seconds": 0.0007746999617666006,
+        "relative_errors": [
+          0.001373598548731092,
+          0.028616473018461264
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.272585566
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 2,
+      "K": 200,
+      "seed": 880103,
+      "cell": "warm200-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.002510456401421249,
+        "p95": 0.004177345584139928,
+        "logvol_roots": [
+          -11.974581418265092,
+          -10.95615852375739
+        ],
+        "residuals": [
+          1.6653345369377348e-16,
+          5.206945985491984e-14
+        ],
+        "logvol_bracket": [
+          -18.589204841896322,
+          -4.4858899893520015
+        ],
+        "solver_seconds": 0.0002804999239742756,
+        "processing_seconds": 0.0006317999213933945,
+        "relative_errors": [
+          0.0025630374172911363,
+          -0.01943783317382941
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.002492755477810918,
+        "p95": 0.004253978664285532,
+        "processing_seconds": 0.0008684000931680202,
+        "relative_errors": [
+          -0.004505912965522829,
+          -0.0014494964167668378
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001270178627758346,
+            "scale_density": 537.5304679557366,
+            "quantile_mcse": 2.3629890833703215e-06,
+            "relative_quantile_mcse": 0.0009436712429924926
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006010423491886993,
+            "scale_density": 66.75435022907533,
+            "quantile_mcse": 9.003792968190875e-06,
+            "relative_quantile_mcse": 0.0021134901493579054
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.281106553
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 50,
+      "seed": 880101,
+      "cell": "warm50-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018497044539081174,
+        "p95": 0.0031005125963661606,
+        "logvol_roots": [
+          -12.585458814596594,
+          -11.552375654987888
+        ],
+        "residuals": [
+          3.3306690738754696e-16,
+          0.0
+        ],
+        "logvol_bracket": [
+          -19.81332727412829,
+          -6.724012489108608
+        ],
+        "solver_seconds": 0.00014210003428161144,
+        "processing_seconds": 0.00033900002017617226,
+        "relative_errors": [
+          -0.000586944601541961,
+          0.009679884678128747
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.001893460816763733,
+        "p95": 0.003081544676919862,
+        "processing_seconds": 0.0008677999721840024,
+        "relative_errors": [
+          0.02305503787963703,
+          0.003502994204737764
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.102111233
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 50,
+      "seed": 880102,
+      "cell": "warm50-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018394355364145269,
+        "p95": 0.0029578253980015396,
+        "logvol_roots": [
+          -12.596593056227347,
+          -11.646601886960948
+        ],
+        "residuals": [
+          9.43689570931383e-16,
+          1.1102230246251565e-16
+        ],
+        "logvol_bracket": [
+          -18.4607775095755,
+          -6.4330444002499805
+        ],
+        "solver_seconds": 0.00013760000001639128,
+        "processing_seconds": 0.0003657999914139509,
+        "relative_errors": [
+          -0.006135339203836465,
+          -0.03678610748029232
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0018604365407503937,
+        "p95": 0.0031014090145553446,
+        "processing_seconds": 0.0008128000190481544,
+        "relative_errors": [
+          0.005211704841713294,
+          0.009971802670959873
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.084515204
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 50,
+      "seed": 880103,
+      "cell": "warm50-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.001779844072107115,
+        "p95": 0.0029006028712564797,
+        "logvol_roots": [
+          -12.66245903691013,
+          -11.685673353909953
+        ],
+        "residuals": [
+          3.3306690738754696e-16,
+          5.329070518200751e-15
+        ],
+        "logvol_bracket": [
+          -19.025982144543573,
+          -7.040654724766555
+        ],
+        "solver_seconds": 0.0001398000167682767,
+        "processing_seconds": 0.0002978000557050109,
+        "relative_errors": [
+          -0.03833317886049392,
+          -0.05542058562195762
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0018420149879419512,
+        "p95": 0.0027553504924966716,
+        "processing_seconds": 0.0009775999933481216,
+        "relative_errors": [
+          -0.004741636806229854,
+          -0.10272192708636985
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.076034868
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 100,
+      "seed": 880101,
+      "cell": "warm100-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.001850169560556546,
+        "p95": 0.002973115729186534,
+        "logvol_roots": [
+          -12.584955979474035,
+          -11.636289617975331
+        ],
+        "residuals": [
+          2.220446049250313e-16,
+          5.1736392947532295e-14
+        ],
+        "logvol_bracket": [
+          -20.215650624744498,
+          -6.1534202412795285
+        ],
+        "solver_seconds": 0.000210900092497468,
+        "processing_seconds": 0.0004205999430269003,
+        "relative_errors": [
+          -0.00033564301895117055,
+          -0.03180682120174283
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.001864435616553465,
+        "p95": 0.002915998324578219,
+        "processing_seconds": 0.0007892000721767545,
+        "relative_errors": [
+          0.007372443849868349,
+          -0.050407066388821975
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.149537748
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 100,
+      "seed": 880102,
+      "cell": "warm100-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018708656703022289,
+        "p95": 0.0031692208500004784,
+        "logvol_roots": [
+          -12.56270805987438,
+          -11.508539019894618
+        ],
+        "residuals": [
+          8.881784197001252e-16,
+          0.0
+        ],
+        "logvol_bracket": [
+          -21.107395320950452,
+          -6.673291219959314
+        ],
+        "solver_seconds": 0.00020510004833340645,
+        "processing_seconds": 0.0004265999887138605,
+        "relative_errors": [
+          0.010846663555535763,
+          0.03205468221555541
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0018844216394749505,
+        "p95": 0.003294080494024628,
+        "processing_seconds": 0.0008221999742090702,
+        "relative_errors": [
+          0.018171083703399038,
+          0.07271514304613191
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.152778295
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 100,
+      "seed": 880103,
+      "cell": "warm100-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018466486122890445,
+        "p95": 0.0029572560389643436,
+        "logvol_roots": [
+          -12.588765687355263,
+          -11.646986908905292
+        ],
+        "residuals": [
+          5.551115123125783e-17,
+          4.439781875476001e-13
+        ],
+        "logvol_bracket": [
+          -20.140990069686097,
+          -6.458118848589844
+        ],
+        "solver_seconds": 0.00023999996483325958,
+        "processing_seconds": 0.0004392999690026045,
+        "relative_errors": [
+          -0.0022380451343209096,
+          -0.03697151887571459
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0018441834645332388,
+        "p95": 0.002944323912339998,
+        "processing_seconds": 0.0007920999778434634,
+        "relative_errors": [
+          -0.003569988107931188,
+          -0.041182857392453975
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.174884817
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 200,
+      "seed": 880101,
+      "cell": "warm200-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018342659615581335,
+        "p95": 0.0030367169463742343,
+        "logvol_roots": [
+          -12.602221796909145,
+          -11.593956597965551
+        ],
+        "residuals": [
+          1.2656542480726785e-14,
+          2.220446049250313e-16
+        ],
+        "logvol_bracket": [
+          -20.78203430722994,
+          -6.153796010248517
+        ],
+        "solver_seconds": 0.00027550000231713057,
+        "processing_seconds": 0.0005513000069186091,
+        "relative_errors": [
+          -0.008928510075768559,
+          -0.011095126719118054
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0018297415215580727,
+        "p95": 0.00297342398459437,
+        "processing_seconds": 0.0008129000198096037,
+        "relative_errors": [
+          -0.011373108397881082,
+          -0.03170643803123108
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.322999005
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 200,
+      "seed": 880102,
+      "cell": "warm200-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018622009633059201,
+        "p95": 0.0030393797998558678,
+        "logvol_roots": [
+          -12.571992354430847,
+          -11.592203595165676
+        ],
+        "residuals": [
+          2.8976820942716586e-14,
+          7.105427357601002e-15
+        ],
+        "logvol_bracket": [
+          -21.34175837028286,
+          -4.244298527963228
+        ],
+        "solver_seconds": 0.00028270005714148283,
+        "processing_seconds": 0.0005446999566629529,
+        "relative_errors": [
+          0.006165039269549366,
+          -0.010227970236863615
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0018623562113652022,
+        "p95": 0.003069490960735944,
+        "processing_seconds": 0.0008446000283583999,
+        "relative_errors": [
+          0.006248921284832454,
+          -0.000422290530691094
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.302521234
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 50,
+      "K": 200,
+      "seed": 880103,
+      "cell": "warm200-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0018336833693187984,
+        "p95": 0.003071396141796449,
+        "logvol_roots": [
+          -12.60285712983409,
+          -11.571246102888903
+        ],
+        "residuals": [
+          2.7755575615628914e-16,
+          9.992007221626409e-15
+        ],
+        "logvol_bracket": [
+          -19.82018628654437,
+          -6.259042201108853
+        ],
+        "solver_seconds": 0.00028220005333423615,
+        "processing_seconds": 0.0005864000413566828,
+        "relative_errors": [
+          -0.00924329024983106,
+          0.00019813042670668857
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.00183977251196814,
+        "p95": 0.003037377212835008,
+        "processing_seconds": 0.0007957000052556396,
+        "relative_errors": [
+          -0.0059532680805717275,
+          -0.01088011138108913
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.001341554588194275,
+            "scale_density": 714.9294576179007,
+            "quantile_mcse": 1.8764852586495028e-06,
+            "relative_quantile_mcse": 0.0010138829810322895
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006412192775456391,
+            "scale_density": 102.16444309330274,
+            "quantile_mcse": 6.276344862566705e-06,
+            "relative_quantile_mcse": 0.002043887570224251
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.310253245
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 50,
+      "seed": 880101,
+      "cell": "warm50-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0017388878427742687,
+        "p95": 0.002989916303771655,
+        "logvol_roots": [
+          -12.709019081863675,
+          -11.62501976804188
+        ],
+        "residuals": [
+          1.960986928395414e-12,
+          1.887379141862766e-15
+        ],
+        "logvol_bracket": [
+          -18.173996875514327,
+          -6.7287007523707
+        ],
+        "solver_seconds": 0.00013449997641146183,
+        "processing_seconds": 0.00030910002533346415,
+        "relative_errors": [
+          0.0039150787277741905,
+          0.04053934144289917
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0017679544537985898,
+        "p95": 0.0029957035896829094,
+        "processing_seconds": 0.0009239999344572425,
+        "relative_errors": [
+          0.020696154756390195,
+          0.042553410754218035
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.089334555
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 50,
+      "seed": 880102,
+      "cell": "warm50-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0017472607723404787,
+        "p95": 0.0029142257640765246,
+        "logvol_roots": [
+          -12.699411980629128,
+          -11.676302197098162
+        ],
+        "residuals": [
+          4.996003610813204e-16,
+          0.0
+        ],
+        "logvol_bracket": [
+          -18.557239310969436,
+          -6.714537745429415
+        ],
+        "solver_seconds": 0.00011609995272010565,
+        "processing_seconds": 0.0002886999864131212,
+        "relative_errors": [
+          0.00874903640915825,
+          0.014197806655294132
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0017320777767462184,
+        "p95": 0.0030033500680316386,
+        "processing_seconds": 0.0008011999307200313,
+        "relative_errors": [
+          -1.658828634665266e-05,
+          0.04521450917202574
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.110254399
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 50,
+      "seed": 880103,
+      "cell": "warm50-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0017364025655699962,
+        "p95": 0.002937158917959663,
+        "logvol_roots": [
+          -12.711879594034938,
+          -11.660625038577017
+        ],
+        "residuals": [
+          5.551115123125783e-16,
+          3.3306690738754696e-16
+        ],
+        "logvol_bracket": [
+          -19.064821980828462,
+          -7.187556303669679
+        ],
+        "solver_seconds": 0.0001338999718427658,
+        "processing_seconds": 0.0003483999753370881,
+        "relative_errors": [
+          0.002480249408243873,
+          0.022178915962155932
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0017066246505139835,
+        "p95": 0.0029384685038281325,
+        "processing_seconds": 0.0007927999831736088,
+        "relative_errors": [
+          -0.014711484987984691,
+          0.022634673073290035
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 50,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 50,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.109102781
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 100,
+      "seed": 880101,
+      "cell": "warm100-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0017448800123996857,
+        "p95": 0.0029401200949895957,
+        "logvol_roots": [
+          -12.702138972988703,
+          -11.658609699659825
+        ],
+        "residuals": [
+          2.7755575615628914e-16,
+          1.6653345369377348e-15
+        ],
+        "logvol_bracket": [
+          -19.13188239852571,
+          -6.718694740914137
+        ],
+        "solver_seconds": 0.0003101000329479575,
+        "processing_seconds": 0.0005129000637680292,
+        "relative_errors": [
+          0.0073745482192932865,
+          0.023209453570427696
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0017496573251889426,
+        "p95": 0.0028746191593838188,
+        "processing_seconds": 0.000839599990285933,
+        "relative_errors": [
+          0.010132642345296317,
+          0.00041406618344552726
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.193168034
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 100,
+      "seed": 880102,
+      "cell": "warm100-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0016911535477839399,
+        "p95": 0.0027692988311236568,
+        "logvol_roots": [
+          -12.764688820481398,
+          -11.778322240767661
+        ],
+        "residuals": [
+          5.551115123125783e-16,
+          2.1538326677728037e-14
+        ],
+        "logvol_bracket": [
+          -20.34719724820224,
+          -6.085985455659017
+        ],
+        "solver_seconds": 0.00021749990992248058,
+        "processing_seconds": 0.0004230999620631337,
+        "relative_errors": [
+          -0.02364344306669408,
+          -0.03623911533542701
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0016897636622890417,
+        "p95": 0.0027986416299459315,
+        "processing_seconds": 0.0008682999759912491,
+        "relative_errors": [
+          -0.024445868025745554,
+          -0.026027345686856607
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.186196467
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 100,
+      "seed": 880103,
+      "cell": "warm100-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.001722566671248765,
+        "p95": 0.002981573912308263,
+        "logvol_roots": [
+          -12.727879699460896,
+          -11.630607918797448
+        ],
+        "residuals": [
+          2.7755575615628914e-16,
+          0.0
+        ],
+        "logvol_bracket": [
+          -19.31079804711085,
+          -6.874812265979889
+        ],
+        "solver_seconds": 0.00017290003597736359,
+        "processing_seconds": 0.0003667999990284443,
+        "relative_errors": [
+          -0.00550765101586137,
+          0.03763605398016101
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0017097500932970306,
+        "p95": 0.002950937665593349,
+        "processing_seconds": 0.0007858999306336045,
+        "relative_errors": [
+          -0.012907067784977522,
+          0.026974143497648262
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 100,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 100,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.175030607
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 200,
+      "seed": 880101,
+      "cell": "warm200-real-N250-s880101",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0017676308075259277,
+        "p95": 0.002936856827754826,
+        "logvol_roots": [
+          -12.676230311690261,
+          -11.66083075147816
+        ],
+        "residuals": [
+          4.8128168117500536e-14,
+          1.1102230246251565e-16
+        ],
+        "logvol_bracket": [
+          -19.09496011540932,
+          -5.709150581445647
+        ],
+        "solver_seconds": 0.0002717999741435051,
+        "processing_seconds": 0.0005376000190153718,
+        "relative_errors": [
+          0.020509303502785903,
+          0.02207378367387025
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0017703080601231725,
+        "p95": 0.002952365344977771,
+        "processing_seconds": 0.0007882000645622611,
+        "relative_errors": [
+          0.022054966302779366,
+          0.027470999066676605
+        ],
+        "within_2pct_5pct": false
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.35677303
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 200,
+      "seed": 880102,
+      "cell": "warm200-real-N250-s880102",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0016872764159748914,
+        "p95": 0.0028107647580418063,
+        "logvol_roots": [
+          -12.769279276465655,
+          -11.748597353554828
+        ],
+        "residuals": [
+          1.1102230246251565e-15,
+          2.220446049250313e-16
+        ],
+        "logvol_bracket": [
+          -19.601729743290022,
+          -6.08589309921617
+        ],
+        "solver_seconds": 0.00023690005764365196,
+        "processing_seconds": 0.0004790000384673476,
+        "relative_errors": [
+          -0.02588183417483425,
+          -0.02180830058877259
+        ],
+        "within_2pct_5pct": false
+      },
+      "original_noise": {
+        "p50": 0.0016999428146987833,
+        "p95": 0.002802346361059781,
+        "processing_seconds": 0.0007421999471262097,
+        "relative_errors": [
+          -0.018569120635008707,
+          -0.024738039204074802
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.357854538
+      }
+    },
+    {
+      "dataset": "real",
+      "tick": 100,
+      "K": 200,
+      "seed": 880103,
+      "cell": "warm200-real-N250-s880103",
+      "status": "ok",
+      "reference_caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee.",
+      "deterministic": {
+        "p50": 0.0017152227490884683,
+        "p95": 0.0028673657742991896,
+        "logvol_roots": [
+          -12.736424647895724,
+          -11.708723038735735
+        ],
+        "residuals": [
+          4.440892098500626e-16,
+          2.3314683517128287e-15
+        ],
+        "logvol_bracket": [
+          -19.293844545116094,
+          -6.056708773432295
+        ],
+        "solver_seconds": 0.0002688999520614743,
+        "processing_seconds": 0.000530900084413588,
+        "relative_errors": [
+          -0.009747530099702861,
+          -0.002110229406257491
+        ],
+        "within_2pct_5pct": true
+      },
+      "original_noise": {
+        "p50": 0.0017153846388857285,
+        "p95": 0.0028257550480015707,
+        "processing_seconds": 0.0007778999861329794,
+        "relative_errors": [
+          -0.009654065987433014,
+          -0.016591436684222693
+        ],
+        "within_2pct_5pct": true
+      },
+      "chains": 4,
+      "draws_per_chain": 200,
+      "original_noise_chain_rows": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "reference_uncertainty": {
+        "method": "ArviZ mean MCSE of per-draw CDF, divided by mixture scale density",
+        "quantiles": [
+          {
+            "probability": 0.5,
+            "cdf_mcse": 0.0013264675794399466,
+            "scale_density": 747.6892883487949,
+            "quantile_mcse": 1.7740893177289352e-06,
+            "relative_quantile_mcse": 0.0010242380061939106
+          },
+          {
+            "probability": 0.95,
+            "cdf_mcse": 0.0006362467401145193,
+            "scale_density": 111.86968783364641,
+            "quantile_mcse": 5.687391754061541e-06,
+            "relative_quantile_mcse": 0.001979304525291801
+          }
+        ],
+        "caveat": "Shared same-sampler finite-draw reference; independent sampler not validated. Deterministic CDF removes innovation simulation, not posterior Monte Carlo error. Reported reference MCSE is an asymptotic diagnostic, not a qualification guarantee."
+      },
+      "original_warm_metadata": {
+        "chains": 4,
+        "draws": 200,
+        "kept": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "divergences": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "wall_seconds": 0.348403539
+      }
+    }
+  ],
+  "groups": [
+    {
+      "dataset": "sim",
+      "K": 50,
+      "planned": 9,
+      "processed": 9,
+      "original_noise": {
+        "within_tolerance": 5,
+        "median_absolute_relative_error": [
+          0.01422335696256427,
+          0.043694888930145837
+        ],
+        "median_local_processing_seconds": 0.0008040000684559345
+      },
+      "deterministic": {
+        "within_tolerance": 6,
+        "median_absolute_relative_error": [
+          0.011700613049143826,
+          0.033328939539854385
+        ],
+        "median_local_processing_seconds": 0.0003179999766871333
+      }
+    },
+    {
+      "dataset": "sim",
+      "K": 100,
+      "planned": 9,
+      "processed": 9,
+      "original_noise": {
+        "within_tolerance": 9,
+        "median_absolute_relative_error": [
+          0.0027120230338656404,
+          0.01677881556448435
+        ],
+        "median_local_processing_seconds": 0.0007920999778434634
+      },
+      "deterministic": {
+        "within_tolerance": 9,
+        "median_absolute_relative_error": [
+          0.0053962394113702405,
+          0.012335206353687012
+        ],
+        "median_local_processing_seconds": 0.00036890001501888037
+      }
+    },
+    {
+      "dataset": "sim",
+      "K": 200,
+      "planned": 9,
+      "processed": 9,
+      "original_noise": {
+        "within_tolerance": 9,
+        "median_absolute_relative_error": [
+          0.00449543397519836,
+          0.014558949351320294
+        ],
+        "median_local_processing_seconds": 0.0007831000257283449
+      },
+      "deterministic": {
+        "within_tolerance": 9,
+        "median_absolute_relative_error": [
+          0.0024325800607127857,
+          0.007518267823296676
+        ],
+        "median_local_processing_seconds": 0.0005673000123351812
+      }
+    },
+    {
+      "dataset": "real",
+      "K": 50,
+      "planned": 9,
+      "processed": 9,
+      "original_noise": {
+        "within_tolerance": 5,
+        "median_absolute_relative_error": [
+          0.014711484987984691,
+          0.016378981978666274
+        ],
+        "median_local_processing_seconds": 0.0008327999385073781
+      },
+      "deterministic": {
+        "within_tolerance": 7,
+        "median_absolute_relative_error": [
+          0.004975654262868279,
+          0.022178915962155932
+        ],
+        "median_local_processing_seconds": 0.00030910002533346415
+      }
+    },
+    {
+      "dataset": "real",
+      "K": 100,
+      "planned": 9,
+      "processed": 9,
+      "original_noise": {
+        "within_tolerance": 5,
+        "median_absolute_relative_error": [
+          0.011836191540724239,
+          0.026974143497648262
+        ],
+        "median_local_processing_seconds": 0.0007920999778434634
+      },
+      "deterministic": {
+        "within_tolerance": 7,
+        "median_absolute_relative_error": [
+          0.0073745482192932865,
+          0.03205468221555541
+        ],
+        "median_local_processing_seconds": 0.0004230999620631337
+      }
+    },
+    {
+      "dataset": "real",
+      "K": 200,
+      "planned": 9,
+      "processed": 9,
+      "original_noise": {
+        "within_tolerance": 8,
+        "median_absolute_relative_error": [
+          0.006248921284832454,
+          0.016591436684222693
+        ],
+        "median_local_processing_seconds": 0.0007957000052556396
+      },
+      "deterministic": {
+        "within_tolerance": 7,
+        "median_absolute_relative_error": [
+          0.008928510075768559,
+          0.011095126719118054
+        ],
+        "median_local_processing_seconds": 0.000548899988643825
+      }
+    }
+  ],
+  "input_identities": [
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\protocol.json",
+      "bytes": 20488,
+      "sha256": "bd7406a4c9c6a4353c4f43c90949ae217b75eac5969e107bdfacd07cb054bc90"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\analyze.py",
+      "bytes": 26115,
+      "sha256": "431c838101646efb435e3d36d005675a9dfc67d73b63df17a973b0276885354a"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-sim-N250\\ticks.jsonl",
+      "bytes": 65388,
+      "sha256": "545be7501b4365ff67e2791bbc555de24a1c5ced75ec7d18bee818e45930551c"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-sim-N250\\tick-002-a0.f32",
+      "bytes": 960000,
+      "sha256": "b7906076117d63abdbdb26796b2d032b60875371900a07ec1267054e28cd346a"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880101\\ticks.jsonl",
+      "bytes": 23673,
+      "sha256": "cf23e11aa635838f8a545318cda6f6074b124a3c6ca6d78be40fbb439efc1e4a"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880101\\tick-002.f32",
+      "bytes": 2400,
+      "sha256": "ebeb7a8db251989e430af66dd0940fd70572b0f78c33e087ce1a0e937a3dcb27"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880102\\ticks.jsonl",
+      "bytes": 23572,
+      "sha256": "4a1ae441f30b1d8213391c1ca8ef3531ad2024e91cc23331a0afe8ce9d5c68d4"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880102\\tick-002.f32",
+      "bytes": 2400,
+      "sha256": "332197414d846b4cf74a4ce68ea440bd69fd01acf362d8d9dcc4115c84ec065e"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880103\\ticks.jsonl",
+      "bytes": 23959,
+      "sha256": "e8c199f6a020e7faf11519a0b6126d954693760d24939716f1502b6cbf8ecf93"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880103\\tick-002.f32",
+      "bytes": 2400,
+      "sha256": "3ce666db7240096a111c6e0188ab6c37de636638f111a47e80005ad487388043"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880101\\ticks.jsonl",
+      "bytes": 23970,
+      "sha256": "42c81f8b0296873ea8ec84b5b707c1776b20aa7c88050bcacee72014727db709"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880101\\tick-002.f32",
+      "bytes": 4800,
+      "sha256": "90b5d4cb54e644283690ad2098c053cdc562ec4f9e3d30e6462c5e4f6e0283e5"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880102\\ticks.jsonl",
+      "bytes": 23869,
+      "sha256": "671938fbd76eb34e1ef110accd59d2e101b4194d1b8c79f6fb0cc78b853406c3"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880102\\tick-002.f32",
+      "bytes": 4800,
+      "sha256": "4a1f8ff6334ad1020b64c0522a7b853753677c14ba7caa081d5199b77669e76f"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880103\\ticks.jsonl",
+      "bytes": 24262,
+      "sha256": "13048e2c20d33dcae9f94678778bc7c58b347feffaf4c017f7c80653ea10de77"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880103\\tick-002.f32",
+      "bytes": 4800,
+      "sha256": "8fff181044bcfcd15c2059fc2fda777270163e4729ca4629d5809e343ed60f35"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880101\\ticks.jsonl",
+      "bytes": 23972,
+      "sha256": "41bb21b0b09d1e023ecba785dcf5b3bb653e88c762c4d88df799c4c0b576d6e8"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880101\\tick-002.f32",
+      "bytes": 9600,
+      "sha256": "ecf18a1784cb6d9cd94e1e42672e06c56343aeb45ae1e35007e7fe386203a7c4"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880102\\ticks.jsonl",
+      "bytes": 23883,
+      "sha256": "4d989b201229c3b2cc5320e3b5d1335b17d972b11efd7c12d93b3b59b9a0149f"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880102\\tick-002.f32",
+      "bytes": 9600,
+      "sha256": "7fdde6b3a0e14b95c38538801fca3c7809ee7fe7d976fa9d735d01729c5d8013"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880103\\ticks.jsonl",
+      "bytes": 24267,
+      "sha256": "e8f7f49d3b7e6865393f073f9499247e0ab5f0305b83d866db1fceb525b1e68f"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880103\\tick-002.f32",
+      "bytes": 9600,
+      "sha256": "5935a7d41cc5cd638c09f571be8310e762202aa90984c41ab58e854c2297277c"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-sim-N250\\tick-050-a0.f32",
+      "bytes": 960000,
+      "sha256": "98386b1887f2b3406737451ff22fa84ba668f98e70a983d4b5efa0676d54b118"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880101\\tick-050.f32",
+      "bytes": 2400,
+      "sha256": "1c7c4bd7f8b0a633c8734c731a899f05b37b80b947a877e19d1cf7b865b74189"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880102\\tick-050.f32",
+      "bytes": 2400,
+      "sha256": "78ab3b1059a1a6da512fafe1e58fe4f8fa31527ffa7baf322a1dbcfb71a49d4c"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880103\\tick-050.f32",
+      "bytes": 2400,
+      "sha256": "7ab7d9f4a53a46a474751514e7a3a80ad31f7ed0e20212187be59f0bd48cd967"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880101\\tick-050.f32",
+      "bytes": 4800,
+      "sha256": "067a286f0b9175dfd2957e7d33ce52ff212e0a6385288fc96967dd8eb0d523d3"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880102\\tick-050.f32",
+      "bytes": 4800,
+      "sha256": "51c07ab6076cec291237787a3015d31bcea79374b57d5809fac88f79da488fd7"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880103\\tick-050.f32",
+      "bytes": 4800,
+      "sha256": "6a377c5d7607d5879f9d2e9ecc0c6502a97cde97b373f6414ab64fc1f09ba885"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880101\\tick-050.f32",
+      "bytes": 9600,
+      "sha256": "284e93ea10146373404df5e41612fb1f019e6e6ae3beb1b1ffedd1d22ea904ed"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880102\\tick-050.f32",
+      "bytes": 9600,
+      "sha256": "176c33aee2928f2957f152558f7358c64078b64459d683335a1527e11b647e9b"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880103\\tick-050.f32",
+      "bytes": 9600,
+      "sha256": "cf554f4b3e590c6c532315047e8a3a0099c54030ea62f28d9c71df81504bfd9e"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-sim-N250\\tick-100-a0.f32",
+      "bytes": 960000,
+      "sha256": "e8e70a1994fb7ac5966d111644af899dee7871a17e5e3d65cd66cbae55827cf3"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880101\\tick-100.f32",
+      "bytes": 2400,
+      "sha256": "80244e0da99efd38e785563c850da21bc4332095c790d4aff27013a9db36d834"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880102\\tick-100.f32",
+      "bytes": 2400,
+      "sha256": "1dcb3833b37c0ac5d7ee9c51383f67601ced632906e780ec3ef44b412c3a8ea4"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-sim-N250-s880103\\tick-100.f32",
+      "bytes": 2400,
+      "sha256": "1e211b2f88d485575357b728bfc9cdd8d5c3724f8ca3d563467367bbd758598c"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880101\\tick-100.f32",
+      "bytes": 4800,
+      "sha256": "0ef056fedd46992a1893db4ae6dc3c8290e8675913117e5711e4f2c086e09e57"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880102\\tick-100.f32",
+      "bytes": 4800,
+      "sha256": "82aa33c4d039c5059ecd51be81b87df82a3ebc6636957a91fef96f44f5ec5e58"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-sim-N250-s880103\\tick-100.f32",
+      "bytes": 4800,
+      "sha256": "7ab214c2cb8ab25125817b33737128823fd730e802b26ae7d8829f51ccc02923"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880101\\tick-100.f32",
+      "bytes": 9600,
+      "sha256": "553c495e18cd07d06279d1fd32762df722c0b87ad12059691e2081bbed680575"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880102\\tick-100.f32",
+      "bytes": 9600,
+      "sha256": "5a3b9799163a8d1260d38c8576817d22aa861daa364c5895e8de90bb00755032"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-sim-N250-s880103\\tick-100.f32",
+      "bytes": 9600,
+      "sha256": "dc7ad75af9f4604e3238a527e28c45ef66c38f5065dc2b7b436341bda2458581"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-real-N250\\ticks.jsonl",
+      "bytes": 35331,
+      "sha256": "0231f2c3e94ee1e352a84bc1c325943d9fd3d5b1189bc17a8885711805f5ab74"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-real-N250\\tick-002-a0.f32",
+      "bytes": 960000,
+      "sha256": "01fb0d461361f0e6c4ec07d65d2c0420ed45208c9959b0bb4a35e0cb1a710b8a"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880101\\ticks.jsonl",
+      "bytes": 24077,
+      "sha256": "d0adfdeda8a5dd32ca4a37a6297430bad7f0c40495275226ba7f1a97ae78816c"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880101\\tick-002.f32",
+      "bytes": 2400,
+      "sha256": "dab2a5cee73f572d0ef28319de81f181d6c7cee0cfc47e3b26f61562d7f1be56"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880102\\ticks.jsonl",
+      "bytes": 24276,
+      "sha256": "4917ea3bb845bccc984cca10e3d2365b6da505b9f361aea3a03a33b03ceeac8f"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880102\\tick-002.f32",
+      "bytes": 2400,
+      "sha256": "08684b9864ecde7d8df9b1e2b92788d343932bde41fc7673e30fe3f4fcdafbd3"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880103\\ticks.jsonl",
+      "bytes": 24079,
+      "sha256": "653a3560dbe53686b2c033bd9004b83cb37d2a5ef690117dcc94274aefe3b1da"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880103\\tick-002.f32",
+      "bytes": 2400,
+      "sha256": "ff34537b7e8ba100a2d719cc3bc4785fe63d372246bc99cbada313b1ae94906f"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880101\\ticks.jsonl",
+      "bytes": 24279,
+      "sha256": "44645357f43ec3bd60a9c23c8b7a2dfd28506c6aba6db1d3ea4025d30458b71d"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880101\\tick-002.f32",
+      "bytes": 4800,
+      "sha256": "f96af0fb4b5d5abbdf50d860081f5583f4e9bd762068fc1216c3c85c48f38a0c"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880102\\ticks.jsonl",
+      "bytes": 24476,
+      "sha256": "5f1d4721cfda44732e963c358d26a627b7a18a76772afae01251deec4f28aa1e"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880102\\tick-002.f32",
+      "bytes": 4800,
+      "sha256": "6ee414ca19a0eaf2abb32ef9d175910a2dac90a3cb521ecd236c25a6eaf92628"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880103\\ticks.jsonl",
+      "bytes": 24280,
+      "sha256": "13d23c1e95d13f7a411f67d4050df0f876d941986d58f182c144ba4fcfc7fed8"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880103\\tick-002.f32",
+      "bytes": 4800,
+      "sha256": "2a3c785e195a9a4057c269899f49b8a26854c2c16fa5b7171187567c236d9269"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880101\\ticks.jsonl",
+      "bytes": 24279,
+      "sha256": "0beab28b332e6b72649b29684a5f0502714d75f4d86491f2c11fa833145c9c29"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880101\\tick-002.f32",
+      "bytes": 9600,
+      "sha256": "54e22dd7a47c529794d6fa88102d5864041aedf6ad161eb82f74bdf5461d63ec"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880102\\ticks.jsonl",
+      "bytes": 24485,
+      "sha256": "747f9d092082a9c59887c0da1aa6f047a0c68b593f95e1cceea792a6e8f844b6"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880102\\tick-002.f32",
+      "bytes": 9600,
+      "sha256": "de0398dd08c5cf267d4cf887f9450b899096a4e2cf667bfca078eaa12787624a"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880103\\ticks.jsonl",
+      "bytes": 24280,
+      "sha256": "9830b5eed2fbafc17ed9de9980dd92e1486f3f4f91563d3f55f7a7811073ed7e"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880103\\tick-002.f32",
+      "bytes": 9600,
+      "sha256": "4f395d239a377ec462938926a775f21eea1d2506c267fc93f894fed8d69fbecd"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-real-N250\\tick-050-a0.f32",
+      "bytes": 960000,
+      "sha256": "e4fb85c8732d99d0fcd586da0e6be97c46f0e3a74943ef1270a09bb79be1f769"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880101\\tick-050.f32",
+      "bytes": 2400,
+      "sha256": "60e22c7b254747d7e17862e200b3e87ba4d82dadc5555a76f5ada2e7c761dba4"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880102\\tick-050.f32",
+      "bytes": 2400,
+      "sha256": "a17c1bc76777c647ae3c39ab85540ee3a6ac70b107c21e7891cf108ba8d0d320"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880103\\tick-050.f32",
+      "bytes": 2400,
+      "sha256": "d27f8877373e7901ed3930a1801440fa8f523aa707b88e66ab90922539a932db"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880101\\tick-050.f32",
+      "bytes": 4800,
+      "sha256": "38c0f8dc92a5b43bc2b20cf0008e57b744f86ac0742973747a9aa8f2177aa556"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880102\\tick-050.f32",
+      "bytes": 4800,
+      "sha256": "eb5a7b41465a0cf51b21dcc98b25a5840f2d2f830e8b9e156c97ff7cb1db9609"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880103\\tick-050.f32",
+      "bytes": 4800,
+      "sha256": "47d890adf2b7ad13f93a8a11531987c2db6f8483d2136dec5743a349bcceaea9"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880101\\tick-050.f32",
+      "bytes": 9600,
+      "sha256": "b37702f6fa12fe6ef32a1a1cb4ecdcb107f154ebbe5f153a6cbdd4a313c4ab26"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880102\\tick-050.f32",
+      "bytes": 9600,
+      "sha256": "074b06103eec6bb524752f6c4a4e07916dfac705f6d1101db75f180d626849bc"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880103\\tick-050.f32",
+      "bytes": 9600,
+      "sha256": "4b1ce12c75f8e006034caa4af999cd61fdab0c41c05273794a2d2bc85a927d7e"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\ref-real-N250\\tick-100-a0.f32",
+      "bytes": 960000,
+      "sha256": "aee4e4817f5cf6a686a841dfb0d386c4b3aff6b6bcbef07e8bd7e0675589bfc0"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880101\\tick-100.f32",
+      "bytes": 2400,
+      "sha256": "801ae8343307c60ff31a9fbe23a1d99a51e38e1dc4a78599f4261365577bf345"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880102\\tick-100.f32",
+      "bytes": 2400,
+      "sha256": "b86fee19318e14a5faed2e224384b4a31fddc577eefc672e56558ac1cc69a79e"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm50-real-N250-s880103\\tick-100.f32",
+      "bytes": 2400,
+      "sha256": "f5318f378ed60be3d45337ef01ea40b5145f6883e5e5956f076b48a5c6a96f2a"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880101\\tick-100.f32",
+      "bytes": 4800,
+      "sha256": "cdf35ac3079e238f239af068652dcd7f0728d82ef045c1d4e52ee356779bccf1"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880102\\tick-100.f32",
+      "bytes": 4800,
+      "sha256": "f09b4e6835e60490f046241a858ed052544105644abdae893062f12b2d4cac97"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm100-real-N250-s880103\\tick-100.f32",
+      "bytes": 4800,
+      "sha256": "9569631f4e2bdd5028a1e294751651ce22e7ba5fc01d3f901c5baa79044cb0e1"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880101\\tick-100.f32",
+      "bytes": 9600,
+      "sha256": "17772024de918ebf40e4ce1200702c5e4a842f8f1801c6e456f9ebcd67bfd7ba"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880102\\tick-100.f32",
+      "bytes": 9600,
+      "sha256": "16bf24c3c4fb4da2325ee928aaf084fb44234c91f7a76af06e11b5b940d2863b"
+    },
+    {
+      "path": "C:\\dev\\oWALNUTS\\STUDIES\\online_sv_quote_v2\\artifacts\\cells\\warm200-real-N250-s880103\\tick-100.f32",
+      "bytes": 9600,
+      "sha256": "ae278d440d383dff4aba6ba8ed0cb50695f3fcc0ddfb1a9ec99cffb3a120081c"
+    }
+  ],
+  "input_integrity_after": true,
+  "total_local_processing_seconds": 0.5566963999299332,
+  "processed_warm_rows": 54
+}
