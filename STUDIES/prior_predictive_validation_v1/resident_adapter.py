@@ -1,6 +1,9 @@
 """Posterior-only resident path: same target/remap; deliberately no quantile roots."""
 import time
 import numpy as np
+class InitializationFailure(RuntimeError):
+    def __init__(self,cause,payload):self.payload=payload;super().__init__(str(cause))
+
 class DrawResident:
     def __init__(self,owalnuts,targets,y,seed_map):
         self.closed=False;self.ow=owalnuts;self.targets=targets;self.y=np.array(y,copy=True)
@@ -10,8 +13,11 @@ class DrawResident:
         init=np.zeros((4,253));init[:,0]=2*np.log(.005);init[:,1]=np.log(.2)
         started=time.perf_counter()
         fitted=owalnuts.sample(self.owner.target,253,init=init,chains=4,warmup=1000,draws=200,seed=seed_map['initial'],threads=4,tuning=tuning,adaptation=adaptation,admit_worst_case=True)
-        self.initial=dict(seconds=time.perf_counter()-started,summary=fitted.summary(),config=fitted.config,chain_metadata=[c.get('metadata') for c in fitted.chains],chain_diagnostics=[c.get('diagnostics') for c in fitted.chains])
-        self.session=owalnuts.WarmSession(self.owner.target,fitted.warm_state(),seed=seed_map['warm'],threads=4,tuning=tuning,max_target_evaluations=None,admit_worst_case=True)
+        keys=('metadata','seed','depth','stop','target_evaluations','divergent','trapped_chain_checks','work_retained','work_discarded','work_total','warmup_end','sampling_end')
+        self.initial=dict(seconds=time.perf_counter()-started,summary=fitted.summary(),config=fitted.config,chain_metadata=[c.get('metadata') for c in fitted.chains],chains=[{k:c[k] for k in keys if k in c} for c in fitted.chains],chain_warnings=getattr(fitted,'chain_warnings',None))
+        try:
+            self.session=owalnuts.WarmSession(self.owner.target,fitted.warm_state(),seed=seed_map['warm'],threads=4,tuning=tuning,max_target_evaluations=None,admit_worst_case=True)
+        except Exception as exc:raise InitializationFailure(exc,dict(phase='session_creation',initial_fit=self.initial,seeds=seed_map)) from exc
     def advance(self,y_new,k):
         if self.closed:raise RuntimeError('closed/poisoned')
         start=time.perf_counter()

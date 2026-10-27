@@ -23,6 +23,9 @@ def extract(trace):
     draws=np.stack(components,axis=-1)
     divergence=np.asarray(trace.sample_stats['diverging'].transpose('chain','draw'))
     if divergence.shape!=(4,4000):raise ValueError('reference divergence axes mismatch')
+    if not np.isfinite(divergence).all() or not np.isin(divergence,[0,1]).all():raise ValueError('invalid divergence indicators')
+    coordinates=np.asarray(trace.posterior.coords['chain'])
+    if coordinates.shape!=(4,) or len(set(coordinates.tolist()))!=4:raise ValueError('invalid reference chain identities')
     return draws,dict(divergences=divergence.sum(axis=1).astype(int).tolist(),chain_coordinates=np.asarray(trace.posterior.coords['chain']).tolist())
 def fit(nutpie,compiled,window,seed,validated_settings):
     # Only a future frozen runner may invoke this; no caller exists in scaffold.

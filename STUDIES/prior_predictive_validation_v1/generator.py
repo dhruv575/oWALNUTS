@@ -10,21 +10,35 @@ def seeds(stream):
     if type(stream) is not int or not 0<=stream<32:raise ValueError('stream must be0..31')
     return dict(data=DATA_BASE+stream,initial=INIT_BASE+1000*stream,warm=WARM_BASE+1000*stream)
 
+class GenerationFailure(RuntimeError):
+    def __init__(self,cause,payload):
+        self.payload=payload
+        super().__init__(str(cause))
+
 def generate(stream,rng_factory=np.random.default_rng):
-    """One draw, without rejection/truncation/replacement; caller archives failures."""
-    rng=rng_factory(seeds(stream)['data'])
-    mu=float(rng.normal(2*math.log(.005),1.));ls=float(rng.normal(math.log(.2),.5));beta=float(rng.normal(0.,.002))
-    z=np.asarray(rng.normal(size=283),dtype=float);innovation=np.asarray(rng.standard_t(5,size=283),dtype=float)
-    with np.errstate(over='raise',invalid='raise',under='ignore'):
-        sigma=np.exp(ls)
-        if not np.isfinite(sigma) or sigma<=0:raise ValueError("nonrepresentable innovation scale; preserve failed stream")
-        h=np.empty(283);h[0]=mu+sigma*z[0]/math.sqrt(1-RHO*RHO)
-        for i in range(1,283):h[i]=mu+RHO*(h[i-1]-mu)+sigma*z[i]
-        scales=np.exp(h/2)
-        if not np.isfinite(scales).all() or np.any(scales<=0):raise ValueError("nonrepresentable return scale; preserve failed stream")
-        y=beta+scales*innovation
-    if not np.isfinite([mu,ls,beta]).all() or not np.isfinite(h).all() or not np.isfinite(y).all():raise ValueError('nonfinite generated stream; preserve failure, never regenerate')
-    return dict(stream=stream,seeds=seeds(stream),parameters=dict(mu=mu,log_sigma=ls,beta=beta),h=h,y=y)
+    """One draw only; failure carries acquired truth/seed metadata without replay."""
+    payload=dict(stream=stream,seeds=seeds(stream),phase='rng',parameters={})
+    try:
+        rng=rng_factory(payload['seeds']['data']);payload['phase']='parameters'
+        mu=float(rng.normal(2*math.log(.005),1.));payload['parameters']['mu']=mu
+        ls=float(rng.normal(math.log(.2),.5));payload['parameters']['log_sigma']=ls
+        beta=float(rng.normal(0.,.002));payload['parameters']['beta']=beta
+        payload['phase']='innovations'
+        z=np.asarray(rng.normal(size=283),dtype=float);innovation=np.asarray(rng.standard_t(5,size=283),dtype=float)
+        payload['phase']='latent_and_returns'
+        with np.errstate(over='raise',invalid='raise',under='ignore'):
+            sigma=np.exp(ls)
+            if not np.isfinite(sigma) or sigma<=0:raise ValueError('nonrepresentable innovation scale')
+            h=np.empty(283);h[0]=mu+sigma*z[0]/math.sqrt(1-RHO*RHO)
+            for i in range(1,283):h[i]=mu+RHO*(h[i-1]-mu)+sigma*z[i]
+            scales=np.exp(h/2)
+            if not np.isfinite(scales).all() or np.any(scales<=0):raise ValueError('nonrepresentable return scale')
+            y=beta+scales*innovation
+        if not np.isfinite([mu,ls,beta]).all() or not np.isfinite(h).all() or not np.isfinite(y).all():raise ValueError('nonfinite generated stream')
+        return dict(stream=stream,seeds=payload['seeds'],parameters=payload['parameters'],h=h,y=y)
+    except Exception as exc:
+        payload['error_type']=type(exc).__name__;payload['error']=repr(exc)
+        raise GenerationFailure(exc,payload) from exc
 
 def tick_inputs(data,tick):
     if type(tick) is not int or not 1<=tick<=32:raise ValueError('tick must be1..32')
