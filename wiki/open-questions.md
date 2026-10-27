@@ -438,6 +438,17 @@ still resolve; new items from the WP41–WP61 rounds start at 11.
     4.86 ms and 0.166 ms for the controls. This supports incremental predictive
     value for one historical month; generalization, the value of that extra
     computation for AMM decisions, and profitability remain open.
+    A fixed-method [April/May/June replication](../STUDIES/market_replication_v1/README.md)
+    now completes all 4,368 origins and 24 reliable references. Gains over
+    rolling t5 repeat in each month (+0.0783/+0.0510/+0.0894 nats), with all
+    predeclared block intervals positive. EWMA gains are smaller, and June's
+    intervals include zero; April's 48-origin EWMA lower bound is close to zero.
+    This strengthens historical predictive evidence while preserving the
+    cheap-control question. Adjacent months are dependent, with no pooled
+    significance claim. The next practical gap is a concrete decision,
+    horizon and loss: whether the extra computation improves risk or quoting
+    decisions after inventory costs, fills and adverse selection. Price-bar
+    log scores alone cannot answer that question or establish profitability.
     The [fresh long-horizon K400 follow-up](../STUDIES/long_horizon_k400_v1/README.md)
     also completes four 2,000-update lanes and 18 reliable references on one
     paired control/volatility-shift path. Maximum grid CDF error is 0.003574

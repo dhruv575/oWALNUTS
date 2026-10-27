@@ -1351,3 +1351,18 @@ claims explicitly.
   all 8,638 archive hashes; the original failure is preserved, with no scientific
   rerun:
   [`long_horizon_k400_v1`](STUDIES/long_horizon_k400_v1/README.md).
+- [E64] A fixed-method April/May/June 2026 historical replication completes
+  **4,368 origins, 13,104 forecasts and 24 reliable independent references**.
+  Mean SV-minus-rolling-t5 gains are +0.0783, +0.0510 and +0.0894 nats per
+  forecast; all three months' predeclared 24/48/96-origin block intervals
+  remain positive. Gains over EWMA are smaller (+0.0188, +0.0171, +0.0137);
+  June's intervals include zero, and April's 48-origin EWMA interval has a lower
+  bound near zero.
+  Adjacent months are dependent, and the descriptive weighted aggregate is
+  not a pooled significance test. Median native-plus-observed-label cost is
+  498-512 ms with three concurrent candidate lanes, versus 4.71-4.88 ms for
+  rolling t5 and 0.162-0.165 ms for EWMA in subsequent serial phases. This is
+  historical predictive replication, not isolated latency, complete quantile
+  timing, AMM decision value or profitability evidence. All 40,648 archived
+  files were independently hash-verified, and the AWS instance was stopped:
+  [`market_replication_v1`](STUDIES/market_replication_v1/README.md).
