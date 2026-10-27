@@ -1,4 +1,4 @@
-import hashlib,io,json,tempfile,unittest
+import hashlib,io,json,os,tempfile,unittest
 from pathlib import Path
 import numpy as np
 import data_contract as d
@@ -7,7 +7,7 @@ from tail_inputs import seal_inference,Archive,origins,references
 class Contract(unittest.TestCase):
     def test_actual_calendar_import_closure(self):
         from reuse import calendar
-        root=Path(__file__).resolve().parents[1]/'fresh_real_value_v1'
+        root=Path(os.environ.get('OWALNUTS_E62_ROOT',str(Path(__file__).resolve().parents[1]/'fresh_real_value_v1')))
         for row in d.MONTHS:
             modules=calendar(row['month'],root)
             self.assertEqual(modules['worker'].ORIGINS,row['origins']);self.assertEqual(modules['reference'].TICKS,row['reference_ticks'])
@@ -48,7 +48,7 @@ class Contract(unittest.TestCase):
     def test_empty_unified_accounting(self):
         import worker
         with tempfile.TemporaryDirectory() as folder:
-            spec=dict(e62_root=str(Path(__file__).resolve().parents[1]/'fresh_real_value_v1'))
+            spec=dict(e62_root=os.environ.get('OWALNUTS_E62_ROOT',str(Path(__file__).resolve().parents[1]/'fresh_real_value_v1')))
             result=worker.terminal_accounting(spec,folder,[])
             self.assertTrue(result['accounting_complete']);self.assertTrue(result['artifact_integrity']['integrity_ok'])
             self.assertEqual(result['planned_origins'],4320);self.assertEqual(result['tail']['valid_arm_origins'],0)
