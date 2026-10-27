@@ -177,6 +177,9 @@ fn simulate(n: usize) -> Vec<f64> {
     y
 }
 
+/// A measurement plus the last call's draws per chain (for the bit-identity check).
+type Measured = (Measure, Vec<Vec<f64>>);
+
 struct Measure {
     walls: Vec<Duration>,
     gradients: Vec<usize>,
@@ -323,7 +326,7 @@ fn time_run_warm(
     threads: usize,
     draws: usize,
     options: &Options,
-) -> Result<(Measure, Vec<Vec<f64>>), Box<dyn Error>> {
+) -> Result<Measured, Box<dyn Error>> {
     let mut state = state0.clone();
     let mut measure = Measure {
         walls: Vec::with_capacity(options.calls),
@@ -358,7 +361,7 @@ fn time_session(
     threads: usize,
     draws: usize,
     options: &Options,
-) -> Result<(Measure, Vec<Vec<f64>>), Box<dyn Error>> {
+) -> Result<Measured, Box<dyn Error>> {
     let mut session = Sampler::new()
         .seed(SEED)
         .threads(threads)
