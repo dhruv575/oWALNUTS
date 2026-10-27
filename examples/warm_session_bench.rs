@@ -532,7 +532,6 @@ struct Row {
 /// `run_warm` per call with the session's seed rule (call `n` seeded
 /// `SEED + n * CHAINS`), chaining the state; returns the timings and the
 /// last call's draws.
-
 fn time_run_warm(
     target: &Sv,
     state0: &WarmState,
