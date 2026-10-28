@@ -43,3 +43,12 @@ batch control records. Four archive tests pass locally; the combined seven
 archive/supervisor tests pass on AWS. Test receipts are simulated binding fixtures,
 not claims of S3 verification. Production transport uses the previously exercised
 presigned transfer helper and real exact-version streaming verification.
+
+The two-panel data contract and fixture preparation are implemented. Two causal
+tests check every primary origin's current-observation/next-label timestamps,
+window isolation from label mutation, and rejection of invalid grids/closes.
+An AWS baseline test verifies that one optimizer exception preserves all three
+baseline slots and still attempts the other methods. All three tests pass on
+AWS; the two causal tests also pass locally. Preparation retains all 8,784
+baseline slots and writes incremental progress with four bounded worker slots;
+it must run under the outer preparation resource/time monitor before admission.
