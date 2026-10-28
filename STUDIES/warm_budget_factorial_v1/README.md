@@ -45,7 +45,16 @@ claims of completed update counts. Missing terminal candidate summaries and
 unreached score spots must remain in the final denominator. The queue started
 December K400 jobs 00 and 02; no cap extension or failed-path replacement was
 performed. The campaign as a whole remains active.
-Twelve complete monthly paths compare K400 and K1600 at two seed schedules
+Subsequent partial checkpoint: December K400 jobs 00 and 02 completed all
+1,488 updates and eight planned scores each. Outer elapsed times were 701.784
+and 686.425 seconds, with exit zero and drained process groups. Their receipts
+are preserved alongside the K1600 and January timeout receipts. Thus all four
+December arms completed; posterior/reference scoring comparisons remain pending
+the sealed campaign audit. These durations include initialization and I/O and
+do not establish the accuracy of either budget. January K400 and February K1600
+workers continue under the original bounds.
+
+Twelve planned monthly paths compare K400 and K1600 at two seed schedules
 on each of the three E66 panels. The full plan fixes data, targets, diagnostics,
 reporting, retained points and resource limits before market sampling.
 

@@ -79,7 +79,11 @@ The swap-only auditor reconstructs every integer reserve transition, checks the
 reserve timestamp exactly. LP total supply is unchanged. Three focused tests
 cover large integers, invalid accounting and Ethereum Keccak. Raw requests,
 responses, exact sources, accounting output and a verified archive manifest are
-preserved in `evidence/pool-events-20261028/`.
+preserved in `evidence/pool-events-20261028/`. The 1,451,200-byte archive was
+uploaded to the private versioned S3 research bucket, downloaded by its exact
+version ID, and checked against its SHA-256 and all 233 member hashes. The
+`S3-VERIFIED.json` receipt identifies the immutable object version; local
+originals remain available.
 
 This is a narrow accounting admission, not a policy evaluation. The auditor
 rejects unsupported events rather than silently excluding them. Mint, burn,
