@@ -48,3 +48,23 @@ been compiled or compared with the analytic implementation. That comparison,
 including T=250 and broad finite parameter fixtures, is the next gate before
 bounded synthetic sampling. These finite checks are not a global numerical
 stability guarantee or evidence of posterior sampling fidelity.
+
+## Independent Stan comparison completed
+
+BridgeStan compiled the independent implementation and all 16 deterministic
+fixtures passed (T=1,4,12,250; four cases each). Cases include tied cells,
+nonuniform widths, width 1e-6, and transformed coordinates up to +/-1000.
+Normalized density comparisons explicitly set `propto=False`. Maximum absolute
+log-density error was 2.9104e-11; maximum absolute gradient error was 1.1642e-9.
+The run took 13.337 seconds including compilation, with four compiler jobs and
+an outer 240-second timeout. The source-bound report is preserved under
+`evidence/price-cell-stan-20261028`.
+
+BridgeStan warned about loading the same shared object repeatedly. This run
+compiled once before constructing the 16 data-specific models; it did not
+recompile between loads. The warning therefore does not indicate a changed
+library was silently reused in these comparisons.
+
+The next gate is bounded synthetic posterior sampling and independent
+reference checks. Historical observation semantics remain unresolved, so these
+results do not admit a market-data campaign or rescue the old target's claims.
