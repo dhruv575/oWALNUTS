@@ -18,7 +18,7 @@ class CampaignTests(unittest.TestCase):
                 self.assertEqual(kwargs['phase_reserved_cores'],{'startup':1})
                 self.assertIn(int(command[2]),range(16))
                 return dict(status='exited',exit_code=1 if failed else 0,group_drained=not failed)
-            with patch.object(runner,'validate',return_value={'chains':count}),patch.object(runner.shutil,'disk_usage',return_value=SimpleNamespace(free=20*1024**3)),patch.object(runner,'execute',side_effect=execute),contextlib.redirect_stdout(io.StringIO()):
+            with patch.object(runner,'validate',return_value={'chains':count,'warmup':1000,'retained':2000}),patch.object(runner.shutil,'disk_usage',return_value=SimpleNamespace(free=20*1024**3)),patch.object(runner,'execute',side_effect=execute),contextlib.redirect_stdout(io.StringIO()):
                 code=runner.campaign(root)
             return code,json.loads((root/'campaign01/FINAL.json').read_bytes())
 

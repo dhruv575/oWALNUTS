@@ -7,6 +7,7 @@ import time
 import numpy as np
 from development import Target,Priors,EvaluationBudget,sweep,sweep_interwoven,sha,write
 from blocked_path import sweep_blocked
+from market_budget import budget as campaign_budget
 
 
 def decode(index,methods=(0,1)):
@@ -16,13 +17,13 @@ def decode(index,methods=(0,1)):
     return index//width,methods[(index%width)//4],index%4
 
 
-def sample(window,method,seed,*,warmup=1000,retained=2000,cap=295,function=None):
+def sample(window,method,seed,*,warmup=1000,retained=2000,cap=295,evaluations=2000000,function=None):
     if np.asarray(window).shape!=(250,) or not np.isfinite(window).all():raise ValueError('Finite T250 window required')
     if method not in (0,1,2):raise ValueError('Method')
     model=Target(window,np.ones((250,1)),np.empty((250,0)),np.ones(250,dtype=bool),rho=.95,nu=5.,
                  priors=Priors(2*np.log(.005),1.,np.log(.2),.5,.002,.03))
     q=np.r_[model.priors.mu_mean,model.priors.log_sigma_mean,0.,np.zeros(250)]
-    rng=np.random.default_rng(seed);budget=EvaluationBudget(2000000)
+    rng=np.random.default_rng(seed);budget=EvaluationBudget(evaluations)
     function=function or (sweep,sweep_interwoven,sweep_blocked)[method]
     full=[];compact=[];started=time.monotonic();result=dict(status='incomplete',completed_sweeps=0)
     try:
@@ -51,7 +52,8 @@ def run(manifest,index,out):
     with np.load(path,allow_pickle=False) as data:window=data['window'].copy()
     root=Path(out);root.mkdir(exist_ok=False)
     write(root/'STARTED.json',dict(index=index,spot=spot,method=method,chain=chain,seed=spec['seeds'][index],manifest_sha256=sha(manifest),window_sha256=item['sha256']))
-    result,full,compact=sample(window,method,spec['seeds'][index])
+    limits=campaign_budget(spec)
+    result,full,compact=sample(window,method,spec['seeds'][index],**{k:limits[k] for k in ('warmup','retained','cap','evaluations')})
     np.savez_compressed(root/'draws.npz',full=full,compact=compact)
     result.update(index=index,spot=spot,method=method,chain=chain,arrays_sha256=sha(root/'draws.npz'))
     write(root/'FINAL.json',result)

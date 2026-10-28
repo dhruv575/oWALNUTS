@@ -11,12 +11,14 @@ import threading
 import time
 from development import sha,write
 from resource_monitor import execute
+from market_budget import budget
 
 
 def validate(root):
     spec=json.loads((root/'MANIFEST.json').read_bytes())
     methods=spec.get('methods',[0,1])
-    if methods not in ([0,1],[2]) or spec.get('status')!='frozen_authorized' or spec['chains']!=96*len(methods) or spec['warmup']!=1000 or spec['retained']!=2000:
+    budget(spec)
+    if methods not in ([0,1],[2]) or spec.get('status')!='frozen_authorized' or spec['chains']!=96*len(methods):
         raise ValueError('Fixed campaign required')
     if sys.prefix!=spec['runtime']['prefix']:raise ValueError('Runtime prefix drift')
     for package,version in spec['runtime']['packages'].items():
@@ -31,6 +33,7 @@ def validate(root):
 
 def campaign(root):
     spec=validate(root)
+    limits=budget(spec)
     if shutil.disk_usage(root).free<10*1024**3:raise ValueError('Initial disk admission')
     out=root/'campaign01';out.mkdir(exist_ok=False)
     count=spec['chains'];jobs=[dict(index=i,status='not_started') for i in range(count)]
@@ -39,12 +42,12 @@ def campaign(root):
         while not stop.is_set():
             with lock:index=next(order,None)
             if index is None:break
-            if time.monotonic()-started>4450 or shutil.disk_usage(root).free<4*1024**3:
+            if time.monotonic()-started>limits['queue_seconds'] or shutil.disk_usage(root).free<4*1024**3:
                 stop.set();break
             directory=out/f'chain-{index:03d}';directory.mkdir()
             command=['taskset','-c',str(core),sys.executable,str(Path(__file__).with_name('market_worker.py')),str(root/'MANIFEST.json'),str(index),str(directory/'fit')]
             try:
-                receipt=execute(command,str(root),300,directory,1024**3,64*1024**2,directory/'worker.log',
+                receipt=execute(command,str(root),limits['chain_seconds'],directory,1024**3,limits['chain_bytes'],directory/'worker.log',
                                 output_scan_interval=5,utilization_path=directory/'utilization.jsonl',phase_reserved_cores={'startup':1})
                 jobs[index].update(receipt)
                 if not receipt.get('group_drained') or receipt.get('reason') in ('rss_limit','output_limit','output_limit_final_scan'):stop.set()
@@ -58,9 +61,9 @@ def campaign(root):
 
 
 def supervise(root):
-    validate(root)
-    result=execute([sys.executable,str(Path(__file__).resolve()),str(root),'--campaign'],str(root),4800,root,
-                   22*1024**3,8*1024**3,root/'campaign.log',ownership_env='OWALNUTS_SPECIALIST_MARKET_OUTER',
+    limits=budget(validate(root))
+    result=execute([sys.executable,str(Path(__file__).resolve()),str(root),'--campaign'],str(root),limits['outer_seconds'],root,
+                   22*1024**3,limits['outer_bytes'],root/'campaign.log',ownership_env='OWALNUTS_SPECIALIST_MARKET_OUTER',
                    output_scan_interval=5,utilization_path=root/'outer-utilization.jsonl',phase_reserved_cores={'startup':16})
     write(root/'SUPERVISION.json',result)
     print(json.dumps(result))

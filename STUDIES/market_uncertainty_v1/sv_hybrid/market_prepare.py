@@ -8,7 +8,8 @@ import numpy as np
 from development import sha,write
 
 
-def prepare(root,parent,audit,blocked=False):
+def prepare(root,parent,audit,blocked=False,precision=False):
+    if precision and not blocked:raise ValueError('Precision panel requires blocked method')
     root=Path(root).resolve();root.mkdir(exist_ok=False)
     parent=Path(parent).resolve();spec=json.loads(parent.read_bytes())
     for name,digest in spec['sources'].items():
@@ -34,10 +35,10 @@ def prepare(root,parent,audit,blocked=False):
     write(root/'MANIFEST.json',dict(status='frozen_authorized',windows=windows,seeds=seeds,sources=sources,
                                   parent_path=str(root/'PARENT.json'),parent_sha256=sha(root/'PARENT.json'),
                                   audit_sha256=sha(root/'SEED-AUDIT.json'),runtime=spec['runtime'],
-                                  chains=count,methods=methods,warmup=1000,retained=2000))
+                                  chains=count,methods=methods,warmup=4000 if precision else 1000,retained=8000 if precision else 2000))
     return dict(windows=len(windows),chains=count,manifest_sha256=sha(root/'MANIFEST.json'))
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('root');p.add_argument('parent');p.add_argument('audit');p.add_argument('--blocked',action='store_true');a=p.parse_args()
-    print(json.dumps(prepare(a.root,a.parent,a.audit,a.blocked)))
+    p=argparse.ArgumentParser();p.add_argument('root');p.add_argument('parent');p.add_argument('audit');p.add_argument('--blocked',action='store_true');p.add_argument('--precision',action='store_true');a=p.parse_args()
+    print(json.dumps(prepare(a.root,a.parent,a.audit,a.blocked,a.precision)))

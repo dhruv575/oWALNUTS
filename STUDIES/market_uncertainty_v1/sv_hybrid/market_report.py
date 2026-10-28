@@ -24,7 +24,8 @@ def collect_chains(root,spec,spot,method):
         path=directory/'fit/draws.npz'
         if sha(path)!=done['arrays_sha256']:raise ValueError('Specialist draws drift')
         with np.load(path,allow_pickle=False) as data:
-            if data['full'].shape!=(2000,253) or data['compact'].shape!=(2000,4):raise ValueError('Specialist axes')
+            retained=spec.get('retained',2000)
+            if data['full'].shape!=(retained,253) or data['compact'].shape!=(retained,4):raise ValueError('Specialist axes')
             full.append(data['full'].copy());compact.append(data['compact'].copy())
     return records,full,compact
 
