@@ -192,6 +192,21 @@ hashes. LP Transfer logs are visible, but protocol versus user issuance has not
 yet been validated against feeTo, kLast and pre-event balances. Successful
 receipt acquisition does not resolve those accounting requirements.
 
+The subsequent fixed boundary-state acquisition completed 60 requests in
+14.93 seconds. It retained 42 state calls over the six before/after blocks and
+410 pair/USDC/WETH logs over the three event blocks. States include reserves,
+LP supply, kLast, feeTo, token balances held by the pair and LP tokens held by
+the pair. Selector/address-encoding checks passed. Local verification matched
+all derived states and log lists to raw responses, checked state ABI bounds,
+source hashes and adjacent block ancestry. The 336,762-byte archive SHA-256 is
+`826a36a01d792badc7b4635f3ba019c2f3cc59ee3e169e1aabf69414d92409e3`;
+evidence is in `states-aws/`. Header rechecks matched throughout acquisition.
+The feeTo getter is identical at these six block ends, but that does not prove
+it never changed within a transaction or block. Block-end state is not a
+substitute for reconstructing intermediate balances and all relevant events.
+Token behavior, protocol-fee issuance and full liquidity reconciliation remain
+to be checked before this panel supports LP accounting claims.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
