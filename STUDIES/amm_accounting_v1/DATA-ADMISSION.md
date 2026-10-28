@@ -129,6 +129,22 @@ contract. No observed pool is admitted solely because the oracle tests pass.
 
 ## Economic identification boundary
 
+### Liquidity discovery transport failure (2026-10-28)
+
+A separate fixed 4,096-block range ending at the same finalized anchor was
+declared for Mint/Burn discovery, with 20 requests, 120 seconds and byte caps.
+Both the initial attempt and a diagnostic attempt stopped on their first log
+query after chain and anchor checks succeeded. The diagnostic attempt added
+HTTP-error-body preservation; it was not an independent scientific replicate.
+The provider returned HTTP 400 and RPC code 35, reporting an unsupported range
+over 10,000 blocks, despite the serialized bounds spanning 4,096 blocks.
+The cause of that inconsistency is unresolved. No events were acquired and no
+liquidity accounting was admitted. Exact executed sources, source hashes,
+plans, requests, successful responses and terminal failures are preserved in
+`evidence/liquidity-discovery-20261028/`. The first attempt did not retain its
+HTTP error body; the second did. Any revised range/chunking is a new declared
+engineering acquisition, not a retry hidden within these attempts.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
