@@ -38,9 +38,33 @@ occurred. The second attempt followed the first transport failure and is not
 presented as an independent scientific replication. Both plans, attempted
 requests and terminal errors are preserved in `evidence/pair-snapshot-20261028/`.
 No proxy was reported by urllib's proxy discovery, and certificate verification
-was not disabled. Pool identity/state acquisition remains unverified; no event
-panel has been admitted. Diagnose transport or use a documented provider before
-proceeding, preserving these failures in the engineering history.
+was not disabled. At that checkpoint pool identity/state acquisition remained
+unverified. These failures remain in the engineering history.
+
+### Transport recovery and completed snapshot
+
+Windows curl 8.21.0/Schannel also failed TLS negotiation with the PublicNode
+endpoint (HTTP status 000). A separate fixed-block attempt through
+`https://eth.drpc.org`, listed in the
+[Ethereum chain registry](https://raw.githubusercontent.com/ethereum-lists/chains/master/_data/chains/eip155-1.json),
+completed all 13 read-only requests in 4.37 seconds. No certificate verification
+was disabled, and no chain outcome was used to choose a different block.
+
+At the same pinned block, the factory resolves pair
+`0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`. Returned token0/token1 match
+USDC/WETH, decimals are 6/18, and the pair reports the intended factory.
+Reserves in raw integer units are 9855293124395 and 4152633905887036482868;
+LP total supply is 70825582185439218. The runtime bytecode is 11293 bytes;
+its fingerprint is preserved, not claimed independently compiled.
+
+The factory's fee recipient is nonzero:
+`0xf38521f130fccf29db1961597bc5d2b60f995f85`. Observed LP-supply accounting must
+therefore include protocol-fee minting behavior rather than assume the E69
+no-protocol-fee abstraction. Both header checks match the original finalized
+block hash. Metadata/raw responses are in `evidence/pair-snapshot-20261028/drpc/`;
+a verified local archive also preserves the exact executed source and 43 sealed
+files. This is a state/identity snapshot only: no swap-event panel or economic
+policy evaluation has yet been admitted.
 
 ## Next bounded engineering acquisition
 

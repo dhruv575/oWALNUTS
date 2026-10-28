@@ -26,11 +26,13 @@ def address(value):
     return '0x'+format(number,'040x')
 
 
-def run(root):
+def run(root, endpoint=ENDPOINT):
+    if endpoint not in (ENDPOINT,'https://eth.drpc.org'):
+        raise ValueError('Declared public endpoint required')
     root=Path(root);root.mkdir(parents=True,exist_ok=False)
     source=Path(__file__)
     write(root/'PLAN.json',dict(scope='Single fixed finalized-block engineering snapshot; no strategy or trading',
-                               endpoint=ENDPOINT,block=BLOCK,block_hash=BLOCK_HASH,factory=FACTORY,tokens=[USDC,WETH],
+                               endpoint=endpoint,block=BLOCK,block_hash=BLOCK_HASH,factory=FACTORY,tokens=[USDC,WETH],
                                max_requests=16,max_response_bytes=2097152,total_seconds=90,timeout_seconds=15,retries=0,
                                sources={str(p.resolve()):hashlib.sha256(p.read_bytes()).hexdigest() for p in (source,source.with_name('rpc_probe.py'))}))
     result=dict(status='incomplete',completed_requests=0);started=time.monotonic()
@@ -42,7 +44,7 @@ def run(root):
         if method not in ('eth_chainId','eth_call','eth_getCode','eth_getBlockByNumber'):raise ValueError('Read-only method required')
         call=dict(jsonrpc='2.0',id=index+1,method=method,params=params)
         raw=json.dumps(call).encode();(root/f'request-{index:02d}.json').write_bytes(raw)
-        request=urllib.request.Request(ENDPOINT,data=raw,headers={'Content-Type':'application/json','User-Agent':'owalnuts-research-readonly-snapshot/1'})
+        request=urllib.request.Request(endpoint,data=raw,headers={'Content-Type':'application/json','User-Agent':'owalnuts-research-readonly-snapshot/1'})
         with urllib.request.build_opener(NoRedirect).open(request,timeout=min(15,90-(time.monotonic()-started))) as response:
             body=response.read(2097153)
             (root/f'response-{index:02d}.json').write_bytes(body)
@@ -82,4 +84,4 @@ def run(root):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('root');a=p.parse_args();print(json.dumps(run(a.root)))
+    p=argparse.ArgumentParser();p.add_argument('root');p.add_argument('--endpoint',default=ENDPOINT);a=p.parse_args();print(json.dumps(run(a.root,a.endpoint)))
