@@ -1,7 +1,12 @@
 # Re-adapting compiled NUTS rolling comparator
 
-Status: adapter and literal evidence-loop readiness passed; market resource/seed
-plan is not yet frozen and market sampling has not been admitted.
+Status: frozen after seven queue, seed and adapter checks in the pinned AWS
+runtime; not launched because disk admission is outstanding. Plan SHA-256:
+`3faefcb89e13950b7c469134e098956638b832b84488313a2d9b23cb90fee02c`.
+All 17,292 external seeds had no collisions in 1,357 primary historical source
+records. The current seed-declaration file was explicitly excluded from that
+historical scan and its hash retained; raw numerical histories were not
+universally audited. No market sampling has occurred under this plan.
 
 Evaluate the same complete December, January and February rolling paths as E72,
 with two fresh external seed replicates per month. Use the identical 250-return
