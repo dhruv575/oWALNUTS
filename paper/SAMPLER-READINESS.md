@@ -119,6 +119,20 @@ remain intact; model admissibility is an additional, separate requirement.
 
 ## Implications for the manuscript
 
+A subsequent fixed candidate-budget study used four synthetic paths, each
+with three successive shifts and 1,024 warm draws per chain. All twelve
+warm/cold pairs passed every coordinate diagnostic, with zero retained
+divergences or depth-limit hits. All 24 trace summaries were reproduced.
+Three bounded latent-increment CDF functionals also passed diagnostics; the
+largest warm/cold mean discrepancy was 2.593 combined MCSEs, and numerical
+integration checks passed. Sampling costs remained mixed: wider-cell warm
+updates took 10--11 seconds versus 13--14 for cold adaptation/sampling, while
+narrow-cell warm updates took 20--21 versus about 11 seconds. Different draw
+budgets and precision prevent a general efficiency claim. Shared static
+initial states and development-exposed synthetic data limit generalization.
+Evidence is in `STUDIES/amm_accounting_v1/evidence/price-cell-repeated-20261028`
+and the corresponding `price-cell-repeated-predictive-20261028` directory.
+
 An initial one-shift synthetic comparison used remapped static WALNUTS states
 and fresh NUTS fits on identical declared targets. All four pairs passed
 coordinate diagnostics, with zero retained divergences or depth saturation;

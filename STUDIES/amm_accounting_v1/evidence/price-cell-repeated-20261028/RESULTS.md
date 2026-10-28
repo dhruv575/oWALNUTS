@@ -18,8 +18,10 @@ the narrow-cell warm route is slower despite its smaller draw budget.
 Outer elapsed time was 137.737 seconds, peak RSS 7,752,491,008 bytes and final
 output 1,337,177,568 bytes. All processes drained and sources stayed unchanged.
 The downloaded report archive and all launch source bindings were verified.
-Full trace archival, full-trace reproduction and the planned predictive-CDF
-analysis remain outstanding; raw evidence remains on AWS.
+The full 1,327,816,304-byte archive was subsequently downloaded and verified;
+all 24 traces were reproduced by the planned predictive-CDF analysis. See
+../price-cell-repeated-predictive-20261028/RESULTS.md and FULL-ARCHIVE-VERIFIED.json.
+S3 upload/restore verification remains outstanding; raw evidence remains on AWS.
 
 No market observation assumption, empirical predictive calibration, economic
 decision value or profitability claim is established by these synthetic paths.
