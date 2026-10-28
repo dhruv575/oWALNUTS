@@ -39,4 +39,6 @@ The campaign took 323.72 seconds end-to-end on the existing 16-core instance.
 Source, input and seed schedules were frozen; no chain was retried or excluded.
 The downloaded reporting archive matches its remote SHA-256. Full sampling
 evidence remains in the original and hash-verified sealed AWS directories;
-its off-instance archive is still required.
+its versioned S3 archive has now passed exact-version restore, whole-archive
+SHA-256 and all 1,183 original-member hash checks. The redundant remote compressed
+archive was reclaimed; the original and sealed sampling trees remain available.

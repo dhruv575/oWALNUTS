@@ -36,7 +36,11 @@ A subsequent fixed 16-state centered-path block update passed all 254 diagnostic
 flags on one literal synthetic development fixture. Its predictive estimates
 were compared with the preserved independent reference, with separate Monte
 Carlo errors. This is developmental evidence only. The separately frozen
-24-window market test is pending; none of its outcomes are available here.
+24-window market test completed: 10/24 fits passed all coordinate gates and
+14 remained flagged, chiefly scale mixing. All 96 chains completed; maximum
+absolute log-density discrepancy on the 22 passing references was 0.018963.
+The substantial improvement remains insufficient for full posterior readiness.
+See the [complete market results](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKET-RESULTS.md).
 
 Source: [block derivation and development](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-PATH.md)
 and [fixed market plan](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKET-PLAN.md).
