@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/home/ubuntu/lanes/bounded-walnuts-20261028/bounded_walnuts_worker.py", line 48, in <module>
+    if __name__=='__main__':run(int(sys.argv[1]),sys.argv[2])
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/bounded-walnuts-20261028/bounded_walnuts_worker.py", line 30, in run
+    result=owalnuts.sample(owner.target,owner.dimension,init=initial,chains=4,warmup=2000,draws=4000,seed=398139000+16*index,threads=4,tuning=tuning,adaptation=adaptation,admit_worst_case=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/unified-readiness-20261027/installation02/work/env/lib/python3.12/site-packages/owalnuts/__init__.py", line 914, in sample
+    raw = _owalnuts.sample_cfunc(
+          ^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: owalnuts Target: target evaluation failed: raw target returned a nonfinite log density (NaN) (chain 1, transition 1)
