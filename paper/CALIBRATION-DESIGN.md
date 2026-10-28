@@ -3,6 +3,22 @@
 Status: proposed follow-up, not a frozen experiment or a result. E72 remains
 the active campaign. No additional CPU sampling is co-scheduled on its cores.
 
+## Existing internal evidence to reuse
+
+The completed `prior_predictive_validation_v1` study already generated 32 exact,
+untruncated prior-predictive histories, performed 32 warm updates per history,
+and checked predictive calibration with whole-history bootstrap resampling.
+It retained every compact posterior array and generating latent path. Its
+`generator.py` matches the intended fixed-rho Student-t model and stationary
+initialization. Reuse and independently audit this generator rather than
+introducing a duplicate. New research should extend the horizon and diagnostic
+coverage, not present the old short-history predictive study as a new finding.
+
+The supplemental `posterior_coverage.py` now extracts marginal parameter/state
+coverage from all 4096 existing stream/tick/parameter slots. This is explicitly
+exploratory reuse, not a fresh SBC campaign. In particular, posterior rank
+fractions are descriptive: correlated draws do not support an iid rank test.
+
 ## Prior work and what it rules out
 
 WALNUTS already includes stochastic-volatility experiments, so applying its
