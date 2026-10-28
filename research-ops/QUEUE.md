@@ -27,8 +27,10 @@ Comparator preparation: the existing specialist SV prototype now has a
 centered/noncentered interweaving extension. Eleven mathematical/edge tests and
 an eight-chain local T32 development check completed. Mu bulk ESS improved on
 that literal fixture; this is not an oWALNUTS comparison. Next readiness must
-cover the full 250-state target, predictive functionals and independent-reference
-agreement before any scientific performance campaign. Exact development sources
+cover independent-reference agreement before any scientific performance
+campaign. The full T250 literal check and six predictive calculations have now
+completed: mu mixing improved, predictive MCSE did not materially improve, and
+worst latent Rhat was higher. These mixed findings remain visible. Exact development sources
 and arrays are preserved in a restore-verified S3 archive; see
 `STUDIES/market_uncertainty_v1/sv_hybrid/INTERWEAVING.md`.
 

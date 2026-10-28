@@ -28,6 +28,14 @@ The full result still requires campaign completion, source/evidence checks and
 review; test fixtures are not scientific outcomes.
 
 Status: running, no scientific conclusion yet. Source frozen at de91b5a6.
+
+Partial operational checkpoint, 2026-10-28 09:23 UTC: both December K1600
+paths (jobs 01 and 03) completed 1488/1488 updates and 8/8 scores, exited zero,
+and drained all owned processes. Outer job times were 2778.51 and 2728.54
+seconds. Their terminal receipts are in `evidence/partial-20261028/`; the full
+raw campaign is still on AWS and not yet sealed. The queue automatically
+started February K1600 jobs 09 and 11 while January jobs 05 and 07 continued.
+This checkpoint is not a final 12-path or paired-budget result.
 Twelve complete monthly paths compare K400 and K1600 at two seed schedules
 on each of the three E66 panels. The full plan fixes data, targets, diagnostics,
 reporting, retained points and resource limits before market sampling.

@@ -145,3 +145,7 @@ arrays, logs, exact executed sources and analysis sources. Independent-reference
 corroboration and matched predictive precision remain required before a
 sampler-superiority claim. This evidence argues against choosing only mu as
 the headline efficiency endpoint.
+
+The T250 raw archive also has a private S3 copy: the exact version and restored
+SHA-256 are in `S3-VERIFIED.json`. All 56 sealed members were read and checked
+from the downloaded version. Original local arrays remain preserved.
