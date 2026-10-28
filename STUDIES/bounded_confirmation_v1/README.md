@@ -33,3 +33,13 @@ affinity and 3.5 GiB free disk. Limits remain 900 seconds/5 GiB/192 MiB per cell
 and 2,760 seconds/22 GiB/2.5 GiB per batch. Archive verification must bind the
 previous PLAN.json before advancement. Full source admission and archival
 automation are still pending; these tests do not authorize a sampling launch.
+
+`archive_batch.py` now supplies the archive handoff. It packages only drained
+batches, verifies stored member bytes against a manifest, and binds the resulting
+archive to PLAN.json. Admission requires matching upload/restore hash, byte count,
+bucket, key and exact version, plus verified restoration and AES256 encryption.
+Reclamation rechecks every raw NPZ hash before deleting anything and preserves
+batch control records. Four archive tests pass locally; the combined seven
+archive/supervisor tests pass on AWS. Test receipts are simulated binding fixtures,
+not claims of S3 verification. Production transport uses the previously exercised
+presigned transfer helper and real exact-version streaming verification.
