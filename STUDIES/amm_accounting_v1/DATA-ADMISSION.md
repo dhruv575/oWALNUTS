@@ -207,6 +207,19 @@ substitute for reconstructing intermediate balances and all relevant events.
 Token behavior, protocol-fee issuance and full liquidity reconciliation remain
 to be checked before this panel supports LP accounting claims.
 
+An offline transfer audit now reconciles USDC, WETH and pair-held LP balances
+across all three blocks. Every observed Sync equals the transfer-reconstructed
+token balances, and final balances/reserves match the boundary snapshots.
+The LP supply delta is consistent with summed zero-source issuance minus
+non-mint zero-recipient outflows in each block. This is an aggregate consistency
+check, not an automatic classification of zero-recipient transfers as burns:
+the upstream ERC20 permits ordinary transfers to zero, and mint-to-zero itself
+increases supply. Tests cover that ambiguity, self-transfers, underflow and ABI
+address padding. Exact report and sources are in `balance-audit/`. Transfer
+semantics, within-block feeTo changes and per-operation liquidity arithmetic
+remain outside this check; matching endpoints cannot exclude offsetting
+unobserved intermediate balance effects.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
