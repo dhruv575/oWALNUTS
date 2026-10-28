@@ -22,8 +22,7 @@ The 195,543,619-byte complete archive matched its remote SHA256. Source and all
 comparison-input bindings, all nine retained array shapes/finiteness and event
 phase counts were verified locally. Cross-method comparisons use the frozen
 coordinate CSV summaries; this verifier does not rerun ArviZ on every raw trace.
-Raw draws and full diagnostic events are preserved in the archive. S3 upload
-has started; exact-version restore verification is still pending.
+Raw draws and full diagnostic events are preserved in the archive. Exact-version S3 restore verification subsequently passed; see S3-VERIFIED.json.
 
 The next substantive study is declared real-market predictive/prior sensitivity,
 with causal baselines and explicit development-data status. Prior-cap scientific
