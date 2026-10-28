@@ -24,3 +24,12 @@ that still attempts the second method and preserves the failure. These are
 orchestration tests, not a confirmation sampling run. The temporary test layout
 initially lacked its predictive-density module path; adding the read-only
 dependency link fixed that import without changing campaign sources.
+
+The bounded supervisor defines 255 batches: 254 twelve-cell batches and one
+two-cell batch. Three tests pass locally and on AWS for exact denominator
+coverage, retained failed jobs, and archive-plan/process-drain admission gates.
+Each launch checks frozen source and runtime hashes/versions, sixteen-core
+affinity and 3.5 GiB free disk. Limits remain 900 seconds/5 GiB/192 MiB per cell
+and 2,760 seconds/22 GiB/2.5 GiB per batch. Archive verification must bind the
+previous PLAN.json before advancement. Full source admission and archival
+automation are still pending; these tests do not authorize a sampling launch.
