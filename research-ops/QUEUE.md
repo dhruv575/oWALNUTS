@@ -2,45 +2,34 @@
 
 Updated 2026-10-28. Status requires live verification; this file is not a watcher.
 
-1. **Running: E72 paired warm budgets.** Existing instance, four disjoint
-   four-core workers. Root `/home/ubuntu/lanes/warm-budget-factorial-20261028`.
-   Latest preserved receipts: December jobs 0–3 complete; January K1600
-   jobs 5/7 hit the fixed cap and drained. Jobs 4/6/9/11 were live at the
-   subsequent process check; the campaign had no terminal receipt.
-   Read `pulse.py`, processes and terminal
-   records before acting. Preserve the fixed 3600-second per-job limit even
-   when a slower monthly path cannot finish. Do not restart on SSH timeout.
-2. **Next: E72 terminal audit.** Verify process drain, all 12 job slots and all
-   96 planned reference-spot slots. Preserve missing scores and failed reference
-   flags. Reconstruct candidate scores and MCSE from sealed arrays; report each
-   seed, each budget, full-path cost/health and paired differences. Separate
-   partial-path timing from completed-path costs. Archive with a verified
-   restore before reclaiming redundant output.
-3. **Preparation while sampling: calibration design and comparator audit.**
-   See `paper/CALIBRATION-DESIGN.md`. This is proposed work, not authorization
-   to bypass readiness checks or alter the live campaign. Audit prior internal
-   experiments before implementing a new synthetic study.
-   The next specialist readiness design is
-   `STUDIES/market_uncertainty_v1/sv_hybrid/REFERENCE-PLAN.md`: one bounded
-   independent reference on the existing T250 literal fixture, with all
-   specialist chains and predictive labels retained. Source/seed bindings and
-   a tested supervised runner are required before execution; no fit is claimed.
-4. **Economic work remains necessary.** The accounting oracle is not a market
-   validation. Define feasible actions, observed information, execution and
-   controls before running a claimed AMM-profit study. Preserve the negative
-   fixed-cost decision results; do not promote an exposed cost-sweep winner.
+1. **Running: specialist market-window corroboration.** Root
+   `/home/ubuntu/lanes/specialist-market-20261028/run01`. Sixteen single-core
+   workers process 192 chain slots: both methods, four chains each, all 24 E70
+   windows. Five readiness tests passed in the pinned AWS runtime. Supervisor
+   PID 13081 and campaign PID 13114 were observed at launch; verify identities
+   before acting. Frozen manifest hash is
+   `3bf02e87613e76b03a4e57f08cba86107bb839d1bac51c334037a74ee0ce7393`.
+   See `STUDIES/market_uncertainty_v1/sv_hybrid/MARKET-PLAN.md` for limits.
+2. **Next: terminal specialist analysis.** Preserve all 192 chains and 48
+   method/window fits, all 254 diagnostic coordinates and all 24 reference
+   flags. Compute actual-label predictive density/PIT with separate MCSE.
+   A cold-window cost is not a matched speed comparison to E72 warm paths.
+3. **Archive E72 to S3.** The campaign drained: 10/12 completed, 90/96 scores,
+   42/48 paired comparisons. Full local archive and 16,722 original member
+   hashes verified. Two January K1600 timeouts remain. Results are committed in
+   `STUDIES/warm_budget_factorial_v1/RESULTS.md`; S3 upload/restore remains.
+4. **Calibration and paper.** The literal independent reference completed,
+   with zero divergences and all coordinate diagnostic flags passing. Both
+   specialists are descriptively corroborated, with one interwoven latent flag
+   retained. The raw archive is restore-verified in S3. Longer-path calibration,
+   matched precision/cost comparisons and a defensible novel contribution remain
+   required. Existing paper tables preserve all 44 fixed historical comparisons.
+5. **Economic research.** Nine observed swaps reconcile exactly; protocol-fee
+   liquidity arithmetic has five tests, but compiled-contract parity, observed
+   liquidity-event replay, feasible LP controls, costs and profitability are
+   unverified. Preserve negative decision results; don't select an exposed winner.
 
-Comparator preparation: the existing specialist SV prototype now has a
-centered/noncentered interweaving extension. Eleven mathematical/edge tests and
-an eight-chain local T32 development check completed. Mu bulk ESS improved on
-that literal fixture; this is not an oWALNUTS comparison. Next readiness must
-cover independent-reference agreement before any scientific performance
-campaign. The full T250 literal check and six predictive calculations have now
-completed: mu mixing improved, predictive MCSE did not materially improve, and
-worst latent Rhat was higher. These mixed findings remain visible. Exact development sources
-and arrays are preserved in a restore-verified S3 archive; see
-`STUDIES/market_uncertainty_v1/sv_hybrid/INTERWEAVING.md`.
-
-Paper checkpoint `f64777bf` contains all 44 fixed completed-study comparisons
-and reproducible figures. Notification frequency remains approximately one
-third of the earlier cadence; batch scientific milestones, not routine polls.
+Keep the existing instance useful within limits. No deployment or trading.
+Phone notifications remain about one third of the earlier cadence: batch major
+scientific milestones. The last push covered independent-reference corroboration
+and the pool-accounting checkpoint; do not notify for routine polls or commits.

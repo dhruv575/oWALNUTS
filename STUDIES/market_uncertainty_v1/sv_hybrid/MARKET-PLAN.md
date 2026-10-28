@@ -1,6 +1,12 @@
 # Specialist market-window corroboration
 
-Status: preparation, not sampled. Follow the completed literal reference check
+Status: frozen campaign launched on AWS after five readiness tests passed.
+Root: `/home/ubuntu/lanes/specialist-market-20261028/run01`. All 16 worker
+slots were observed live. The first local scheduler-test invocation failed
+before execution because its isolated runtime lacked psutil; AWS's pinned
+runtime includes it. The source, input and 192-seed bindings are preserved in
+`evidence/market-readiness-20261028/`. No market result is claimed at launch.
+Follow the completed literal reference check
 with the worker in `market_worker.py`. Three local tests cover all 192 index
 slots, preservation of partial draws after a failure, and actual literal sweeps
 for both methods. The internal sampling clock stops at 295 seconds to leave
