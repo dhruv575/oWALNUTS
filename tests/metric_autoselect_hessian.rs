@@ -270,10 +270,10 @@ fn correlated_gaussian_takes_the_dense_branch() {
         assert_eq!(chain.metadata().discarded(), 600);
     }
     // Retained draws recover the correlation.
-    let draws: Vec<&[f64]> = posterior
+    let draws: Vec<&[f64; 5]> = posterior
         .chains()
         .iter()
-        .flat_map(|c| c.samples().chunks_exact(5))
+        .flat_map(|c| c.samples().as_chunks::<5>().0.iter())
         .collect();
     let n = draws.len() as f64;
     let mean = |i: usize| draws.iter().map(|d| d[i]).sum::<f64>() / n;

@@ -77,7 +77,7 @@ fn harness_chain(
         .adaptation(Adaptation::None)
         .tuning(tuning.clone().step_size(chain.step_size))
         .limits(Limits::new().admit_worst_case())
-        .run(target, &[chain.position.clone()])
+        .run(target, std::slice::from_ref(&chain.position))
         .unwrap()
 }
 
@@ -193,7 +193,7 @@ fn run_warm_with_one_chain_equals_run_with_the_same_seed() {
         .metric(Metric::fixed_diagonal(chain.mass_diagonal.clone()))
         .adaptation(Adaptation::None)
         .tuning(Tuning::new().step_size(chain.step_size))
-        .run(&target, &[chain.position.clone()])
+        .run(&target, std::slice::from_ref(&chain.position))
         .unwrap();
     assert_eq!(warm.chains()[0].samples(), plain.chains()[0].samples());
     assert_eq!(
