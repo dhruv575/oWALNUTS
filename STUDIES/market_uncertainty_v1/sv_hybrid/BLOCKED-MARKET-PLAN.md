@@ -1,11 +1,14 @@
 # Fixed blocked-path market panel
 
-Status: implementation reviewed and tested; manifest frozen, not yet launched.
+Status: launched on 2026-10-28 after source/runtime validation and disk admission.
 The manifest SHA-256 is
 `a11380041e9a148fbbaf6c11d992de2a40f961b41817c7200fc7434b0af42fea`.
 The 96 seeds beginning at 2026102815000000 passed an exact-token audit of
 1,338 primary source records. This audit does not prove uniqueness against all
-historical raw artifacts. The launch remains gated on disk admission.
+historical raw artifacts. Launch receipts preserve the disk admission and the
+verified redundant-archive cleanup. Initial monitoring observed 16 single-core
+workers and approximately 99.6% utilization of the reserved cores over one
+five-second interval; this is an early observation, not a campaign average.
 
 Evaluate the fixed 16-state centered block update on all 24 inherited E70
 windows, using four fresh chains per window, 1,000 warmup and 2,000 retained
