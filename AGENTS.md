@@ -37,6 +37,13 @@ autonomously and send concise substantial-progress milestones through Agent
 Comms to the exact current CODEX_THREAD_ID, leaving a clean morning work log.
 Avoid routine notification noise. Preserve unrelated local edits.
 
+Notification frequency override (2026-10-28): reduce phone notifications to about
+one third of the previous cadence. Batch several related findings into a single
+substantial milestone update; individual study completions normally belong in
+the written research log. Notify promptly only for an exceptional breakthrough
+or a blocker requiring the user's attention. Do not send a push acknowledging
+this preference change.
+
 Required deliverable (2026-10-28): a submission-ready research paper grounded in
 the verified research, with a clear novel contribution, related work, reproducible
 methods and artifacts, strong baselines, uncertainty analysis and limitations.
