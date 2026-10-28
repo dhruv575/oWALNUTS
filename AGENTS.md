@@ -36,3 +36,13 @@ While Dhruv sleeps, do not ask questions. Resolve routine research choices
 autonomously and send concise substantial-progress milestones through Agent
 Comms to the exact current CODEX_THREAD_ID, leaving a clean morning work log.
 Avoid routine notification noise. Preserve unrelated local edits.
+
+Required deliverable (2026-10-28): a submission-ready research paper grounded in
+the verified research, with a clear novel contribution, related work, reproducible
+methods and artifacts, strong baselines, uncertainty analysis and limitations.
+Preserve negative results; do not inflate claims to fit the intended venue.
+Actual external submission is separate from preparing the paper.
+
+Storage authorization (2026-10-28): create a private S3 research archive, upload
+and verify completed evidence, and reclaim verified redundant EC2 copies and
+disposable files while preserving active dependencies and an audit trail.
