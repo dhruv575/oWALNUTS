@@ -1,6 +1,10 @@
 # Fourfold blocked-path precision study
 
-Status: implementation preparation; not launched.
+Status: launched on 2026-10-28, supervisor PID 18139. Fourteen tests passed in
+the pinned AWS runtime before freezing. Manifest SHA-256:
+`8cd2fa2d6a55ac7ee625c7e896c041e7509f5fdcb61b8606330b86ee80e99388`.
+The 96 seeds beginning at 2026102816000000 had no exact-token collisions in
+1,342 audited primary source records; this is not a universal raw-history audit.
 
 The completed 1,000-warmup / 2,000-retained study left 14/24 fits flagged.
 Thirteen windows flagged log_sigma, with worst bulk ESS 189.41 and worst scale

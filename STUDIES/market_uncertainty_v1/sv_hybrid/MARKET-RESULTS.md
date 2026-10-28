@@ -41,4 +41,6 @@ The downloaded reporting archive matches its remote SHA-256. Full sampling
 evidence remains in the original and hash-verified sealed AWS directories;
 its versioned S3 archive has now passed exact-version restore, whole-archive
 SHA-256 and all 1,183 original-member hash checks. The redundant remote compressed
-archive was reclaimed; the original and sealed sampling trees remain available.
+archive and redundant sealed tree were reclaimed after verification against
+the preserved original tree and restored S3 archive. The original sampling tree
+and source dependencies remain available.
