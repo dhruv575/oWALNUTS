@@ -7,6 +7,26 @@ undrained receipt. It does not calculate posterior precision or replace the
 full artifact seal/restore audit. Keep this new analysis code outside the live
 campaign directory; it is not part of the already frozen sampling manifest.
 
+`analyze.py` builds on that inventory to reconstruct log(mean predictive
+density) and PIT from retained per-chain arrays. It reports candidate MCSE and
+reference precision separately, each seed/budget's all-reference and passing-
+reference subsets, and all 48 paired-budget slots. Missing values remain in
+the planned denominator. Available-case maxima are explicitly labelled;
+partial-path cost is not converted into completed monthly cost. Shared seeds
+and references preclude an independence-based combined-error interpretation.
+
+Run after terminal evidence has been sealed and verified, with a new output:
+
+```text
+python analyze.py CAMPAIGN_ROOT E70_COMPARISON.json NEW_ANALYSIS.json
+```
+
+Use the pinned scientific runtime for the final analysis. Local analytic tests
+check extreme log-density offsets, mixture versus mean-log scoring, missing
+pairs, failed references and the sign of paired absolute-discrepancy changes.
+The full result still requires campaign completion, source/evidence checks and
+review; test fixtures are not scientific outcomes.
+
 Status: running, no scientific conclusion yet. Source frozen at de91b5a6.
 Twelve complete monthly paths compare K400 and K1600 at two seed schedules
 on each of the three E66 panels. The full plan fixes data, targets, diagnostics,

@@ -98,6 +98,6 @@ if __name__ == '__main__':
     parser.add_argument('out')
     args = parser.parse_args()
     result = inventory(args.root, args.reference)
-    with Path(args.out).open('x', encoding='utf-8') as stream:
+    with Path(args.out).open('x', encoding='utf-8', newline='\n') as stream:
         json.dump(result, stream, indent=2, allow_nan=False)
     print(json.dumps({k: v for k, v in result.items() if k not in ('jobs', 'spots', 'supervision')}))
