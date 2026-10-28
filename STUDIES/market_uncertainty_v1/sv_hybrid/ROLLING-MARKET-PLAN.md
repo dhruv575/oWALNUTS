@@ -1,6 +1,7 @@
 # Re-adapting compiled NUTS rolling comparator
 
-Status: adapter implementation; not frozen or admitted for market sampling.
+Status: adapter and literal evidence-loop readiness passed; market resource/seed
+plan is not yet frozen and market sampling has not been admitted.
 
 Evaluate the same complete December, January and February rolling paths as E72,
 with two fresh external seed replicates per month. Use the identical 250-return
@@ -27,6 +28,14 @@ slots. The adapter must pass a literal end-to-end run with the existing immutabl
 linear evidence loop before market admission. Fit limits and the whole campaign
 resource/seed plan must be frozen separately before launch. Existing E72
 January K1600 failures remain unchanged; this experiment cannot repair them.
+
+The two-update literal end-to-end run completed both updates and scores in
+20.067 seconds, including 16.540 seconds initialization. Its verified archive
+contains 52 files / 58,858,523 bytes, SHA-256
+`0ca471aea26ebf7a10e1aab8bd4474abc657b739e14d4cb03cbc135b644c3fef`.
+Checks matched journal-to-record hashes, causal windows and label indices,
+compact arrays to full-trace extracts, score-array hashes and zero recorded
+divergences. This establishes evidence plumbing, not market posterior fidelity.
 
 The reference cost panel already favors NUTS over the blocked specialist for
 cold fitting. Rolling results must be reported whether favorable or unfavorable
