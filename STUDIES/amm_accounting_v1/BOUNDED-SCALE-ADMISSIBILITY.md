@@ -60,6 +60,42 @@ likelihood is <=1, so any finite prior predictive absolute moment remains
 finite after conditioning on a positive-probability observed-cell event.
 That separate change still needs an observation-model justification.
 
+## Exact range of predictive absolute moments
+
+The same argument extends beyond the first moment. For any 0<p<nu, define
+C_p=max(1,2^(p-1)). The elementary inequality
+|x+z|^p<=C_p(|x|^p+|z|^p) gives
+
+    E[|R|^p | beta,h_next]
+      <= C_p (|beta|^p + E|epsilon|^p exp(p*h_next/2)).
+
+After multiplying by the likelihood peak bound, the first term integrates
+because a Gaussian beta has every positive absolute moment. In the second,
+the exponent is a'h_aug with a=(-1/2,...,-1/2,p/2). Its prior expectation,
+conditional on sigma, is exactly
+
+    exp(m*sum(a) + [v*sum(a)^2 + sigma^2*a'C_aug*a]/2).
+
+Positive semidefiniteness and sigma<=S give a finite uniform bound. Since the
+posterior normalizer is positive and finite, every posterior predictive
+absolute moment of order p<nu exists. Conversely, for p>=nu, every conditional
+Student-t distribution with finite location and strictly positive scale has
+infinite p-th absolute moment. Translation and positive scaling do not change
+the tail exponent. Tonelli then makes the posterior predictive moment infinite.
+
+Thus for the current nu=5 candidate, the absolute moments exist exactly for
+0<p<5: in particular variance and fourth moment are finite, while the fifth
+absolute moment is infinite. This conclusion holds for every finite observed
+vector under the stated bounded-scale and Gaussian-prior assumptions. It does
+not imply stationarity of real market returns or adequate finite-sample power.
+
+For any nonzero t, conditional E[exp(t*R)] is still infinite because a Student-t
+tail cannot offset exponential growth in the corresponding direction. Tonelli
+again preserves this divergence under posterior mixing. Finite variance of log
+returns therefore cannot justify finite expected gross returns or expected
+dollar wealth. This extension is an analytic derivation, not independent
+mathematical review or a numerical verification of the theorem.
+
 ## Scientific admission remains open
 
 Choose a scientifically defensible scale range using declared prior-predictive
