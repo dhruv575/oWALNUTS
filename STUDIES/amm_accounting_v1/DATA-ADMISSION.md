@@ -236,6 +236,14 @@ liquidity-only pair-event blocks. It is not a general EVM replay or a proof that
 the deployed bytecode matches the upstream compiler output. The unresolved
 assumptions must remain visible before admitting economic conclusions.
 
+A bounded read-only `callTracer` request was attempted to inspect intratransaction
+fee-recipient and balance reads. Chain and finalized-anchor checks passed, but
+the first trace request returned HTTP 429 / RPC -32005, `rate limit exceeded`.
+No traces were acquired or interpreted. The attempt and exact executed sources
+are preserved in `traces-attempt01/`; its failure does not resolve any assumption
+in the conditional reconstruction above. The request used the documented
+[Geth callTracer interface](https://geth.ethereum.org/docs/developers/evm-tracing/built-in-tracers).
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as

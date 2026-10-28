@@ -1,5 +1,14 @@
 # Research paper: working manuscript and evidence contract
 
+**Model-admissibility warning (2026-10-28):** an exact-tie audit and analytical
+derivation identify a potentially improper posterior for the current no-flow
+SV target on repeated observations. This affects 155 January and 311 February
+rolling windows, including February sentinel 577, and the repeated literal
+fixture. The derivation needs independent mathematical review. Finite-chain
+diagnostic passes on these inputs cannot establish posterior validity; prior
+tables retain their historical numerical results with this additional limitation.
+See [posterior propriety](../STUDIES/amm_accounting_v1/POSTERIOR-PROPRIETY.md).
+
 Status: manuscript preparation, not submission-ready. Required by Dhruv on
 2026-10-28. Working title: **Fast Bayesian volatility updates: predictive gains,
 decision sensitivity, and the limits of market-making evidence**.

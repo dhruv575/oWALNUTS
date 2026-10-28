@@ -59,6 +59,17 @@ a direct WALNUTS comparison. See the [baseline results](../STUDIES/market_uncert
 Source: [block derivation and development](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-PATH.md)
 and [fixed market plan](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKET-PLAN.md).
 
+## Model-admissibility warning discovered after the diagnostic studies
+
+The [exact-tie derivation](../STUDIES/amm_accounting_v1/POSTERIOR-PROPRIETY.md)
+indicates that the current no-flow SV posterior is improper on repeated exact
+observations despite proper priors. An audit found 155 affected January windows
+and 311 February windows, including reference sentinel 577. The repeated
+literal fixture is also affected. This mathematical derivation requires
+independent review, but affected diagnostic passes must not be represented as
+proper-posterior qualification. The historical flags and failure denominators
+remain intact; model admissibility is an additional, separate requirement.
+
 ## Implications for the manuscript
 
 Keep posterior fidelity, prediction, decision value and profitability separate.
