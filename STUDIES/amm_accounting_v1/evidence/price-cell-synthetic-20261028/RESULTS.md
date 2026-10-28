@@ -20,3 +20,9 @@ excluding dependency/cache directories. It is not proof about unrecorded seeds
 or opaque engine-internal derivations. Full draws remain on the AWS instance;
 off-instance artifact preservation and an independent report reconstruction are
 still required before closing this study.
+
+Follow-up: all 18 archived files are now preserved off-instance; source and draw
+bindings were checked, and saved NPZ draws exactly match the NetCDF trace.
+Means, Rhat and mean MCSE were reconstructed locally (same ArviZ estimator,
+not an independent diagnostics implementation). The exact-version S3 restore
+matches the verified full archive SHA-256. No remote evidence was deleted.
