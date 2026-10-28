@@ -63,6 +63,14 @@ interwoven coordinate triggered the declared diagnostic flags. The reference
 was deliberately absent in this reporting check, so every reference contrast
 remained unavailable. This is not a new sampling result. Predictive comparisons
 still require the separate evaluator after a completed independent fit.
+`reference_predictive.py` now implements that fixed three-label evaluation and
+all six specialist/reference contrasts using the unchanged evaluator. Two tests
+cover unavailable scores, duplicate-slot rejection and separate MCSE reporting.
+A missing-reference readiness call verified the six existing specialist score
+array hashes and preserved all three reference slots and six unavailable
+contrasts. No reference density result is available yet. Reference diagnostic
+flags must accompany the predictive table; an available score is not a qualified
+reference or an equivalence conclusion.
 
 Report mu, log_sigma, beta, h_last and all 250 innovation diagnostics, including
 rank Rhat, bulk/tail ESS, per-chain divergences and mean MCSE. Report posterior
