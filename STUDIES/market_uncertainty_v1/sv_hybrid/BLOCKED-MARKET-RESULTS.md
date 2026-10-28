@@ -32,7 +32,9 @@ sampling archive also matched its remote digest; all 96 draw-file receipt hashes
 is `4bfe7341d8e0ec6bc0fe92f7e1b75ed14a7dae17eec27bf0f7528ad42300b92c`.
 The exact S3 version `L2an0FFzPahL.zKBUTl6k3WsPN0sj.ks` was downloaded and
 passed the same archive, source, input and draw checks. Its receipt is preserved
-as `S3-VERIFIED.json`; the original remote sampling tree remains available.
+as `S3-VERIFIED.json`. After checking all 577 sampling-tree files against that
+archive, the redundant remote chain tree and compressed archive were reclaimed.
+Full local/S3 archives, online sources, inputs and analysis reports are preserved.
 
 The next inference question is whether the remaining scale/latent diagnostics
 resolve at a separately declared larger budget, with every window retained.
