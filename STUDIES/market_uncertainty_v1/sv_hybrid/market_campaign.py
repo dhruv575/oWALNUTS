@@ -15,7 +15,8 @@ from resource_monitor import execute
 
 def validate(root):
     spec=json.loads((root/'MANIFEST.json').read_bytes())
-    if spec.get('status')!='frozen_authorized' or spec['chains']!=192 or spec['warmup']!=1000 or spec['retained']!=2000:
+    methods=spec.get('methods',[0,1])
+    if methods not in ([0,1],[2]) or spec.get('status')!='frozen_authorized' or spec['chains']!=96*len(methods) or spec['warmup']!=1000 or spec['retained']!=2000:
         raise ValueError('Fixed campaign required')
     if sys.prefix!=spec['runtime']['prefix']:raise ValueError('Runtime prefix drift')
     for package,version in spec['runtime']['packages'].items():
@@ -32,8 +33,8 @@ def campaign(root):
     spec=validate(root)
     if shutil.disk_usage(root).free<10*1024**3:raise ValueError('Initial disk admission')
     out=root/'campaign01';out.mkdir(exist_ok=False)
-    jobs=[dict(index=i,status='not_started') for i in range(192)]
-    order=iter(range(192));lock=threading.Lock();stop=threading.Event();started=time.monotonic()
+    count=spec['chains'];jobs=[dict(index=i,status='not_started') for i in range(count)]
+    order=iter(range(count));lock=threading.Lock();stop=threading.Event();started=time.monotonic()
     def queue(core):
         while not stop.is_set():
             with lock:index=next(order,None)

@@ -9,8 +9,10 @@ from reference_report import summarize,metrics
 
 def collect_chains(root,spec,spot,method):
     records=[];full=[];compact=[]
+    methods=spec.get('methods',[0,1])
+    if methods not in ([0,1],[2]) or method not in methods:raise ValueError('Declared method panel')
     for chain in range(4):
-        j=spot*8+method*4+chain;directory=root/f'campaign01/chain-{j:03d}'
+        j=spot*4*len(methods)+methods.index(method)*4+chain;directory=root/f'campaign01/chain-{j:03d}'
         monitor=json.loads((directory/'MONITOR.json').read_bytes()) if (directory/'MONITOR.json').exists() else dict(status='missing')
         path=directory/'fit/FINAL.json';done=json.loads(path.read_bytes()) if path.exists() else dict(status='missing')
         records.append(dict(index=j,monitor=monitor,done=done))
@@ -29,10 +31,11 @@ def collect_chains(root,spec,spot,method):
 
 def run(root,reference_root,index,evaluator_path,out):
     root=Path(root);reference_root=Path(reference_root);out=Path(out);out.mkdir(exist_ok=False)
-    if not 0<=index<48:raise ValueError('Fixed fit index')
+    spec=json.loads((root/'MANIFEST.json').read_bytes());methods=spec.get('methods',[0,1])
+    if methods not in ([0,1],[2]) or not 0<=index<24*len(methods):raise ValueError('Fixed fit index')
     if json.loads((root/'SUPERVISION.json').read_bytes()).get('group_drained') is not True:
         raise ValueError('Terminal drained campaign required')
-    spec=json.loads((root/'MANIFEST.json').read_bytes());spot,method=divmod(index,2);item=spec['windows'][spot]
+    spot,position=divmod(index,len(methods));method=methods[position];item=spec['windows'][spot]
     if sha(root/Path(item['file']).name)!=item['sha256']:raise ValueError('Window drift')
     with np.load(root/Path(item['file']).name,allow_pickle=False) as data:
         if float(data['label'])!=item['label']:raise ValueError('Actual-label mismatch')

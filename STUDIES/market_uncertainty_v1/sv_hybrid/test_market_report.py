@@ -7,6 +7,12 @@ from literal_reference import sha
 
 
 class ReportTests(unittest.TestCase):
+    def test_blocked_last_window_uses_last_four_slots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            records,full,compact=collect_chains(Path(directory),{'methods':[2]},23,2)
+            self.assertEqual([r['index'] for r in records],[92,93,94,95])
+            self.assertEqual(full,[]);self.assertEqual(compact,[])
+
     def test_missing_chains_keep_four_slots(self):
         with tempfile.TemporaryDirectory() as directory:
             records,full,compact=collect_chains(Path(directory),{},3,1)

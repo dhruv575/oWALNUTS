@@ -6,21 +6,24 @@ import sys
 import time
 import numpy as np
 from development import Target,Priors,EvaluationBudget,sweep,sweep_interwoven,sha,write
+from blocked_path import sweep_blocked
 
 
-def decode(index):
-    if type(index) is not int or not 0<=index<192:raise ValueError('Chain index')
-    return index//8,(index%8)//4,index%4
+def decode(index,methods=(0,1)):
+    if tuple(methods) not in ((0,1),(2,)):raise ValueError('Declared method panel')
+    width=4*len(methods)
+    if type(index) is not int or not 0<=index<24*width:raise ValueError('Chain index')
+    return index//width,methods[(index%width)//4],index%4
 
 
 def sample(window,method,seed,*,warmup=1000,retained=2000,cap=295,function=None):
     if np.asarray(window).shape!=(250,) or not np.isfinite(window).all():raise ValueError('Finite T250 window required')
-    if method not in (0,1):raise ValueError('Method')
+    if method not in (0,1,2):raise ValueError('Method')
     model=Target(window,np.ones((250,1)),np.empty((250,0)),np.ones(250,dtype=bool),rho=.95,nu=5.,
                  priors=Priors(2*np.log(.005),1.,np.log(.2),.5,.002,.03))
     q=np.r_[model.priors.mu_mean,model.priors.log_sigma_mean,0.,np.zeros(250)]
     rng=np.random.default_rng(seed);budget=EvaluationBudget(2000000)
-    function=function or (sweep,sweep_interwoven)[method]
+    function=function or (sweep,sweep_interwoven,sweep_blocked)[method]
     full=[];compact=[];started=time.monotonic();result=dict(status='incomplete',completed_sweeps=0)
     try:
         for step in range(warmup+retained):
@@ -41,8 +44,8 @@ def run(manifest,index,out):
     if spec.get('status')!='frozen_authorized':raise ValueError('Frozen campaign required')
     for name,digest in spec['sources'].items():
         if sha(name)!=digest:raise ValueError('Frozen source drift')
-    spot,method,chain=decode(index);item=spec['windows'][spot]
-    if len(spec['windows'])!=24 or len(spec['seeds'])!=192:raise ValueError('Fixed denominators')
+    methods=spec.get('methods',[0,1]);spot,method,chain=decode(index,methods);item=spec['windows'][spot]
+    if len(spec['windows'])!=24 or len(spec['seeds'])!=96*len(methods):raise ValueError('Fixed denominators')
     path=Path(item['file'])
     if sha(path)!=item['sha256']:raise ValueError('Window drift')
     with np.load(path,allow_pickle=False) as data:window=data['window'].copy()

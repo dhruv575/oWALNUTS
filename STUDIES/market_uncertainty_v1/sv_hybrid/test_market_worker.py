@@ -8,6 +8,9 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(len({decode(i) for i in range(192)}),192)
         self.assertEqual(decode(191),(23,1,3))
         with self.assertRaises(ValueError):decode(192)
+        self.assertEqual(len({decode(i,(2,)) for i in range(96)}),96)
+        self.assertEqual(decode(95,(2,)),(23,2,3))
+        with self.assertRaises(ValueError):decode(96,(2,))
 
     def test_failure_preserves_retained_draws_without_retry(self):
         calls=[]
@@ -20,7 +23,7 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(f.shape,(2,253));self.assertEqual(c.shape,(2,4))
 
     def test_literal_actual_sweeps_both_methods(self):
-        for method in (0,1):
+        for method in (0,1,2):
             r,f,c=sample(np.resize([.001,-.002,.0005,0.,.003],250),method,82+method,warmup=1,retained=2)
             self.assertEqual(r['status'],'complete');self.assertEqual(f.shape,(2,253))
             np.testing.assert_array_equal(f[:,:3],c[:,:3])
