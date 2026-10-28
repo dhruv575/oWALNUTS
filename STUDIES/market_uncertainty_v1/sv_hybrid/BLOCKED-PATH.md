@@ -28,13 +28,20 @@ observations, and nonmutation of input/global parameters. These mathematical
 checks do not establish mixing or precision. The existing ESS evaluation cap
 and total density-evaluation budget still abort explicitly on exhaustion.
 
-The four-chain literal development fit is now running at
+The four-chain literal development fit completed and drained at
 `/home/ubuntu/lanes/blocked-development-20261028/run01`, using fixed 1000 warmup
 and 2000 retained sweeps. Each chain has a 300-second external cap (295 seconds
 internal), and the campaign has a 360-second outer cap. Four disjoint single
 cores are used. The prior mathematical checks passed in the pinned AWS runtime;
 sources, runtime binaries and four external seeds are bound in the preserved
-plan. No chain is retried. Compare all chains to the already preserved reference,
+plan. No chain was retried. All four chains retained 2,000 draws and all 254
+coordinate diagnostic flags passed. Terminal-volatility bulk ESS was 3726.74
+(the previous interwoven fixture: 1365.9); log_sigma bulk ESS was 3444.19.
+Log-density MCSE at [-.005,0,.005] was [.007705,.001836,.006324], versus
+[.012744,.003077,.010425] previously. Signed reference discrepancies were
+[-.000781,-.001658,.003446]. Keep the fixed prior reference and both old methods
+visible: this is one development fixture, not a market or speed benchmark.
+The verified local archive contains full draws and analysis. Compare all chains to the already preserved reference,
 followed by a separately declared all-window test only if readiness supports it.
 Retain the existing original/interwoven market failures unchanged. Block size 16
 is an engineering choice fixed before this variant's sampling, not an optimized
