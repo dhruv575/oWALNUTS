@@ -21,7 +21,8 @@ The downloaded report archive and all launch source bindings were verified.
 The full 1,327,816,304-byte archive was subsequently downloaded and verified;
 all 24 traces were reproduced by the planned predictive-CDF analysis. See
 ../price-cell-repeated-predictive-20261028/RESULTS.md and FULL-ARCHIVE-VERIFIED.json.
-S3 upload/restore verification remains outstanding; raw evidence remains on AWS.
+The exact-version S3 restore also matched the full archive (S3-VERIFIED.json);
+raw evidence remains on AWS.
 
 No market observation assumption, empirical predictive calibration, economic
 decision value or profitability claim is established by these synthetic paths.
