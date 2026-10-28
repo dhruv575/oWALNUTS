@@ -28,8 +28,10 @@ this verifier does not independently recompute their ArviZ diagnostics.
 
 Raw arrays and NUTS files remain in target/bounded-multi-full.tar.gz and the
 remote lane; the Git evidence includes sources, reports, logs, coordinate CSVs
-and a full byte/hash manifest. S3 restore verification is a separate pending
-step; no remote copies from this experiment have been deleted.
+and a full byte/hash manifest. Exact-version S3 restore verification subsequently
+passed (S3-VERIFIED.json). The redundant remote archive alone was then removed
+after another SHA256 check, reclaiming 809,797,266 bytes (CLEANUP.json). The remote
+raw lane and both local archive copies remain available.
 
 The all-zero geometry audit and exact coordinate-change follow-up are described
 in ../../BOUNDED-SCALE-GEOMETRY-NEXT.md. No prior cap is selected. This synthetic
