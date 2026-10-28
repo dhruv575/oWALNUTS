@@ -168,3 +168,18 @@ under the current log-normal innovation-scale prior. The derivation still needs
 independent mathematical review. Passing sampler diagnostics would not resolve
 this integrability issue; pointwise density/CDF evaluation and economic moment
 existence are different requirements.
+
+A separate bounded-innovation-scale candidate has a derived posterior-propriety
+and absolute-logreturn-moment argument, still requiring independent mathematical
+review. Its fixed nine-case synthetic panel qualified both NUTS and blocked
+elliptical-slice diagnostics on six T=250 fits (distinct and exactly-two-zero
+observations, three caps). All three all-zero T=12 stress comparisons failed
+independent-reference qualification. At caps 1 and 2 NUTS also failed every
+coordinate diagnostic and hit its depth limit 13,342 and 11,405 times. Zero
+divergences did not imply adequate exploration. Full results are preserved in
+`STUDIES/amm_accounting_v1/evidence/bounded-multi-20261028`.
+
+Native WALNUTS density/gradient parity passed 108 deterministic bounded-target
+cases, but WALNUTS sampling for that candidate is not yet qualified. The candidate
+prior cap lacks empirical justification; synthetic successes do not resolve
+that modeling choice or establish any economic claim.
