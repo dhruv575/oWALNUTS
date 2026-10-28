@@ -4,8 +4,10 @@ Updated 2026-10-28. Status requires live verification; this file is not a watche
 
 1. **Running: E72 paired warm budgets.** Existing instance, four disjoint
    four-core workers. Root `/home/ubuntu/lanes/warm-budget-factorial-20261028`.
-   At the latest verified observation, jobs 1/3/5/7 were advancing and the
-   campaign had no terminal receipt. Read `pulse.py`, processes and terminal
+   Latest preserved receipts: December jobs 0–3 complete; January K1600
+   jobs 5/7 hit the fixed cap and drained. Jobs 4/6/9/11 were live at the
+   subsequent process check; the campaign had no terminal receipt.
+   Read `pulse.py`, processes and terminal
    records before acting. Preserve the fixed 3600-second per-job limit even
    when a slower monthly path cannot finish. Do not restart on SSH timeout.
 2. **Next: E72 terminal audit.** Verify process drain, all 12 job slots and all
@@ -18,6 +20,11 @@ Updated 2026-10-28. Status requires live verification; this file is not a watche
    See `paper/CALIBRATION-DESIGN.md`. This is proposed work, not authorization
    to bypass readiness checks or alter the live campaign. Audit prior internal
    experiments before implementing a new synthetic study.
+   The next specialist readiness design is
+   `STUDIES/market_uncertainty_v1/sv_hybrid/REFERENCE-PLAN.md`: one bounded
+   independent reference on the existing T250 literal fixture, with all
+   specialist chains and predictive labels retained. Source/seed bindings and
+   a tested supervised runner are required before execution; no fit is claimed.
 4. **Economic work remains necessary.** The accounting oracle is not a market
    validation. Define feasible actions, observed information, execution and
    controls before running a claimed AMM-profit study. Preserve the negative
