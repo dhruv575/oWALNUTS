@@ -23,14 +23,18 @@ def likelihood(core,x,initial=0.,rho=.95):
     return value,h,beta
 
 
-def ellipse(core,x,rng,initial=0.,max_attempts=1000):
+def ellipse(core,x,rng,initial=0.,max_attempts=1000,indices=None):
     core=np.asarray(core,dtype=float);current=likelihood(core,x,initial)[0]
-    direction=rng.normal(size=len(core));uniform=float(rng.uniform())
+    indices=np.arange(len(core)) if indices is None else np.asarray(indices)
+    if indices.ndim!=1 or not len(indices) or indices.dtype.kind not in 'iu' or len(set(indices.tolist()))!=len(indices) or np.any(indices<0) or np.any(indices>=len(core)):
+        raise ValueError('Unique valid block indices required')
+    direction=rng.normal(size=len(indices));uniform=float(rng.uniform())
     if uniform<=0:raise FloatingPointError('Zero slice uniform')
     threshold=current+np.log(uniform)
     angle=float(rng.uniform(0,2*np.pi));lo=angle-2*np.pi;hi=angle
     for attempt in range(max_attempts):
-        proposal=core*np.cos(angle)+direction*np.sin(angle)
+        proposal=core.copy()
+        proposal[indices]=core[indices]*np.cos(angle)+direction*np.sin(angle)
         if likelihood(proposal,x,initial)[0]>threshold:return proposal,attempt+1
         if angle<0:lo=angle
         else:hi=angle
@@ -43,3 +47,16 @@ def transition(core,x,lower,upper,rng,initial=0.):
     _,h,beta=likelihood(new_core,x,initial)
     new_x,proposals=sweep(x,h,beta,initial,lower,upper,rng)
     return new_core,new_x,dict(slice_evaluations=evaluations,price_proposals=proposals)
+
+
+def blocked_transition(core,x,lower,upper,rng,initial=0.,block_size=16):
+    """Three scalar hyperparameter blocks, then contiguous innovation blocks."""
+    if type(block_size)is not int or block_size<1:raise ValueError('Positive block size')
+    updated=np.asarray(core,dtype=float).copy();evaluations=0
+    blocks=[np.array([i]) for i in range(3)]
+    blocks.extend(np.arange(i,min(i+block_size,len(updated))) for i in range(3,len(updated),block_size))
+    for indices in blocks:
+        updated,calls=ellipse(updated,x,rng,initial,indices=indices);evaluations+=calls
+    _,h,beta=likelihood(updated,x,initial)
+    new_x,proposals=sweep(x,h,beta,initial,lower,upper,rng)
+    return updated,new_x,dict(slice_evaluations=evaluations,price_proposals=proposals)

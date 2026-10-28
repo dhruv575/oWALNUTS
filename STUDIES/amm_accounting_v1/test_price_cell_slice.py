@@ -6,6 +6,17 @@ from price_cell_sv import target
 
 
 class SliceContract(unittest.TestCase):
+    def test_block_preserves_other_coordinates(self):
+        core=np.array([.1,.2,.3,.4,.5,.6,.7]);original=core.copy()
+        result,calls=ellipse(core,np.zeros(4),np.random.default_rng(19),indices=[1,4])
+        np.testing.assert_array_equal(core,original)
+        np.testing.assert_array_equal(result[[0,2,3,5,6]],original[[0,2,3,5,6]])
+        self.assertGreaterEqual(calls,1)
+
+    def test_invalid_blocks(self):
+        for indices in [[],[0,0],[-1],[4],[.5]]:
+            with self.assertRaises(ValueError):ellipse(np.zeros(4),[0.],None,indices=indices)
+
     def test_likelihood_prior_jacobian_identity(self):
         for n in [1,4,12]:
             c=np.linspace(-.4,.5,n+3);q=physical(c);u=np.linspace(-1,1,n)
