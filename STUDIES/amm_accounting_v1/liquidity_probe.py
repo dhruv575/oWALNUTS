@@ -6,15 +6,15 @@ from pathlib import Path
 import time
 import urllib.request
 import urllib.error
-from Crypto.Hash import keccak
 from pair_snapshot import BLOCK, BLOCK_HASH
 
 PAIR='0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc'
 START=BLOCK-4095
 ENDPOINT='https://eth.drpc.org'
+TOPICS=['0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f',
+        '0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496']
 
 
-def topic(signature):return '0x'+keccak.new(digest_bits=256,data=signature.encode()).hexdigest()
 def write(path,value):path.write_text(json.dumps(value,indent=2,allow_nan=False)+'\n',encoding='utf-8')
 
 
@@ -23,11 +23,13 @@ def partitions(width):
     return [(lo,min(lo+width-1,BLOCK)) for lo in range(START,BLOCK+1,width)]
 
 
-def run(root):
+def run(root,endpoint=ENDPOINT):
+    if endpoint not in (ENDPOINT,'https://mainnet.gateway.tenderly.co'):
+        raise ValueError('Reviewed public endpoint required')
     root=Path(root);root.mkdir(parents=True,exist_ok=False)
-    topics=[topic('Mint(address,uint256,uint256)'),topic('Burn(address,uint256,uint256,address)')]
+    topics=TOPICS
     write(root/'PLAN.json',dict(scope='Fixed-range liquidity discovery only; not accounting validation or strategy evaluation',
-        pair=PAIR,start=START,end=BLOCK,end_hash=BLOCK_HASH,endpoint=ENDPOINT,topics=topics,
+        pair=PAIR,start=START,end=BLOCK,end_hash=BLOCK_HASH,endpoint=endpoint,topics=topics,
         transport='Same fixed range; 256-block versus 128-block partition agreement',
         partitions={str(w):partitions(w) for w in (128,256)},
         max_requests=70,total_seconds=180,max_response_bytes=2097152,max_total_bytes=8388608,
@@ -44,7 +46,7 @@ def run(root):
         if remaining<=0 or index>=70:raise TimeoutError('Acquisition cap')
         call=dict(jsonrpc='2.0',id=index+1,method=method,params=params);raw=json.dumps(call).encode()
         (root/f'{index:02d}-{role}-request.json').write_bytes(raw)
-        request=urllib.request.Request(ENDPOINT,data=raw,headers={'Content-Type':'application/json','User-Agent':'owalnuts-fixed-liquidity-probe/1'})
+        request=urllib.request.Request(endpoint,data=raw,headers={'Content-Type':'application/json','User-Agent':'owalnuts-fixed-liquidity-probe/1'})
         previous=time.monotonic()
         try:
             with urllib.request.build_opener(NoRedirect).open(request,timeout=min(15,remaining)) as response:
@@ -90,4 +92,4 @@ def run(root):
     return result
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('root');a=p.parse_args();print(json.dumps(run(a.root)))
+    p=argparse.ArgumentParser();p.add_argument('root');p.add_argument('--endpoint',default=ENDPOINT);a=p.parse_args();print(json.dumps(run(a.root,a.endpoint)))

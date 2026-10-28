@@ -1,8 +1,13 @@
 import unittest
-from liquidity_probe import START,BLOCK,partitions
+from liquidity_probe import START,BLOCK,TOPICS,partitions
 
 
 class TransportPartition(unittest.TestCase):
+    def test_topics_match_ethereum_keccak(self):
+        from Crypto.Hash import keccak
+        signatures=['Mint(address,uint256,uint256)','Burn(address,uint256,uint256,address)']
+        self.assertEqual(TOPICS,['0x'+keccak.new(digest_bits=256,data=s.encode()).hexdigest() for s in signatures])
+
     def test_same_fixed_range_no_gaps_or_overlap(self):
         for width,count in ((128,32),(256,16)):
             ranges=partitions(width)

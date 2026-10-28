@@ -158,6 +158,27 @@ topic-filter problem. All raw responses and exact executed sources are retained.
 No diagnostic acquired event data. Further acquisition needs a separately
 reviewed transport/provider change rather than repeated identical requests.
 
+### Same-range acquisition from AWS completed
+
+The [Ethereum chain registry](https://raw.githubusercontent.com/ethereum-lists/chains/master/_data/chains/eip155-1.json)
+also lists `https://mainnet.gateway.tenderly.co`. A bounded local attempt failed
+TLS negotiation before any chain response. Running the separately recorded,
+same-range partitioned probe from AWS completed 54 requests in 13.43 seconds.
+It obtained three Mint and two Burn events across blocks 26287531, 26289040
+and 26289812. The first two blocks each contain a Mint and Burn in the same
+transaction; their economic purpose has not been inferred from those labels.
+
+The 256-block and 128-block partitions returned identical event lists; event
+block hashes match returned headers and the original finalized anchor was
+rechecked. This is not independent-provider completeness or full intervening
+header ancestry. A downloaded 134,212-byte archive has SHA-256
+`8d3933fdcb9f0f3744e3b9762e3fadab7abef46e1726b97a6099e06cd37bb2ab`.
+Local checks matched executed source hashes, partition responses and event
+headers. Raw evidence is in `evidence/liquidity-discovery-20261028/tenderly-aws/`;
+the failed local attempt is also retained. Transaction receipts, token transfers,
+pre-event balances, feeTo and kLast still need acquisition and accounting checks.
+Finding these events does not validate mint/burn arithmetic or protocol dilution.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
