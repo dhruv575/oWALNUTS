@@ -12,7 +12,13 @@ are preserved in `evidence/literal-reference-readiness-20261028/`.
 These are runner checks only; compilation and sampling for this new entry point
 have not yet been exercised. Runtime prefix, package versions and binary hashes
 are checked against the bound runtime inventory. A frozen path/hash manifest,
-seed audit, runtime binding and available four-core allocation are still needed.
+seed audit and runtime binding have now passed on AWS. The frozen manifest is
+preserved in the readiness evidence directory; sampling remains unstarted while
+E72 occupies the four worker groups. The audit checked 99,206 tracked seed-bearing
+source/metadata files no larger than 1 MB for exact integer reuse of 704028000
+and 704028001, with no matches. It also records reviewed disjoint study ranges.
+The compressed scan manifest preserves file hashes. This establishes the stated
+external-seed audit scope, not a proof of independence of internal PRNG streams.
 Do not compete with E72's four reserved worker groups. Run under the existing
 resource supervisor only after a group is released and its ownership drains,
 or after the campaign terminates. Preserve E72's resource caps unchanged.
