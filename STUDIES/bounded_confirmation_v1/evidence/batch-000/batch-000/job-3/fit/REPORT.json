@@ -1,0 +1,151 @@
+{
+  "index": 3,
+  "fixture": {
+    "index": 1,
+    "month": "2025-09",
+    "tick": 2,
+    "fixture": "case-0001.npz",
+    "sha256": "2d2ddddcd87b8221068112b665d01df900bb89696ab4457e32b3327980518fca",
+    "history_count": 252,
+    "current_index": 251,
+    "label_index": 252,
+    "origin_ms": 1756686600000,
+    "label_available_ms": 1756688400000
+  },
+  "cap": 1.0,
+  "seed": 398201048,
+  "methods": {
+    "nuts": {
+      "divergences": 0,
+      "depth_hits": 0,
+      "warmup_divergences": 12,
+      "setup_seconds": 14.491153012997529,
+      "sampling_seconds": 4.418938210001215,
+      "serialization_seconds": 1.4961289130005753,
+      "status": "sampled",
+      "failed_physical_coordinates": [],
+      "failed_b": false,
+      "diagnostics_seconds": 2.029853391999495,
+      "prediction": {
+        "status": "ok",
+        "logpdf": 3.483692773776067,
+        "pit": 0.946425035944128,
+        "logpdf_mcse": 0.0024163329821170333,
+        "pit_mcse": 0.00023209284766661375,
+        "failed_functionals": [],
+        "numerical": {
+          "orders": [
+            64,
+            128
+          ],
+          "logpdf_absolute_difference": 0.0,
+          "pit_absolute_difference": 2.220446049250313e-16,
+          "logpdf_tolerance": 1e-06,
+          "pit_tolerance": 1e-06,
+          "max_per_draw_logpdf_difference": 8.881784197001252e-16,
+          "max_per_draw_pit_difference": 5.551115123125783e-16,
+          "aggregate_by_order": [
+            {
+              "order": 64,
+              "logpdf": 3.483692773776067,
+              "pit": 0.9464250359441282,
+              "cdf_roundoff_clip_count": 0
+            },
+            {
+              "order": 128,
+              "logpdf": 3.483692773776067,
+              "pit": 0.946425035944128,
+              "cdf_roundoff_clip_count": 0
+            }
+          ],
+          "chunk": 512,
+          "max_node_matrix_elements": 65536,
+          "uses_full_node_cache": false,
+          "density_scaling_identity_residual": 4.440892098500626e-16,
+          "density_scaling_identity_tolerance": 4.9506251880530766e-14
+        },
+        "elapsed_seconds": 0.48710406300233444
+      },
+      "qualified": true
+    },
+    "walnuts": {
+      "divergences": 0,
+      "depth_hits": 0,
+      "warmup_divergences": 0,
+      "target_recoverable_failures": 0,
+      "setup_seconds": 1.1339054589989246,
+      "sampling_seconds": 3.222014910003054,
+      "serialization_seconds": 1.4877059499995084,
+      "status": "sampled",
+      "failed_physical_coordinates": [],
+      "failed_b": false,
+      "diagnostics_seconds": 2.1385758179967524,
+      "prediction": {
+        "status": "ok",
+        "logpdf": 3.4834233514766417,
+        "pit": 0.9463177986224782,
+        "logpdf_mcse": 0.0025231838049110927,
+        "pit_mcse": 0.0002445801370970125,
+        "failed_functionals": [],
+        "numerical": {
+          "orders": [
+            64,
+            128
+          ],
+          "logpdf_absolute_difference": 0.0,
+          "pit_absolute_difference": 2.220446049250313e-16,
+          "logpdf_tolerance": 1e-06,
+          "pit_tolerance": 1e-06,
+          "max_per_draw_logpdf_difference": 1.7763568394002505e-15,
+          "max_per_draw_pit_difference": 5.551115123125783e-16,
+          "aggregate_by_order": [
+            {
+              "order": 64,
+              "logpdf": 3.4834233514766417,
+              "pit": 0.9463177986224784,
+              "cdf_roundoff_clip_count": 0
+            },
+            {
+              "order": 128,
+              "logpdf": 3.4834233514766417,
+              "pit": 0.9463177986224782,
+              "cdf_roundoff_clip_count": 0
+            }
+          ],
+          "chunk": 512,
+          "max_node_matrix_elements": 65536,
+          "uses_full_node_cache": false,
+          "density_scaling_identity_residual": 0.0,
+          "density_scaling_identity_tolerance": 4.95024231593766e-14
+        },
+        "elapsed_seconds": 0.4751046800010954
+      },
+      "qualified": true
+    }
+  },
+  "comparisons": [
+    {
+      "baseline": "rolling_t5",
+      "qualified": true,
+      "model": 0.17718081915068407,
+      "inference": -0.00026942229942505946,
+      "total": 0.176911396851259
+    },
+    {
+      "baseline": "ewma_t5",
+      "qualified": true,
+      "model": 0.04589693059517019,
+      "inference": -0.00026942229942505946,
+      "total": 0.045627508295745134
+    },
+    {
+      "baseline": "nig_ar1",
+      "qualified": true,
+      "model": -0.36454588287108347,
+      "inference": -0.00026942229942505946,
+      "total": -0.36481530517050853
+    }
+  ],
+  "total_seconds": 35.727242701999785,
+  "scope": "Fixed historical confirmation schedule; no economic or profit claim"
+}

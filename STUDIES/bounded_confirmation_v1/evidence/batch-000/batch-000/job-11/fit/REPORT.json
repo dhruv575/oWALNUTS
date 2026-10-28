@@ -1,0 +1,151 @@
+{
+  "index": 11,
+  "fixture": {
+    "index": 9,
+    "month": "2025-09",
+    "tick": 10,
+    "fixture": "case-0009.npz",
+    "sha256": "46aa9815e4f76ee993bcd234d319b317483167db76d73dffc8fa56241fbeb9b9",
+    "history_count": 260,
+    "current_index": 259,
+    "label_index": 260,
+    "origin_ms": 1756701000000,
+    "label_available_ms": 1756702800000
+  },
+  "cap": 1.0,
+  "seed": 398201176,
+  "methods": {
+    "nuts": {
+      "divergences": 0,
+      "depth_hits": 0,
+      "warmup_divergences": 11,
+      "setup_seconds": 14.459429533999355,
+      "sampling_seconds": 4.366849671001546,
+      "serialization_seconds": 1.501948914003151,
+      "status": "sampled",
+      "failed_physical_coordinates": [],
+      "failed_b": false,
+      "diagnostics_seconds": 2.0302316209999844,
+      "prediction": {
+        "status": "ok",
+        "logpdf": 5.277445637022915,
+        "pit": 0.3735347919063199,
+        "logpdf_mcse": 0.001337824949254096,
+        "pit_mcse": 0.00023071426815619923,
+        "failed_functionals": [],
+        "numerical": {
+          "orders": [
+            64,
+            128
+          ],
+          "logpdf_absolute_difference": 0.0,
+          "pit_absolute_difference": 5.551115123125783e-17,
+          "logpdf_tolerance": 1e-06,
+          "pit_tolerance": 1e-06,
+          "max_per_draw_logpdf_difference": 1.7763568394002505e-15,
+          "max_per_draw_pit_difference": 2.220446049250313e-16,
+          "aggregate_by_order": [
+            {
+              "order": 64,
+              "logpdf": 5.277445637022915,
+              "pit": 0.37353479190631994,
+              "cdf_roundoff_clip_count": 0
+            },
+            {
+              "order": 128,
+              "logpdf": 5.277445637022915,
+              "pit": 0.3735347919063199,
+              "cdf_roundoff_clip_count": 0
+            }
+          ],
+          "chunk": 512,
+          "max_node_matrix_elements": 65536,
+          "uses_full_node_cache": false,
+          "density_scaling_identity_residual": 8.881784197001252e-16,
+          "density_scaling_identity_tolerance": 7.499701321510933e-14
+        },
+        "elapsed_seconds": 0.3642130489970441
+      },
+      "qualified": true
+    },
+    "walnuts": {
+      "divergences": 0,
+      "depth_hits": 0,
+      "warmup_divergences": 0,
+      "target_recoverable_failures": 0,
+      "setup_seconds": 1.125870785996085,
+      "sampling_seconds": 4.212185615004273,
+      "serialization_seconds": 1.4942197640048107,
+      "status": "sampled",
+      "failed_physical_coordinates": [],
+      "failed_b": false,
+      "diagnostics_seconds": 2.12597476800147,
+      "prediction": {
+        "status": "ok",
+        "logpdf": 5.276214538531969,
+        "pit": 0.3741459765507236,
+        "logpdf_mcse": 0.001326549957963086,
+        "pit_mcse": 0.00023494543780335525,
+        "failed_functionals": [],
+        "numerical": {
+          "orders": [
+            64,
+            128
+          ],
+          "logpdf_absolute_difference": 1.7763568394002505e-15,
+          "pit_absolute_difference": 1.1102230246251565e-16,
+          "logpdf_tolerance": 1e-06,
+          "pit_tolerance": 1e-06,
+          "max_per_draw_logpdf_difference": 1.7763568394002505e-15,
+          "max_per_draw_pit_difference": 2.220446049250313e-16,
+          "aggregate_by_order": [
+            {
+              "order": 64,
+              "logpdf": 5.2762145385319705,
+              "pit": 0.37414597655072374,
+              "cdf_roundoff_clip_count": 0
+            },
+            {
+              "order": 128,
+              "logpdf": 5.276214538531969,
+              "pit": 0.3741459765507236,
+              "cdf_roundoff_clip_count": 0
+            }
+          ],
+          "chunk": 512,
+          "max_node_matrix_elements": 65536,
+          "uses_full_node_cache": false,
+          "density_scaling_identity_residual": 0.0,
+          "density_scaling_identity_tolerance": 7.497951825331439e-14
+        },
+        "elapsed_seconds": 0.3638690640000277
+      },
+      "qualified": true
+    }
+  },
+  "comparisons": [
+    {
+      "baseline": "rolling_t5",
+      "qualified": true,
+      "model": -0.056171424129775716,
+      "inference": -0.0012310984909458256,
+      "total": -0.05740252262072154
+    },
+    {
+      "baseline": "ewma_t5",
+      "qualified": true,
+      "model": 0.0005868301386975361,
+      "inference": -0.0012310984909458256,
+      "total": -0.0006442683522482895
+    },
+    {
+      "baseline": "nig_ar1",
+      "qualified": true,
+      "model": 0.2572682354211482,
+      "inference": -0.0012310984909458256,
+      "total": 0.25603713693020236
+    }
+  ],
+  "total_seconds": 36.499839349002286,
+  "scope": "Fixed historical confirmation schedule; no economic or profit claim"
+}
