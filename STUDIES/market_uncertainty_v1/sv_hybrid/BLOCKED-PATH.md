@@ -28,7 +28,13 @@ observations, and nonmutation of input/global parameters. These mathematical
 checks do not establish mixing or precision. The existing ESS evaluation cap
 and total density-evaluation budget still abort explicitly on exhaustion.
 
-Next: a bounded literal development fit against the already preserved reference,
+The four-chain literal development fit is now running at
+`/home/ubuntu/lanes/blocked-development-20261028/run01`, using fixed 1000 warmup
+and 2000 retained sweeps. Each chain has a 300-second external cap (295 seconds
+internal), and the campaign has a 360-second outer cap. Four disjoint single
+cores are used. The prior mathematical checks passed in the pinned AWS runtime;
+sources, runtime binaries and four external seeds are bound in the preserved
+plan. No chain is retried. Compare all chains to the already preserved reference,
 followed by a separately declared all-window test only if readiness supports it.
 Retain the existing original/interwoven market failures unchanged. Block size 16
 is an engineering choice fixed before this variant's sampling, not an optimized
