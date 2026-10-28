@@ -183,3 +183,11 @@ Native WALNUTS density/gradient parity passed 108 deterministic bounded-target
 cases, but WALNUTS sampling for that candidate is not yet qualified. The candidate
 prior cap lacks empirical justification; synthetic successes do not resolve
 that modeling choice or establish any economic claim.
+
+An exact beta=exp(mean(h)/2)*b coordinate change subsequently passed 72 independent
+autodiff checks and all three all-zero NUTS stress fits' physical diagnostics,
+with zero retained divergences/depth hits at the same sampling budget. Raw-trace
+diagnostics were reproduced locally. The cap-2 chains reached a much more extreme
+latent-volatility region than the earlier failed methods. This supports a
+coordinate-coupling diagnosis but still lacks a qualified independent reference;
+see `STUDIES/amm_accounting_v1/evidence/bounded-rescaled-20261028`.
