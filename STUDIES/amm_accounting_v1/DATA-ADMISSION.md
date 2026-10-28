@@ -66,7 +66,30 @@ a verified local archive also preserves the exact executed source and 43 sealed
 files. This is a state/identity snapshot only: no swap-event panel or economic
 policy evaluation has yet been admitted.
 
-## Next bounded engineering acquisition
+## Fixed 64-block engineering panel completed
+
+The predeclared range 26290193–26290256 yielded 18 logs: nine Sync/Swap
+pairs and no liquidity events. All 74 read-only calls completed in 18.55 seconds
+within the declared request, byte and time bounds. Full-range and two half-range
+responses agree; 65 headers form a continuous ancestry ending at the pinned
+finalized hash. This does not establish provider-independent completeness.
+
+The swap-only auditor reconstructs every integer reserve transition, checks the
+997/1000 fee-adjusted product inequality, and matches terminal reserves and
+reserve timestamp exactly. LP total supply is unchanged. Three focused tests
+cover large integers, invalid accounting and Ethereum Keccak. Raw requests,
+responses, exact sources, accounting output and a verified archive manifest are
+preserved in `evidence/pool-events-20261028/`.
+
+This is a narrow accounting admission, not a policy evaluation. The auditor
+rejects unsupported events rather than silently excluding them. Mint, burn,
+standalone Sync, donations and protocol-fee issuance remain unvalidated. The
+observed nonzero feeTo requires protocol-fee accounting before LP economics.
+No gas, liquidation, demand-response or profitability claim follows from this
+sample. Reproduce offline with Python and pycryptodome 3.23.0:
+`python audit_swap_panel.py evidence/pool-events-20261028 NEW-ACCOUNTING.json`.
+
+## Requirements for broader acquisition
 
 Use a declared pool and fixed finalized block range before inspecting swap
 activity. Resolve and verify factory/pair/token identities and bytecode;
