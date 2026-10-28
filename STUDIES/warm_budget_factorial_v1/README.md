@@ -90,7 +90,13 @@ verifies that inherited numerical code changed only its K-admission checks and
 corresponding error wording. No new target or tuning rule was introduced.
 
 At completion, retain all 12 paths and 96 planned spot scores, including missing
-or failed slots. Compare to all original E70 spots with failed references flagged,
+or failed slots. Terminal-report preparation passed all eight inventory/analysis
+tests in the pinned AWS runtime. Code is staged separately at
+`/home/ubuntu/lanes/warm-budget-reporting-20261028`; the E70 comparison hash
+matches the preserved local reference evidence. See
+`evidence/reporting-readiness-20261028/` for the source bindings and test log.
+This readiness check does not analyze or qualify the still-running campaign.
+Compare to all original E70 spots with failed references flagged,
 and report the passing-reference subset separately. Report both seeds rather
 than choosing the better one. Whole-path accuracy, cross-algorithm superiority
 and executable AMM profitability remain unestablished.
