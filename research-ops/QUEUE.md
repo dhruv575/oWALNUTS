@@ -14,10 +14,11 @@ Updated 2026-10-28. Status requires live verification; this file is not a watche
    method/window fits, all 254 diagnostic coordinates and all 24 reference
    flags. Compute actual-label predictive density/PIT with separate MCSE.
    A cold-window cost is not a matched speed comparison to E72 warm paths.
-3. **Archive E72 to S3.** The campaign drained: 10/12 completed, 90/96 scores,
+3. **E72 archived to S3.** The campaign drained: 10/12 completed, 90/96 scores,
    42/48 paired comparisons. Full local archive and 16,722 original member
    hashes verified. Two January K1600 timeouts remain. Results are committed in
-   `STUDIES/warm_budget_factorial_v1/RESULTS.md`; S3 upload/restore remains.
+   `STUDIES/warm_budget_factorial_v1/RESULTS.md`. Exact-version S3 restore
+   verified all 16,722 members and both analysis reports; originals remain.
 4. **Calibration and paper.** The literal independent reference completed,
    with zero divergences and all coordinate diagnostic flags passing. Both
    specialists are descriptively corroborated, with one interwoven latent flag
