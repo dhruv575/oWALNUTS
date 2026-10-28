@@ -220,6 +220,22 @@ semantics, within-block feeTo changes and per-operation liquidity arithmetic
 remain outside this check; matching endpoints cannot exclude offsetting
 unobserved intermediate balance effects.
 
+A restricted liquidity-operation reconstruction also matches all five observed
+operations: three mints and two burns. It matches protocol LP issuance amounts
+and recipients, user mint amounts, pair-held LP consumed by burns, burn token
+amounts and recipients, Sync reserves, final LP supply and kLast. Protocol LP
+issuance at the three mints is respectively 68,813,277,584; 90,139,260,947; and
+5,297,671,092 raw LP units; both burns calculate zero additional protocol issuance.
+These are raw token units, not revenue or profit. Tests reject modified Mint
+amounts and Burn recipients. Report/source evidence is in `operation-audit/`.
+
+This check explicitly assumes feeTo is constant within each block, ordinary
+token transfers without unobserved balance-changing callbacks, and upstream
+pair semantics. It rejects unsupported pair events and is limited to these
+liquidity-only pair-event blocks. It is not a general EVM replay or a proof that
+the deployed bytecode matches the upstream compiler output. The unresolved
+assumptions must remain visible before admitting economic conclusions.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
