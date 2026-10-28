@@ -55,7 +55,12 @@ do not establish the accuracy of either budget. January K400 and February K1600
 workers continue under the original bounds.
 
 Twelve planned monthly paths compare K400 and K1600 at two seed schedules
-on each of the three E66 panels. The full plan fixes data, targets, diagnostics,
+on each of the three E66 panels. Subsequent February K1600 receipts (09/11)
+confirm all 1,344 updates and eight scores per path, exit zero and drained
+groups. Outer times were 2630.687 and 2621.634 seconds. Those slots proceeded
+to February K400 without replacement or limit changes. January's K1600
+timeouts remain failures; successful February runs do not erase them.
+The full plan fixes data, targets, diagnostics,
 reporting, retained points and resource limits before market sampling.
 
 AWS root: `/home/ubuntu/lanes/warm-budget-factorial-20261028`.

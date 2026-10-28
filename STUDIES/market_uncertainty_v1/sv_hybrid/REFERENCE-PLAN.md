@@ -19,6 +19,10 @@ source/metadata files no larger than 1 MB for exact integer reuse of 704028000
 and 704028001, with no matches. It also records reviewed disjoint study ranges.
 The compressed scan manifest preserves file hashes. This establishes the stated
 external-seed audit scope, not a proof of independence of internal PRNG streams.
+The deterministic `test_reference_storage.py` also passes in the pinned AWS
+runtime: posterior, warmup, latent and divergence arrays survive a NetCDF
+save/reload with their groups intact. This tests serialization, not nutpie
+sampling; the actual fit's saved groups still require inspection afterward.
 Do not compete with E72's four reserved worker groups. Run under the existing
 resource supervisor only after a group is released and its ownership drains,
 or after the campaign terminates. Preserve E72's resource caps unchanged.
