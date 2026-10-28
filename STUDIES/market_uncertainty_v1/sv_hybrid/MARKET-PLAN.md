@@ -1,6 +1,12 @@
 # Specialist market-window corroboration
 
 Status: preparation, not sampled. Follow the completed literal reference check
+with the worker in `market_worker.py`. Three local tests cover all 192 index
+slots, preservation of partial draws after a failure, and actual literal sweeps
+for both methods. The internal sampling clock stops at 295 seconds to leave
+serialization room inside the unchanged 300-second external cap. Frozen input
+preparation, seed audit and the reviewed campaign supervisor remain required.
+Follow the completed literal reference check
 with all 24 fixed E70 windows (eight per month, December–February), including
 the two flagged references. Use the original E66 sealed data contract and actual
 next-return label. Preserve each window's causal indices and data hashes.
