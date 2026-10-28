@@ -30,7 +30,9 @@ the downloaded bytes matched the remote digest. The complete 385,000,775-byte
 sampling archive also matched its remote digest; all 96 draw-file receipt hashes,
 24 window hashes and 29 frozen source hashes were verified locally. Its SHA-256
 is `4bfe7341d8e0ec6bc0fe92f7e1b75ed14a7dae17eec27bf0f7528ad42300b92c`.
-S3 transfer is underway; no S3 restore verification is claimed yet.
+The exact S3 version `L2an0FFzPahL.zKBUTl6k3WsPN0sj.ks` was downloaded and
+passed the same archive, source, input and draw checks. Its receipt is preserved
+as `S3-VERIFIED.json`; the original remote sampling tree remains available.
 
 The next inference question is whether the remaining scale/latent diagnostics
 resolve at a separately declared larger budget, with every window retained.
