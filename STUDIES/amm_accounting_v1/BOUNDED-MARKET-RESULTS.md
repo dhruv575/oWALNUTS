@@ -36,7 +36,15 @@ of reported log-score MCSEs is 2.650 over 72 comparisons, with none above 3.
 This is descriptive agreement, not a simultaneous confidence guarantee or proof
 of exact posterior fidelity. The study is not precision-matched speed evidence.
 
-Next: retain every case, audit score uncertainty and tail influence, independently
+Post hoc influence analysis leaves every origin in the primary result. Removing
+the best origin alone leaves positive mean gains, but removing the two best
+origins reverses the rolling-t5 and EWMA mean differences at all caps (about
+-0.011 to -0.013 and -0.010 to -0.011 nats respectively). NIG AR1 differences
+remain positive at about +0.106 to +0.107. This is descriptive sensitivity, not
+a trimmed primary estimate or a confidence interval. Input hashes and all
+leave-one-out ranges are in `BOUNDED-MARKET-INFLUENCE.json`.
+
+Next: retain every case, audit score uncertainty, independently
 recompute diagnostics for archived traces, and freeze a genuinely untouched
 confirmation period before inspecting it. Economic inventory/cost assumptions,
 counterfactual evaluation, mathematical review and a submission-ready paper
