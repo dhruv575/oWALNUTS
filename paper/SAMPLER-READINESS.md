@@ -49,6 +49,13 @@ MCSE estimates decreased, while absolute reference discrepancies improved in
 on exposed windows, not universal predictive improvement or algorithm superiority.
 See the [precision results](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-PRECISION-RESULTS.md).
 
+The subsequent same-target NUTS panel passed all 24 fits with zero divergences
+in 196.46 seconds, including per-fit compilation. Its median density MCSE was
+0.001113 and maximum discrepancy on passing references was 0.003133, both lower
+than the blocked specialist's aggregate metrics. This is negative evidence for
+a specialist efficiency advantage on this workload, not a universal ranking or
+a direct WALNUTS comparison. See the [baseline results](../STUDIES/market_uncertainty_v1/sv_hybrid/MARKET-REFERENCE-RESULTS.md).
+
 Source: [block derivation and development](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-PATH.md)
 and [fixed market plan](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKET-PLAN.md).
 
