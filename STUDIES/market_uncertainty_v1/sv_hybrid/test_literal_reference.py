@@ -11,6 +11,16 @@ import literal_reference as runner
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_compact_accepts_declared_draw_count_and_rejects_bad_divergences(self):
+        ds=xr.Dataset({n:(('chain','draw'),np.zeros((4,8000))) for n in ('mu','log_sigma','beta','h_last')},coords={'chain':[0,1,2,3]})
+        stats=xr.Dataset({'diverging':(('chain','draw'),np.zeros((4,8000)))})
+        trace=SimpleNamespace(posterior=ds,sample_stats=stats)
+        compact,metadata=runner.extract_compact(trace,8000)
+        self.assertEqual(compact.shape,(4,8000,4));self.assertEqual(metadata['divergences'],[0]*4)
+        with self.assertRaisesRegex(ValueError,'axes'):runner.extract_compact(trace,4000)
+        stats['diverging'].values[0,0]=2
+        with self.assertRaisesRegex(ValueError,'divergence'):runner.extract_compact(trace,8000)
+
     def test_supervisor_contract_and_non_drained_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
@@ -56,6 +66,20 @@ class ReferenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'resource'):runner.validate(spec)
             spec=self.fixture(Path(directory)); spec['sampling']['draws']=8000
             with self.assertRaisesRegex(ValueError,'sampling'):runner.validate(spec)
+
+    def test_market_schedule_requires_bound_window_and_fixed_spot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);spec=self.fixture(root)
+            window=root/'window.npz';np.savez(window,window=np.zeros(250))
+            spec.update(scope='fixed_market_reference',spot=23,
+                        sampling=dict(chains=4,draws=8000,tune=4000,cores=4),
+                        limits=dict(seconds=1800,rss_bytes=4*1024**3,output_bytes=1024**3))
+            spec['bindings']['window']=dict(path=str(window),sha256=runner.sha(window))
+            runner.validate(spec)
+            altered=copy.deepcopy(spec);altered['spot']=24
+            with self.assertRaisesRegex(ValueError,'spot'):runner.validate(altered)
+            window.write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError,'window drift'):runner.validate(spec)
 
     def test_full_extraction_preserves_named_axes_and_rejects_nonfinite(self):
         ds=xr.Dataset({name:(('draw','chain'),np.full((4000,4),float(i)))

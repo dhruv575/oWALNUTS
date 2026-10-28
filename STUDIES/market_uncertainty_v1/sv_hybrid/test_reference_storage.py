@@ -23,7 +23,9 @@ class StorageTests(unittest.TestCase):
                 np.testing.assert_array_equal(restored.warmup_posterior['mu'],-values)
                 np.testing.assert_array_equal(restored.sample_stats['diverging'],values.astype(int)%2)
                 np.testing.assert_array_equal(restored.warmup_sample_stats['diverging'],np.zeros_like(values,dtype=bool))
-            finally:restored.close()
+            finally:
+                for group in restored.groups():getattr(restored,group).close()
+                restored.close()
 
 
 if __name__=='__main__':unittest.main()

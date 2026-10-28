@@ -48,9 +48,16 @@ def validate(spec):
     for name, digest in runtime['binaries'].items():
         if sha(name) != digest:
             raise ValueError('Runtime binary drift: '+name)
-    if spec.get('sampling') != dict(chains=4, draws=4000, tune=2000, cores=4):
+    market=spec.get('scope')=='fixed_market_reference'
+    schedule=dict(chains=4,draws=8000,tune=4000,cores=4) if market else dict(chains=4,draws=4000,tune=2000,cores=4)
+    limits=dict(seconds=1800,rss_bytes=4*1024**3,output_bytes=1024**3) if market else dict(seconds=900,rss_bytes=4*1024**3,output_bytes=512*1024**2)
+    if market:
+        window=spec['bindings']['window']
+        if sha(window['path'])!=window['sha256']:raise ValueError('Market window drift')
+        if type(spec.get('spot')) is not int or not 0<=spec['spot']<24:raise ValueError('Fixed market spot')
+    if spec.get('sampling') != schedule:
         raise ValueError('Fixed sampling schedule required')
-    if spec.get('limits') != dict(seconds=900, rss_bytes=4*1024**3, output_bytes=512*1024**2):
+    if spec.get('limits') != limits:
         raise ValueError('Fixed resource limits required')
     seed = spec['seed']
     if type(seed) is not int or not 0 <= seed < 2**32-1:
@@ -68,11 +75,11 @@ def validate(spec):
     return spec
 
 
-def extract_full(trace):
+def extract_full(trace,draws=4000):
     columns = []
     for name in ('mu', 'log_sigma', 'beta'):
         a = np.asarray(trace.posterior[name].transpose('chain', 'draw'))
-        if a.shape != (4, 4000):
+        if a.shape != (4, draws):
             raise ValueError('Scalar axes mismatch')
         columns.append(a[..., None])
     z = trace.posterior['z']
@@ -80,12 +87,25 @@ def extract_full(trace):
     if len(extra) != 1:
         raise ValueError('Innovation axes mismatch')
     z = np.asarray(z.transpose('chain', 'draw', extra[0]))
-    if z.shape != (4, 4000, 250):
+    if z.shape != (4, draws, 250):
         raise ValueError('Innovation dimensions mismatch')
     full = np.concatenate(columns+[z], axis=-1)
     if full.dtype != np.float64 or not np.isfinite(full).all():
         raise ValueError('Finite float64 full draws required')
     return full
+
+
+def extract_compact(trace,draws):
+    components=[]
+    for name in ('mu','log_sigma','beta','h_last'):
+        a=np.asarray(trace.posterior[name].transpose('chain','draw'))
+        if a.dtype!=np.float64 or a.shape!=(4,draws) or not np.isfinite(a).all():raise ValueError('Compact reference axes')
+        components.append(a)
+    divergence=np.asarray(trace.sample_stats['diverging'].transpose('chain','draw'))
+    if divergence.shape!=(4,draws) or not np.isin(divergence,[0,1]).all():raise ValueError('Reference divergence axes or values')
+    coordinates=np.asarray(trace.posterior.coords['chain'])
+    if coordinates.shape!=(4,) or len(set(coordinates.tolist()))!=4:raise ValueError('Reference chain identities')
+    return np.stack(components,axis=-1),dict(divergences=divergence.sum(axis=1).astype(int).tolist(),chain_coordinates=coordinates.tolist())
 
 
 def worker(manifest, root):
@@ -104,21 +124,28 @@ def worker(manifest, root):
         adapter = load(binding('adapter'), 'literal_reference_adapter')
         capture = load(binding('capture'), 'literal_reference_capture')
         result['api'] = adapter.api_inventory(nutpie)
-        y = np.resize(np.array([.001, -.002, .0005, 0., .003]), 250)
+        if spec.get('scope')=='fixed_market_reference':
+            with np.load(binding('window'),allow_pickle=False) as data:y=data['window'].copy()
+            if y.shape!=(250,) or not np.isfinite(y).all():raise ValueError('Finite T250 market input')
+        else:y = np.resize(np.array([.001, -.002, .0005, 0., .003]), 250)
         np.save(root/'window.npy', y, allow_pickle=False)
         captures = []
+        phase=time.monotonic()
         with capture.capture_compiler(bridgestan, root/'captured-libraries', captures):
             compiled = nutpie.compile_stan_model(code=Path(binding('stan')).read_text(encoding='utf-8-sig'), cleanup=False)
+        result['compile_seconds']=time.monotonic()-phase
         if not captures:
             raise ValueError('Compiled provenance missing')
         write(root/'COMPILER.json', captures)
         model = compiled.with_data(seed=spec['seed']+1, **adapter.stan_data(y))
+        phase=time.monotonic()
         trace = nutpie.sample(model, **spec['sampling'], seed=spec['seed'], save_warmup=True,
                               progress_bar=False, **spec['reference_settings']['engine_options'])
+        result['sampling_seconds']=time.monotonic()-phase
         # Preserve the full engine evidence before extracting or diagnosing it.
         trace.to_netcdf(root/'trace.nc')
-        compact, metadata = adapter.extract(trace)
-        full = extract_full(trace)
+        compact, metadata = extract_compact(trace,spec['sampling']['draws'])
+        full = extract_full(trace,spec['sampling']['draws'])
         np.savez_compressed(root/'draws.npz', full=full, compact=compact)
         validate(spec)
         result.update(status='complete', metadata=metadata, arrays_sha256=sha(root/'draws.npz'),
@@ -138,9 +165,10 @@ def supervise(manifest, root):
     if len(os.sched_getaffinity(0)) != 4:
         raise ValueError('Exactly four allocated cores required')
     monitor = load(spec['bindings']['monitor']['path'], 'literal_reference_monitor')
+    limits=spec.get('limits',dict(seconds=900,rss_bytes=4*1024**3,output_bytes=512*1024**2))
     receipt = monitor.execute([sys.executable, str(Path(__file__).resolve()), str(manifest),
-                               str(root/'fit'), '--worker'], cwd=str(root), cap=900,
-                              output_root=root, rss_limit=4*1024**3, byte_limit=512*1024**2,
+                               str(root/'fit'), '--worker'], cwd=str(root), cap=limits['seconds'],
+                              output_root=root, rss_limit=limits['rss_bytes'], byte_limit=limits['output_bytes'],
                               log_path=root/'worker.log', output_scan_interval=1,
                               utilization_path=root/'utilization.jsonl', phase_reserved_cores={'startup':4})
     write(root/'SUPERVISION.json', receipt)
