@@ -27,7 +27,7 @@ def main():
             jobroot=root/f'job-{j:02d}';jobroot.mkdir()
             cmd=['taskset','-c',f'{q*4}-{q*4+3}',sys.executable,str(base/'worker.py'),str(base/'MANIFEST.json'),str(j),str(jobroot/'results')]
             try:
-                result=execute(cmd,str(base),min(480,2990-(time.monotonic()-start)),str(jobroot),4*1024**3,1024**3,str(jobroot/'stdout.log'),output_scan_interval=5,utilization_path=str(jobroot/'utilization.jsonl'),phase_reserved_cores=4)
+                result=execute(cmd,str(base),min(480,2990-(time.monotonic()-start)),str(jobroot),4*1024**3,1024**3,str(jobroot/'stdout.log'),output_scan_interval=5,utilization_path=str(jobroot/'utilization.jsonl'),phase_reserved_cores={'startup':4})
                 jobs[j].update(result)
                 if not result.get('group_drained') or result.get('reason') in ('rss_limit','output_limit','output_limit_final_scan'):stop.set()
             except Exception as e:jobs[j].update(status='monitor_failed',error=repr(e));stop.set()
