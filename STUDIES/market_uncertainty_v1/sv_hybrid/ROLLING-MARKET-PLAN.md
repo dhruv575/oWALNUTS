@@ -26,7 +26,13 @@ Preserve initial and sentinel full traces (including warmup), all per-update
 diagnostic records, source/runtime identity, seeds, input hashes and incomplete
 slots. The adapter must pass a literal end-to-end run with the existing immutable
 linear evidence loop before market admission. Fit limits and the whole campaign
-resource/seed plan must be frozen separately before launch. Existing E72
+resource/seed plan must be frozen separately before launch. Each path is bounded
+at 3,600 seconds, 4 GiB RSS and 1 GiB output. Use four disjoint four-core groups;
+the whole campaign has an 11,000-second, 22 GiB RSS and 6 GiB output bound.
+Require 8 GiB free before launch and stop new admissions below 3 GiB. Output
+limits are sampled checks, not filesystem quotas. Six paths reserve 17,292
+distinct external sampling/initialization seeds from disjoint blocks beginning
+at 705000000; audit all reserved seeds before freezing. Existing E72
 January K1600 failures remain unchanged; this experiment cannot repair them.
 
 The two-update literal end-to-end run completed both updates and scores in
