@@ -20,6 +20,20 @@ Status: manuscript preparation, not submission-ready. Required by Dhruv on
 2026-10-28. Working title: **Fast Bayesian volatility updates: predictive gains,
 decision sensitivity, and the limits of market-making evidence**.
 
+## Bounded-prior development result (2026-10-28)
+
+A separately specified bounded-volatility-prior candidate completed all 72 fixed
+origin/cap cells (24 development origins, three caps), with both NUTS and WALNUTS
+qualified in all 144 fits. Mean predictive log-score gains over rolling t5, EWMA
+t5 and NIG AR1 were positive at every cap, but concentrated in December. At cap
+1, January mean scores were worse than all three baselines, and rolling-t5 wins
+occurred at only 9 of 24 origins. Sampler score differences were small relative
+to model-versus-baseline differences. This supports implementation reliability
+on this panel, not general predictive dominance or economic value. Full results,
+denominators and limitations are in
+[the development screen](../STUDIES/amm_accounting_v1/BOUNDED-MARKET-RESULTS.md).
+Untouched confirmation, mathematical review and economic evaluation remain open.
+
 ## Research question
 
 Can affordable repeated Bayesian posterior updates produce reliable predictive
