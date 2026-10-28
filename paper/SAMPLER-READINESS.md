@@ -119,6 +119,15 @@ remain intact; model admissibility is an additional, separate requirement.
 
 ## Implications for the manuscript
 
+An initial one-shift synthetic comparison used remapped static WALNUTS states
+and fresh NUTS fits on identical declared targets. All four pairs passed
+coordinate diagnostics, with zero retained divergences or depth saturation;
+no coordinate mean difference exceeded four combined MCSEs. The 250-cell warm
+routes took about 40 and 79 seconds versus 30 and 26 seconds for cold NUTS.
+Timing scopes differ (cold includes compilation and serialization), and no
+speed advantage is established. See the complete failure-preserving record in
+`STUDIES/amm_accounting_v1/evidence/price-cell-warm-cold-20261028`.
+
 The first native WALNUTS panel for the candidate finite-price-cell model
 completed all four synthetic fixtures (27 or 503 dimensions). All 1,060
 coordinate diagnostics passed, with zero retained divergences or depth-limit
