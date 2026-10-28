@@ -2,13 +2,22 @@
 
 **Priority override after rolling completion:** the six-path comparator and
 bounded analysis are complete. Preserve and independently verify the sealed
-full archive, then finish its S3 restore check. The exact-tie propriety issue
+full archive. Its exact-version S3 restore check is now complete (checkpoint
+6f0bb493). The exact-tie propriety issue
 now takes priority over more sampling of the unchanged target. Strengthen and
 review the normalizer bounds, justify a finite-resolution observation model or
 prior repair, and validate the changed target independently before admitting
 new posterior-fidelity or economic experiments. Do not discard tied windows or
 add arbitrary jitter. The older queue below records the preceding plan; its
 storage, API and rolling-comparator preparation steps have been completed.
+
+The joint price-cell candidate is specified in
+`STUDIES/amm_accounting_v1/FINITE-RESOLUTION-MODEL.md`. It has a bounded event
+likelihood and a proper posterior under its stated assumptions, but historical
+observation semantics remain an admission gate. The volume audit rules out
+empty bars as a complete explanation of the repeated zero returns. Next build
+independent synthetic density, Jacobian and quadrature checks; do not treat
+those checks as validation of the market observation mechanism.
 
 The fixed cold-fit workload favors NUTS over the blocked specialist. Do not use
 further tuning of that exposed panel to imply a general algorithm advantage.

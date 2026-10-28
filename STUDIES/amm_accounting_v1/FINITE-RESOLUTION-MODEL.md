@@ -1,0 +1,108 @@
+# Candidate joint price-cell observation model
+
+Status: proposed mathematical repair, not an admitted market model. The existing
+exact-return posterior claims do not transfer to this target. Historical price
+resolution and the provider's missing-bar semantics remain unverified.
+
+## Generative construction
+
+Let X_i be a latent log price and condition explicitly on X_0=x_0. Conditional
+on the stochastic-volatility path and common drift beta, specify independent
+increments X_i-X_(i-1) with Student-t(5,beta,exp(h_i/2)) densities. Retain the
+proper Gaussian priors for mu, log(sigma), beta and standardized AR innovations
+only as a candidate; their predictive-tail suitability is a separate question.
+
+For each reported price p_i, a known observation rule maps X_i into a measurable
+cell C_i of positive width. Under nearest-grid rounding of positive price with
+grid delta, the interior cells would be
+
+    C_i = [log(p_i-delta/2), log(p_i+delta/2)).
+
+This expression requires p_i>delta/2 and an explicitly justified rounding rule.
+A price lattice alone does not establish that trades are rounded measurements
+of an underlying continuous price. Boundary, clipping and missing observations
+require their own specified rule. Do not infer historical delta from a current
+instrument response or merely from the greatest common divisor of this panel.
+
+The likelihood is the joint event probability
+
+    L(theta) = integral over C_1 x ... x C_T
+               product_i f(X_i-X_(i-1) | beta,h_i) dX_1...dX_T.
+
+Adjacent increment measurement errors share X_i; independent jitter or a product
+of independent return-interval probabilities is generally a different model.
+If X_0 is itself a rounded observation, replace the fixed anchor with a declared
+proper distribution for X_0 conditional on its cell, or include its prior and
+observation jointly. An arbitrary exact first close is not equivalent to either.
+
+## Propriety proof for the declared model
+
+For every finite theta, the product of transition densities integrates to one
+over R^T by iterated integration, starting with X_T. Its integral over the cell
+product is therefore between zero and one. Since the cells have positive
+Lebesgue measure and each Student-t transition density is strictly positive,
+L(theta)>0. With a proper prior pi(theta),
+
+    0 < Z = integral L(theta) pi(theta) dtheta <= 1.
+
+Thus the joint augmented posterior and its theta marginal are proper, including
+when reported prices or derived returns repeat. This is an analytic result for
+the stated observation mechanism; it does not validate that mechanism for the
+exchange data. Zero-width cells revert to a density problem and are excluded.
+
+A missing observation can be represented by C_i=R only if missingness is
+ignorable under the declared model. Zero trading volume is not automatically
+ignorable missingness: trading activity may depend on latent market state.
+Forward-filled displayed prices must not be treated as fresh rounded-price
+measurements without modelling that reporting mechanism.
+
+## Augmented density and gradient contract
+
+For finite log-price cells [a_i,b_i), put w_i=b_i-a_i>0 and introduce unrestricted
+u_i with s_i=logistic(u_i), X_i=a_i+w_i*s_i. The log target in (theta,u) is
+
+    log pi(theta) + sum_i log f(X_i-X_(i-1) | beta,h_i)
+      + sum_i [log(w_i) + log(s_i) + log(1-s_i)].
+
+There is no additional independent prior on u. Adding one changes the model.
+For r_i=X_i-X_(i-1)-beta and scale squared exp(h_i), define
+
+    g_i = -6*r_i / (5*exp(h_i)+r_i^2).
+
+Then d log likelihood/dX_i = g_i-g_(i+1), with g_(T+1)=0, and
+
+    d log target/du_i = (g_i-g_(i+1))*w_i*s_i*(1-s_i) + 1-2*s_i.
+
+Core theta derivatives use the same conditional return likelihood evaluated at
+the latent increments, with X held fixed. The extra T coordinates make the
+T=250 standardized target 503-dimensional (mu,log(sigma),beta,250 z,250 u).
+This is not a drop-in 253-dimensional retargeting operation. Unbounded missing
+cells need a different transformation with its own Jacobian.
+
+Use stable log-logistic expressions. Floating-point saturation of logistic at
+extreme u must not silently remove the Jacobian or manufacture exact infinite
+densities. Small price-cell widths also make conditioning an empirical concern.
+
+## Admission gates and remaining claims
+
+1. Establish the historical observation rule, including missing bars, price
+   grid, first-price treatment and causality. The existing volume audit finds
+   seven positive-volume equal-close pairs and two zero-volume ones; neither
+   group can be silently removed.
+2. Independently implement and compare normalized densities and gradients,
+   including Jacobians, tied prices, extreme finite u and nonuniform cells.
+   For T=1, compare cell probabilities with Student-t CDF differences; for T=2,
+   compare the joint integral with numerical quadrature rather than multiplying
+   marginal increment-cell probabilities.
+3. Validate conditional and marginal sampling on synthetic data generated by
+   this exact model, including repeated reported prices. Bound runtime and
+   memory before any market campaign. Preserve failed diagnostics.
+4. Freeze a revised causal rolling protocol with the first-price convention,
+   coordinate remapping, forecast cell probabilities, scoring units and costs.
+   Compare samplers on this same target and report all fixed opportunities.
+5. Address predictive moments and finite economic objectives independently.
+   Propriety alone does not establish integrable log wealth, calibration,
+   economically feasible actions, decision value or profitability.
+
+The next implementation can test these mathematical contracts on synthetic
+cells, but cannot count as market confirmation while gate 1 remains unresolved.
