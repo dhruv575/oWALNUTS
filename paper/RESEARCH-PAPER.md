@@ -15,6 +15,12 @@ A model-versus-EWMA comparison does not identify a sampler advantage. The final
 paper needs same-target inference comparisons at matched accuracy or matched
 resource budgets, in addition to predictive and economic comparisons.
 
+WALNUTS itself is established prior work: Bou-Rabee, Carpenter, Kleppe and Liu,
+JMLR 27(113), 2026. That paper already includes stochastic-volatility experiments.
+We must not claim originality for the base sampler or merely applying it to SV.
+The working methods prose is in METHODS.md; novelty remains to be established
+for our sequential workflow, validated implementation or application findings.
+
 ## Provisional abstract structure
 
 Introduce the need to update latent-state uncertainty under streaming data.
