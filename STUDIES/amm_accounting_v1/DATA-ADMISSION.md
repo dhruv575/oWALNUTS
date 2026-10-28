@@ -145,6 +145,19 @@ plans, requests, successful responses and terminal failures are preserved in
 HTTP error body; the second did. Any revised range/chunking is a new declared
 engineering acquisition, not a retry hidden within these attempts.
 
+A separately declared partitioned acquisition retained that exact 4,096-block
+range, comparing 256-block with 128-block partitions. A coverage test proved
+both partitions cover the same integers without overlap or gaps. The first
+256-block query received the same code-35 rejection. Four fixed diagnostic
+queries then tested no topic filter, Mint/Burn alternatives, Mint alone and Burn
+alone over that identical 256-block interval. The initial diagnostic used the
+default Python user agent and received non-JSON `error code: 1010` bodies;
+a separately recorded diagnostic with the acquisition's explicit user agent
+received code 35 for all four variants. Thus this evidence does not isolate a
+topic-filter problem. All raw responses and exact executed sources are retained.
+No diagnostic acquired event data. Further acquisition needs a separately
+reviewed transport/provider change rather than repeated identical requests.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
