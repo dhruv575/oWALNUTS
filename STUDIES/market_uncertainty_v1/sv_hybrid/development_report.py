@@ -9,6 +9,7 @@ import numpy as np
 
 def run(root):
     root=Path(root)
+    periods=json.loads((root/'PLAN.json').read_bytes()).get('periods',32)
     final=json.loads((root/'FINAL.json').read_bytes())
     if len(final['receipts']) != 8:
         raise ValueError('Incomplete development ledger')
@@ -25,7 +26,7 @@ def run(root):
                     raise ValueError('Development array changed')
                 with np.load(data,allow_pickle=False) as stored:
                     full,compact=stored['full'],stored['compact']
-                    if full.shape!=(2000,35) or compact.shape!=(2000,4) or not np.isfinite(full).all() or not np.isfinite(compact).all():
+                    if full.shape!=(2000,periods+3) or compact.shape!=(2000,4) or not np.isfinite(full).all() or not np.isfinite(compact).all():
                         raise ValueError('Invalid development arrays')
                     arrays.append((full.copy(),compact.copy()))
         summary=dict(method=method,planned=4,completed=len(arrays),chains=chains)
@@ -37,7 +38,7 @@ def run(root):
                             tail_ess=float(np.asarray(az.ess(a,method='tail',prob=(.05,.95))).item()),
                             mean_mcse=float(np.asarray(az.mcse(a,method='mean')).item()))
             summary['compact']={name:metrics(compact[:,:,i]) for i,name in enumerate(('mu','log_sigma','beta','h_last'))}
-            latent=[metrics(full[:,:,i]) for i in range(3,35)]
+            latent=[metrics(full[:,:,i]) for i in range(3,periods+3)]
             summary['innovations']=dict(max_rhat=max(v['rhat'] for v in latent),min_bulk_ess=min(v['bulk_ess'] for v in latent),min_tail_ess=min(v['tail_ess'] for v in latent))
         summaries.append(summary)
     return dict(scope='Local literal development only; no independent posterior reference, predictive accuracy or market-performance claim',

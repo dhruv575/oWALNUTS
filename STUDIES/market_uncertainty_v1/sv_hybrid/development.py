@@ -35,20 +35,21 @@ def verify(root):
             raise ValueError('Development source drift')
 
 
-def worker(root, method, chain):
+def worker(root, method, chain, periods=32):
     verify(root)
     start = time.monotonic()
-    y = np.resize(np.array([.001,-.002,.0005,0.,.003]),32)
-    model = Target(y,np.ones((32,1)),np.empty((32,0)),np.ones(32,dtype=bool),rho=.95,nu=5.,priors=Priors(2*np.log(.005),1.,np.log(.2),.5,.002,.03))
-    q = np.r_[model.priors.mu_mean,model.priors.log_sigma_mean,0.,np.zeros(32)]
-    rng = np.random.default_rng(2026102807000000+100*method+chain)
+    y = np.resize(np.array([.001,-.002,.0005,0.,.003]),periods)
+    model = Target(y,np.ones((periods,1)),np.empty((periods,0)),np.ones(periods,dtype=bool),rho=.95,nu=5.,priors=Priors(2*np.log(.005),1.,np.log(.2),.5,.002,.03))
+    q = np.r_[model.priors.mu_mean,model.priors.log_sigma_mean,0.,np.zeros(periods)]
+    seed_base = 2026102807000000 if periods == 32 else 2026102808000000
+    rng = np.random.default_rng(seed_base+100*method+chain)
     function = (sweep,sweep_interwoven)[method]
     budget = EvaluationBudget(2000000)
     result = dict(method=method,chain=chain,status='running',completed_sweeps=0)
     full, compact = [], []
     try:
         for step in range(3000):
-            if time.monotonic()-start > 100:
+            if time.monotonic()-start > (100 if periods == 32 else 300):
                 raise TimeoutError('Development chain time cap')
             q,_ = function(model,q,rng,budget=budget)
             result['completed_sweeps'] = step+1
@@ -68,12 +69,12 @@ def worker(root, method, chain):
     return 0 if result['status']=='complete' else 1
 
 
-def campaign(root):
+def campaign(root, periods=32):
     root.mkdir(exist_ok=False)
     write(root/'PLAN.json',dict(scope='Fixed literal development fixture; no market data, target qualification or cross-hardware speed claim',
-                              warmup=1000,retained=2000,chains=4,methods=['original','interwoven'],
-                              seeds=[2026102807000000+100*m+c for m in range(2) for c in range(4)],
-                              internal_chain_cap_seconds=100,external_chain_cap_seconds=120,
+                              periods=periods,warmup=1000,retained=2000,chains=4,methods=['original','interwoven'],
+                              seeds=[(2026102807000000 if periods == 32 else 2026102808000000)+100*m+c for m in range(2) for c in range(4)],
+                              internal_chain_cap_seconds=100 if periods == 32 else 300,external_chain_cap_seconds=120 if periods == 32 else 320,
                               sources={str(p):sha(p) for p in sources()}))
     receipts = []
     for method in range(2):
@@ -81,7 +82,7 @@ def campaign(root):
             start = time.monotonic()
             with (root/f'm{method}-c{chain}.log').open('wb') as log:
                 try:
-                    completed = subprocess.run([sys.executable,str(Path(__file__).resolve()),str(root),'--worker',str(method),str(chain)],stdout=log,stderr=subprocess.STDOUT,timeout=120)
+                    completed = subprocess.run([sys.executable,str(Path(__file__).resolve()),str(root),'--worker',str(method),str(chain),'--periods',str(periods)],stdout=log,stderr=subprocess.STDOUT,timeout=120 if periods == 32 else 320)
                     receipt = dict(method=method,chain=chain,exit_code=completed.returncode)
                 except subprocess.TimeoutExpired:
                     receipt = dict(method=method,chain=chain,external_timeout=True)
@@ -96,5 +97,6 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('root',type=Path)
     parser.add_argument('--worker',nargs=2,type=int)
+    parser.add_argument('--periods',type=int,choices=(32,250),default=32)
     args=parser.parse_args()
-    raise SystemExit(worker(args.root,*args.worker) if args.worker else campaign(args.root.resolve()))
+    raise SystemExit(worker(args.root,*args.worker,args.periods) if args.worker else campaign(args.root.resolve(),args.periods))

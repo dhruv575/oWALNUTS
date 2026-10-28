@@ -103,3 +103,45 @@ The raw archive is also in the private S3 research bucket. `S3-VERIFIED.json`
 records its exact object version, full-byte restore SHA-256 and verification
 of all 39 sealed members read from that restored archive. Local evidence is
 retained; no active experiment dependency was removed.
+
+## Full-window literal readiness: mixed results
+
+The separate T250 check completed all eight chains at the same 1000 warmup /
+2000 retained schedule. Fresh declared development seeds and a new source
+manifest were used. Each chain had a 300-second internal / 320-second external
+limit. Existing T32 evidence was preserved rather than overwritten.
+
+| Endpoint | Original bulk ESS | Interwoven bulk ESS |
+|---|---:|---:|
+| mu | 892.8 | 4306.6 |
+| log_sigma | 2649.4 | 2776.2 |
+| beta | 4530.5 | 5133.1 |
+| h_last | 1391.4 | 1365.9 |
+
+Worst innovation Rhat was 1.00865 original versus 1.01252 interwoven; minimum
+innovation bulk ESS was 846.2 versus 894.4. Better mu mixing did not translate
+into a uniformly better chain. No convergence verdict is introduced here.
+
+The unchanged predictive evaluator completed GH64/128 numerical checks for
+all six fixed labels/methods. Log-density MCSE for labels [-.005,0,.005] was
+[.01239,.00297,.01043] original versus [.01274,.00308,.01042] interwoven.
+Thus predictive precision did not materially improve on this literal fixture.
+The two samplers' log-density estimates differ by approximately .02304,
+-.00421 and .01679 nats respectively. No independent reference was fitted, so
+neither is declared correct by agreement or by a favorable diagnostic.
+
+Sampling used the default local NumPy 2.5.2 runtime. The first predictive call
+failed before scoring because that runtime lacked Numba. A separate Python
+3.11 environment could not resolve the pinned SciPy requirement (Python >=3.12).
+A new isolated Python 3.14 environment successfully installed the existing AWS
+numerical-package pins: NumPy 2.4.6, SciPy 1.18.1, Numba .67.0, llvmlite .49.0,
+and ArviZ .23.4. Only postprocessing was rerun; no chain was rerun or discarded.
+The dependency list and failed-call log are preserved. Local platform/interpreter
+differences still preclude treating these timings as AWS benchmark results.
+
+All results are in `evidence/interwoven-t250-development-20261028/`. The verified
+32.3 MB local archive retains 56 sealed files, including full draws, predictive
+arrays, logs, exact executed sources and analysis sources. Independent-reference
+corroboration and matched predictive precision remain required before a
+sampler-superiority claim. This evidence argues against choosing only mu as
+the headline efficiency endpoint.
