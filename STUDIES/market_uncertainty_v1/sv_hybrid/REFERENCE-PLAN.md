@@ -1,6 +1,6 @@
 # Independent literal-reference readiness
 
-Status: reviewed design, not executed. This check follows the completed T250
+Status: frozen reference attempt launched; no result yet. This check follows the completed T250
 development fixture and precedes any market sampler-performance campaign.
 `literal_reference.py` implements the bounded run and full-trace retention.
 Four local tests cover manifest drift, fixed budgets, named-axis extraction and
@@ -26,6 +26,16 @@ sampling; the actual fit's saved groups still require inspection afterward.
 Do not compete with E72's four reserved worker groups. Run under the existing
 resource supervisor only after a group is released and its ownership drains,
 or after the campaign terminates. Preserve E72's resource caps unchanged.
+
+Attempt01 was admitted on released cores 8–11 after job 04's terminal ownership
+receipt and an exhausted E72 queue were verified. Remaining campaign workers
+occupied disjoint cores 0–7. Supervisor PID 11575 and worker PID 11579 were
+observed live after launch; recheck process identities rather than relying on
+these historical PIDs. ADMISSION.json and LAUNCH.json preserve the checks.
+Three pre-launch checks stopped on protected system/SSH process environments;
+no scientific worker had started. The admission scan now excludes older/user-
+external processes and verified privilege-separated SSH helpers. The frozen
+sampling worker, seeds, target and limits were not changed.
 
 ## Target and evidence bindings
 
