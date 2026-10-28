@@ -42,6 +42,13 @@ absolute log-density discrepancy on the 22 passing references was 0.018963.
 The substantial improvement remains insufficient for full posterior readiness.
 See the [complete market results](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKET-RESULTS.md).
 
+A separately frozen fourfold-effort panel subsequently passed all 24 fits, with
+735.90 seconds of campaign time versus 188.85 seconds. All paired density/PIT
+MCSE estimates decreased, while absolute reference discrepancies improved in
+17/24 and 18/24 pairs respectively. This establishes a diagnostic/cost result
+on exposed windows, not universal predictive improvement or algorithm superiority.
+See the [precision results](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-PRECISION-RESULTS.md).
+
 Source: [block derivation and development](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-PATH.md)
 and [fixed market plan](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKET-PLAN.md).
 
@@ -54,3 +61,10 @@ comparative claim needs a declared evaluation design, fair computational costs,
 and adequate references; any economic claim additionally needs feasible
 execution and accounting. Established blocking and elliptical-slice techniques
 are controls, not a claimed new inference algorithm.
+
+A separate [tail analysis](../STUDIES/amm_accounting_v1/LOG-WEALTH-OBJECTIVE.md)
+derives an obstruction to unbounded posterior-predictive log-wealth objectives
+under the current log-normal innovation-scale prior. The derivation still needs
+independent mathematical review. Passing sampler diagnostics would not resolve
+this integrability issue; pointwise density/CDF evaluation and economic moment
+existence are different requirements.

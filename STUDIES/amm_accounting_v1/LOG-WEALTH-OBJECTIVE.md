@@ -99,3 +99,20 @@ posterior integrability. Possible future alternatives include bounded utility,
 quantile-based objectives, or a separately justified model/prior change; none
 has been admitted here. Changing the prior would change the inferential target
 and would require new validation rather than silently reusing existing claims.
+
+## Binding the derivation to implementation
+
+The no-flow target in `../market_uncertainty_v1/sv_prototype/target.py` uses
+Gaussian priors directly on log_sigma and standardized latent innovations.
+Its physical path starts with stationary variance sigma^2/(1-rho^2) and uses
+innovation scale sigma thereafter. The equivalent physical-path density has
+the sigma^(-T) factor used above; omitting this Jacobian would give the wrong
+tail bound. The factor does not overcome exp(sigma^2/8).
+
+`../predictive_value_diagnostic_v1/predictive_density.py` integrates the next
+state as h_next=mu+rho(h_last-mu)+sigma*z. Its observation scale is exp(h_next/2),
+which supplies precisely the conditional scale moment in the derivation.
+Finite observed-label density and CDF calculations are distinct functionals;
+this obstruction does not by itself invalidate those preserved pointwise
+predictive calculations. It does invalidate inferring finite unbounded utility
+moments from their successful numerical checks or from finite posterior samples.
