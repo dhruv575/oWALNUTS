@@ -18,6 +18,30 @@ The [Ethereum JSON-RPC specification](https://ethereum.org/developers/docs/apis/
 provides block and log retrieval. Availability on two calls does not establish
 provider completeness, archive access, historical coverage or future service.
 
+## Fixed pair snapshot preparation and transport failures
+
+`pair_snapshot.py` fixes the earlier finalized block and resolves the USDC/WETH
+pair through the Ethereum v2 factory. The factory address is corroborated by
+the [official deployments table](https://developers.uniswap.org/docs/protocols/v2/deployments);
+token addresses/decimals are corroborated by the
+[Uniswap token list](https://github.com/Uniswap/default-token-list/blob/main/src/tokens/mainnet.json).
+The intended checks cover returned pair factory, token ordering, decimals,
+reserve ABI bounds, LP supply, runtime bytecode fingerprint, protocol-fee
+recipient and unchanged pinned block hash. A bytecode fingerprint is not
+independent compiler equivalence. Two ABI controls pass, including integer
+precision above the floating-point exact range and rejection of address padding.
+
+Both the initial attempt and one separately recorded transport-recovery attempt
+failed on the first request with SSL WRONG_VERSION_NUMBER. Neither received a
+chain response or acquired pool observations; no per-attempt request retries
+occurred. The second attempt followed the first transport failure and is not
+presented as an independent scientific replication. Both plans, attempted
+requests and terminal errors are preserved in `evidence/pair-snapshot-20261028/`.
+No proxy was reported by urllib's proxy discovery, and certificate verification
+was not disabled. Pool identity/state acquisition remains unverified; no event
+panel has been admitted. Diagnose transport or use a documented provider before
+proceeding, preserving these failures in the engineering history.
+
 ## Next bounded engineering acquisition
 
 Use a declared pool and fixed finalized block range before inspecting swap
