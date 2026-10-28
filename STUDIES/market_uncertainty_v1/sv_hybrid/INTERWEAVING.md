@@ -63,3 +63,38 @@ diagnostics, counted evaluations and complete end-to-end costs. Compare the
 old and interwoven prototypes on the same fixture without discarding failures.
 Choose scientific seeds and budgets only after readiness, then freeze them.
 Do not occupy cores assigned to the current E72 campaign.
+
+## Completed literal local development check
+
+The fixed T32 fixture completed all eight chains: four original and four
+interwoven, each with 1000 warmup and 2000 retained sweeps. Both methods use the
+same physical starting state and target; their declared seed schedules are
+disjoint. Methods/chains ran sequentially on the local workstation. All internal
+100-second and external 120-second per-chain bounds were respected; no retries
+or replacement chains occurred. AWS E72 was not co-scheduled with this work.
+
+| Endpoint | Original bulk ESS | Interwoven bulk ESS | Original mean MCSE | Interwoven mean MCSE |
+|---|---:|---:|---:|---:|
+| mu | 559.0 | 3416.3 | 0.02752 | 0.01039 |
+| log_sigma | 1368.8 | 2412.9 | 0.01235 | 0.00925 |
+| beta | 4853.7 | 5040.6 | 0.00000456 | 0.00000446 |
+| h_last | 1555.2 | 2336.7 | 0.01379 | 0.01072 |
+
+Original worker times ranged 5.94–6.08 seconds; interwoven 6.46–6.89 seconds.
+These include sampling and output compression but exclude process imports;
+outer receipts preserve the additional overhead. They are not AWS timing or
+end-to-end forecast latency. Full diagnostics include all 32 innovations:
+maximum Rhat was 1.00775 original and 1.00541 interwoven. Compact endpoint
+means and every chain's evaluation counts are in the saved summary.
+
+This supports proceeding to readiness on a larger target, not a superiority
+claim: one literal fixture has no independent posterior reference or predictive
+functional evaluation. Existing scientific failures remain unchanged.
+
+Metadata are in `evidence/interwoven-development-20261028/`. The local archive
+contains all raw arrays, logs and exact executed source copies; 39 sealed files
+were read back from the archive and hash-verified. The receipt gives its path
+and SHA-256. The first reporting call failed because local ArviZ 1.3.0 requires
+an explicit tail-ESS probability; the corrected report explicitly uses
+(0.05,0.95). Sampling was not repeated or changed. This local diagnostic
+environment differs from the pinned AWS environment and is labelled as such.
