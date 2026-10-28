@@ -191,3 +191,13 @@ diagnostics were reproduced locally. The cap-2 chains reached a much more extrem
 latent-volatility region than the earlier failed methods. This supports a
 coordinate-coupling diagnosis but still lacks a qualified independent reference;
 see `STUDIES/amm_accounting_v1/evidence/bounded-rescaled-20261028`.
+
+The first independent slice control in rescaled coordinates still failed
+fourteen of fifteen physical diagnostics at every cap. A separately declared
+Gaussian-reference recentering, chosen from an analytical linear tilt and
+corrected by the exact density ratio, subsequently passed every physical
+diagnostic at all three caps. Its maximum coordinate-mean discrepancies against
+the frozen NUTS traces were 1.774/2.517/1.457 combined MCSEs. All failed and
+successful chains are retained. This supplies limited independent support for
+the three stress fits, without selecting a cap or implying market validity;
+see `STUDIES/amm_accounting_v1/evidence/bounded-centered-slice-20261028`.

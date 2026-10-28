@@ -11,6 +11,7 @@ class NativeBounded:
     callback: object
     dimension: int
     snapshot_sha256: str
+    evaluator: object
 
     def value_gradient(self,q):
         q=np.ascontiguousarray(q,dtype=np.float64)
@@ -65,4 +66,4 @@ def compile_target(y,cap,rho=.95):
             for j in range(dim):g[j]=np.nan
         return value
     names=['mu','eta','beta']+[f'z[{i}]' for i in range(n)]
-    return NativeBounded(owalnuts.from_cfunc(callback,dim,parameter_names=names),callback,dim,digest)
+    return NativeBounded(owalnuts.from_cfunc(callback,dim,parameter_names=names),callback,dim,digest,evaluate)
