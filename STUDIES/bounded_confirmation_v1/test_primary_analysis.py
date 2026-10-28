@@ -12,6 +12,28 @@ def constant_summary(scores, n, block, seed):
 
 
 class PrimaryAnalysisTests(unittest.TestCase):
+    def test_real_full_budget_bootstrap_known_monthly_answers(self):
+        calendar, reports = GateTests().fixture()
+        # Binary-exact constants give analytical percentile answers for every
+        # resample. Opposite monthly decisions expose accidental month pooling.
+        for report in reports:
+            september = report['fixture']['month'] == '2025-09'
+            inference = 1 / 256 if september else 1 / 32
+            for comparison, value in zip(report['comparisons'],
+                                         [.125, .0625] if september else [-.125, .0625]):
+                comparison.update(model=value, inference=inference, total=value + inference)
+        result = analyze(calendar, reports)
+        self.assertFalse(result['predictive_confirmation'])
+        self.assertFalse(result['predictive_functional_equivalence'])
+        for month, expected in zip(result['months'],
+                                   [[.125, .0625, 1 / 256], [-.125, .0625, 1 / 32]]):
+            self.assertEqual(month['median'], expected)
+            for block in month['blocks']:
+                self.assertEqual(block['replicates'], 20000)
+                self.assertEqual(block['mean'], expected)
+                self.assertEqual(block['lower_9875'], expected)
+                self.assertEqual(block['interval_95'], [[x, x] for x in expected])
+
     def test_incomplete_denominator_never_bootstraps(self):
         calendar, reports = GateTests().fixture()
         with patch('primary_analysis.summarize') as bootstrap:
