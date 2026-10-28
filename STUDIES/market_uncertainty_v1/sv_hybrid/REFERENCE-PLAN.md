@@ -2,6 +2,11 @@
 
 Status: reviewed design, not executed. This check follows the completed T250
 development fixture and precedes any market sampler-performance campaign.
+`literal_reference.py` implements the bounded run and full-trace retention.
+Three local tests cover manifest drift, fixed budgets and named-axis extraction.
+These are runner checks only; compilation, sampling and Linux supervision for
+this new entry point have not yet been exercised. A frozen path/hash manifest,
+seed audit, runtime binding and available four-core allocation are still needed.
 Do not compete with E72's four reserved worker groups. Run under the existing
 resource supervisor only after a group is released and its ownership drains,
 or after the campaign terminates. Preserve E72's resource caps unchanged.
