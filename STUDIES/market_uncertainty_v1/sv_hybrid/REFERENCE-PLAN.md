@@ -1,6 +1,7 @@
 # Independent literal-reference readiness
 
-Status: frozen reference attempt launched; no result yet. This check follows the completed T250
+Status: completed and analyzed; results and limitations are in INTERWEAVING.md.
+The complete trace archive has a restore-verified S3 copy. This check follows the completed T250
 development fixture and precedes any market sampler-performance campaign.
 `literal_reference.py` implements the bounded run and full-trace retention.
 Four local tests cover manifest drift, fixed budgets, named-axis extraction and
@@ -9,12 +10,11 @@ clean-exit/process-drain test pass in the pinned AWS runtime. Review corrected a
 phase/core mapping mismatch before sampling; the first test-discovery invocation
 also failed because the shell expanded a wildcard. Both failed and passing logs
 are preserved in `evidence/literal-reference-readiness-20261028/`.
-These are runner checks only; compilation and sampling for this new entry point
-have not yet been exercised. Runtime prefix, package versions and binary hashes
+Compilation and sampling subsequently completed under the frozen manifest.
+Runtime prefix, package versions and binary hashes
 are checked against the bound runtime inventory. A frozen path/hash manifest,
 seed audit and runtime binding have now passed on AWS. The frozen manifest is
-preserved in the readiness evidence directory; sampling remains unstarted while
-E72 occupies the four worker groups. The audit checked 99,206 tracked seed-bearing
+preserved in the readiness evidence directory. The audit checked 99,206 tracked seed-bearing
 source/metadata files no larger than 1 MB for exact integer reuse of 704028000
 and 704028001, with no matches. It also records reviewed disjoint study ranges.
 The compressed scan manifest preserves file hashes. This establishes the stated
@@ -22,7 +22,7 @@ external-seed audit scope, not a proof of independence of internal PRNG streams.
 The deterministic `test_reference_storage.py` also passes in the pinned AWS
 runtime: posterior, warmup, latent and divergence arrays survive a NetCDF
 save/reload with their groups intact. This tests serialization, not nutpie
-sampling; the actual fit's saved groups still require inspection afterward.
+sampling; the actual fit's saved groups were subsequently inspected and verified.
 Do not compete with E72's four reserved worker groups. Run under the existing
 resource supervisor only after a group is released and its ownership drains,
 or after the campaign terminates. Preserve E72's resource caps unchanged.
