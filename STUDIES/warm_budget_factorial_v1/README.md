@@ -36,6 +36,15 @@ seconds. Their terminal receipts are in `evidence/partial-20261028/`; the full
 raw campaign is still on AWS and not yet sealed. The queue automatically
 started February K1600 jobs 09 and 11 while January jobs 05 and 07 continued.
 This checkpoint is not a final 12-path or paired-budget result.
+
+At the later 09:36 UTC observation, January K1600 jobs 05 and 07 had reached
+their unchanged 3600-second deadlines. Both were terminated with exit -15 and
+verified process drain; monitor receipts are preserved alongside the completed
+December receipts. Their last started ticks were 928 and 927, which are not
+claims of completed update counts. Missing terminal candidate summaries and
+unreached score spots must remain in the final denominator. The queue started
+December K400 jobs 00 and 02; no cap extension or failed-path replacement was
+performed. The campaign as a whole remains active.
 Twelve complete monthly paths compare K400 and K1600 at two seed schedules
 on each of the three E66 panels. The full plan fixes data, targets, diagnostics,
 reporting, retained points and resource limits before market sampling.
