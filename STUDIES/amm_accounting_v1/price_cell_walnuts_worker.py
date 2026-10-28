@@ -35,10 +35,11 @@ def run(index,out):
     trace=az.from_dict(posterior=dict(mu=samples[:,:,0],log_sigma=samples[:,:,1],beta=samples[:,:,2],z=samples[:,:,3:3+n],u=samples[:,:,3+n:]))
     summary=az.summary(trace,round_to='none');summary.to_csv(out/'coordinates.csv')
     if len(summary)!=3+2*n:raise ValueError('Coordinate omission')
-    divergent=int(result.divergent.sum())
+    if result.divergent.shape!=(4,6000) or result.depth.shape!=(4,6000):raise ValueError('Diagnostic shape')
+    divergent=int(result.divergent[:,2000:].sum())
     finite=bool(np.isfinite(summary[['r_hat','ess_bulk','ess_tail']].to_numpy()).all())
     passed=finite and bool((summary.r_hat<=1.01).all() and (summary.ess_bulk>=400).all() and (summary.ess_tail>=400).all()) and divergent==0
-    report=dict(index=index,n=n,width=width,dimensions=3+2*n,diagnostic_pass=passed,divergences=divergent,max_depth_hits=int((result.depth>=10).sum()),elapsed_seconds=time.monotonic()-start,target_calls=result.target_calls,scope='Synthetic WALNUTS sampling readiness; no market or economic claim')
+    report=dict(index=index,n=n,width=width,dimensions=3+2*n,diagnostic_pass=passed,divergences=divergent,warmup_divergences=int(result.divergent[:,:2000].sum()),max_depth_hits=int((result.depth[:,2000:]>=10).sum()),elapsed_seconds=time.monotonic()-start,target_calls=result.target_calls,scope='Synthetic WALNUTS sampling readiness; no market or economic claim')
     (out/'REPORT.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report),flush=True)
 
 
