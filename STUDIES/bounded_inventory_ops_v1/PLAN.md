@@ -1,0 +1,13 @@
+# Bounded inventory functional: operational draft
+
+This prospective arithmetic plan reuses sealed E64 posterior draws and saved baseline fits for all 4,368 origins and 24 reference checkpoints. No acquisition, sampling, model changes, period selection or chain filtering is proposed. The scientific owner separately fixes the bounded payoff, integration checks, observed costs, comparisons and reporting. Source and method review plus literal readiness are prerequisites to any empirical evaluation.
+
+The operational shape is the validated E65 envelope: twelve persistent candidate shards on cores 0-11, 364 canonical month-major origins per shard; a full process drain barrier; twelve reference shards with two checkpoints each; then three monthly reports and metadata-only final accounting. All 27 jobs and all planned slots survive missing output or failure. Arrays and input hashes are preserved, and candidate functional arrays at reference checkpoints are reused rather than numerically integrated again.
+
+Proposed fixed bounds are 30 seconds per candidate origin and 120 seconds per reference origin; phase caps 2,700 / 600 / 120 seconds for candidates / references / reports; 3,600 seconds internal and 3,720 external; aggregate 8 GiB RSS, 1 GiB per worker, and 1 GiB new outputs. The output cap is sampled every two seconds and again after drainage. Five-second utilization logging covers owned processes, including orchestration overhead, normalized to twelve reserved cores. Numerical failures are retained with no order adaptation, retry, or outcome-dependent scope change.
+
+Scientific-owner local literal timings were approximately 3.07 seconds for 1,600 draws and 26.32 seconds for 16,000 draws. Multiplying by 364 and two tasks per shard suggests about twenty minutes before host-specific overhead; this is a planning estimate, not measured AWS performance. Twelve simultaneous full-size cold-cache literal workers must validate memory, numerical agreement and complete per-worker paths on the unchanged pinned runtime. That readiness runs only after E66 drains. Its fixed schema and source-only bundle will be bound before launch.
+
+Three new bootstrap seeds are reserved in BOOTSTRAP-RESERVATIONS.json. Exact integer inventories cover E61 through E66, including E66's full derived native schedules; a separate bounded source/metadata token scan found no collision. No RNG was initialized in the reservation step. Earlier frozen evidence and ongoing E66 source/runtime remain unchanged.
+
+AWS stays running between experiments under parent lifecycle control. The supervisor terminates and drains only its owned processes; it never powers off the host.

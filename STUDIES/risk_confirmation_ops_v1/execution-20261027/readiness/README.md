@@ -1,0 +1,9 @@
+# Four-reference literal readiness
+
+The single authorized engineering run completed all eight stages in 74.6516 seconds. It retained 32 native updates, four independent-engine arrays of shape (4,4000,4), the 1,600/16,000-draw tail path, and complete three-calendar partial-evidence accounting. These are deliberately reused development seeds and fixed literals, not fresh scientific evidence.
+
+All launched groups exited zero and drained. Aggregate sampled peak RSS was 8,201,457,664 bytes, with 31,805,616 output bytes, below 12 GiB and 2 GiB. Four simultaneous full-reference jobs took 22.398 to 22.489 seconds and peaked below 2.020 GB each. Their generated-library source and captured-copy paths were distinct and contained; captured SHA-256 identities matched. All 98 shared SDK build-product metadata rows and eight selected common-product hashes stayed unchanged. Immutable source/runtime admission and the authorized manifest also held.
+
+Both independent reviewers cleared the readiness/source evidence before the conditionally authorized production launch. All 935 readiness file hashes and 44 frozen source hashes were verified after download. The parent workspace retains the full archive at C:/dev/owalnuts/target/risk-confirmation-readiness-20261027.tar.gz, 20,864,480 bytes, SHA-256 acfd6e9456af99d066bee1d3bfa936a438224314ab2e2f67d9aa72c04577daff. This directory preserves 25 exact metadata files, including SDK inventories, fixture logs, terminal status and monitor records; COPIED-CHECKSUMS.sha256 binds those copies.
+
+The earlier source03 isolated local fixture check failed because two tests assumed a sibling native-helper checkout. Source04 only corrected explicit fixture dependency-root plumbing; all 13 packaged scientific/acquisition fixtures passed before the single remote readiness run. No failed remote run or sampler retry was hidden. AWS remains running under the user's explicit preference.
