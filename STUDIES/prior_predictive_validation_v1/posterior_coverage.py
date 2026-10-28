@@ -13,10 +13,10 @@ NAMES = ('mu', 'log_sigma', 'beta', 'h_last')
 LEVELS = (.5, .9, .95)
 
 
-def marginal(draws, truth):
+def marginal(draws, truth, retained=400):
     draws = np.asarray(draws)
-    if draws.shape != (4, 400, 4) or not np.isfinite(draws).all():
-        raise ValueError('Expected finite 4-chain 400-draw compact array')
+    if retained not in (400, 4000) or draws.shape != (4, retained, 4) or not np.isfinite(draws).all():
+        raise ValueError('Expected finite four-chain compact array at declared retained count')
     truth = np.asarray(truth)
     if truth.shape != (4,) or not np.isfinite(truth).all():
         raise ValueError('Invalid generating truth')

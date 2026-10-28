@@ -43,3 +43,28 @@ the quantile interpolation method is explicitly `linear`. Two analytic-grid
 tests check interval membership, outside truths, ties and invalid shape.
 The earlier development invocation had a syntax error, produced no result and
 was corrected before any analysis output was generated.
+
+## Independent-reference corroboration
+
+`reference_coverage.py` compares all eight originally fixed reference spots,
+using their sealed 4x4000 draws and the corresponding 4x400 candidate draws.
+All 32 parameter/spot pairs are available. No additional reference fits were
+selected or run in response to the coverage finding.
+
+Candidate and reference interval membership agree for all 32 comparisons at
+50% and all 32 at 95%. At 90%, one of 32 differs: stream 4, tick 32, log_sigma
+has truth -2.21222, candidate lower bound -2.18983 and reference lower bound
+-2.23017. Both 95% intervals contain that truth. The discrepancy is retained;
+no quantile-MCSE qualification rule is introduced.
+
+Beta coverage agrees at every level for all eight reference spots. Both methods
+miss the generating beta in stream 0, tick 1 at 95%: truth 0.00133113 exceeds
+the candidate upper bound 0.00113282 and reference upper bound 0.00119001.
+Their posterior means are 0.00046976 and 0.00047085. This particular miss is
+therefore not unique to the warm sampler. Eight spots cannot resolve the
+all-history coverage pattern or establish posterior exactness.
+
+Full paired intervals and means are preserved in
+`execution-20261027/REFERENCE-COVERAGE-SUPPLEMENT.json`. Run the reference
+script with the same packet root and a new output path to reproduce it. The
+three analytic tests now additionally require explicit reference draw counts.

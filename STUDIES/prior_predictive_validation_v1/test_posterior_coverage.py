@@ -19,6 +19,12 @@ class CoverageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             marginal(np.zeros((1600, 4)), [0]*4)
 
+    def test_reference_draw_count_is_explicit(self):
+        values = np.zeros((4, 4000, 4))
+        with self.assertRaises(ValueError):
+            marginal(values, [0]*4)
+        self.assertEqual(marginal(values, [0]*4, retained=4000)[0]['ties'], 16000)
+
 
 if __name__ == '__main__':
     unittest.main()
