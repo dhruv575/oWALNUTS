@@ -95,6 +95,23 @@ sample. Reproduce offline with Python and pycryptodome 3.23.0:
 
 ## Requirements for broader acquisition
 
+`liquidity_math.py` adds a separate integer arithmetic model based on the
+[upstream v2 pair implementation](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol),
+reviewed 2026-10-28. It handles protocol liquidity issuance before LP mint/burn,
+the initial 1,000 locked LP tokens, donation-inclusive balances, floor division,
+integer square roots and checked uint256 operations. Five hand-computable tests
+cover dilution, fee switching, donations, rounding, invalid mint/burn and overflow.
+The existing swap-only event auditor remains strict and does not silently use
+this arithmetic to admit unsupported events.
+
+This is not a compiled-contract equivalence result or deployed-bytecode match.
+Burn assumes ordinary transfers debit the stated amounts; taxes, rebases and
+balance-changing callbacks are outside this helper. Broader replay must acquire
+pre-event balances, supply, kLast, feeTo history and LP transfers. It must also
+distinguish initial mint-to-zero from burns and ordinary transfers to zero;
+recipient address alone does not determine a supply change. Observed liquidity
+events and contract-level differential checks remain required.
+
 Use a declared pool and fixed finalized block range before inspecting swap
 activity. Resolve and verify factory/pair/token identities and bytecode;
 retrieve token decimals and initial reserve/supply state at the preceding
