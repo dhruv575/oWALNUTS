@@ -201,3 +201,15 @@ the frozen NUTS traces were 1.774/2.517/1.457 combined MCSEs. All failed and
 successful chains are retained. This supplies limited independent support for
 the three stress fits, without selecting a cap or implying market validity;
 see `STUDIES/amm_accounting_v1/evidence/bounded-centered-slice-20261028`.
+
+The first rescaled native WALNUTS panel completed four of nine fits and aborted
+five on nonfinite callback evaluations. A captured finite proposal exposed
+underflow in physical-scale reconstruction. A direct log-space formula passed
+arbitrary-precision and independent Stan checks, followed by native parity.
+Its separately seeded fixed nine-case WALNUTS follow-up passed every physical
+diagnostic and all eighteen comparisons against the frozen NUTS/slice references,
+with no divergences, retained depth hits or recoverable target failures. Maximum
+mean discrepancies were 3.886 and 3.539 combined MCSEs against NUTS and slice.
+Both failed and successful panels are preserved. This is limited synthetic
+implementation evidence, not predictive value or a precision-matched speed claim;
+see `STUDIES/amm_accounting_v1/evidence/bounded-logspace-walnuts-20261028`.
