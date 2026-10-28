@@ -1,5 +1,15 @@
 # Queue after the reference cost panel
 
+**Priority override after rolling completion:** the six-path comparator and
+bounded analysis are complete. Preserve and independently verify the sealed
+full archive, then finish its S3 restore check. The exact-tie propriety issue
+now takes priority over more sampling of the unchanged target. Strengthen and
+review the normalizer bounds, justify a finite-resolution observation model or
+prior repair, and validate the changed target independently before admitting
+new posterior-fidelity or economic experiments. Do not discard tied windows or
+add arbitrary jitter. The older queue below records the preceding plan; its
+storage, API and rolling-comparator preparation steps have been completed.
+
 The fixed cold-fit workload favors NUTS over the blocked specialist. Do not use
 further tuning of that exposed panel to imply a general algorithm advantage.
 The unresolved algorithm question is the actual WALNUTS rolling-update workload,

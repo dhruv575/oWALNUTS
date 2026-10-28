@@ -61,6 +61,15 @@ and [fixed market plan](../STUDIES/market_uncertainty_v1/sv_hybrid/BLOCKED-MARKE
 
 ## Model-admissibility warning discovered after the diagnostic studies
 
+The six-path compiled NUTS rolling comparator subsequently completed all paths
+and 48 scores. Its path times were 1.33--2.93 times the corresponding WALNUTS
+K400 times, but it restarted 1,000 warmup transitions on every update whereas
+WALNUTS reused adaptation. None of its 48 retained update fits passed all 254
+coordinate gates; ten divergences were recorded across completed updates.
+This is numerical implementation evidence, not an accuracy-matched algorithm
+claim. The [full result](../STUDIES/market_uncertainty_v1/sv_hybrid/ROLLING-MARKET-RESULTS.md)
+retains paired scores, failures of diagnostic gates and the model limitation below.
+
 The [exact-tie derivation](../STUDIES/amm_accounting_v1/POSTERIOR-PROPRIETY.md)
 indicates that the current no-flow SV posterior is improper on repeated exact
 observations despite proper priors. An audit found 155 affected January windows
