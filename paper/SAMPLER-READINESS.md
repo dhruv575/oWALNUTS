@@ -3,6 +3,44 @@
 These studies extend the evidence ledger, not the existing 44-comparison figure
 bundle. They do not establish an original algorithm contribution or profitability.
 
+## Finite-resolution candidate: synthetic validation only
+
+The exact-return target's tie pathology motivated a different observation
+model: a joint latent log-price process observed through finite cells. Its
+likelihood is a joint event probability bounded by one, so proper priors give
+a finite positive posterior normalizer under the stated observation mechanism.
+This argument does not establish that exchange transaction prices are rounded
+measurements of a continuous latent price. Historical data semantics remain
+an admission gate, and the former target's empirical claims do not transfer.
+
+An independent analytic implementation and Stan autodiff agreed on sixteen
+finite density/gradient fixtures through 503 dimensions. A T1 synthetic
+posterior was compared with 74,311 independent prior-rejection draws. Both
+NUTS and a separately implemented elliptical-slice/conditional-price method
+passed its diagnostic and mean-agreement checks. This is a single reference
+fixture, not simulation-based calibration.
+
+On four deterministic stress fixtures (T=12 or 250, log-price cell widths
+0.001 or 0.00001), NUTS passed all coordinate diagnostics. The first independent
+method failed its rejection cap in fifteen of sixteen chains. A valid tighter
+cell envelope removed these execution failures, but all four fits still failed
+core-coordinate diagnostics. Separating scalar hyperparameter updates and
+16-innovation elliptical blocks then passed three of four fits, including both
+T250 cases. The narrow-cell T12 case still flags mu, log_sigma and z[11].
+No mean discrepancy in the blocked comparison exceeded the fixed descriptive
+threshold of four combined standard errors (maximum 3.900 across the panel).
+
+This supplies limited independent-method support on two long synthetic
+fixtures. It is not proof of general posterior fidelity, a fair efficiency
+ranking, market calibration, decision value or profitability. The failures
+remain in the denominator. Revisions used new declared seeds and did not extend
+failed chains. These are exposed development cases, not untouched confirmation.
+
+Sources: [model specification](../STUDIES/amm_accounting_v1/FINITE-RESOLUTION-MODEL.md),
+[synthetic kernel checks](../STUDIES/amm_accounting_v1/PRICE-CELL-CONTRACT-RESULTS.md),
+[blocked comparison](../STUDIES/amm_accounting_v1/evidence/price-cell-slice-v3-20261028/RESULTS.md),
+[observation audit](../STUDIES/amm_accounting_v1/OBSERVATION-SEMANTICS.md).
+
 ## Warm-start effort tradeoff
 
 The paired E72 study planned 12 monthly paths: three months, two external seed

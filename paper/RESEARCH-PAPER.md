@@ -9,6 +9,13 @@ diagnostic passes on these inputs cannot establish posterior validity; prior
 tables retain their historical numerical results with this additional limitation.
 See [posterior propriety](../STUDIES/amm_accounting_v1/POSTERIOR-PROPRIETY.md).
 
+A separate finite-price-cell candidate now has an analytic propriety argument
+and synthetic implementation/reference checks, including independent-method
+agreement on two T250 fixtures. One short synthetic fixture still fails the
+independent sampler's diagnostics. This is a changed target with unresolved
+market observation assumptions; it does not repair or inherit the old market
+results. See [updated sampler readiness](SAMPLER-READINESS.md).
+
 Status: manuscript preparation, not submission-ready. Required by Dhruv on
 2026-10-28. Working title: **Fast Bayesian volatility updates: predictive gains,
 decision sensitivity, and the limits of market-making evidence**.
