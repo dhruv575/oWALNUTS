@@ -149,3 +149,32 @@ the headline efficiency endpoint.
 The T250 raw archive also has a private S3 copy: the exact version and restored
 SHA-256 are in `S3-VERIFIED.json`. All 56 sealed members were read and checked
 from the downloaded version. Original local arrays remain preserved.
+
+## Independent T250 literal reference
+
+The declared four-chain reference completed 2,000 warmup and 4,000 retained
+draws per chain, with zero divergences. All 254 coordinate diagnostics passed
+the declared Rhat/ESS flags. Its saved trace was reloaded and verified to
+contain posterior and warmup draws and both diagnostic groups. The 22.75-second
+outer duration includes compilation and serialization on AWS; it is not a
+cross-hardware speed comparison with local specialist runs.
+
+All eight compact specialist-minus-reference mean differences were retained.
+They were at most about one specialist mean MCSE in magnitude. This descriptive
+agreement is useful corroboration, not an equivalence test or proof of fidelity.
+The original specialist had no flagged coordinates; the interwoven specialist
+retained its z[116] diagnostic flag.
+
+| Fixed label | Original minus reference log density | Interwoven minus reference log density | Reference MCSE |
+|---|---:|---:|---:|
+| -.005 | -.015424 | .007612 | .003498 |
+| 0 | .002574 | -.001638 | .000829 |
+| .005 | -.010604 | .006183 | .002769 |
+
+Specialist MCSE remains as reported above; no independence-based combined
+interval or selected-label winner is used. All six predictive contrasts are
+available. Evidence is in `evidence/literal-reference-result-20261028/`; a
+verified 93.8 MB local archive preserves 41 files, including full draws,
+compiler artifacts and analysis. Matched-hardware market comparisons,
+predictive precision/cost evaluation and longer-path calibration remain
+necessary before algorithm-superiority claims.
