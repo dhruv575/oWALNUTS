@@ -55,8 +55,9 @@ Before any decision evaluation, declare quote units, strictly positive wealth,
 cost treatment, feasible LP entry/exit, information timing and the fee-revenue
 model. Include cash, matched initial-inventory buy-and-hold, and any appropriate
 fixed LP control. Verify posterior integrability rather than assuming it from
-sample finiteness. This objective is a way to pose a finite research question;
-it is not a shortcut around economic identification or profitability evidence.
+sample finiteness. Conditional log utility alone does not pose a finite
+posterior-predictive research question for this prior, as shown below. It is
+not a shortcut around economic identification or profitability evidence.
 
 ## Posterior obstruction for the current scale prior
 
@@ -99,6 +100,36 @@ posterior integrability. Possible future alternatives include bounded utility,
 quantile-based objectives, or a separately justified model/prior change; none
 has been admitted here. Changing the prior would change the inferential target
 and would require new validation rather than silently reusing existing claims.
+
+### Explicit one-sided lower bounds
+
+The argument does not require cancellation of signed integrals. On the compact
+set above choose B >= 1 with |beta| <= B, and write R=beta+S*epsilon,
+S=exp(h_next/2), with epsilon an independent standard Student-t(5) variable.
+Let c=P(epsilon>=1)=P(epsilon<=-1)>0. For S>=2B, the event epsilon>=1 implies
+R>=S/2; epsilon<=-1 similarly implies -R>=S/2. Hence, for any p>0,
+
+    E[(R_+)^p | S,beta] >= c*(S/2)^p * 1{S>=2B},
+    E[((-R)_+)^p | S,beta] >= c*(S/2)^p * 1{S>=2B}.
+
+The conditional Gaussian identity gives E[S^p | h_T,mu,sigma] =
+exp(p*m_next/2 + p^2*sigma^2/8). Removing S<2B subtracts at most (2B)^p.
+The same posterior lower bound therefore proves divergence of **every positive
+absolute moment**, and of both one-sided p moments, conditional on posterior
+propriety. Tonelli applies throughout because these integrands are nonnegative.
+This strengthens the first-moment obstruction; it does not establish posterior
+propriety, nor an independently reviewed theorem.
+
+For 0<w<1, g(R)=log((1-w)+w*exp(aR)) satisfies g(R)>=log(1-w) and
+g(R)>=log(w)+aR. Thus its negative part is bounded and its positive part has
+infinite expectation. At w=0 it is identically zero; at w=1 it equals aR and
+has no expectation. The apparent preference for any nonzero interior weight
+under an infinite objective is not an economic ranking.
+
+Bounded measurable losses remain integrable under a proper predictive law.
+That observation permits designing a different decision question, but does
+not license truncating these moments and labeling the result expected profit.
+See `BOUNDED-DECISION-DESIGN.md` for the remaining design requirements.
 
 ## Binding the derivation to implementation
 
