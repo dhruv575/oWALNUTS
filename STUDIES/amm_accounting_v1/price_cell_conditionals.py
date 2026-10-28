@@ -22,11 +22,26 @@ def sweep(x,h,beta,initial,lower,upper,rng,max_attempts=10000):
     if not np.isfinite(lower).all() or not np.isfinite(upper).all() or not np.all((x>lower)&(x<upper)):raise ValueError('Interior state')
     attempts=0
     for i in range(len(x)):
+        envelope=cell_log_envelope(i,x,h,beta,initial,lower[i],upper[i])
         for _ in range(max_attempts):
             value=float(rng.uniform(lower[i],upper[i]));attempts+=1
             if not lower[i]<value<upper[i]:raise FloatingPointError('Rounded endpoint proposal')
             uniform=float(rng.uniform())
             if uniform<=0:raise FloatingPointError('Zero uniform')
-            if np.log(uniform)<log_acceptance(value,i,x,h,beta,initial):x[i]=value;break
+            log_ratio=log_acceptance(value,i,x,h,beta,initial)-envelope
+            if log_ratio>1e-10:raise FloatingPointError('Conditional envelope violation')
+            if np.log(uniform)<min(0.,log_ratio):x[i]=value;break
         else:raise RuntimeError('Conditional rejection attempt cap')
     return x,attempts
+
+
+def cell_log_envelope(index,x,h,beta,initial,lower,upper):
+    """Product of factor maxima over the cell, relative to global peaks."""
+    x=np.asarray(x,dtype=float);h=np.asarray(h,dtype=float)
+    if x.ndim!=1 or h.shape!=x.shape or not 0<=index<len(x):raise ValueError('Shape/index')
+    if not np.isfinite([lower,upper,beta,initial]).all() or not lower<upper:raise ValueError('Cell')
+    modes=[(initial if index==0 else x[index-1])+beta];scales=[h[index]]
+    if index+1<len(x):modes.append(x[index+1]-beta);scales.append(h[index+1])
+    modes=np.asarray(modes);distance=np.abs(np.clip(modes,lower,upper)-modes)
+    with np.errstate(divide='ignore'):a=2*np.log(distance)-np.log(5.)-np.asarray(scales)
+    return float(-3*np.logaddexp(0.,a).sum())
