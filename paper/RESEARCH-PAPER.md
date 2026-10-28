@@ -72,6 +72,11 @@ The [sampler readiness supplement](SAMPLER-READINESS.md) retains the newer
 warm-budget runtime failures, market diagnostic failures and narrowly scoped
 blocked-path development evidence separately from the existing figure bundle.
 
+The [accounting readiness supplement](ACCOUNTING-READINESS.md) records the fixed
+observed mint/burn panel and its conditional integer reconstruction. It keeps
+transport failures, unvalidated contract/token assumptions and economic
+identification gaps separate from the sampler results.
+
 The current reproducible table/figure bundle and its limitations are documented
 in [README.md](README.md). It contains all 44 completed density, tail-loss and
 bounded-decision comparisons; ongoing experiments are not silently included.
