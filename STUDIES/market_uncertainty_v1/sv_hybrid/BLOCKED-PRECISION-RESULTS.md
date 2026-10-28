@@ -27,7 +27,10 @@ algorithm, decision-value claim or profitability claim follows.
 All reports and comparison rows are in `evidence/blocked-precision-result-20261028`.
 The reporting archive matched remote SHA-256
 `5a177b572e502d4fc0d68d04ae7fa8bffbe2f4baffc84b3992eef86ac720d337`.
-Full raw sampling arrays remain on AWS pending complete archival verification.
+The full raw archive was verified locally and after restoring exact S3 version
+`8j46Ll2FHZ2PvJhO6QSdcjJzmoUUeQi_`. Checks covered all 96 chain-array hashes,
+24 inputs and 31 frozen sources, as well as the whole-archive SHA-256. Receipts
+are preserved alongside the reports; raw AWS copies remain available.
 
 Next: establish a fair same-target computational comparison and then a declared
 untouched predictive evaluation. Preserve fixed economic-identification and

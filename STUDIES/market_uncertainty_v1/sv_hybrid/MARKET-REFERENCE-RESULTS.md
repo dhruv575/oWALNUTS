@@ -37,4 +37,8 @@ profitability remain unproven.
 The complete reporting archive matched remote SHA-256
 `bbe11ab1658ff304632e2052e2a36e96b1fc40aec49d595981c0fb7585dfae81`.
 All reports are retained in `evidence/market-reference-result-20261028`.
-Full traces and compiled-source provenance remain on AWS pending archive sealing.
+The full 4,431,480,889-byte archive was streamed off AWS and verified against
+the sealed 587-file manifest, including all 24 full traces and 24 draw files.
+Its SHA-256 is `c15b7ef141ca7345d3d70e96ff571a4c95f5db9625d0faf5a5e0384ba122cf35`.
+S3 upload is underway; no S3 restore verification is claimed yet. Original AWS
+evidence remains intact.
