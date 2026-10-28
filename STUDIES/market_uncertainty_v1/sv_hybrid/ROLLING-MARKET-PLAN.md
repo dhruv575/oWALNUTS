@@ -1,12 +1,15 @@
 # Re-adapting compiled NUTS rolling comparator
 
 Status: frozen after seven queue, seed and adapter checks in the pinned AWS
-runtime; not launched because disk admission is outstanding. Plan SHA-256:
+runtime; launched after verified S3 restoration and duplicate reclamation. Plan SHA-256:
 `3faefcb89e13950b7c469134e098956638b832b84488313a2d9b23cb90fee02c`.
 All 17,292 external seeds had no collisions in 1,357 primary historical source
 records. The current seed-declaration file was explicitly excluded from that
 historical scan and its hash retained; raw numerical histories were not
-universally audited. No market sampling has occurred under this plan.
+universally audited. The bounded supervisor started as PID 25127 on 2026-10-28.
+Admission had 10,014,281,728 free bytes after reclaiming 5,982,800,906 verified
+redundant bytes; restoration and cleanup receipts are preserved with the evidence.
+Results remain pending.
 
 Evaluate the same complete December, January and February rolling paths as E72,
 with two fresh external seed replicates per month. Use the identical 250-return
