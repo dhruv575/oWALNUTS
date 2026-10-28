@@ -54,6 +54,16 @@ would be a separately declared experiment preserving this attempt.
 
 ## Comparisons and interpretation
 
+`reference_report.py` prepares all-coordinate summaries and keeps unavailable
+methods and all eight compact mean contrasts. Three tests cover missing evidence,
+path corruption, retained diagnostic flags and numerical summaries. A local
+readiness call against the original T250 arrays reconstructed terminal paths for
+both methods and retained all 254 coordinates each: zero original and one
+interwoven coordinate triggered the declared diagnostic flags. The reference
+was deliberately absent in this reporting check, so every reference contrast
+remained unavailable. This is not a new sampling result. Predictive comparisons
+still require the separate evaluator after a completed independent fit.
+
 Report mu, log_sigma, beta, h_last and all 250 innovation diagnostics, including
 rank Rhat, bulk/tail ESS, per-chain divergences and mean MCSE. Report posterior
 means, standard deviations and 5/50/95 percent quantiles for all three methods.
