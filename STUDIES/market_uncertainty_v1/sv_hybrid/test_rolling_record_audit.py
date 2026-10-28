@@ -3,10 +3,22 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from rolling_record_audit import audit_lane
+from rolling_record_audit import audit_lane, verify_packed
 
 
 class Integrity(unittest.TestCase):
+    def test_packed_shape_dtype_bytes_and_extra_members(self):
+        import numpy as np
+        a=np.arange(8,dtype=np.float64).reshape(2,4)
+        leaf=dict(array_key='x',shape=[2,4],dtype=a.dtype.str,sha256=hashlib.sha256(a.tobytes()).hexdigest())
+        verify_packed(dict(nested=[leaf]),dict(x=a))
+        with self.assertRaisesRegex(ValueError,'identity'):
+            verify_packed(leaf,dict(x=a.reshape(4,2)))
+        with self.assertRaisesRegex(ValueError,'identity'):
+            verify_packed(leaf,dict(x=a.astype(np.float32)))
+        with self.assertRaisesRegex(ValueError,'Unreferenced'):
+            verify_packed(leaf,dict(x=a,y=a))
+
     def fixture(self, root, journal=True):
         (root/'records').mkdir()
         row=dict(tick=1,current_index=250,label_index=251,window_start=1,window_stop=251,
