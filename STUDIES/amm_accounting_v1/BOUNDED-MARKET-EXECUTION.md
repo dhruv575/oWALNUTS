@@ -47,6 +47,13 @@ Archive completed batches and verify exact-version S3 restores before reclaiming
 their remote traces. Never delete active inputs or unverified evidence. A disk
 admission failure delays later fixed batches; it does not reduce their scope.
 
+Pre-launch implementation detail: each method runs in its own monitored child
+process, limited to400seconds,4GiB RSS and96MiB output within the cell's budget.
+Drain a failed/timed-out method before attempting the other method on the same
+four-core group. This prevents the first method from consuming the entire cell
+budget and silently suppressing its comparator. Record both method receipts;
+resource failures remain failed slots, not replacement attempts.
+
 Report setup, sampling, serialization/diagnostic and prediction costs separately.
 This screen is not precision-matched performance evidence. Compare each method
 to all three frozen baselines and preserve the exact model/inference-score
