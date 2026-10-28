@@ -98,3 +98,8 @@ and SHA-256. The first reporting call failed because local ArviZ 1.3.0 requires
 an explicit tail-ESS probability; the corrected report explicitly uses
 (0.05,0.95). Sampling was not repeated or changed. This local diagnostic
 environment differs from the pinned AWS environment and is labelled as such.
+
+The raw archive is also in the private S3 research bucket. `S3-VERIFIED.json`
+records its exact object version, full-byte restore SHA-256 and verification
+of all 39 sealed members read from that restored archive. Local evidence is
+retained; no active experiment dependency was removed.

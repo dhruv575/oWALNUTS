@@ -23,6 +23,15 @@ Updated 2026-10-28. Status requires live verification; this file is not a watche
    controls before running a claimed AMM-profit study. Preserve the negative
    fixed-cost decision results; do not promote an exposed cost-sweep winner.
 
+Comparator preparation: the existing specialist SV prototype now has a
+centered/noncentered interweaving extension. Eleven mathematical/edge tests and
+an eight-chain local T32 development check completed. Mu bulk ESS improved on
+that literal fixture; this is not an oWALNUTS comparison. Next readiness must
+cover the full 250-state target, predictive functionals and independent-reference
+agreement before any scientific performance campaign. Exact development sources
+and arrays are preserved in a restore-verified S3 archive; see
+`STUDIES/market_uncertainty_v1/sv_hybrid/INTERWEAVING.md`.
+
 Paper checkpoint `f64777bf` contains all 44 fixed completed-study comparisons
 and reproducible figures. Notification frequency remains approximately one
 third of the earlier cadence; batch scientific milestones, not routine polls.
