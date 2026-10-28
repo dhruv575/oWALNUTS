@@ -68,6 +68,10 @@ This outline deliberately contains no invented numerical result or novelty claim
 
 ## Submission readiness gates
 
+The current reproducible table/figure bundle and its limitations are documented
+in [README.md](README.md). It contains all 44 completed density, tail-loss and
+bounded-decision comparisons; ongoing experiments are not silently included.
+
 - A defensible original contribution relative to primary literature.
 - Proofs or appropriately scoped empirical claims for algorithm correctness.
 - No outcome-driven tuning presented as confirmation; all failures retained.
