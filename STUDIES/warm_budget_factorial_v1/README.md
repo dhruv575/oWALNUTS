@@ -1,5 +1,12 @@
 # E72: paired warm-budget experiment
 
+The post-run `inventory.py` structurally audits a drained campaign copy against
+its frozen sources and E70 `COMPARISON.json`. It retains all 12 job and 96 spot
+slots, checks contiguous records and retained-array hashes, and refuses an
+undrained receipt. It does not calculate posterior precision or replace the
+full artifact seal/restore audit. Keep this new analysis code outside the live
+campaign directory; it is not part of the already frozen sampling manifest.
+
 Status: running, no scientific conclusion yet. Source frozen at de91b5a6.
 Twelve complete monthly paths compare K400 and K1600 at two seed schedules
 on each of the three E66 panels. The full plan fixes data, targets, diagnostics,
