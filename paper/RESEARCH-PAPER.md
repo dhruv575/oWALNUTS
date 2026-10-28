@@ -97,5 +97,7 @@ bounded-decision comparisons; ongoing experiments are not silently included.
   Profits in the Presence of Fees*, arXiv:2305.14604:
   https://arxiv.org/abs/2305.14604 . Candidate for detailed methods review.
 
-Prior sampler and forecast literature remains to be systematically reviewed;
-this is not a complete related-work section.
+The [related-work draft](RELATED-WORK.md) records verified primary references for
+WALNUTS, elliptical slice sampling and stochastic-volatility interweaving, and
+separates existing methods from still-unproven contribution candidates. Sampler,
+forecast and economic literature still require systematic review.

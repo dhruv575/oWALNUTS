@@ -26,8 +26,11 @@ algorithm-superiority, economic-value or profitability conclusion follows.
 Full per-window reports, reference flags, signed differences and chain receipts
 are retained in `evidence/blocked-market-result-20261028`. The reporting archive
 SHA-256 is `b0c3800c19d7d6cb49d6ddfb6ba11f34b14fda7b20d04b307a8e3ac46598573b`;
-the downloaded bytes matched the remote digest. Raw sampling arrays remain on
-AWS pending the complete archive transfer and verification.
+the downloaded bytes matched the remote digest. The complete 385,000,775-byte
+sampling archive also matched its remote digest; all 96 draw-file receipt hashes,
+24 window hashes and 29 frozen source hashes were verified locally. Its SHA-256
+is `4bfe7341d8e0ec6bc0fe92f7e1b75ed14a7dae17eec27bf0f7528ad42300b92c`.
+S3 transfer is underway; no S3 restore verification is claimed yet.
 
 The next inference question is whether the remaining scale/latent diagnostics
 resolve at a separately declared larger budget, with every window retained.
