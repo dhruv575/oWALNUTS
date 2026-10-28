@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import importlib.util
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -38,6 +39,15 @@ def validate(spec):
             raise ValueError('Source binding drift: '+name)
     if Path(spec['bindings']['worker']['path']).resolve() != Path(__file__).resolve():
         raise ValueError('Worker identity mismatch')
+    runtime = json.loads(Path(spec['bindings']['runtime_inventory']['path']).read_bytes())['runtime']
+    if sys.prefix != runtime['prefix']:
+        raise ValueError('Runtime prefix drift')
+    for name, version in runtime['packages'].items():
+        if importlib.metadata.version(name) != version:
+            raise ValueError('Runtime package drift: '+name)
+    for name, digest in runtime['binaries'].items():
+        if sha(name) != digest:
+            raise ValueError('Runtime binary drift: '+name)
     if spec.get('sampling') != dict(chains=4, draws=4000, tune=2000, cores=4):
         raise ValueError('Fixed sampling schedule required')
     if spec.get('limits') != dict(seconds=900, rss_bytes=4*1024**3, output_bytes=512*1024**2):
@@ -132,7 +142,7 @@ def supervise(manifest, root):
                                str(root/'fit'), '--worker'], cwd=str(root), cap=900,
                               output_root=root, rss_limit=4*1024**3, byte_limit=512*1024**2,
                               log_path=root/'worker.log', output_scan_interval=1,
-                              utilization_path=root/'utilization.jsonl', phase_reserved_cores=4)
+                              utilization_path=root/'utilization.jsonl', phase_reserved_cores={'startup':4})
     write(root/'SUPERVISION.json', receipt)
     return 0 if receipt.get('exit_code')==0 and receipt.get('group_drained') is True else 1
 

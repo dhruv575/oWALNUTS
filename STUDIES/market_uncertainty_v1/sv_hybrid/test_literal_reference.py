@@ -4,22 +4,43 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import numpy as np
 import xarray as xr
 import literal_reference as runner
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_supervisor_contract_and_non_drained_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            manifest=root/'manifest.json'; manifest.write_text('{}')
+            def execute(command, **kwargs):
+                self.assertEqual(kwargs['phase_reserved_cores'], {'startup':4})
+                self.assertEqual(kwargs['cap'],900)
+                self.assertEqual(kwargs['rss_limit'],4*1024**3)
+                self.assertEqual(kwargs['byte_limit'],512*1024**2)
+                self.assertEqual(command[-1],'--worker')
+                return dict(exit_code=0,group_drained=False)
+            spec=dict(bindings=dict(monitor=dict(path='fixture')))
+            with patch.object(runner,'validate',return_value=spec), patch.object(runner,'load',return_value=SimpleNamespace(execute=execute)), patch.object(runner.os,'sched_getaffinity',return_value={0,1,2,3},create=True):
+                self.assertEqual(runner.supervise(manifest,root/'out'),1)
+            self.assertFalse(json.loads((root/'out/SUPERVISION.json').read_bytes())['group_drained'])
+
     def fixture(self, root):
         audit=root/'audit.json'; audit.write_text(json.dumps(dict(status='passed',reserved_seeds=[123,124],collisions=[])))
         source=Path(runner.__file__).resolve()
         binding=dict(path=str(source),sha256=runner.sha(source))
-        return dict(status='frozen_authorized',bindings={k:dict(binding) for k in
+        spec = dict(status='frozen_authorized',bindings={k:dict(binding) for k in
                     ('worker','stan','adapter','capture','monitor','sdk_makefile','runtime_inventory')},
                     sampling=dict(chains=4,draws=4000,tune=2000,cores=4),
                     limits=dict(seconds=900,rss_bytes=4*1024**3,output_bytes=512*1024**2),
                     seed=123,seed_audit=dict(path=str(audit),sha256=runner.sha(audit),reserved_seeds=[123,124]),
                     reference_settings=dict(api_and_target_verified=True,engine_options={}))
+        runtime=root/'runtime.json'
+        runtime.write_text(json.dumps(dict(runtime=dict(prefix=runner.sys.prefix,packages={},binaries={}))))
+        spec['bindings']['runtime_inventory']=dict(path=str(runtime),sha256=runner.sha(runtime))
+        return spec
 
     def test_rejects_source_drift_and_unreserved_initialization(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -3,9 +3,15 @@
 Status: reviewed design, not executed. This check follows the completed T250
 development fixture and precedes any market sampler-performance campaign.
 `literal_reference.py` implements the bounded run and full-trace retention.
-Three local tests cover manifest drift, fixed budgets and named-axis extraction.
-These are runner checks only; compilation, sampling and Linux supervision for
-this new entry point have not yet been exercised. A frozen path/hash manifest,
+Four local tests cover manifest drift, fixed budgets, named-axis extraction and
+the supervisor invocation contract. All four plus the inherited monitor's live
+clean-exit/process-drain test pass in the pinned AWS runtime. Review corrected a
+phase/core mapping mismatch before sampling; the first test-discovery invocation
+also failed because the shell expanded a wildcard. Both failed and passing logs
+are preserved in `evidence/literal-reference-readiness-20261028/`.
+These are runner checks only; compilation and sampling for this new entry point
+have not yet been exercised. Runtime prefix, package versions and binary hashes
+are checked against the bound runtime inventory. A frozen path/hash manifest,
 seed audit, runtime binding and available four-core allocation are still needed.
 Do not compete with E72's four reserved worker groups. Run under the existing
 resource supervisor only after a group is released and its ownership drains,
