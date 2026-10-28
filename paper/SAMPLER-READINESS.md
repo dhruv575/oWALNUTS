@@ -119,6 +119,18 @@ remain intact; model admissibility is an additional, separate requirement.
 
 ## Implications for the manuscript
 
+The first native WALNUTS panel for the candidate finite-price-cell model
+completed all four synthetic fixtures (27 or 503 dimensions). All 1,060
+coordinate diagnostics passed, with zero retained divergences or depth-limit
+hits. All-coordinate mean comparisons against NUTS and the independent
+blocked-slice control had no absolute combined-MCSE discrepancy above four;
+the short narrow-cell slice reference still failed three diagnostics. Original
+reports incorrectly pooled warmup and retained diagnostic events; the saved
+arrays were reanalyzed without resampling and both versions are preserved in
+`STUDIES/amm_accounting_v1/evidence/price-cell-walnuts-20261028`.
+This supports limited synthetic implementation agreement, not general fidelity,
+market observation validity, warm-state correctness, or a speed advantage.
+
 Keep posterior fidelity, prediction, decision value and profitability separate.
 Report the runtime failures and diagnostic failures alongside favorable
 development results. The current windows are development-exposed. Any final
