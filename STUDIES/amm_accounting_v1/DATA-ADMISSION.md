@@ -179,6 +179,19 @@ the failed local attempt is also retained. Transaction receipts, token transfers
 pre-event balances, feeTo and kLast still need acquisition and accounting checks.
 Finding these events does not validate mint/burn arithmetic or protocol dilution.
 
+The fixed three transaction receipts were subsequently acquired from the same
+provider in nine requests / 2.15 seconds. All five discovery logs match receipt
+address, topics, data, block/transaction identities and log indices; receipt
+success and ordered unique log indices were checked. A mismatch-focused test
+rejects altered event data and a different transaction. Exact raw receipts,
+headers and sources are retained in the sibling `receipts-aws/` directory.
+The downloaded 76,299-byte archive has SHA-256
+`3d3c64371e837ab23d6259c27a7da5775779a50e996d9147a8fddb55c80522ff`.
+Local verification matched receipt lists to raw responses and executed source
+hashes. LP Transfer logs are visible, but protocol versus user issuance has not
+yet been validated against feeTo, kLast and pre-event balances. Successful
+receipt acquisition does not resolve those accounting requirements.
+
 Observed swaps support reconstruction under the observed contract and policy.
 Replaying those same swaps unchanged under another fee is not an identified
 demand response. Transaction classification alone cannot label every trader as
