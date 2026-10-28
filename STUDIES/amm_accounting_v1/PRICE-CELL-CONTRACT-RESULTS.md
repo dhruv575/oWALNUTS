@@ -32,3 +32,19 @@ AWS had 30,048 MiB available memory and 8.3 GiB disk available at this check.
 No sampling campaign was running. The next useful compute work is full-target
 synthetic validation, after implementing independently checkable SV derivatives;
 running further unchanged improper-target comparisons would not advance fidelity.
+
+## Full SV extension
+
+`price_cell_sv.py` now supplies the normalized-prior joint log target and all
+analytic gradients in (mu,log_sigma,beta,z,u). Independent direct recurrence and
+SciPy density checks agree for T=1,4,12; central finite differences check every
+coordinate, including drift, innovation scale, stationary initial state and
+latent-price coordinates. Fixtures contain repeated price cells. The full test
+passed locally; the combined six-test suite passed on pinned AWS Python 3.12 in
+3.212 seconds under a 60-second timeout.
+
+`price_cell_sv.stan` is a separately expressed autodiff candidate. It has not yet
+been compiled or compared with the analytic implementation. That comparison,
+including T=250 and broad finite parameter fixtures, is the next gate before
+bounded synthetic sampling. These finite checks are not a global numerical
+stability guarantee or evidence of posterior sampling fidelity.
