@@ -31,3 +31,21 @@ semantics and complete diagnostics across multiple data updates. Declare all
 adaptation costs and keep baseline limitations visible. Do not disable necessary
 adaptation merely to make transition counts appear equal, or call an unsupported
 zero-refinement configuration ordinary NUTS.
+
+## Literal readiness result
+
+The frozen three-fit readiness case completed with the same library object
+reused across all data updates and no mutation of previous model data mappings.
+One initial fit used 1,000 warmup / 200 retained draws; two updates each used
+1,000 warmup / 400 retained draws, four chains and four cores. All recorded
+divergence counts were zero. Compilation took 13.685 seconds; sampling times
+were 0.985, 1.096 and 1.019 seconds. These are literal-fixture observations,
+not a market benchmark or full diagnostic qualification.
+
+The center for each update was the mean of remapped terminal chain states;
+new chains were jittered around it and adaptation restarted. This must not be
+reported as exact chain-state or metric reuse. The input center, full draws,
+warmup traces and source/seed bindings were preserved remotely. Plan and terminal
+receipts are in `evidence/rolling-reuse-readiness-20261028`; full archive
+verification remains outstanding. No phone notification is warranted for this
+engineering-readiness completion alone.
