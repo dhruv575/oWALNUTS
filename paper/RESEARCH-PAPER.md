@@ -1,5 +1,14 @@
 # Research paper: working manuscript and evidence contract
 
+**Curvature/tuning extension (2026-10-29):** 144 calibration and 384 held-out
+fits show roughly 2x lower fixed-budget WALNUTS kernel cost after tuning and
+improved depth-limit qualification in the hardest case. The declared
+multi-target speed advantage over tuned NUTS fails. In the hardest case,
+WALNUTS uses approximately half the target calls, motivating an expensive-
+likelihood hypothesis; an additive-cost projection is not measured evidence.
+Exact reparameterization remains substantially cheaper. See the
+[full extension](../STUDIES/curvature_scaling_v1/results-20261029/REPORT.md).
+
 **Known-truth geometry screen (2026-10-29):** nine target geometries, 432
 held-out fits, and a corrected 96-fit native follow-up identify a narrow
 curved-target precision-per-draw lead. WALNUTS qualifies 8/8 seeds at 3,000

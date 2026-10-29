@@ -1,15 +1,26 @@
 # Active research queue
 
-## Running checkpoint: 2026-10-29 curvature scaling
+## Latest checkpoint: 2026-10-29 curvature scaling and tuning
 
-Protocol frozen at `0a5a5da7`; five test methods passed, including all 13
-native configuration smoke checks. Calibration has 144 fits across six target
-geometries and equal six-configuration searches per engine. Held-out validation
-will have 384 fits, with selected/default WALNUTS and selected/reparameterized
-NUTS. Root `/home/ubuntu/lanes/curvature-scaling-20261029`; calibration supervisor
-PID 366890 at launch. Use live STATUS/FINAL receipts to verify current progress.
-Local-error tuning is exploratory; no validation-driven reselection is allowed.
-See [protocol](../STUDIES/curvature_scaling_v1/PROTOCOL.md).
+Completed 144 calibration and 384 held-out fits, with all process groups drained
+and source freezes intact. See [report](../STUDIES/curvature_scaling_v1/results-20261029/REPORT.md).
+Tuning roughly halves WALNUTS fixed-budget kernel cost; hardest-case qualifying
+ladders improve from 0/8 to 8/8 by avoiding depth saturation. The predeclared
+multi-target speed advantage over tuned NUTS was not achieved. On dimension24,
+curvature5, selected WALNUTS uses about half the target calls while wall time
+remains similar; exact reparameterization is much faster.
+
+Next research question: can reduced evaluation count produce a measured
+advantage on a genuinely expensive curved likelihood? Require a qualified
+posterior reference, fresh seeds, strong NUTS tuning, optimized/collapsed model
+baselines, and interleaved timing. Do not use artificial delays or duplicated
+arithmetic as practical evidence. Freeze that protocol before launch; it has
+not yet been launched. The current additive-cost calculation is a projection.
+
+Root `/home/ubuntu/lanes/curvature-scaling-20261029`. The instance remains
+running. Verify current disk space before any next campaign; evidence backup
+uses streaming to avoid a duplicate EC2 tar. Historical running entries below
+are not live status. S3 remains pending renewal of the expired local AWS login.
 
 ## Latest checkpoint: 2026-10-29 known-truth geometry screen
 
