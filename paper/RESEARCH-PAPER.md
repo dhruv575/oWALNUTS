@@ -1,5 +1,13 @@
 # Research paper: working manuscript and evidence contract
 
+**Exploratory pivot screen (2026-10-29):** 400 independent synthetic replicates
+across hierarchical A/B, revenue A/B, contextual bandits and inventory completed.
+Hierarchical and inventory models improved on some simpler baselines, but Laplace
+retained similar decision quality at much lower observed cost. No tested pivot
+established a WALNUTS-specific advantage; inventory's strict posterior reference
+qualification was poor. These are small, exploratory formulations, not general
+domain-level impossibility results. See [the complete screen](../STUDIES/pivot_screen_v1/results-20261029/REPORT.md).
+
 **Historical confirmation update (2026-10-29):** the 3,050-slot bounded-prior
 September/October study has finished with verified archives. One missing primary
 report and one NUTS diagnostic failure block formal confirmation. Descriptive

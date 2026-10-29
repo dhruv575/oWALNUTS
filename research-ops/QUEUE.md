@@ -1,5 +1,28 @@
 # Active research queue
 
+## Latest checkpoint: 2026-10-29 four-pivot screen
+
+All 400 planned synthetic replicates completed in 203.49 seconds on the existing
+instance; main source identity and all 3,853 archived evidence members verified.
+See [results](../STUDIES/pivot_screen_v1/results-20261029/REPORT.md). Hierarchical
+A/B and inventory retain modeling interest, but cheap Laplace inference captures
+the observed benefit. Revenue A/B shows little separation, and logistic UCB
+beats sampled Thompson policies in this short-horizon screen. No candidate yet
+establishes a WALNUTS-specific decision/computational advantage. Inventory's
+strict reference qualification is inadequate (NUTS 17/100, WALNUTS 26/100).
+
+Next work should specify a narrow, independently motivated follow-up before any
+larger campaign; do not simply scale this exposed screen or tune until Laplace
+loses. No follow-up campaign has been launched. The instance remains running.
+The completed historical confirmation also failed its frozen success rules;
+see the bounded-confirmation final report. Entries below are historical and
+must not be treated as live process status.
+
+Storage: verified local raw archive `target/pivot-screen-evidence-v1.tar.gz`,
+SHA256 `796c1c1260b2e4b27f5611379468ad9c384984590cbc3829b480d817798ef38f`.
+EC2 originals remain at `/home/ubuntu/lanes/pivot-screen-20261029`. S3 upload is
+pending renewal of the expired local `owalnuts` AWS login; no evidence reclaimed.
+
 Updated 2026-10-28. Status requires live verification; this file is not a watcher.
 
 1. **Running: specialist market-window corroboration.** Root
