@@ -1,5 +1,22 @@
 # Active research queue
 
+## Latest checkpoint: 2026-10-29 known-truth geometry screen
+
+Completed nine-geometry calibration and held-out screen, IID/Laplace controls,
+16 update streams, and 96 corrected native follow-up fits. See
+[report](../STUDIES/geometry_precision_v1/results-20261029/REPORT.md).
+Curved banana geometry gives a precision-per-draw lead, but stronger native
+NUTS controls prevent a broad computational-win claim. Original adapter
+failures are preserved and corrected, not counted as algorithm failures.
+
+Next reviewed research question: does the precision lead persist across
+curvature/dimension with fresh seeds, strong native mass-matrix baselines,
+and an exact reparameterization control? Specify the bounded protocol before
+launch. No larger application campaign is justified by this result. The
+instance remains running; completed entries below are historical. Raw evidence
+is retained remotely and in the verified local archive; S3 remains pending
+renewal of the previously expired local AWS login.
+
 ## Latest checkpoint: 2026-10-29 four-pivot screen
 
 All 400 planned synthetic replicates completed in 203.49 seconds on the existing

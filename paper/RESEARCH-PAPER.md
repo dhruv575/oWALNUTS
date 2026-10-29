@@ -1,5 +1,14 @@
 # Research paper: working manuscript and evidence contract
 
+**Known-truth geometry screen (2026-10-29):** nine target geometries, 432
+held-out fits, and a corrected 96-fit native follow-up identify a narrow
+curved-target precision-per-draw lead. WALNUTS qualifies 8/8 seeds at 3,000
+draws, versus 1/8, 5/8, and 6/8 for three NUTS configurations. Larger budgets
+qualify all method ladders. Stronger native NUTS controls remove the clear
+total-cost advantage; this is not an AMM or uniqueness result. See the
+[full report](../STUDIES/geometry_precision_v1/results-20261029/REPORT.md),
+including preserved adapter failures and warm-continuation negatives.
+
 **Exploratory pivot screen (2026-10-29):** 400 independent synthetic replicates
 across hierarchical A/B, revenue A/B, contextual bandits and inventory completed.
 Hierarchical and inventory models improved on some simpler baselines, but Laplace

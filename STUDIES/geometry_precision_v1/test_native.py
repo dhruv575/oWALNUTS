@@ -5,6 +5,14 @@ from native_check import Native,sample,CONFIGS
 
 
 class NativeTests(unittest.TestCase):
+    def test_nonfinite_proposals_are_recoverable_in_both_abis(self):
+        owner=Native(Target('banana'))
+        status,lp,g,other,h=owner.values(np.full(8,1e200))
+        self.assertEqual(status,1)
+        self.assertEqual(other,-np.inf)
+        self.assertTrue(np.isfinite(h).all())
+        self.assertEqual(owner.counter[1],2)
+
     def test_abi_densities_gradients_and_counters(self):
         t=Target('banana');owner=Native(t)
         for q in t.initial():

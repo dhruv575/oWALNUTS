@@ -40,7 +40,10 @@ class Native:
             counts=numba.carray(user,(2,),dtype=numba.types.float64);counts[0]+=1
             q=numba.carray(qp,(d,));g=numba.carray(gp,(d,));value,gradient=core(q,kind,P)
             for i in range(d):g[i]=gradient[i]
-            if not np.isfinite(value) or not np.isfinite(gradient).all():counts[1]+=1;return np.nan
+            if not np.isfinite(value) or not np.isfinite(gradient).all():
+                counts[1]+=1
+                for i in range(d):g[i]=0.
+                return -np.inf
             return value
         self.nuts_logp=nuts_logp;self.expand=expand;self.walnuts_logp=walnuts_logp
         starts=iter(target.initial());self.initial_calls=0

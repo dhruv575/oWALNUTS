@@ -35,3 +35,14 @@ Seed base 675000000, config stride 100000, replicate stride 1000, budget offsets
 This is a selected-target exploratory follow-up, not independent validation of
 a broad geometry class. The banana has an exact Gaussian reparameterization;
 even a positive outcome does not establish an application advantage.
+
+## Adapter correction, 2026-10-29
+
+The first native run is retained as `native-v1` with its original `native-source`.
+Its WALNUTS wrapper incorrectly returned NaN for overflowing proposals, which is
+a fatal ABI error; NUTS returned a recoverable status. The corrected wrapper
+returns negative infinity and a finite zero gradient, per the WALNUTS raw target
+contract (`src/walnutpie.rs`). A regression test exercises both rejection paths.
+`native-v2` repeats all 96 cases and seeds from `native-source-v2`; it is a bug
+correction rerun, not independent replication. No tuning or success gates change.
+The original 17 failed executions must not be attributed to the algorithm.
