@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -67,6 +68,28 @@ def trim(folder):
           removed=[str(p.relative_to(LANE)) for p in remove], completed=True))
 
 
+def reclaim_runtime_cache(folder):
+    """Discard only per-job disposable caches after archived process drain."""
+    from archive_batch import drained, sha, write
+    drained(folder, int(folder.name[-3:]))
+    receipt = read(folder / 'ARCHIVE-VERIFIED.json')
+    if not receipt or receipt.get('exact_version_restore_verified') is not True or not receipt.get('version_id'):
+        raise ValueError('Archive required before cache reclamation')
+    for name, field in [('PLAN.json','plan_sha256'),('RAW-MANIFEST.json','manifest_sha256')]:
+        if sha(folder / name) != receipt[field]:
+            raise ValueError('Archive binding drift')
+    if (folder / 'CACHE-CLEANUP.json').exists():
+        return
+    roots = [p for p in folder.rglob('runtime-cache') if 'runtime-cache' not in p.relative_to(folder).parts[:-1]]
+    for p in roots:
+        if p.is_symlink() or not p.is_dir() or not p.resolve().is_relative_to(folder.resolve()):
+            raise ValueError('Unsafe cache root')
+    for p in roots:
+        shutil.rmtree(p)
+    write(folder / 'CACHE-CLEANUP.json', dict(completed=True, version_id=receipt['version_id'],
+          removed=[str(p.relative_to(LANE)) for p in roots], scope='Disposable isolated runtime caches; excluded from raw archive by original packer'))
+
+
 def action(mode, batch, payload):
     from archive_batch import pack, admit, reclaim
     if not 0 <= batch < 255:
@@ -116,6 +139,7 @@ def action(mode, batch, payload):
             raise ValueError('Partial cleanup requires review')
         if not state['trimmed']:
             trim(folder)
+        reclaim_runtime_cache(folder)
         review = CACHE / f'confirmation-{batch:03d}-controller-review.tar.gz'
         with tarfile.open(review, 'w:gz') as tar:
             for p in sorted(folder.rglob('*')):

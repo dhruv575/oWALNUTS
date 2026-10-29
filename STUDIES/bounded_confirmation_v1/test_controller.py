@@ -86,6 +86,16 @@ class ControllerTests(unittest.TestCase):
                 sampler.write_bytes(b'raw'); controller_remote.trim(folder)
                 self.assertFalse(sampler.exists())
                 self.assertTrue(json.loads((folder/'CONTROLLER-TRIM.json').read_text())['completed'])
+                cache = folder/'job-0/runtime-cache'; cache.mkdir()
+                (cache/'disposable').write_text('compiled cache')
+                plan.write_bytes(b'changed')
+                with self.assertRaises(ValueError): controller_remote.reclaim_runtime_cache(folder)
+                self.assertTrue(cache.exists())
+                plan.write_bytes(b'plan')
+                controller_remote.reclaim_runtime_cache(folder)
+                self.assertFalse(cache.exists())
+                self.assertTrue(plan.exists())
+                controller_remote.reclaim_runtime_cache(folder)
 
 
 if __name__ == '__main__': unittest.main()
