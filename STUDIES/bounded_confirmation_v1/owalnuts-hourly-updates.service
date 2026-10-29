@@ -1,0 +1,14 @@
+[Unit]
+Description=oWALNUTS hourly Agent Comms progress consultation
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+User=ubuntu
+UMask=0077
+ExecStart=/home/ubuntu/lanes/unified-readiness-20261027/installation02/work/env/bin/python /home/ubuntu/.cache/owalnuts-transfer/hourly_updates.py
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=90
