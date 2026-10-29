@@ -46,3 +46,9 @@ connection recovery, record `blocked` and exit rather than bypassing a gate. It 
 phone notifications or claim completion of the broader research goal. Monitor
 credentials, its live process, and evidence periodically. It ends after all
 255 archives and compact local reviews are preserved, without unsealing scores.
+
+Recovery also covers SCP transport failures. A restart skips only a contiguous
+prefix of locally verified batches: local archive/version bindings and control
+hashes are checked, and the final skipped batch's remote archive identity and
+cleanup receipts must agree. This avoids recopying all prior archives after a
+connection interruption. Partial or inconsistent evidence still stops recovery.

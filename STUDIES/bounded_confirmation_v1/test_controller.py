@@ -3,13 +3,27 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import Mock, patch
-from controller import next_action, transfer_spec, BUCKET, remote
+from controller import next_action, transfer_spec, BUCKET, remote, copy_review, resume_index
 import controller_remote
 
 
 class ControllerTests(unittest.TestCase):
+    def test_copy_transport_failure_is_recoverable(self):
+        with patch('controller.subprocess.run', side_effect=subprocess.CalledProcessError(255, 'scp')):
+            with self.assertRaises(ConnectionError): copy_review('/safe/archive', Path('local'))
+        with patch('controller.subprocess.run', side_effect=subprocess.CalledProcessError(1, 'scp')):
+            with self.assertRaises(subprocess.CalledProcessError): copy_review('/safe/archive', Path('local'))
+
+    def test_resume_does_not_trust_marker_without_bound_records(self):
+        with tempfile.TemporaryDirectory() as d, patch('controller.STATE', Path(d)):
+            self.assertEqual(resume_index(), 0)
+            folder = Path(d) / 'batch-000-evidence'; folder.mkdir()
+            (folder / 'LOCAL-VERIFICATION.json').write_text('{}')
+            with self.assertRaises((KeyError, FileNotFoundError)): resume_index()
+
     def test_connection_failure_never_blindly_retries_mutation(self):
         for result in [Mock(returncode=255, stdout=''),
                        Mock(returncode=1, stdout='{"error_type":"BlockingIOError"}')]:

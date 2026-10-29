@@ -1,5 +1,6 @@
 """Persistent local coordinator; credentials stay local, research stays on EC2."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -85,12 +86,54 @@ def transfer_spec(client, packed, batch, upload=None):
     return spec
 
 
+def resume_index():
+    """Skip only a contiguous prefix with intact local archive bindings."""
+    next_batch = 0
+    last = None
+    for batch in range(255):
+        destination = STATE / f'batch-{batch:03d}-evidence'
+        marker = destination / 'LOCAL-VERIFICATION.json'
+        if not marker.exists():
+            break
+        local = json.loads(marker.read_text())
+        folder = destination / f'batch-{batch:03d}'
+        receipt = json.loads((folder / 'ARCHIVE-VERIFIED.json').read_text())
+        if (local['batch'] != batch or local['version_id'] != receipt['version_id']
+                or local['archive_sha256'] != receipt['sha256']
+                or receipt.get('exact_version_restore_verified') is not True):
+            raise ValueError('Local resume binding mismatch')
+        for name, field in [('PLAN.json', 'plan_sha256'), ('RAW-MANIFEST.json', 'manifest_sha256')]:
+            if hashlib.sha256((folder / name).read_bytes()).hexdigest() != receipt[field]:
+                raise ValueError('Local resume control drift')
+        next_batch, last = batch + 1, receipt
+    if last:
+        previous = remote('status', next_batch - 1)
+        if previous['live'] or not previous['cleaned'] or not previous['trimmed']:
+            raise ValueError('Previous batch not safely reclaimed')
+        for key in ['sha256', 'version_id', 'plan_sha256', 'manifest_sha256']:
+            if previous['verified'][key] != last[key]:
+                raise ValueError('Remote resume binding mismatch')
+    return next_batch
+
+
+def copy_review(source, local):
+    try:
+        subprocess.run(['scp', *OPTIONS, f'{HOST}:{source}', str(local)],
+                       check=True, capture_output=True, timeout=180)
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode == 255:
+            raise ConnectionError('SCP unavailable; reconcile before retry') from None
+        raise
+    except subprocess.TimeoutExpired:
+        raise ConnectionError('Review copy timed out; reconcile before retry') from None
+
+
 def run():
     import boto3
     from import_review import run as import_review
     session = boto3.Session(profile_name='owalnuts', region_name='us-east-2')
     sts, s3 = session.client('sts'), session.client('s3')
-    for batch in range(255):
+    for batch in range(resume_index(), 255):
         while True:
             if (STATE / 'STOP').exists():
                 event(state='stopped_at_safe_boundary', batch=batch)
@@ -114,8 +157,7 @@ def run():
             else:
                 result = remote('finish', batch)
                 local = STATE / f'batch-{batch:03d}-review.tar.gz'
-                subprocess.run(['scp', *OPTIONS, f"{HOST}:{result['review']}", str(local)],
-                               check=True, capture_output=True, timeout=180)
+                copy_review(result['review'], local)
                 destination = STATE / f'batch-{batch:03d}-evidence'
                 if not destination.exists():
                     import_review(local, destination, batch)
