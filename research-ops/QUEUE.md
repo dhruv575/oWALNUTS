@@ -1,5 +1,16 @@
 # Active research queue
 
+## Running checkpoint: 2026-10-29 dense likelihood cost mechanism
+
+Frozen at `16be9fa1`; five validation tests passed. Eight fresh seeds across
+64/2048-observation dense regression likelihoods and five arms: full WALNUTS,
+two full NUTS mass settings, collapsed NUTS, and reparameterized NUTS. 80 fits
+at 6,000 draws, shuffled order, 300-second job bounds, twelve exclusive cores.
+Root `/home/ubuntu/lanes/likelihood-cost-20261029`; supervisor PID 371549 at
+launch. Check live STATUS/FINAL receipts. Exact posterior normalization holds
+geometry fixed; this tests a cost mechanism, not practical regression uniqueness.
+See [protocol](../STUDIES/likelihood_cost_v1/PROTOCOL.md).
+
 ## Latest checkpoint: 2026-10-29 curvature scaling and tuning
 
 Completed 144 calibration and 384 held-out fits, with all process groups drained
