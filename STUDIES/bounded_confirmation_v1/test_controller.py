@@ -5,11 +5,20 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
-from controller import next_action, transfer_spec, BUCKET
+from controller import next_action, transfer_spec, BUCKET, remote
 import controller_remote
 
 
 class ControllerTests(unittest.TestCase):
+    def test_connection_failure_never_blindly_retries_mutation(self):
+        for result in [Mock(returncode=255, stdout=''),
+                       Mock(returncode=1, stdout='{"error_type":"BlockingIOError"}')]:
+            with patch('controller.subprocess.run', return_value=result) as command:
+                with self.assertRaises(ConnectionError): remote('launch', 11)
+                command.assert_called_once()
+        with patch('controller.subprocess.run', return_value=Mock(returncode=1, stdout='{"error_type":"ValueError"}')):
+            with self.assertRaises(RuntimeError): remote('finish', 11)
+
     def state(self):
         return dict(live=[], exists=True, final=True,
                     supervision=dict(group_drained=True, sources_unchanged=True),

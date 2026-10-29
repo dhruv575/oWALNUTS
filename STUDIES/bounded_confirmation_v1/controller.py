@@ -27,10 +27,21 @@ def event(**fields):
 
 
 def remote(mode, batch, **fields):
-    result = subprocess.run(['ssh', *OPTIONS, HOST, f'{PYTHON} {REMOTE}'],
-        input=json.dumps(dict(mode=mode, batch=batch, **fields)), text=True,
-        capture_output=True, timeout=700)
+    try:
+        result = subprocess.run(['ssh', *OPTIONS, HOST, f'{PYTHON} {REMOTE}'],
+            input=json.dumps(dict(mode=mode, batch=batch, **fields)), text=True,
+            capture_output=True, timeout=700)
+    except subprocess.TimeoutExpired:
+        raise ConnectionError('Remote observation timed out; reconcile before any mutation') from None
+    if result.returncode == 255:
+        raise ConnectionError('SSH unavailable; remote operation outcome unknown')
     if result.returncode:
+        try:
+            busy = json.loads(result.stdout).get('error_type') == 'BlockingIOError'
+        except (ValueError, AttributeError):
+            busy = False
+        if busy:
+            raise ConnectionError('Remote operation still owns lock')
         # Never print subprocess stderr or signed URLs.
         raise RuntimeError(f'Remote {mode} failed (exit {result.returncode})')
     return json.loads(result.stdout)
@@ -129,8 +140,16 @@ def main():
             return 2
         try:
             event(state='starting')
-            run()
-            return 0
+            for attempt in range(21):
+                try:
+                    run()
+                    return 0
+                except ConnectionError:
+                    if attempt == 20:
+                        raise
+                    event(state='connection_recovery', attempt=attempt + 1,
+                          action='Wait then reconcile remote receipts; never blindly repeat a mutation')
+                    time.sleep(30)
         except Exception as exc:
             event(state='blocked', error_type=type(exc).__name__)
             return 1

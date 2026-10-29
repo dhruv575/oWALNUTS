@@ -38,8 +38,11 @@ controller resumes from receipts; it does not replace existing scientific jobs.
 
 This implementation survives chat turns but depends on this workstation staying
 awake and connected. AWS login refresh works only within its authorization
-window; renewal can still require user approval. On an error the controller
-records `blocked` and exits rather than bypassing a gate. It does not implement
+window; renewal can still require user approval. SSH failures, observation
+timeouts and a busy remote lock trigger up to 20 recovery attempts, separated
+by 30 seconds. Each attempt reconciles remote state instead of blindly
+repeating a potentially successful mutation. Other errors, or exhausted
+connection recovery, record `blocked` and exit rather than bypassing a gate. It does not implement
 phone notifications or claim completion of the broader research goal. Monitor
 credentials, its live process, and evidence periodically. It ends after all
 255 archives and compact local reviews are preserved, without unsealing scores.
