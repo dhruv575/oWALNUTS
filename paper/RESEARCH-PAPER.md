@@ -1,5 +1,15 @@
 # Research paper: working manuscript and evidence contract
 
+**Measured likelihood-cost follow-up (2026-10-29):** the depth10 primary
+screen fails its strict depth qualification, while a separately frozen depth11
+follow-up qualifies all 8/8 fresh seeds per full-evaluator arm. On the controlled
+2048-observation curved Gaussian posterior, WALNUTS is 1.93x faster than diagonal
+NUTS and 2.56x faster than low-rank NUTS in native kernel time; total-time gains
+are 1.82x/2.40x. This supports the proposed evaluation-cost mechanism. Analytic
+collapse/reparameterization and exact IID draws remain far cheaper, so it does
+not establish practical uniqueness or AMM success. See the
+[primary and follow-up evidence](../STUDIES/likelihood_cost_v1/results-20261029/REPORT.md).
+
 **Curvature/tuning extension (2026-10-29):** 144 calibration and 384 held-out
 fits show roughly 2x lower fixed-budget WALNUTS kernel cost after tuning and
 improved depth-limit qualification in the hardest case. The declared

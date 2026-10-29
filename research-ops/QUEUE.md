@@ -1,15 +1,31 @@
 # Active research queue
 
-## Running checkpoint: 2026-10-29 dense likelihood cost mechanism
+## Latest checkpoint: 2026-10-29 measured likelihood-cost advantage
 
-Frozen at `16be9fa1`; five validation tests passed. Eight fresh seeds across
-64/2048-observation dense regression likelihoods and five arms: full WALNUTS,
-two full NUTS mass settings, collapsed NUTS, and reparameterized NUTS. 80 fits
-at 6,000 draws, shuffled order, 300-second job bounds, twelve exclusive cores.
-Root `/home/ubuntu/lanes/likelihood-cost-20261029`; supervisor PID 371549 at
-launch. Check live STATUS/FINAL receipts. Exact posterior normalization holds
-geometry fixed; this tests a cost mechanism, not practical regression uniqueness.
-See [protocol](../STUDIES/likelihood_cost_v1/PROTOCOL.md).
+Completed 80 primary fits, 16 analytic IID controls, and 24 fresh-seed depth11
+follow-up fits. See [report](../STUDIES/likelihood_cost_v1/results-20261029/REPORT.md).
+The depth10 primary rule fails because full WALNUTS qualifies 6/8 seeds.
+At depth11, all three full-likelihood arms qualify 8/8 fresh seeds; WALNUTS is
+1.93x faster than diagonal NUTS and 2.56x faster than low-rank NUTS in matched
+native kernel time (1.82x/2.40x cold totals). This supports a controlled
+cost mechanism. Analytic collapse, reparameterization and IID sampling are
+much faster, so this is not a practical regression or AMM uniqueness claim.
+
+Next scientific question: does the advantage persist for an expensive curved
+posterior without an analytic shortcut, against a qualified posterior reference
+and strong NUTS/Laplace/model-rewrite baselines? Freeze a representative target
+and reference qualification plan before running. Do not translate this selected
+Gaussian construction directly into business or profitability claims.
+
+Storage prerequisite: last free root disk was 1,086,537,728 bytes, only about
+13 MB above the 1 GiB admission floor. Do not launch another ordinary on-disk
+campaign until durable archive/reclamation creates headroom. S3 remains pending
+renewal of the expired local AWS login; do not broaden the EC2 role. Current
+backup is streamed locally and originals retained. A redundant pivot transfer
+tar was removed only after rechecking its matching local/remote SHA256.
+
+Root `/home/ubuntu/lanes/likelihood-cost-20261029`. The instance remains running.
+Entries below are historical; they are not live running-job status.
 
 ## Latest checkpoint: 2026-10-29 curvature scaling and tuning
 
