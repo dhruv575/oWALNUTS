@@ -1,5 +1,16 @@
 # Active research queue
 
+## Running checkpoint: 2026-10-29 curvature scaling
+
+Protocol frozen at `0a5a5da7`; five test methods passed, including all 13
+native configuration smoke checks. Calibration has 144 fits across six target
+geometries and equal six-configuration searches per engine. Held-out validation
+will have 384 fits, with selected/default WALNUTS and selected/reparameterized
+NUTS. Root `/home/ubuntu/lanes/curvature-scaling-20261029`; calibration supervisor
+PID 366890 at launch. Use live STATUS/FINAL receipts to verify current progress.
+Local-error tuning is exploratory; no validation-driven reselection is allowed.
+See [protocol](../STUDIES/curvature_scaling_v1/PROTOCOL.md).
+
 ## Latest checkpoint: 2026-10-29 known-truth geometry screen
 
 Completed nine-geometry calibration and held-out screen, IID/Laplace controls,
