@@ -1,5 +1,13 @@
 # Research paper: working manuscript and evidence contract
 
+**Historical confirmation update (2026-10-29):** the 3,050-slot bounded-prior
+September/October study has finished with verified archives. One missing primary
+report and one NUTS diagnostic failure block formal confirmation. Descriptive
+available-case gains over rolling t5 are positive with positive 98.75% lower
+bounds in both months, but EWMA lower bounds cross zero at all three specified
+block lengths. Qualified WALNUTS/NUTS predictive differences are small; complete
+study-wide equivalence is not established. See the [final analysis and limitations](../STUDIES/bounded_confirmation_v1/final-analysis-20261029/REPORT.md).
+
 **Model-admissibility warning (2026-10-28):** an exact-tie audit and analytical
 derivation identify a potentially improper posterior for the current no-flow
 SV target on repeated observations. This affects 155 January and 311 February
