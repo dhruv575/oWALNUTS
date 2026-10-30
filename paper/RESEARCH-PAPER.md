@@ -654,3 +654,20 @@ supervision. NATIVE-COMPARISON-SCREEN.md freezes the next stronger comparison
 using actual evaluation counts and aligned post-import operation clocks. It has
 not run and does not alter the previous failed continuation result. General
 usefulness, application value and paper-readiness remain unproven.
+
+### Native comparison execution update
+
+The previously frozen native comparison has now begun. The six-target short
+instrumentation qualification passed all 18 model/mode pairs with exact retained
+trajectory parity. The first two fresh chunks completed 84 arm cells, with local
+cost/schedule audits and archive read-back. The remaining two chunks are queued
+or running; no four-seed efficiency conclusion is available yet.
+
+An exposed full-budget ARMA diagnostic reproduced identical retained trajectories
+with and without the counting wrapper in all three native modes. Divergence counts
+of 2000, 4000 and 2000 matched the first chunk. This excludes that wrapper as the
+cause in these replays; it does not establish a general sampler advantage. Native
+default initialization and different adaptation schedules remain limitations.
+Failed controls receive no efficiency credit. The frozen four-seed analysis must
+finish before deciding whether a larger replication is warranted. No application
+value or submission readiness is established by these interim results.
