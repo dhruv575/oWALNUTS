@@ -1,0 +1,9 @@
+# GP lower-tail transition diagnostic replay
+
+Posthoc diagnosis after failed selected-workflow validation; not new validation. Saved chain index1 of WALNUTS seed946500006 spends retained indices309..467 (159 draws) below the fit's pooled empirical5% length-scale quantile4.42237. Its longest consecutive unchanged-state stretch is only4 transitions. Upper-tail runs do not explain the failure. These are exposed observations, not fixed reference probabilities or proof of biased sampling.
+
+Replay all eight selected WALNUTS fits, not only the failure, with an isolated driver adding read-only post-run diagnostics: per-transition depth,target calls,leaves,refinement level,reverse-coarser rejections,stop reason,position changes and macro trajectory length; final step and dense metric updates. Same source/manifest as qualified tuned driver, same input JSON/seeds. Require exact equality of every original output field except elapsed seconds, including all draws,calls,divergences and algorithm revision. The added output must not change the sampler. No performance claim from instrumented output.
+
+Summarize diagnostics separately for the159-draw excursion, its complement in the same chain, other chains,and each fit's own empirical lower5% region. Attribute transitions by their selected endpoint; this association cannot establish cause because the transition may cross regions. Count original retained work and reconcile sums. Preserve all raw replay output and sources. Do not delete the excursion or retune to this seed. Use the result to decide whether a full state-independent kernel modification, model transformation or more accurate stopping/budget study is justified; all require new protocols and fresh validation.
+
+Build300s/4GiB, workers180s/2GiB/64MiB,serial BLAS1,no paid cloud or production edits. The research goal remains incomplete.
