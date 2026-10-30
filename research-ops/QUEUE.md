@@ -1,5 +1,17 @@
 # Active research queue
 
+## Running: 2026-10-30 bounded initial-metric mechanism screen
+
+A 78-cell frozen screen is active at /dev/shm/bounded-init-20261030 on the existing
+instance. Candidate clips start-gradient masses to [0.1,1000] with the shipped
+restart guard; controls are current defaults and WP94's rejected unbounded rule.
+No sampler source/default changed. Six initial-metric and three fingerprint tests,
+plus exact control and clipping preflight checks, pass. Source is parent 2dbdc651.
+See usefulness_search_v1/bounded_init/PROTOCOL.md. Three four-core workers,
+600 seconds/2 GiB/64 MiB per job; continue monitoring the existing supervisor,
+then analyze every cell, archive/verify and update the paper. No verdict yet.
+The previous unbounded and conditional-metric failures remain negative results.
+
 ## Latest checkpoint: 2026-10-30 qualified PK posterior, no competitive advantage
 
 All population follow-up jobs are TERMINAL. Two independent exchange references
