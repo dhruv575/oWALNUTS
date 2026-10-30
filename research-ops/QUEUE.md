@@ -1,5 +1,18 @@
 # Active research queue
 
+## Running: full block shape fresh validation after passing mechanism preflight
+
+V3 passes 47 analytic/exposed checks; prior failed geometries improve condition
+proxies by2748--21056x, not performance. Preserve v2 failed gate. Preflight's
+31-member archive restore verified. Fresh16-seed five-arm test runs in
+metric-blocks-recovery-20261030/work/fullshape02; durable gzip copies in
+evidence/fullshape02. SSH exec session34601. Inspect live controller and terminal
+SUMMARY before resuming; never restart based on missing logs alone. Protocol
+FULL-SHAPE-VALIDATION.md retains all previous gates, changes only reconstruction.
+After completion run verify_full_shape_validation.py, analyze_full_shape_validation.py,
+archive_full_shape_validation.py then exact-version S3 restore. Broader
+nonconjugate tests remain required; no application or general improvement claim.
+
 ## Latest: matched curvature ablation FAILED
 
 All 96 jobs terminal and drained. Accuracy passes: curvature13/16, empirical15/16,

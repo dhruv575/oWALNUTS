@@ -414,3 +414,11 @@ proxies up to 2.27e8 and worst coefficient bulk ESS 4.86. This does not establis
 causality, but motivates testing full block shape with a common scale instead of
 correlation-only reconstruction. It does not rehabilitate the failed candidate.
 See metric_blocks/ABLATION-REPORT.md and the verified 427-member archive.
+
+A subsequent reconstruction-only preflight preserves full inverse-precision block
+shape, fitting one positive scale per block instead of replacing each marginal
+variance. All 47 analytic/exposed checks passed. The three previously failed
+geometries show condition-proxy reductions of 2748--21056 times, but these are
+neither mixing nor runtime improvements. A new sixteen-seed matched experiment
+is frozen separately; the prior candidate remains failed. Broader nonconjugate
+validation and useful-application evidence remain absent. See FULL-SHAPE-REPORT.md.
