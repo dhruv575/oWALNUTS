@@ -1,0 +1,86 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cpu/cycles/P'
+# Event count (approx.): 15861804055
+#
+# Overhead  Command   Shared Object         Symbol                                                                               
+# ........  ........  ....................  .....................................................................................
+#
+     7.23%  baseline  baseline              [.] <alloc::vec::Vec<f64> as owalnuts::kernel::MassOperator>::kinetic_energy
+            |
+            ---<alloc::vec::Vec<f64> as owalnuts::kernel::MassOperator>::kinetic_energy
+               |          
+                --2.24%--std::thread::local::LocalKey<T>::with
+
+     6.63%  baseline  baseline              [.] <owalnuts::kernel::InPlaceEval<F> as owalnuts::kernel::FusedEval>::evaluate
+            |
+            ---<owalnuts::kernel::InPlaceEval<F> as owalnuts::kernel::FusedEval>::evaluate
+               |          
+                --6.59%--0x7ffce1a76dd0
+                          0x4
+
+     5.40%  baseline  baseline              [.] owalnuts::kernel::spans_make_u_turn_observed
+            |
+            ---owalnuts::kernel::spans_make_u_turn_observed
+               |          
+                --5.08%--0x8
+
+     4.39%  baseline  baseline              [.] owalnuts::kernel::build_span_counted_inner
+            |
+            ---owalnuts::kernel::build_span_counted_inner
+               |          
+                --2.01%--0x18
+                          0x2190b025ff087f
+
+     4.35%  baseline  baseline              [.] <kernel_bench::EightSchools as owalnuts::walnutpie::Target>::log_density_gradient
+            |
+            ---<kernel_bench::EightSchools as owalnuts::walnutpie::Target>::log_density_gradient
+
+     4.02%  baseline  baseline              [.] owalnuts::kernel::integrate
+            |
+            ---owalnuts::kernel::integrate
+
+     3.52%  baseline  baseline              [.] owalnuts::kernel::set_evaluation_context
+            |
+            ---owalnuts::kernel::set_evaluation_context
+
+     2.88%  baseline  baseline              [.] owalnuts::kernel::build_span_counted_inner
+            |
+            ---owalnuts::kernel::build_span_counted_inner
+
+     2.56%  baseline  baseline              [.] kernel_bench::main
+            |
+            ---kernel_bench::main
+
+     2.38%  baseline  baseline              [.] owalnuts::kernel::build_span_inner
+            |
+            ---owalnuts::kernel::build_span_inner
+
+     2.24%  baseline  baseline              [.] owalnuts::kernel::integrate
+            |
+            ---owalnuts::kernel::integrate
+
+     2.16%  baseline  libm.so.6             [.] exp
+            |
+            ---exp
+
+     2.15%  baseline  baseline              [.] owalnuts::kernel::build_leaf_observed
+            |
+            ---owalnuts::kernel::build_leaf_observed
+
+     2.15%  baseline  baseline              [.] owalnuts::kernel::transition_w_traced_with_telemetry_and_outer_policy
+            |
+            ---owalnuts::kernel::transition_w_traced_with_telemetry_and_outer_policy
+
+     2.10%  baseline  baseline              [.] owalnuts::kernel::build_leaf_observed
+            |
+            ---owalnuts::kernel::build_leaf_observed
+
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

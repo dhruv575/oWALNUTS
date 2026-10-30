@@ -49,6 +49,22 @@ and leaves Eight Schools unchanged; calls/draw fingerprints match. Candidate
 not adopted. Inspect larger allocation and metric costs next. Compilation and
 runs used /dev/shm; originals remain, no inference jobs currently running.
 
+Next substantive mechanism screen is now launched: late metric selection,
+36 jobs, three arms (diag, auto window 2, auto window 3), four exposed models,
+three fresh seeds. See usefulness_search_v1/late_metric/PROTOCOL.md. Current
+root /dev/shm/late-metric-20261029, pinned Python supervisor run.py, run01.
+Build succeeded with source/binary hashes in BUILD.json. Initial launch with
+system Python failed before creating jobs (psutil missing); preserved launch.log.
+Pinned environment launch uses launch-pinned.log. Each job has 600s/2GiB/64MiB
+bounds; at most three four-core jobs. Inspect actual PID and FINAL before any
+restart. This is exploratory; no default change or success claim.
+
+CPU profiling collected 2199 samples with zero lost samples. Largest individual
+symbols included diagonal kinetic energy (~7.2%), target callback wrapper (~6.6%)
+and U-turn checks (~5.4%); no dominant unused-allocation mechanism. Ordinary perf
+was denied by kernel policy; sudo perf collected only this owned benchmark
+without changing system policy. Reports preserved under kernel_profile.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
