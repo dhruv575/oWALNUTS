@@ -2,6 +2,16 @@
 
 ## Current experiment: 2026-10-29 pharmacokinetic ODE pilot
 
+Current running root is `/home/ubuntu/lanes/pharma-ode-logforecast-20261029`.
+The original 53-job batch completed but 32 forecast evaluations crossed zero
+numerically. Its complete 314-member archive is verified locally (SHA256
+`693ba95f5b5cf483125c2c6adf1d3c477d99eaeafff9e859d516e914aa605242`).
+The separately frozen repair integrates log concentration for predictions;
+training likelihood/gradients are unchanged, checked against the old native
+binary. Four numerical/backend tests pass. All 53 initial jobs are rerun, then
+a bounded workflow freezes calibration-only selection before 64 fresh fits.
+Read WORKFLOW-STATUS.json and live run STATUS; no winner is established yet.
+
 User authorized the practical follow-up. Frozen protocol and common native
 BridgeStan adapter are in `STUDIES/pharma_ode_v1`. Three backend/solver tests
 passed, including independent integration, gradient checks and both samplers.
