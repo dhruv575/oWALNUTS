@@ -25,3 +25,13 @@ binary. Do not relax tests: an initial repaired-solver test missed tolerance
 by 1.69e-6 and was corrected by tightening forecast-only tolerance to 1e-10.
 The separate root `pharma-ode-logforecast-20261029` reruns all jobs. The workflow
 hash-freezes selection before launching fresh validation. Remote originals stay.
+
+During validation, SSH became unreachable after a client-network change. The
+user explicitly authorized renewing `aws login --profile owalnuts`; STS identity
+and EC2 running/system/instance checks then succeeded. Added only the current
+client /32 to the existing port22 allowlist. Reconnection verified the detached
+workflow had continued (41/64 validation jobs complete); no jobs restarted.
+No instance-role permissions changed. The renewed account session also enabled
+private S3 upload and exact-version restore of the legacy archive: all 314
+members verified. See S3-VERIFICATION.json, which supersedes earlier pending
+S3 status in the historical local-archive receipt.

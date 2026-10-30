@@ -33,5 +33,5 @@ for name,d in freezes:
     assert not differences,(name,differences)
     if d.get('selection_sha256'):assert manifest['SELECTION.json']['sha256']==d['selection_sha256']
     verified.append(name)
-result=dict(archive=str(out),sha256=hashlib.file_digest(out.open('rb'),'sha256').hexdigest(),bytes=out.stat().st_size,verified_members=len(manifest),manifest_sha256=remote['manifest_sha256'],verified_source_freezes=verified,aborted_attempts=aborted,remote_originals_retained=True,s3_status='Pending renewal of expired local AWS login')
+result=dict(archive=str(out),sha256=hashlib.file_digest(out.open('rb'),'sha256').hexdigest(),bytes=out.stat().st_size,verified_members=len(manifest),manifest_sha256=remote['manifest_sha256'],verified_source_freezes=verified,aborted_attempts=aborted,remote_originals_retained=True,s3_status='Awaiting separate upload and exact-version restore verification')
 (report/'ARCHIVE-VERIFICATION.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2))
