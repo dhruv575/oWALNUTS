@@ -1,9 +1,9 @@
-﻿# Population rate-exchange mechanism pilot
+# Population rate-exchange mechanism pilot
 
 Status: completed; useful mixing mechanism, no demonstrated unique WALNUTS
 advantage and no qualified posterior reference. Goal remains active.
 
-Original tuned ODE pilots left both engines in their starting rate-order modes.
+Original tuned population pilots left both engines in their starting rate-order modes.
 The secondary mode's local Laplace log-mass ratio (-21.87) is an approximation,
 not a posterior mass bound. An exact involutive MH move exchanges absorption
 and elimination rates with the corresponding volume transformation. Its priors
@@ -13,7 +13,7 @@ See INVOLUTION-METHOD.md for derivation and literature.
 
 52 numerical involution/Jacobian checks and an unequal-weight known-mixture
 control passed. Separate retained-state/proposal audits tested 448 points per
-engine against the ODE log density; offset ranges were 2.38e-7 (WALNUTS) and
+engine against the archived Stan log density; offset ranges were 2.38e-7 (WALNUTS) and
 1.40e-9 (NUTS), with no evaluation failures.
 
 | Engine / mechanism | Worst R-hat | Minimum bulk ESS | Primary-mode fractions by chain | Calls | Seconds |
@@ -45,10 +45,8 @@ hash verification: pilot_archive (41 members), jump_archive (48 members), and
 pymc_archive (834 members, including the isolated control environment). Original
 EC2 files remain. JSON reports are checked in; archives remain outside Git.
 
-Next reviewed work: exploit the linear model's closed-form concentration and
-analytic gradient. Audit against the tight ODE implementation across both modes,
-near-equal rates, and exchanged posterior states before any inference. It would
-be misleading to claim an application advantage from unnecessary numerical ODE
-work. Then use the common exact target for calibrated long-run uncertainty and
-predictive comparisons against Laplace/importance and native tuned NUTS. These
-pilots alone do not justify a clinical, forecast, novelty, or uniqueness claim.
+Follow-up completed: see QUALIFIED-REPORT.md. Source inspection corrected an
+assumption in the initial plan: the linear branch already used a closed-form
+curve inside Stan. The new C++ gradient removes per-subject autodiff overhead;
+it does not remove numerical ODE solves from the linear model. The longer
+reference qualifies, but matched native NUTS is more efficient than WALNUTS.

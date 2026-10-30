@@ -1,21 +1,26 @@
 # Active research queue
 
-## Latest checkpoint: shared rate-exchange benefit, not WALNUTS uniqueness
+## Latest checkpoint: 2026-10-30 qualified PK posterior, no competitive advantage
 
-Population ODE sampler pilots and two exchange batches are TERMINAL and archived.
-WALNUTS and independent fixed-kernel PyMC NUTS both escape their secondary-mode
-starts with the same exact involutive MH move; plain controls remain trapped.
-Worst R-hat improves 1.742 -> 1.062 and 1.788 -> 1.017 respectively, but only
-40 endpoints/chain were retained and neither qualifies as a posterior reference.
-See population_pk/EXCHANGE-REPORT.md; goal remains ACTIVE. All originals retained;
-three S3 exact-version restores and member hash checks passed. No default change.
+All population follow-up jobs are TERMINAL. Two independent exchange references
+qualify; raw Laplace is inaccurate and the tested adaptive importance proposals
+collapse to ESS about 1--2. Nevertheless matched native NUTS delivers ~1.38x the
+median minimum bulk ESS/second of WALNUTS, with matching posterior means. Thus
+this application does not satisfy the continuing goal. See
+`STUDIES/usefulness_search_v1/population_pk/QUALIFIED-REPORT.md`.
 
-Next reviewed unit: implement/audit closed-form linear-model gradients against
-tight ODE evaluations at both modes, exchanged posterior states and nearly equal
-rates. Only after parity passes, run stronger bounded posterior/predictive
-comparisons; unnecessary ODE costs must not manufacture a practical advantage.
-Existing instance remains running; root disk ~1.2 GiB free, tmpfs >14 GiB free.
-Use tmpfs for disposable builds and preserve the 1 GiB root admission floor.
+Source correction: the old linear Stan branch was already closed form. The new
+stable C++ gradient removes autodiff overhead, not numerical ODE solves. All
+953 members of the combined evidence archive passed private S3 exact-version
+restore verification. Preserve callback-phase ambiguity and exposed-holdout
+limitations; no defaults changed. The instance remains running, root free ~1.2
+GiB; work/builds remain in tmpfs with the 1 GiB root admission floor.
+
+Next reviewed action: audit existing sampler failure and overhead evidence to
+identify a concrete preventable mechanism before another implementation change.
+The earlier conditional-metric candidate remains a failed screen; do not convert
+its one rescued seed into a post-hoc success or repeat a broad batch without a
+new mechanism. Goal remains ACTIVE; paper and research notes retain negatives.
 
 ## Continuing goal: 2026-10-29 useful application or substantive algorithm improvement
 
@@ -205,7 +210,7 @@ BridgeStan adapter are in `STUDIES/pharma_ode_v1`. Three backend/solver tests
 passed, including independent integration, gradient checks and both samplers.
 Initial batch: 32 calibration fits, 14 reference fits and seven Laplace controls.
 Then freeze calibration-only selection for 64 fresh-seed validation fits.
-Observed Theoph subjects 1â€“3 are chosen by ID; final two measurements held out.
+Observed Theoph subjects 1–3 are chosen by ID; final two measurements held out.
 Public Stan fixture is a computational benchmark of unverified clinical origin.
 Compare nonlinear ODE to exact linear elimination; no clinical/business claims.
 

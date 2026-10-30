@@ -4,7 +4,7 @@
 preserved forecast-solver failure and separately frozen log-state repair.
 On the public nonlinear pharmacokinetic ODE fixture, WALNUTS qualifies 8/8 fresh
 seeds versus tuned NUTS 7/8, with 1.65x matched kernel speedup (descriptive 95%
-bootstrap interval 1.58â€“1.73; seven pairs) and 1.61x cold-total speedup. This
+bootstrap interval 1.58–1.73; seven pairs) and 1.61x cold-total speedup. This
 extends the evaluation-cost finding beyond the curved Gaussian construction,
 but does not establish clinical or application value. The fixture's clinical
 provenance is unverified. Laplace fails parameter-mean accuracy while meeting
@@ -128,8 +128,8 @@ This outline deliberately contains no invented numerical result or novelty claim
 
 | Claim | Existing evidence | Remaining limitation |
 |---|---|---|
-| Historical density value | E62 August; E64 Aprilâ€“June | Historical/project-access holdout; weaker gains over EWMA; no live execution |
-| Tail-risk forecast value | E65 retrospective; E66 Decemberâ€“February | Mixed EWMA comparisons, descriptive intervals, two E66 reference failures |
+| Historical density value | E62 August; E64 April–June | Historical/project-access holdout; weaker gains over EWMA; no live execution |
+| Tail-risk forecast value | E65 retrospective; E66 December–February | Mixed EWMA comparisons, descriptive intervals, two E66 reference failures |
 | Repeated posterior fidelity | WP88 and subsequent K400/reference studies | Accuracy and long-horizon limitations; reference spots do not certify all origins |
 | Larger independent-reference budget | E70: all 24 fixed E66 points, 4x retained draws | MCSE roughly halved but 22/24 still pass; one remaining precision failure and a different retained divergence |
 | Bounded decision value | E67 | No convincing improvement over EWMA at the frozen cost |
@@ -265,6 +265,22 @@ The shared benefit is not evidence of WALNUTS uniqueness, and Python-versus-nati
 timings are not a fair efficiency comparison. Jacobian/known-mixture checks and
 448-point density audits per engine passed. Full protocols, negative wrapper
 preflights, numerical audits and private archive receipts are preserved in
-`population_pk/EXCHANGE-REPORT.md`. Before claiming practical value, the linear
-model must also be evaluated with its inexpensive closed-form gradient rather
-than imposing numerical ODE work on competing methods.
+`population_pk/EXCHANGE-REPORT.md`. Subsequent source inspection showed that the linear branch already used a
+closed-form curve inside Stan; an earlier assumption about numerical ODE
+overhead was incorrect. A separate C++ gradient reduces autodiff overhead.
+
+
+A longer population follow-up qualified two independent exchange-augmented
+NUTS references across 68 parameter/predictive functionals (worst R-hat 1.00069,
+minimum bulk ESS 3820, maximum independent mean difference 2.078 combined MCSE).
+The tested raw Laplace and adaptive importance proposals are inadequate: mean
+errors reach 3.15 posterior SD, and final importance ESS is about 1--2. Posterior
+prediction improves an exposed-data subject log score over raw Laplace by about
+0.52 (descriptive subject-bootstrap interval roughly 0.15--0.82). This does not
+establish independent predictive or clinical value. Crucially, matched native
+NUTS yields about 1.38 times the minimum bulk ESS/second of WALNUTS on two fresh
+seeds; both agree with the practical reference. Unvisited mode mass is not
+bounded, and WALNUTS's unseparated callback errors remain a numerical limitation.
+This candidate is therefore not a demonstrated WALNUTS advantage. Full negative
+and positive evidence, source correction, protocols and verified archive receipts
+are in `population_pk/QUALIFIED-REPORT.md`.
