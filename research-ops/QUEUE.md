@@ -1,5 +1,27 @@
 # Active research queue
 
+## Current infrastructure constraint: AWS budget stop; continue local work
+
+AWS Budgets stopped existing instance at11:11:55/11:12:36 UTC2026-10-30:USD63.09
+reported spend againstUSD60 monthly cap. Restart requested before cause visible,
+then stopped again once CloudTrail identified budget action. Confirmed stopped;
+budget control unchanged. Do NOT restart/use other paid cloud resources to evade
+the cap. Single Agent Comms notice sent to exact thread. See BUDGET-INTERRUPTION.md.
+
+New scaled policy/code frozen in SCALED-VALIDATION.md; standalone scaledport01
+reported exact parity and actual/charged gradients784, local SUMMARY saved.
+Full preflight archive was interrupted. scaled01 fresh seeds929500001--2 were
+running at stop; partial EBS backups uninspected, tmpfs untrusted/lost. Do not
+restart these seeds as new evidence. No further cloud chunks launched.
+
+Local Ubuntu WSL is available,16CPUs/~15GiB; isolated local_recovery/venv installs
+pinned scientific package versions, Python3.14 differs from EC2's3.12. Extracted
+34 archive-verified binary/model/data/reference files (LOCAL-RECOVERY-INPUTS.json).
+Native model needs libtbb.so.2; pinned Intel tbb2020.3.254 supplies it in venv/lib.
+Next qualify local density/gradient and sampler compatibility under full-root
+monitoring, then freeze separate local validation with unused seeds and independent
+timing provenance. Local work does not require an AWS budget override.
+
 ## Latest: fallback scale diagnosis and exposed repair qualify; fresh test pending
 
 fallbackaudit01 terminal:96 saved cells,384 held-out folds,32.34s, no target calls.
