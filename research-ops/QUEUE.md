@@ -9,9 +9,10 @@ checks pass locally and remotely. Hybrid pays all scores, probes and fit time.
 Chunk1 terminal:168 jobs/120 stages verified;721-member archive restored. Hybrid
 4/4 all targets except eight-schools0/4 (all arms); Fisher/dense GP3/4 vs hybrid4/4.
 Chunk2 terminal too:168/120 audits pass;721-member archive restored; redundant
-gzip results reclaimed. Chunk3 runs at work/hybrid03, SSH session7922. Inspect
-live PID/SUMMARY before resuming; never restart from observer timeout. Chunk4
-NOT launched.
+gzip results reclaimed. Chunk3 also terminal:168/120 audits and721-member archive
+restore pass; hybrid4/4 five targets,0/4 eight schools; gzip reclaimed.
+Chunk4 runs at work/hybrid04, SSH session98430. Inspect live PID/SUMMARY before
+resuming; never restart from observer timeout.
 Archive+exact-version restore each chunk before next;
 reclaim only verified redundant RESULT gzip copies using reclaim_chunk_results.py.
 Root floor1GiB. Previous broad/Fisher gzip reclamation freed50,304,299 bytes;

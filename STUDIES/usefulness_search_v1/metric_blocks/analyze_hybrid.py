@@ -1,12 +1,17 @@
 import hashlib,json
 from pathlib import Path
 import numpy as np
-root=Path(__file__).resolve().parent;rows=[];inputs={}
+root=Path(__file__).resolve().parent;rows=[];inputs={};frozen=None;total_jobs=0;total_stages=0
 for i in range(1,5):
     p=root/f'hybrid0{i}/SUMMARY.json';v=root/f'hybrid0{i}/VERIFICATION.json'
-    assert json.loads(v.read_text())['passed'];s=json.loads(p.read_text());assert s['unchanged'];rows+=s['rows']
+    verified=json.loads(v.read_text());assert verified['passed'];s=json.loads(p.read_text());assert s['unchanged'];rows+=s['rows']
+    total_jobs+=verified['jobs'];total_stages+=verified['matched_stages']
+    fingerprint={Path(k).name:value for k,value in s['inputs'].items()};assert len(fingerprint)==len(s['inputs'])
+    if frozen is None:frozen=fingerprint
+    else:assert fingerprint==frozen,'Source or target changed between chunks'
     inputs[str(p)]=hashlib.sha256(p.read_bytes()).hexdigest();inputs[str(v)]=hashlib.sha256(v.read_bytes()).hexdigest()
 assert len(rows)==480 and len({(r['model'],r['seed'],r['arm']) for r in rows})==480
+assert set(r['model'] for r in rows)=={'arma-arma11','arK-arK','sblrc-blr','eight_schools-eight_schools_centered','garch-garch11','gp_pois_regr-gp_pois_regr'}
 rng=np.random.default_rng(929399999);models={};losses=[];signals=[];fisher_losses=[]
 for model in sorted(set(r['model'] for r in rows)):
     rr=[r for r in rows if r['model']==model];hr=sorted([r for r in rr if r['arm']=='hybrid'],key=lambda r:r['seed'])
@@ -32,5 +37,5 @@ for model in sorted(set(r['model'] for r in rows)):
     entry['non_gaussian_signal']=signal
     if signal:signals.append(model)
     models[model]=entry
-result=dict(continuation_gate=not losses and bool(signals) and not fisher_losses,models=models,accuracy_losses=losses,signals=signals,fisher_efficiency_losses=fisher_losses,inputs=inputs,limitations='Exploratory per-target intervals, six-target family, no application or novelty claim.')
+result=dict(continuation_gate=not losses and bool(signals) and not fisher_losses,models=models,accuracy_losses=losses,signals=signals,fisher_efficiency_losses=fisher_losses,inputs=inputs,source_and_target_hashes_identical=True,total_jobs=total_jobs,total_matched_stages=total_stages,analysis_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),limitations='Exploratory per-target intervals, six-target family, no application or novelty claim.')
 (root/'HYBRID-COMPARISON.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({k:v for k,v in result.items() if k not in ['models','inputs']}))

@@ -13,6 +13,11 @@ private archive and historical manifests retained.
 Chunk2 (seeds929300005--8) also completed168 jobs/120 stages; all audits and the
 721-member exact-version private archive restore pass. Hybrid again passes4/4
 on five targets and0/4 centered eight schools. Reclaimed168 redundant compressed
-results (62,818,448 bytes) only after archive verification. Chunk3 is active
-unchanged; chunk4 not launched. Do not tune based on intermediate results. Full gate
+results (62,818,448 bytes) only after archive verification.
+
+Chunk3 (seeds929300009--12) completed168 jobs/120 stages with all audits and
+721-member archive restore passing. Hybrid again passes4/4 on five targets and
+0/4 centered eight schools. Reclaimed168 redundant compressed results
+(62,741,606 bytes) after verification. Chunk4 is active unchanged.
+Do not tune based on intermediate results. Full gate
 and bootstrap intervals require all16 seeds and all four verified chunks.
