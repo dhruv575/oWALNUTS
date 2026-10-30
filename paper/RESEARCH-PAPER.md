@@ -989,3 +989,19 @@ The68-member fresh-data/reference archive was read back and hash-verified locall
 All four disjoint-seed native diagonal/.999 pilots qualified against the independent fresh-data references. Each map was fitted with unchanged K=4,ridge10 and the first100 retained positions per chain; the complete pilot cost is retained. Reconstructing the maps from saved pilot draws produced exact equality. All384 compiled-target equivalence checks passed across affine and bounded forms, including density, gradient, coordinate decoding and24 original functional checks. Setup qualification does not itself establish generalization of the efficiency benefit.
 
 The64-member fresh pilot/target archive was read back and hash-verified locally: SHA256dafd25d102f07e0975601c92ce1f99c90ab3962f0b3e406785082fa48bc95f4f. The fixed-settings48-fit new-data comparison is running separately. A filename collision affecting its worker/protocol is documented under gp_newdata_source_collision01; exact running source bytes are preserved, and historical paths will be restored after terminal completion and evidence archival. No sampling result or frozen source is changed during the run.
+
+Fresh-data transport validation (2026-10-30): all 48 fits met the prospectively
+frozen 24-functional accuracy gates, but the advancement criterion failed.
+Including each fresh dataset's complete pilot gradient cost, bounded WALNUTS
+achieved 0.472325 times raw WALNUTS efficiency (four-dataset bootstrap 95%
+interval 0.415264 to 0.515577). The sampling-only ratio was 1.647290 (1.207396
+to 2.309225), demonstrating why setup cannot be omitted. The matched bounded
+native comparison was 1.823174 (1.530845 to 2.171326), insufficient to establish
+workflow benefit against ordinary WALNUTS. These are four controlled synthetic
+datasets, not application evidence. Independent archive audit is in progress;
+conditional importance remains a required baseline. No goal-completion claim.
+Archive verification subsequently completed: 326 members, SHA-256
+c1b26f77c8fda91858e72e91da98af3eadc0ca38a2955d14138a3f1ac3734a34.
+The historical worker/protocol filenames were restored byte-for-byte from
+revision a74dd1be after verification; exact executed new sources and the
+relocation mapping are preserved. This archive is local, not yet off-device.
