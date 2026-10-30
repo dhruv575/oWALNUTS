@@ -6,9 +6,11 @@ HYBRID-VALIDATION.md freezes16 fresh seeds929300001..16 across six models and
 five arms, four4-seed chunks. Prefer Fisher only when all held-out-chain
 worst-direction R2>0; otherwise unchanged v4 block/auto. Seven analytic gate
 checks pass locally and remotely. Hybrid pays all scores, probes and fit time.
-Chunk1 runs at work/hybrid01 on existing EC2; controller432984, SSH session19852.
-Inspect live PID/SUMMARY before resuming; never restart from observer timeout.
-Chunks2--4 NOT launched. Archive+exact-version restore each chunk before next;
+Chunk1 terminal:168 jobs/120 stages verified;721-member archive restored. Hybrid
+4/4 all targets except eight-schools0/4 (all arms); Fisher/dense GP3/4 vs hybrid4/4.
+Chunk2 runs at work/hybrid02, SSH session91752. Inspect live PID/SUMMARY before
+resuming; never restart from observer timeout. Chunks3/4 NOT launched.
+Archive+exact-version restore each chunk before next;
 reclaim only verified redundant RESULT gzip copies using reclaim_chunk_results.py.
 Root floor1GiB. Previous broad/Fisher gzip reclamation freed50,304,299 bytes;
 exact audits broad01-RECLAIM.json/fishercompare01-RECLAIM.json, originals retained.
