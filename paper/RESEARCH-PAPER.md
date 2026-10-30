@@ -255,3 +255,16 @@ RMSE was 0.249 versus 0.535, favoring linear elimination. Parameter uncertainty
 is omitted, so this is preliminary model evidence rather than posterior or
 clinical validation. Full failures and reproducible artifacts are in
 `STUDIES/usefulness_search_v1/population_pk`.
+
+Population rate-order pilots subsequently exposed trapping in both tuned native
+samplers. Adding an established involutive MH exchange freed both secondary-started
+chains for WALNUTS and an independent fixed-kernel PyMC NUTS control, whereas plain
+controls remained trapped. Worst R-hat fell from 1.742 to 1.062 and from 1.788 to
+1.017 respectively; neither small pilot qualifies as a posterior reference.
+The shared benefit is not evidence of WALNUTS uniqueness, and Python-versus-native
+timings are not a fair efficiency comparison. Jacobian/known-mixture checks and
+448-point density audits per engine passed. Full protocols, negative wrapper
+preflights, numerical audits and private archive receipts are preserved in
+`population_pk/EXCHANGE-REPORT.md`. Before claiming practical value, the linear
+model must also be evaluated with its inexpensive closed-form gradient rather
+than imposing numerical ODE work on competing methods.

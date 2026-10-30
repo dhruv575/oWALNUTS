@@ -1,5 +1,22 @@
 # Active research queue
 
+## Latest checkpoint: shared rate-exchange benefit, not WALNUTS uniqueness
+
+Population ODE sampler pilots and two exchange batches are TERMINAL and archived.
+WALNUTS and independent fixed-kernel PyMC NUTS both escape their secondary-mode
+starts with the same exact involutive MH move; plain controls remain trapped.
+Worst R-hat improves 1.742 -> 1.062 and 1.788 -> 1.017 respectively, but only
+40 endpoints/chain were retained and neither qualifies as a posterior reference.
+See population_pk/EXCHANGE-REPORT.md; goal remains ACTIVE. All originals retained;
+three S3 exact-version restores and member hash checks passed. No default change.
+
+Next reviewed unit: implement/audit closed-form linear-model gradients against
+tight ODE evaluations at both modes, exchanged posterior states and nearly equal
+rates. Only after parity passes, run stronger bounded posterior/predictive
+comparisons; unnecessary ODE costs must not manufacture a practical advantage.
+Existing instance remains running; root disk ~1.2 GiB free, tmpfs >14 GiB free.
+Use tmpfs for disposable builds and preserve the 1 GiB root admission floor.
+
 ## Continuing goal: 2026-10-29 useful application or substantive algorithm improvement
 
 User explicitly requested continuing exploration until an actual useful case is
@@ -188,7 +205,7 @@ BridgeStan adapter are in `STUDIES/pharma_ode_v1`. Three backend/solver tests
 passed, including independent integration, gradient checks and both samplers.
 Initial batch: 32 calibration fits, 14 reference fits and seven Laplace controls.
 Then freeze calibration-only selection for 64 fresh-seed validation fits.
-Observed Theoph subjects 1–3 are chosen by ID; final two measurements held out.
+Observed Theoph subjects 1â€“3 are chosen by ID; final two measurements held out.
 Public Stan fixture is a computational benchmark of unverified clinical origin.
 Compare nonlinear ODE to exact linear elimination; no clinical/business claims.
 
