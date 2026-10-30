@@ -17,17 +17,24 @@ seconds including worker overhead. No proposal meets the frozen 7/8 screen
 gate yet. Preserve the failed serialization attempt; it is administrative,
 not evidence against importance sampling. Raw evidence remains on EC2.
 
-Next: bounded defensive-proposal budget/adaptation comparison, then inspect
-latent GP count-model provenance and strong tuned competitors. Also profile
-reverse-schedule construction; require exact-output parity and meaningful
-held-out timing gains before changing the kernel. Existing ODE primary results
-and qualification gates remain unchanged. No deployment or trading.
+Budget extension completed: 16/16 jobs. Defensive importance passes 5/8 at
+65,536 draws and 7/8 at 262,144 draws, with median cold worker times 6.50 and
+20.73 seconds. The final failure is precision (MCSE ratio 2.148), not reference
+error or density-audit failure. This meets an exploratory screen, not independent
+confirmation. Deprioritize the four-parameter ODE candidate as a unique WALNUTS
+application; timings are not a new randomized head-to-head comparison.
 
-Root `/home/ubuntu/lanes/usefulness-search-20261029`; corrected importance run
-under `is-repaired`. This checkpoint's 32 jobs are terminal, not still running.
-Continue the queue under the active goal. Archive these new artifacts with
-external dependency checks against the prior verified ODE archive before any
-reclamation. The instance remains running; retain the 1GiB disk admission floor.
+Next reviewed work: profile reverse-check overhead and establish a reproducible
+exact-output performance experiment before any kernel change. GP benchmark data
+are synthetic; published reference metadata report tuned NUTS (adapt_delta .99,
+max_treedepth 15) with no divergences. Do not use default-NUTS failures as evidence
+of a unique application. Investigate numerical conditioning before more GP runs.
+
+Both importance batches are terminal. Their full evidence has local verified
+archives, including dependency hashes against the prior ODE and screen archives.
+Screen S3 exact-version restore verified; see archive-budget-v1 for the budget
+restore receipt. No originals reclaimed. Last free EC2 disk 1,234,190,336 bytes;
+retain the 1GiB admission floor. Instance remains running. Goal remains active.
 
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 

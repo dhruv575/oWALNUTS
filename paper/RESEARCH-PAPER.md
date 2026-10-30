@@ -196,3 +196,19 @@ The [related-work draft](RELATED-WORK.md) records verified primary references fo
 WALNUTS, elliptical slice sampling and stochastic-volatility interweaving, and
 separates existing methods from still-unproven contribution candidates. Sampler,
 forecast and economic literature still require systematic review.
+
+### Exploratory importance-correction follow-up (2026-10-29)
+
+The public four-parameter ODE benchmark has Laplace tail-probability gaps up
+to 0.104 against the qualified reference. A frozen defensive importance
+proposal (equal Gaussian and Student-t mixture) was screened at four budgets.
+The fresh-seed extension passed the prespecified functional error, precision,
+weight and density-consistency gates in 5/8 runs at 65,536 draws and 7/8 at
+262,144 draws. Median total worker time at the latter budget was 20.73 seconds.
+The remaining failure exceeded the Monte Carlo precision limit while meeting
+the reference-error gate. These exploratory results strengthen a cheap
+competitor; they do not establish confirmatory reliability, a new matched
+WALNUTS comparison, clinical decision value, or algorithmic uniqueness.
+Patient reference qualification failures remain unchanged. Reproducible
+protocol, results and verified archive receipts are in
+`STUDIES/usefulness_search_v1/budget_extension` and `archive-budget-v1`.
