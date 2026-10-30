@@ -1,0 +1,17 @@
+# Compact output works; the predeclared primary did not validate
+
+The collector aggregates conditional expectations online into overall sums and blocks of 50 transitions. It no longer stores all conditional vectors in compact mode. The original sampler still stores ordinary draws internally. The ordinary control uses the unchanged production kernel and the same summary and SHA256 output schema. Both binaries passed six unit tests. Preflight checked 96 compact replays, three full-output exact replays and 48 original-kernel compact controls against preserved evidence. Means and every block matched independent calculations and draw hashes/work counts matched.
+
+Fresh validation completed 192 independent stationary-start replicate pairs and 288 timed binary executions, plus three full-output checks. The primary rotated-Gaussian P(x<-2) family had MSE ratio 1.293 [1.121,1.462], cost ratio 1.078, and cost-adjusted point ratio 1.199 with descriptive endpoint range [.997,1.452]. It failed both frozen lower-bound requirements. Do not relabel a secondary result as primary success.
+
+The ten-dimensional noncentered Gaussian's second-moment family was a secondary lead: MSE ratio 1.653 [1.566,1.743], direct cost 1.142, and adjusted ratio 1.447, descriptive range [1.349,1.555]. Its below-zero probability family had adjusted ratio 1.435 [1.259,1.674]. These are useful directions for a separately frozen follow-up, not an actual application or proof of WALNUTS-specific superiority. The funnel still lost efficiency: adjusted family ratios .874-.924, including multiple values below the general-replacement floor. General promotion is rejected.
+
+Compact output substantially reduced measured overhead relative to the exposed full recorder, but the fresh comparison must stand on its own seeds. Means, all coordinate-level effects, bias flags, uncertainty diagnostics and failures are retained. Fixed exact stationary starts and analytic targets do not establish a cold-workflow benefit.
+
+## Uncertainty limitation
+
+Block summaries preserve information needed for uncertainty analysis but do not automatically yield calibrated intervals. With 20 blocks, the minimum nominal-95% coverage among ordinary/conditional functionals was .906/.891 on rotated Gaussian, .828/.875 on noncentered Gaussian, and .313/.297 on the centered funnel. These are empirical rates over only 64 independent replicates, not simultaneous population coverage guarantees. The funnel's severe undercoverage is evidence against using these short-run batch intervals for decisions. Do not hide it by reporting only the better Gaussian summaries or interpret short blocks as independent.
+
+## Next reviewed direction
+
+Before more WALNUTS-only tuning, build and qualify a comparably recycled strong native NUTS control. The preserved nuts-rs 0.18.3 source already exposes its tree merge in src/nuts.rs; audit its actual candidate-selection law, stop behavior and coordinate mapping rather than copying WALNUTS weights blindly. Preserve native trajectories and RNG/work with observation disabled/enabled and test exact moments. If comparative testing proceeds, freeze second-moment estimation as a new primary, with fresh seeds, and keep the previous primary failure visible. A future practical study must use qualified nonanalytic posterior quantities, adequate uncertainty calibration and all adaptation/measurement costs. No deployment, trading or goal completion.
