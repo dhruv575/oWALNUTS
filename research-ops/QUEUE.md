@@ -1,6 +1,18 @@
 # Active research queue
 
-## Running: matched staged ablation, 16 fresh paired seeds
+## Latest: matched curvature ablation FAILED
+
+All 96 jobs terminal and drained. Accuracy passes: curvature13/16, empirical15/16,
+fixed diagonal15/16, adaptive dense16/16, auto16/16. The frozen gate fails; no
+qualified aggregate efficiency interval. Audits verify matched schedules, charged
+costs and durable copies. See ABLATION-REPORT.md and 427-member evidence archive.
+Post-hoc conditioning points to severely distorted pilot marginal variances.
+Next test whole-block covariance shape with only a common scale, preserving
+relative variances rather than replacing each independently. This is a new
+hypothesis requiring analytic/exposed preflight then fresh broader validation.
+Earnings remains disqualified as an application needing MCMC. Goal ACTIVE.
+
+## Historical launch: matched staged ablation (now terminal)
 
 ABLATION-PROTOCOL.md freezes fixed diagonal/empirical/curvature and adaptive
 dense/auto arms with shared pilots and stage-two schedules. Earnings remains

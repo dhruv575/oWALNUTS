@@ -403,3 +403,14 @@ reference and exact-moment gates. Generation takes .0029--.0043 seconds after
 diagnostics are excluded. This rules out that earnings model as an application
 requiring expensive MCMC. Its adaptation results remain development evidence,
 not practical superiority. See metric_blocks/DIRECT-REPORT.md and verified archive.
+
+The subsequent matched sixteen-seed ablation rejects promotion: curvature passed
+13/16 accuracy gates, fixed empirical and fixed diagonal each 15/16, and adaptive
+dense and automatic adaptation each 16/16. All 96 jobs drained; schedule, cost and
+durable-copy audits passed. The frozen all-pairs gate prohibits a qualified
+aggregate efficiency interval after these failures. Post-hoc exact-covariance
+conditioning exposes highly distorted pilot marginal variances, with condition
+proxies up to 2.27e8 and worst coefficient bulk ESS 4.86. This does not establish
+causality, but motivates testing full block shape with a common scale instead of
+correlation-only reconstruction. It does not rehabilitate the failed candidate.
+See metric_blocks/ABLATION-REPORT.md and the verified 427-member archive.
