@@ -539,3 +539,26 @@ HYBRID-REPORT.md, HYBRID-TIMING-AUDIT.md, HYBRID-RELATED-WORK.md and the frozen
 HYBRID-VALIDATION.md. Diagnose fallback scaling and compare established metric
 selection criteria before another fresh study. General usefulness, application
 value and manuscript completion remain unproven.
+
+## Fallback scale diagnosis and exposed repair (2026-10-30)
+
+A post-hoc audit of96 saved pilot cells evaluates an established Hessian/covariance
+selection criterion on384 held-out-chain folds. It prefers Fisher in every GP
+case, including three prior accuracy failures; this criterion alone does not
+replace the reliability gate on these data. The implementation uses different
+splits/candidates from Bales et al.(2019), not its full adaptation schedule.
+
+The three regression fallbacks exhibit relative scale mismatch: reference-whitened
+covariance condition proxies13.62,2.10,5.35 fall to1.27,1.19,1.08 when unchanged
+stable-block shapes use Fisher-derived diagonal scales. A separately frozen
+exposed repair runs those same three pilot/seed cells. All pass original accuracy
+gates, with ESS/total-call ratios1.0445,1.1278,1.0534 against reused Fisher controls.
+Ratios against the previous hybrid are7.11,1.67,3.10. This supports a scale mechanism
+but is not independent validation, general improvement or an application claim.
+The earlier fresh16-seed continuation gate remains FAILED.
+
+The24-member audit and32-member repair archives were restored and verified.
+Sampler schedules/costs/binary/durable hashes pass. The audit output scanner covered
+only its monitor subdirectory; a separate whole-root audit verifies final output
+below64MiB. Future harnesses must monitor the full worker root. No end-to-end
+runtime claim is made. See FALLBACK-AUDIT-REPORT.md and SCALE-REPAIR-PREFLIGHT.md.

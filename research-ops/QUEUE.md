@@ -1,5 +1,29 @@
 # Active research queue
 
+## Latest: fallback scale diagnosis and exposed repair qualify; fresh test pending
+
+fallbackaudit01 terminal:96 saved cells,384 held-out folds,32.34s, no target calls.
+Bales criterion prefers Fisher all16 GP including3 prior failures; cannot replace
+score gate on this evidence. Regression fallback geometry proxies13.62/2.10/5.35
+improve to1.27/1.19/1.08 using Fisher diagonal scales with unchanged block shape.
+scalerepair01 terminal:three exposed sampler repairs all pass, ESS/calls vs Fisher
+1.0445/1.1278/1.0534; vs old hybrid7.11/1.67/3.10. Controls reused, NOT replication.
+24-member audit and32-member repair archives restored and verified. See
+FALLBACK-AUDIT-REPORT.md. Previous fresh hybrid gate remains FAILED.
+
+Next freeze revised hybrid changing only rejected-Fisher stable-block scales to
+Fisher-derived scales, retaining explicit old-v4 fallback if unavailable/invalid.
+Require new seeds and old hybrid/v4/Fisher/dense/auto controls, unchanged accuracy
+and comparative efficiency gates. Execute each policy's own fitting independently
+and record full supervised invocation-through-output time, with shared pilot and
+common diagnostics clearly separated. Smaller2-seed chunks if needed for root
+floor1GiB; avoid tuning score thresholds or dropping regression. Source/data
+hashes, exact archives and negative controls required before any success claim.
+Audit harness scope issue: its64MiB scan covered monitor subdirectory only;
+whole-root final1,200,326 bytes independently verifies actual bound. Future
+audits must pass whole worker root to resource monitor. Sampler job folders were
+monitored correctly. No active jobs; keep existing instance productive via queue.
+
 ## Latest: fresh hybrid gate FAILED; preserve useful signals and fallback loss
 
 All four chunks terminal:672 drained jobs,480 matched stages,96 exact branch
