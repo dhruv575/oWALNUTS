@@ -1,0 +1,6 @@
+from pathlib import Path
+p=Path(__file__).resolve().parent
+s=(p/'gp_transport_calibration_worker.py').read_text().replace('GP-TRANSPORT-CALIBRATION-PROTOCOL.md','GP-TRANSPORT-NATIVE-REPAIR-PROTOCOL.md');(p/'gp_transport_native_repair_worker.py').write_text(s)
+s=(p/'run_gp_transport_calibration.py').read_text().replace('gp_transport_calibration01','gp_transport_native_repair01').replace('gp_transport_calibration_worker.py','gp_transport_native_repair_worker.py').replace('run_gp_transport_calibration.py','run_gp_transport_native_repair.py').replace('GP-TRANSPORT-CALIBRATION-PROTOCOL.md','GP-TRANSPORT-NATIVE-REPAIR-PROTOCOL.md').replace("[.9,.99]","[.999,.9999]").replace("['walnuts_diag','diag','walnuts_dense','low_rank']","['diag','low_rank']").replace("['affine','quadratic']","['quadratic']").replace("['walnuts','native']","['native']")
+needle='eligible=[];selected=[]';s=s.replace(needle,"prior=json.loads((l/'gp_transport_calibration01/SUMMARY.json').read_text());assert prior['completed'];rows.extend(x for x in prior['rows'] if x['transform']=='quadratic' and not x['mode'].startswith('walnuts'));configs.extend((m,a) for a in [.9,.99] for m in ['diag','low_rank']);eligible=[];selected=[]")
+(p/'run_gp_transport_native_repair.py').write_text(s)
