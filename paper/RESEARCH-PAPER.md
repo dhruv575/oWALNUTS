@@ -977,3 +977,9 @@ Complete child-process time, including imports, setup, sampling, diagnostics and
 
 The strong approximation remains successful and competitive. Thus the fixed-data sampler improvement does not establish a uniquely useful application or clear practical superiority on this small synthetic problem. Generalization to fresh data, fresh pilot maps and larger or otherwise distinct posterior geometries remains unproven. The contribution and submission-ready paper requirement are still unmet. See GP-FULL-WORKFLOW-RESULT.md in the metric_blocks study; earlier negative results remain intact.
 The295-member complete-workflow archive was read back and hash-verified locally: SHA25604289ce44297f55b74ec0b6a898f6584e2f90bd3cb3ef6746af5e54c4ae9da8d. No off-device archival claim is made.
+
+### Fresh-data reference preparation (2026-10-30)
+
+Four previously frozen N=11 synthetic count datasets vary fixed rho/alpha settings, with no rejection or replacement of generated counts. Each received two independently seeded four-chain raw native diagonal NUTS reference groups,2000 warmup and8000 retained per chain. All eight groups and all four combined references passed the prospectively frozen24-functional convergence and group-agreement checks. An independent audit recomputed diagnostics and agreement from raw functional draws. These practical references do not prove complete posterior exploration, and generative truth was not used as a posterior reference.
+
+The68-member fresh-data/reference archive was read back and hash-verified locally: SHA25666cfe59560ab9e24e5e34008dfeaf14d540f948f67fead1196c39a6de9395277. Fresh pilot maps remain a separate step with disjoint seeds and unchanged K=4/ridge10/400-position fitting settings. No algorithm generalization claim follows from reference preparation.
