@@ -1,5 +1,34 @@
 # Active research queue
 
+## Latest: conditional GP approximation passes; no application advantage shown
+
+The synthetic GP audit is TERMINAL: four global approximations fail, four fresh
+conditional importance replicates pass all frozen 24-functional gates. Reference
+Rhat max 1.000886, bulk/tail minima 9681/9536. Conditional ESS is 13281--13357
+of 16384, Pareto k .082--.146, maximum mean error .031 posterior SD and SD error
+2.15%. Full factor/conditional-solve cost is charged, not only target calls.
+No matched sampler speed ranking or real-data claim follows. See gp_count/REPORT.md.
+
+Preserve three implementation preflight failures: inspect-module shadowing,
+line-search cancellation, and NumPy/Stan factor rounding. Final parity checks
+pass unchanged tolerances; no production draws preceded the repairs. Eight
+production jobs exited, groups drained, inputs unchanged. Archive includes all
+source versions, model/data/reference, raw draws/weights and failure audits.
+
+Per the frozen candidate logic, do not scale a GP application campaign based
+on failed global Laplace: the stronger conditional baseline resolves that gap.
+Next reviewed work: inspect existing retained-work counters and failed automatic
+metric-selection evidence for a concrete preventable algorithm mechanism.
+Any new change needs a mechanism-specific preflight and fresh broad validation;
+do not promote earlier one-seed rescues, negligible allocation savings, or a
+renamed baseline. Goal remains ACTIVE; no sampler defaults changed.
+
+Concrete next audit: metric_blocks/AUDIT-PLAN.md. The current selector reduces
+per-coordinate force-linearity R^2 to a global minimum. Passive telemetry must
+show whether a nonlinear coordinate vetoes an otherwise useful correlated block
+before any block-metric policy is implemented. Replays must preserve exact
+draws/calls; exposed results cannot supply efficacy evidence.
+
 ## Latest: fixed bank repairs synthetic mixing; cheap correction is better value
 
 Fixed-bank stationarity and both frozen oracle mechanism gates PASS. All 128

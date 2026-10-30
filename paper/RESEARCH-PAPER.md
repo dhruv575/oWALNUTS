@@ -323,3 +323,18 @@ mode discovery, and no NUTS comparison or application claim is made. Correct
 mechanics therefore does not establish a useful WALNUTS advantage. Protocols,
 raw samples/weights and private archive receipts are in
 `usefulness_search_v1/fixed_bank/REPORT.md`.
+
+On the 11-point synthetic Poisson-GP benchmark, global unconstrained Laplace
+and its defensive importance correction are inadequate: four importance runs
+have ESS 2.95--91.96 from 32768 proposals and Pareto k .893--1.150. This gap
+closes under a stronger conditional baseline. A conditional-Laplace grid over
+two covariance parameters, mixed with the hyperprior and corrected by exact
+joint importance weights, passes all four fresh 24-functional checks. ESS is
+13281--13357 of 16384; maximum mean error is .031 reference SD and maximum
+relative SD error is .0215. Numerical line-search and covariance-factor parity
+failures were repaired without relaxing tolerances and are preserved. Per-run
+cost includes 180224 factor evaluations and about 294000 conditional objective
+evaluations, in addition to 16384 exact density evaluations. The result supports
+limited approximation adequacy, not an actual application or a sampler speed
+ranking. It removes failure of global Laplace as sufficient motivation for a
+WALNUTS campaign on this benchmark; see `usefulness_search_v1/gp_count/REPORT.md`.
