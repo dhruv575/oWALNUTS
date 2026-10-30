@@ -27,3 +27,27 @@ rescue this result. Matched bounded native comparison remains positive at
 1.823174 [1.530845,2.171326], but superiority to that control does not establish
 practical benefit. Four selected synthetic datasets limit generalization.
 Independent audit and exact-source archive are now running.
+
+2026-10-30: fresh-data importance baseline completed 6/8 qualified. Its sparse
+scenario failed Pareto k twice; AWS post-hoc raw-weight audit found about 10%
+weight below the grid's alpha=.1 lower bound. A separately frozen wider-grid
+repair is launched at /home/ubuntu/lanes/gp-widegrid-repair-20261030 with eight
+fresh seeds, fixed alpha lower bound .0001, unchanged accuracy requirements,
+and 300-second per-job supervision. Initial import failed before any jobs or
+results directory because psutil was missing. Installed psutil==7.2.2 (matching
+local monitor environment), then launched the unchanged source bundle. Preserve
+this administrative startup failure separately from inferential outcomes.
+Bundle SHA256 eae617ad50df4b739640c203add529fd1017346bbd5c8283aa0b573577a8336a.
+New-data comparison S3 exact-version restoration now verified in
+research-ops/archive/gp-newdata-s3-20261030/VERIFICATION.json. No EC2 input cleanup
+based on this archive; dependency archives remain separate.
+
+The first job batch exited before inference: all eight workers could not load
+libtbb.so.2. Preserve /home/ubuntu/lanes/gp-widegrid-repair-20261030/results.
+A second distinct directory gp-widegrid-repair-20261030-v2 uses the unchanged
+frozen bundle and the exact local libtbb.so.2 copied with SHA-256
+4981698e2dbbae5b2f923ca6a4e5778ee0b8a58c0d4633074fd92049f3775c10.
+LD_LIBRARY_PATH points only to this second directory's models folder. The new
+batch launched with the original unused seeds after the administrative failure;
+no posterior draws were produced in the first attempt. Verify its handle before
+any restart. Supplemental runtime library must be included in final archive.
