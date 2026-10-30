@@ -2287,6 +2287,7 @@ pub struct DenseAutoSelectConfig {
     select_window: usize,
     threshold: f64,
     min_linearity: Option<f64>,
+    reconsider_window: Option<usize>,
 }
 
 impl Default for DenseAutoSelectConfig {
@@ -2298,6 +2299,7 @@ impl Default for DenseAutoSelectConfig {
             select_window: 2,
             threshold: 5.0,
             min_linearity: None,
+            reconsider_window: None,
         }
     }
 }
@@ -2318,6 +2320,7 @@ impl DenseAutoSelectConfig {
             select_window,
             threshold,
             min_linearity: None,
+            reconsider_window: None,
         })
     }
     /// The Hessian-fit rule (diagonal facade, WP79); see the type docs.
@@ -2345,6 +2348,19 @@ impl DenseAutoSelectConfig {
     /// `Some` for the Hessian-fit rule, `None` for the window-whitening rule.
     pub fn min_linearity(&self) -> Option<f64> {
         self.min_linearity
+    }
+
+    /// Research-only second decision after an initial diagonal choice.
+    /// Early dense choices are retained. Both fits use their own two windows.
+    #[cfg(feature = "research")]
+    pub fn with_reconsideration(mut self, window: usize) -> Result<Self, Error> {
+        if self.min_linearity.is_none() || window <= self.select_window {
+            return Err(Error::configuration(
+                "reconsideration requires a Hessian fit and a later selection window",
+            ));
+        }
+        self.reconsider_window = Some(window);
+        Ok(self)
     }
 }
 
@@ -7413,6 +7429,7 @@ struct AutoFitRecord {
     joint: DenseCovariance,
     previous: DenseCovariance,
     current: DenseCovariance,
+    reconsider: Option<Box<AutoFitRecord>>,
 }
 
 impl AutoFitRecord {
@@ -7422,10 +7439,14 @@ impl AutoFitRecord {
             joint: DenseCovariance::new(2 * dimension),
             previous: DenseCovariance::new(dimension),
             current: DenseCovariance::new(dimension),
+            reconsider: None,
         }
     }
 
     fn observe(&mut self, window_index: usize, position: &[f64], gradient: &[f64]) {
+        if let Some(later) = self.reconsider.as_mut() {
+            later.observe(window_index, position, gradient);
+        }
         if window_index + 1 == self.select_window {
             self.previous.update(position);
         } else if window_index == self.select_window {
@@ -14105,7 +14126,11 @@ fn sample_chains_auto_selected<'a, T: Target>(
         .as_ref()
         .ok_or_else(|| Error::configuration("dense auto-selection requires warmup"))?;
     let schedule = warmup_schedule(config.discarded, &warmup.windows)?;
-    if auto.select_window >= schedule.windows.len() {
+    if auto.select_window >= schedule.windows.len()
+        || auto
+            .reconsider_window
+            .is_some_and(|window| window >= schedule.windows.len())
+    {
         return Err(Error::configuration(
             "dense auto-selection window is beyond the warmup schedule's slow windows",
         ));
@@ -14148,6 +14173,10 @@ fn sample_chains_auto_selected<'a, T: Target>(
                 )?;
                 run.rescue_record = None;
                 run.auto_fit = Some(AutoFitRecord::new(dimension, auto.select_window));
+                if let Some(window) = auto.reconsider_window {
+                    run.auto_fit.as_mut().expect("created").reconsider =
+                        Some(Box::new(AutoFitRecord::new(dimension, window)));
+                }
                 slot.run = Some(run);
             }
             slot.run.as_mut().expect("started").advance(end)
@@ -14163,7 +14192,10 @@ fn sample_chains_auto_selected<'a, T: Target>(
     };
     // One chain of the dense branch: the dense adaptive driver from the
     // diagonal run's state at the selection window's close.
-    let handoff = |chain: usize, mut run: ChainRun<'a, T>| -> Result<ChainOutput, Error> {
+    let handoff = |chain: usize,
+                   mut run: ChainRun<'a, T>,
+                   selected_window: usize|
+     -> Result<ChainOutput, Error> {
         let record = run
             .auto_fit
             .take()
@@ -14173,7 +14205,7 @@ fn sample_chains_auto_selected<'a, T: Target>(
             .metric_updates
             .iter()
             .rev()
-            .find(|update| update.window_index == auto.select_window)
+            .find(|update| update.window_index == selected_window)
             .ok_or_else(|| {
                 Error::new(
                     ErrorKind::Internal,
@@ -14205,11 +14237,11 @@ fn sample_chains_auto_selected<'a, T: Target>(
         dense_config.limits.max_target_evaluations = handoff_limit;
         let resume = DenseResume {
             position: run.position.clone(),
-            select_window: auto.select_window,
+            select_window: selected_window,
             covariance: record.current,
             step,
             mass_before: mass_before.clone(),
-            transitions_done: select_end,
+            transitions_done: schedule.windows[selected_window].end,
         };
         let mut output = sample_dense_inner(
             target,
@@ -14297,7 +14329,7 @@ fn sample_chains_auto_selected<'a, T: Target>(
             Ok(())
         };
         run_segment(&mut slots, select_end)?;
-        let decision = {
+        let mut decision = {
             let records = slots
                 .iter()
                 .map(|slot| slot.run.as_ref().and_then(|run| run.auto_fit.as_ref()))
@@ -14305,6 +14337,27 @@ fn sample_chains_auto_selected<'a, T: Target>(
                 .ok_or_else(|| Error::new(ErrorKind::Internal, "chain never started"))?;
             hessian_auto_select_decision(&records, &auto, auto.select_window, select_end - 1)
         };
+        if !decision.chose_dense {
+            if let Some(window) = auto.reconsider_window {
+                for slot in &mut slots {
+                    let run = slot.run.as_mut().expect("started");
+                    let later = run
+                        .auto_fit
+                        .as_mut()
+                        .and_then(|fit| fit.reconsider.take())
+                        .ok_or_else(|| Error::new(ErrorKind::Internal, "later fit missing"))?;
+                    run.auto_fit = Some(*later);
+                }
+                let end = schedule.windows[window].end;
+                run_segment(&mut slots, end)?;
+                let records = slots
+                    .iter()
+                    .map(|slot| slot.run.as_ref().and_then(|run| run.auto_fit.as_ref()))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| Error::new(ErrorKind::Internal, "later record missing"))?;
+                decision = hessian_auto_select_decision(&records, &auto, window, end - 1);
+            }
+        }
         for slot in &mut slots {
             let run = slot.run.as_mut().expect("started");
             run.telemetry.dense_auto_select = Some(decision.clone());
@@ -14316,11 +14369,11 @@ fn sample_chains_auto_selected<'a, T: Target>(
                 .map(|slot| slot.run.expect("started"))
                 .collect::<Vec<_>>();
             let execute = |(chain, run): (usize, ChainRun<'a, T>)| {
-                catch_unwind(AssertUnwindSafe(|| handoff(chain, run)))
-                    .unwrap_or_else(|_| {
-                        Err(Error::new(ErrorKind::Panic, "dense hand-off panicked"))
-                    })
-                    .map_err(|error| error.at_chain(chain))
+                catch_unwind(AssertUnwindSafe(|| {
+                    handoff(chain, run, decision.window_index)
+                }))
+                .unwrap_or_else(|_| Err(Error::new(ErrorKind::Panic, "dense hand-off panicked")))
+                .map_err(|error| error.at_chain(chain))
             };
             let results: Vec<Result<ChainOutput, Error>> = match pool {
                 None => runs.into_iter().enumerate().map(execute).collect(),

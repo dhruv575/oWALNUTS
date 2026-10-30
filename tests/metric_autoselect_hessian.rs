@@ -295,6 +295,12 @@ fn correlated_gaussian_takes_the_dense_branch() {
 
 #[test]
 fn validation() {
+    assert!(
+        DenseAutoSelectConfig::default()
+            .with_reconsideration(3)
+            .is_err()
+    );
+    assert!(hessian().with_reconsideration(2).is_err());
     assert!(DenseAutoSelectConfig::hessian_fit(2, 5.0, 0.0).is_err());
     assert!(DenseAutoSelectConfig::hessian_fit(2, 5.0, 1.5).is_err());
     assert!(DenseAutoSelectConfig::hessian_fit(2, 5.0, f64::NAN).is_err());
@@ -351,6 +357,52 @@ fn validation() {
         .run(&target, &starts(&scales, 2))
         .unwrap_err();
     assert_eq!(beyond.kind(), ErrorKind::Configuration, "beyond schedule");
+}
+
+#[test]
+fn reconsideration_preserves_early_dense_and_final_diagonal_paths() {
+    let scales = vec![1.0, 3.0, 0.2, 1.0, 5.0];
+    for rho in [0.0, 0.95] {
+        let target = Gaussian::new(scales.clone(), rho);
+        let original = run(
+            &target,
+            &scales,
+            Some(Adaptation::Custom(warmup(Some(hessian())))),
+            4,
+        )
+        .unwrap();
+        let candidate_config = hessian().with_reconsideration(3).unwrap();
+        let candidate = run(
+            &target,
+            &scales,
+            Some(Adaptation::Custom(warmup(Some(candidate_config)))),
+            4,
+        )
+        .unwrap();
+        assert_same_run(&original, &candidate);
+        let early = original.chains()[0]
+            .telemetry()
+            .dense_auto_select()
+            .unwrap();
+        let final_decision = candidate.chains()[0]
+            .telemetry()
+            .dense_auto_select()
+            .unwrap();
+        assert_eq!(early.chose_dense(), rho > 0.0);
+        assert_eq!(final_decision.chose_dense(), early.chose_dense());
+        assert_eq!(
+            final_decision.window_index(),
+            if early.chose_dense() { 2 } else { 3 }
+        );
+        let serial = run(
+            &target,
+            &scales,
+            Some(Adaptation::Custom(warmup(Some(candidate_config)))),
+            1,
+        )
+        .unwrap();
+        assert_same_run(&candidate, &serial);
+    }
 }
 
 #[test]
