@@ -61,3 +61,29 @@ geometry adaptation. The build/test took31.46s, peakRSS862MB and638MB cache.
 This checks existing implementation coverage, not native metric-transfer parity.
 The next needed artifact is a frozen per-chain-metric/step-size research runner
 and an analytic-target injection check before a matched-geometry comparison.
+
+## Fixed runner preflight
+
+The separate unpublished fixed_metric_runner now supplies per-chain dense
+momentum covariance, step size and seed, with zero warmup and Adaptation::None.
+Chains run sequentially, so its wall time must not be compared directly with
+the four-core native runs. An atomic wrapper counts every attempted gradient.
+The first offline build failed for an uncached libloading dependency; preserved
+attempt02 built successfully with an isolated lockfile and dependency downloads.
+No library defaults or production sampler sources were changed.
+
+Four4000-draw chains on the analytic rotated Gaussian, covariance[[2,1],[1,2]],
+pass the fixed accuracy thresholds at steps .2/.4/.6/.8: Rhat1.00029,
+minimum bulkESS10058.8, tailESS8738.7, zero divergences, maximum covariance error
+normalized by2 is .03037. Every chain's standalone replay exactly matches its
+combined-run draws and target counts. Indefinite mass and zero step reject.
+The source, binary, failed build and all preflight outputs are locally archived
+and read-back verified (59members; SHA256
+39438227eefd3e276f8799a878cd8278ad5bde10c158915e379d6484682855cc).
+
+Next establish native prefix parity between a short recovery-only run and a
+longer run before treating the recovered endpoint as a shared initial state.
+Then compare gradients per qualified effective draw with identical per-chain
+geometry and native step sizes. Charge all native pilot/recovery costs to any
+transplanted workflow. Fixed native steps are diagnostic settings, not evidence
+of optimal WALNUTS tuning. No performance claim follows from this preflight.

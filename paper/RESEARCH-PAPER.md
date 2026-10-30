@@ -696,3 +696,17 @@ it does not show that every possible metric or WALNUTS improvement fails. The
 next diagnostic should distinguish metric adaptation from kernel behavior,
 with pinned native metric export/replay qualification before any transplant.
 No default change, practical application, uniqueness or paper-readiness follows.
+
+### Fixed-geometry diagnostic readiness
+
+Native affine-map recovery now passes all24 chains across six targets with
+held-out coordinate and gradient checks; these exposed short runs are not
+posterior validation. Seventy-two target-gradient/kinetic convention checks and
+five existing compiled dense-metric tests pass. A separate unpublished runner
+accepts fixed per-chain dense momentum covariances and step sizes without
+adaptation. Its analytic rotated-Gaussian preflight passes the fixed accuracy
+criteria, four exact standalone-chain replays and two invalid-input checks.
+Source, binary and failures are archived locally. No library default changed.
+The runner uses sequential chains; its wall clock cannot be equated to native
+four-core sampling. Matched-geometry comparisons and full cost accounting remain
+pending, so no improvement or application claim follows from these checks.
