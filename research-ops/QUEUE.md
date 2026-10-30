@@ -36,6 +36,13 @@ Screen S3 exact-version restore verified; see archive-budget-v1 for the budget
 restore receipt. No originals reclaimed. Last free EC2 disk 1,234,190,336 bytes;
 retain the 1GiB admission floor. Instance remains running. Goal remains active.
 
+Common-functional audit now complete: WALNUTS 6/8, NUTS 7/8. All WALNUTS
+errors pass, but two fail precision. All NUTS errors and precision pass, with
+one diagnostic failure. This is exploratory, not a rewritten original pilot.
+See usefulness_search_v1/mcmc-audit01; 82 archived dependencies verified.
+Prior WP39B already rejects untruncated reverse-check orbits as a general
+improvement. Profile with kernel_bench before selecting another mechanism.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace

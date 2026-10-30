@@ -212,3 +212,10 @@ WALNUTS comparison, clinical decision value, or algorithmic uniqueness.
 Patient reference qualification failures remain unchanged. Reproducible
 protocol, results and verified archive receipts are in
 `STUDIES/usefulness_search_v1/budget_extension` and `archive-budget-v1`.
+
+An exploratory common-functional audit of the preserved public ODE validation
+draws yields 6/8 WALNUTS and 7/8 NUTS passes. All WALNUTS runs meet the error
+and diagnostic gates, but two miss precision; all NUTS runs meet error and
+precision gates, but one fails diagnostics. This does not support an exclusive
+WALNUTS advantage for the observed tail discrepancies. Details and authenticated
+inputs are in `STUDIES/usefulness_search_v1/mcmc-audit01`.
