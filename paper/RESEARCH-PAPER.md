@@ -379,3 +379,16 @@ Thus the mechanism passes this limited correctness check but demonstrates no
 advantage over full dense. Nonlinear and actual-model usefulness remain open;
 the staged restart is not a validated single-run warmup policy. Raw evidence and
 protocol are in metric_blocks/ONLINE-REPORT.md and its verified archive.
+
+The subsequent four-model, four-seed development screen preserved four failed
+earnings installations caused by antisymmetric inversion roundoff. A separately
+specified symmetric-inverse repair passed all sixteen candidate accuracy gates.
+For earnings the paired median minimum-bulk-ESS per total target call was 3.00
+times full-dense adaptation, but the worst replicate achieved only .379 times;
+three other models did not clear the continuation gate. Original controls were
+reused in the repair and are not independent replication. Pilot and probe work
+were charged. This is an exploratory signal requiring matched schedule ablation,
+fresh uncertainty analysis and broader controls. The earnings model admits direct
+Gaussian-regression posterior sampling, so this signal cannot establish an
+application requiring WALNUTS. See metric_blocks/MODEL-REPORT.md; both original
+and repaired raw evidence passed exact-version archive restore verification.

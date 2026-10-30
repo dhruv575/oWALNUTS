@@ -1,6 +1,17 @@
 # Active research queue
 
-## Running: frozen staged curvature model screen
+## Latest: model screen terminal; earnings signal needs ablation/direct baseline
+
+Original 80 jobs completed; four earnings candidate installs failed numerical
+symmetry validation. Separate symmetric-inverse repair ran all 16 candidates;
+all pass reference gates. Only earnings clears continuation: median 3.00x ESS/call
+versus dense, but worst paired ratio .379. Kidiq/GARCH/GP do not clear the gate.
+No usefulness claim. See metric_blocks/MODEL-REPORT.md and NEXT-CONTROLS.md.
+Next qualify the direct Gaussian-regression posterior, then freeze a matched
+staged ablation on fresh seeds. Distinguish curvature information from schedule
+effects. Original and repaired raw evidence archived; production unchanged.
+
+## Historical launch record: staged curvature model screen (now terminal)
 
 MODEL-SCREEN.md freezes four targets, four fresh seeds and candidate/diagonal/
 dense/automatic arms, with 16 additional discarded pilots. Candidate cost includes
