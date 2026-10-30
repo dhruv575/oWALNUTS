@@ -1,9 +1,11 @@
 # Current reviewed research queue: 2026-10-30
 
-1. Active: transfer of verified real-count predictive evidence from
-   /home/ubuntu/lanes/real-counts-predictive-20261030-v2 to predictive_remote02.
-   Serial workflows completed5/6qualified; WAL rep1 missed precision. Prediction
-   and independent36-job raw replay plus score audit completed successfully.
+1. Active: spatial sampler runtime smoke at
+   /home/ubuntu/lanes/spatial-counts-preflight-20261030. Native/WAL4chains,
+   50warmup/30retained;300s/4GiB/128MiB. No posterior or speed qualification.
+   All8 independent60/80-digit model checks PASSED;maximum scaled AD error
+   2.54e-5. Original double finite-difference failure remains preserved.
+   Qualified posterior references and approximation controls are not yet launched.
    This entry is a snapshot, not a watcher: inspect the process before acting.
 2. Completed synthetic AWS comparison:26/28 qualified; all-fit gate failed.
    Independent raw audit and432-member archive verified; checkpoint4eb6fb32.
@@ -17,10 +19,16 @@
    Prediction result NEGATIVE: GP mean log score-1.44693 vs exact changepoint
    -1.40316;difference-.04377,block95%[-.13625,.05059]. No application advantage.
    Both4096-proposal fits missed predictive precision;16384-proposal fits passed.
-   Finish combined fresh/predictive archive and exact-version S3 verification.
-   Then review a distinct candidate with justified posterior-exploration needs;
-   do not retune against these exposed scores to manufacture a successful use case.
-3. Storage: approximately1.1GiB free after predictive evidence. Audit further checkout
+   Fresh/predictive433-member archive verified locally and by exact-version S3
+   restore. Spatial partial-census candidate source/data frozen:spatstat bei,
+   200cells,205parameters,712training points from20%thinning;terrain covariates
+   included. Source binary contains3604 points versus3605 in documentation;
+   discrepancy preserved. Required strong controls named in candidate protocol.
+   Do not retune against historical-count scores to manufacture a successful use case.
+3. Storage: approximately1.7GiB free after verified reclamation of23 archived raw
+   training-study files(568628842bytes);sources/summaries/runtime retained.
+   See real_counts_v1/ARCHIVE-AND-RETIREMENT.md before replaying old AWS studies.
+   Audit further checkout
    files and archive completed studies to private S3 with exact-version restore
    verification before reclaiming redundant evidence. Do not perturb timing
    with large archive/cleanup jobs on the AWS host during timing studies.
