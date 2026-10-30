@@ -710,3 +710,17 @@ Source, binary and failures are archived locally. No library default changed.
 The runner uses sequential chains; its wall clock cannot be equated to native
 four-core sampling. Matched-geometry comparisons and full cost accounting remain
 pending, so no improvement or application claim follows from these checks.
+
+### Matched-geometry exposed diagnostic
+
+The first prefix qualification found native retained-step jitter and was
+preserved as a failed fixed-step qualification. A separate no-jitter run passes
+all six exact-prefix and continuation-call checks. At native-tuned fixed steps
+and recovered per-chain geometry, qualified WALNUTS/native continuation ESS per
+actual gradient ratios are .801 arK, .817 GARCH and .651 regression; full workflow
+ratios including native pilot costs are .839, .859 and .699. Both methods fail
+centered eight schools and GP-Poisson. ARMA fails reconstruction before transfer.
+This one exposed seed does not isolate optimal tuning or prove general kernel
+superiority. Wall times are incomparable because chain parallelism differs.
+A bounded exposed step-size diagnostic is next; any signal needs fresh whole-
+pilot validation. No practical success or production change is established.
