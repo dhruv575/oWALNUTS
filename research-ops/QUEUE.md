@@ -1,5 +1,20 @@
 # Active research queue
 
+## Active: fresh hybrid validation, policy frozen
+
+HYBRID-VALIDATION.md freezes16 fresh seeds929300001..16 across six models and
+five arms, four4-seed chunks. Prefer Fisher only when all held-out-chain
+worst-direction R2>0; otherwise unchanged v4 block/auto. Seven analytic gate
+checks pass locally and remotely. Hybrid pays all scores, probes and fit time.
+Chunk1 runs at work/hybrid01 on existing EC2; controller432984, SSH session19852.
+Inspect live PID/SUMMARY before resuming; never restart from observer timeout.
+Chunks2--4 NOT launched. Archive+exact-version restore each chunk before next;
+reclaim only verified redundant RESULT gzip copies using reclaim_chunk_results.py.
+Root floor1GiB. Previous broad/Fisher gzip reclamation freed50,304,299 bytes;
+exact audits broad01-RECLAIM.json/fishercompare01-RECLAIM.json, originals retained.
+After four chunks use analyze_hybrid.py for prespecified exploratory gate and
+paired bootstrap intervals. A passing continuation gate alone is not goal success.
+
 ## Latest: Fisher baseline removes the apparent regression advantage
 
 fisher02/03 both fail1/16 fixed numerical checks; preserve them. fisher04 uses
