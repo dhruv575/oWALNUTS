@@ -311,3 +311,15 @@ but this does not override the failed known-target gate. The first replay's
 incorrect starting-state assumption and all negative evidence are retained in
 `usefulness_search_v1/ensemble_moves/REPORT.md`. Correct invariance alone does
 not establish practical mixing or a novel sampler contribution.
+
+A fixed proposal-bank diagnostic repairs that live-ensemble occupancy problem
+when the two component centers are supplied. Across 128 fresh jobs, augmented
+WALNUTS's positive-region probability RMSE is .033 and .039 in one and eight
+dimensions, passing the limited mechanism gate. Yet importance sampling from
+the identical fixed bank achieves .019 and .021 RMSE using 800 target evaluations
+versus approximately 115000 and 154000 for augmented WALNUTS. Other functionals
+are not uniformly dominated; all errors are retained. Oracle centers bypass
+mode discovery, and no NUTS comparison or application claim is made. Correct
+mechanics therefore does not establish a useful WALNUTS advantage. Protocols,
+raw samples/weights and private archive receipts are in
+`usefulness_search_v1/fixed_bank/REPORT.md`.

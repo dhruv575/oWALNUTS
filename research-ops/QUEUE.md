@@ -1,5 +1,23 @@
 # Active research queue
 
+## Latest: fixed bank repairs synthetic mixing; cheap correction is better value
+
+Fixed-bank stationarity and both frozen oracle mechanism gates PASS. All 128
+jobs are TERMINAL (17.68s), inputs unchanged, groups drained. Augmented WALNUTS
+estimates true .20 region mass with RMSE .033/.039, but importance sampling
+achieves .019/.021 with 800 target calls versus 115k/154k. Supplied mode centers
+bypass discovery. This is not a demonstrated application or algorithm advantage;
+do not scale the toy campaign. See fixed_bank/REPORT.md and verified 537-member
+private archive. No default changes; goal ACTIVE.
+
+Next: the GP count candidate's provenance is now checked (gp_count/PROVENANCE.md).
+It is an 11-point SYNTHETIC benchmark, not an actual application. Historical GP
+results include both passes and one common failure; dense-choice counts are not
+failure counts. Freeze a bounded Laplace/defensive-importance/reference-functional
+audit before any broader GP campaign. Use known cheap controls to decide whether
+this target even motivates expensive inference, then strong NUTS/latent-Gaussian
+controls if warranted. No new GP sampling batch has been launched.
+
 ## Latest: live-ensemble proposal correct but fails fresh mixing screen
 
 All 128 independent-ensemble mechanism jobs are TERMINAL (28.75s), inputs
