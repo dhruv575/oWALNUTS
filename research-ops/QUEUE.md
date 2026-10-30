@@ -1,5 +1,34 @@
 # Active research queue
 
+## Continuing goal: 2026-10-29 useful application or substantive algorithm improvement
+
+User explicitly requested continuing exploration until an actual useful case is
+demonstrated or WALNUTS is improved substantively. Durable goal is active.
+See `STUDIES/usefulness_search_v1/PLAN.md`; do not mark the goal complete for a
+small runtime change, exploratory tail discrepancy, or a failed cheap baseline.
+
+First audit: public ODE Laplace parameter-tail probabilities differ by up to
+0.10396 from the qualified reference despite accurate tested forecast means.
+This is exploratory evidence for investigating calibrated uncertainty.
+The 32-job corrected importance screen completed: Gaussian 0/8 passes at 4096
+and 16384 draws; defensive mixture 0/8 at 4096 and 5/8 at 16384. Value-only
+density evaluation costs about 1.22 seconds at the larger budget, about 3.17
+seconds including worker overhead. No proposal meets the frozen 7/8 screen
+gate yet. Preserve the failed serialization attempt; it is administrative,
+not evidence against importance sampling. Raw evidence remains on EC2.
+
+Next: bounded defensive-proposal budget/adaptation comparison, then inspect
+latent GP count-model provenance and strong tuned competitors. Also profile
+reverse-schedule construction; require exact-output parity and meaningful
+held-out timing gains before changing the kernel. Existing ODE primary results
+and qualification gates remain unchanged. No deployment or trading.
+
+Root `/home/ubuntu/lanes/usefulness-search-20261029`; corrected importance run
+under `is-repaired`. This checkpoint's 32 jobs are terminal, not still running.
+Continue the queue under the active goal. Archive these new artifacts with
+external dependency checks against the prior verified ODE archive before any
+reclamation. The instance remains running; retain the 1GiB disk admission floor.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
