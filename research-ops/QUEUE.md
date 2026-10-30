@@ -1,19 +1,23 @@
 # Current reviewed research queue: 2026-10-30
 
-1. Active: real count-data posterior references at
-   /home/ubuntu/lanes/real-counts-reference-20261030. Four groups (two native,
-   two WAL), four chains each,2000 warmup/8000 retained,1200s worker caps.
-   Training only:79 observations,81 parameters,160 physical functionals.
+1. Active: real count-data fresh serial workflows at
+   /home/ubuntu/lanes/real-counts-fresh-workflows-20261030. Six workflows:
+   two fresh seeds each,WAL dense.9,native diagonal.99,conditional importance.
+   Frozen FRESH-WORKFLOW-PROTOCOL.md;300s/3GiB/128MiB per workflow.
    This entry is a snapshot, not a watcher: inspect the process before acting.
 2. Completed synthetic AWS comparison:26/28 qualified; all-fit gate failed.
    Independent raw audit and432-member archive verified; checkpoint4eb6fb32.
    No formal ranking or practical advantage established. Real-data source,
    split and exact constant/change-point controls frozen at b2afee9b.
-   Runtime preflight passed; reference qualification and independent raw audit
-   are next. No historical heldout scores yet; freeze predictive integration,
+   Four reference groups and combined agreement passed; all128000 raw draws
+   audited. Both16384-proposal importance fits passed all160 training quantities;
+   original-runtime density replay passed, local replay mismatch preserved.
+   Native.9/.95 screen failed55/12 divergences;.99 andWAL.9 qualified.
+   Training archive172members verified locally; off-device S3 verification
+   active. No historical heldout scores yet; freeze predictive integration,
    MCSE and strong approximate-inference controls before scoring.
-3. Storage: approximately2.1GiB free at reference dispatch. Four workers capped
-   256MiB each;1.5GiB initial free floor. Audit further Git-identical checkout
+3. Storage: approximately1.6GiB free at fresh serial dispatch. Each workflow
+   capped128MiB;1GiB initial and512MiB per-job free floors. Audit further checkout
    files and archive completed studies to private S3 with exact-version restore
    verification before reclaiming redundant evidence. Do not perturb timing
    with large archive/cleanup jobs on the AWS host during timing studies.
