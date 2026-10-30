@@ -754,3 +754,20 @@ frozen cache-experiment criterion fails. No caching change is implemented.
 Two instrument unit tests cover signed zero, altered outputs, capacity and
 nonfinite accounting. The local91-member evidence archive verifies. Next inspect
 existing forward/refinement/reverse work counters; no optimization is assumed.
+
+### Work-counter decomposition
+
+All10 profiled replays preserve the old draws and actual call counts. Existing
+initial/forward/reverse telemetry reconciles with the independent counter.
+At factor1, qualified arK/regression/GARCH reverse-call fractions are5.045%,
+6.420%,5.997%; forward calls not attached to built leaves are5.045%,6.423%,6.003%.
+Holding observed draws fixed and removing both categories gives accounting-only
+ESS/gradient ratios versus native NUTS of .891,.747,.928. These are not attainable
+speedups or bounds on a changed algorithm. They indicate that removing these
+categories alone cannot explain away the observed efficiency gap.
+Factor4 places roughly60% of calls outside built-leaf forward work. Existing
+U-turn and reverse-coarser policy studies already preserve negative broader
+results. Next use a single-level/permissive-error ablation to separate active
+refinement from remaining NUTS implementation differences; no default change
+or improvement is inferred. The68-member local source/binary/evidence archive
+passes read-back verification.
