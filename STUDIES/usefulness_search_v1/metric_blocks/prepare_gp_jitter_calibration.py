@@ -1,0 +1,15 @@
+from pathlib import Path
+p=Path(__file__).resolve().parent
+s=(p/'gp_wal_calibration_worker.py').read_text().replace('import hashlib,json,sys,time,subprocess','import hashlib,json,sys,time,subprocess,os')
+s=s.replace("root=Path(sys.argv[1]);", "amplitude=float(sys.argv[5]);os.environ['OWALNUTS_RESEARCH_JITTER']=str(amplitude);root=Path(sys.argv[1]);")
+s=s.replace('gp_wal_build02/SUMMARY.json','gp_jitter_build02/SUMMARY.json').replace("artifact=build['rows'][1]","artifact=build['rows'][0]")
+s=s.replace('out=dict(model=name,','out=dict(amplitude=amplitude,model=name,').replace('GP-WAL-CALIBRATION-PROTOCOL.md','GP-JITTER-CALIBRATION-PROTOCOL.md')
+(p/'gp_jitter_calibration_worker.py').write_text(s)
+s=(p/'run_gp_wal_calibration.py').read_text().replace('gp_wal_calibration01','gp_jitter_calibration01').replace('gp_wal_driver_test02','gp_jitter_test02')
+s=s.replace("configs=[(m,a) for a in [.8,.9,.99] for m in ['walnuts_auto','walnuts_dense']]","configs=[0.,.25,.5,.75]")
+s=s.replace('[946400001,946400002]','[947800001,947800002]').replace('for mode,accept in configs if si==0 else list(reversed(configs)):',"for amplitude in configs if si==0 else list(reversed(configs)):\n        mode='walnuts_dense';accept=.9")
+s=s.replace("f'{mode}-{accept}-{seed}'","f'jitter-{amplitude}-{seed}'").replace('gp_wal_calibration_worker.py','gp_jitter_calibration_worker.py').replace('str(accept),str(seed)]','str(accept),str(seed),str(amplitude)]')
+s=s.replace('dict(mode=mode,target_accept=accept,seed=seed,passed=False','dict(amplitude=amplitude,mode=mode,target_accept=accept,seed=seed,passed=False').replace('completed=len(rows),mode=mode','completed=len(rows),amplitude=amplitude,mode=mode')
+s=s.replace('for mode,accept in configs:', 'for amplitude in configs:').replace("x['mode']==mode and x['target_accept']==accept","x['amplitude']==amplitude").replace('eligible.append(dict(mode=mode,target_accept=accept,','eligible.append(dict(amplitude=amplitude,')
+s=s.replace("-x['target_accept'],x['mode']!='walnuts_auto'","x['amplitude']")
+(p/'run_gp_jitter_calibration.py').write_text(s)

@@ -1,0 +1,30 @@
+--- src/walnutpie.rs
++++ gp_jitter_source01/src/walnutpie.rs
+@@ -9512 +9512,14 @@
+-            let step_before_transition = active_tuning.step_size;
++            let mut jittered_tuning = *active_tuning;
++            if transition_index >= *discarded {
++                let amplitude: f64 = std::env::var("OWALNUTS_RESEARCH_JITTER")
++                    .unwrap_or_else(|_| "0".to_owned()).parse().expect("numeric jitter");
++                assert!(amplitude.is_finite() && (0.0..1.0).contains(&amplitude));
++                if amplitude > 0.0 {
++                    let schedule_seed = seed ^ 0x8a93_7c61_d5b2_40ef_u64
++                        ^ (transition_index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
++                    let mut jitter_rng = SmallRng::seed_from_u64(schedule_seed);
++                    let uniform: f64 = jitter_rng.random();
++                    jittered_tuning.step_size *= 1.0 + amplitude * (2.0 * uniform - 1.0);
++                }
++            }
++            let step_before_transition = jittered_tuning.step_size;
+@@ -9708 +9721 @@
+-                                active_tuning.transition_tuning(),
++                                jittered_tuning.transition_tuning(),
+@@ -9717 +9730 @@
+-                                active_tuning.transition_tuning(),
++                                jittered_tuning.transition_tuning(),
+@@ -9789 +9802 @@
+-                                active_tuning.transition_tuning(),
++                                jittered_tuning.transition_tuning(),
+@@ -9798 +9811 @@
+-                                active_tuning.transition_tuning(),
++                                jittered_tuning.transition_tuning(),
