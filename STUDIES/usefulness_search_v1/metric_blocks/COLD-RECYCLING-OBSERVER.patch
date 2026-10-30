@@ -1,0 +1,21 @@
+--- banana_wal_source01/src/recycling.rs
++++ cold_wal_source01/src/recycling.rs
+@@ -7 +7 @@
+-pub fn reset(enabled:bool) { ENABLED.store(enabled,Ordering::Relaxed); COMPACT.store(false,Ordering::Relaxed); *ACC.lock().unwrap()=None; RECORDS.lock().unwrap().clear(); LOWER.lock().unwrap().clear(); }
++pub fn reset(enabled:bool) { RETAINED_PHASE.store(false,Ordering::Relaxed); ENABLED.store(enabled,Ordering::Relaxed); COMPACT.store(false,Ordering::Relaxed); *ACC.lock().unwrap()=None; RECORDS.lock().unwrap().clear(); LOWER.lock().unwrap().clear(); }
+@@ -10 +10 @@
+-    if !ENABLED.load(Ordering::Relaxed) {return Vec::new();}
++    if !ENABLED.load(Ordering::Relaxed) || !RETAINED_PHASE.load(Ordering::Relaxed) {return Vec::new();}
+@@ -26 +26 @@
+-pub fn record(v:Vec<f64>) { if ENABLED.load(Ordering::Relaxed) { assert!(!v.is_empty() && v.iter().all(|x|x.is_finite())); if COMPACT.load(Ordering::Relaxed) { ACC.lock().unwrap().as_mut().unwrap().push(&v); } else { RECORDS.lock().unwrap().push(v); } } }
++pub fn record(v:Vec<f64>) { if ENABLED.load(Ordering::Relaxed) && RETAINED_PHASE.load(Ordering::Relaxed) { assert!(!v.is_empty() && v.iter().all(|x|x.is_finite())); if COMPACT.load(Ordering::Relaxed) { ACC.lock().unwrap().as_mut().unwrap().push(&v); } else { RECORDS.lock().unwrap().push(v); } } }
+@@ -52,0 +53,3 @@
++
++static RETAINED_PHASE:AtomicBool=AtomicBool::new(false);
++pub fn set_retained_phase(value:bool){RETAINED_PHASE.store(value,Ordering::Relaxed);}
+--- banana_wal_source01/src/walnutpie.rs
++++ cold_wal_source01/src/walnutpie.rs
+@@ -9679,0 +9680 @@
++            crate::recycling::set_retained_phase(transition_index >= *discarded);
+@@ -9822,0 +9824 @@
++            crate::recycling::set_retained_phase(false);
