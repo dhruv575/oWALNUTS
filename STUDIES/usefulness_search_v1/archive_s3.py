@@ -18,7 +18,10 @@ names=set();manifest=None
 with tarfile.open(restore,'r|gz') as tar:
     for m in tar:
         assert m.isfile() and m.name not in names;names.add(m.name);stream=tar.extractfile(m)
-        if m.name=='EVIDENCE-MANIFEST.json':manifest=json.load(stream);continue
+        if m.name=='EVIDENCE-MANIFEST.json':
+            manifest=json.load(stream)
+            if 'files' in manifest:manifest=manifest['files']
+            continue
         assert manifest is not None and manifest[m.name]==dict(bytes=m.size,sha256=hashlib.file_digest(stream,'sha256').hexdigest()),m.name
 assert names==set(manifest)|{'EVIDENCE-MANIFEST.json'}
 result=dict(bucket=bucket,key=key,version_id=version,sha256=digest,checksum_sha256=checksum,bytes=archive.stat().st_size,restored_path=str(restore),verified_members=len(manifest),private_public_access_block=public,encryption=got['ServerSideEncryption'],remote_originals_retained=True)

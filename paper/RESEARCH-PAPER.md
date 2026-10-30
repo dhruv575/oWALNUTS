@@ -226,3 +226,14 @@ baseline/candidate wall ratios were 1.053 (funnel), 0.971 (Gaussian), and 0.990
 (Eight Schools), with matching draw fingerprints and target-call counts. The
 change was not adopted; these short timings do not establish a substantive
 algorithm improvement. Full logs are in `usefulness_search_v1/kernel_profile`.
+
+A fresh-seed screen of later Hessian-based metric selection (window 3 versus
+window 2 and diagonal, four models, three seeds, 36 fits) passes all statistical
+diagnostics but fails its improvement rule. Median efficiency ratios versus
+the existing automatic selector are 0.873 on earnings, 0.972 on kidiq, and
+1.000 on garch11 (three-target geometric mean 0.947); the nonlinear GP control
+remains diagonal. Gains versus plain diagonal (~5.5x on the regressions) do
+not imply improvement over the stronger incumbent. An earlier 36-fit batch
+was invalidated by a configuration bug and retained as administrative evidence.
+The repaired protocol, results and full archive receipts are in
+`STUDIES/usefulness_search_v1/late_metric`. No default change was made.

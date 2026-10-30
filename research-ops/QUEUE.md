@@ -65,6 +65,16 @@ and U-turn checks (~5.4%); no dominant unused-allocation mechanism. Ordinary per
 was denied by kernel policy; sudo perf collected only this owned benchmark
 without changing system policy. Reports preserved under kernel_profile.
 
+Late-metric screen is TERMINAL. Original run01 invalid: source replacement
+corrupted environment key, so both auto arms selected window 2. Preserved.
+Repaired fresh-seed run02: all 36 diagnostic passes, correct recorded windows,
+44.30s, dependencies unchanged and groups drained. Candidate window3 fails:
+geomean ESS/call vs auto2 .9468, earnings .873 (<.9 floor). Do not adopt.
+Evidence and source/binaries/dependencies in verified 302-member archive.
+No inference jobs remain live. Next hypothesis: conditional late reconsideration
+only after early diagonal choice, retaining successful early dense decisions.
+Implement actual warmup policy; never choose completed chains post hoc.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace

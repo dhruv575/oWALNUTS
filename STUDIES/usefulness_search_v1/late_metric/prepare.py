@@ -5,8 +5,8 @@ study=root/'STUDIES/metric_autoselect_confirmation_v1'
 p=study/'src/bin/pdb.rs';s=p.read_text()
 old='const SELECT_WINDOW: usize = 2;'
 assert s.count(old)==1
-s=s.replace(old,'fn select_window() -> usize { std::env::var("STUDY_SELECT_WINDOW").unwrap_or_else(|_| "2".into()).parse().expect("selection window") }')
-s=s.replace('SELECT_WINDOW','select_window()');p.write_text(s)
+s=s.replace(old,'__WINDOW_FUNCTION__').replace('SELECT_WINDOW','select_window()')
+s=s.replace('__WINDOW_FUNCTION__','fn select_window() -> usize { std::env::var("STUDY_SELECT_WINDOW").unwrap_or_else(|_| "2".into()).parse().expect("selection window") }');p.write_text(s)
 with (root/'build.log').open('xb') as f:
  r=subprocess.run(['timeout','300','/home/ubuntu/.cargo/bin/cargo','build','--release','--locked','--offline','--bin','pdb','-j','4'],cwd=study,stdout=f,stderr=subprocess.STDOUT)
 binary=study/'target/release/pdb'
