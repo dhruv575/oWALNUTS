@@ -75,6 +75,21 @@ No inference jobs remain live. Next hypothesis: conditional late reconsideration
 only after early diagonal choice, retaining successful early dense decisions.
 Implement actual warmup policy; never choose completed chains post hoc.
 
+Conditional reconsideration implemented behind research opt-in, defaults unchanged
+(commit ad425668). Fourteen targeted metric/fingerprint tests passed, including
+exact unchanged-path draws/work and serial/parallel parity. Reserved exposed
+kidiq preflight verifies late-dense candidate exactly matches window3, including
+work and metric updates. Candidate runs both two-window observers and only
+reconsiders after early diagonal selection; no post-hoc chain selection.
+
+Fresh 36-job screen RUNNING at /dev/shm/reconsider-20261029/run01; last verified
+14 complete, three live four-thread workers. Supervisor run.py (pinned Python),
+launch.log; inspect PID/FINAL before restarting. Seeds 927100001--927100003,
+three arms diag/auto2/reconsider. Frozen protocol in usefulness_search_v1/reconsider.
+Disk 1,223,712,768 free, tmpfs 15.88GB free. Source/build hashes and test logs
+committed; preserve complete evidence and analyze exact early-dense/final-diagonal
+matches before any efficiency claim. No proven improvement or goal completion.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
