@@ -130,6 +130,18 @@ FINAL/PIDs before restart. Freeze full uncertainty/calibration/validation rules
 only after implementation/mixing pilot, with distinct fresh seeds. All earlier
 model/preflight failures retained. No useful-application success established.
 
+Pilot update: both TERMINAL at 77.29s (supervisor FINAL exists). NUTS54.05s,
+WALNUTS75.09s; BOTH retain rate-order occupancy [1,0,1,0] by chain: no crossings.
+Neither is a qualified global posterior reference. No divergence/depth hits;
+callback errors NUTS1, WALNUTS598 (phase not separated). These are distinct
+single pilot seeds, not performance validation. Full results still remote;
+archive before further modifications. Next resolve global mode mixing and
+establish a mode-aware strong baseline before expanding sampler comparisons.
+Candidate mechanistic investigation: exact involutive rate-exchange Metropolis
+moves (with proven Jacobian/detailed balance), or an equivalent marginalized
+model. Do not claim correctness from post-hoc draw relabeling or local Laplace
+mode weights. Both samplers must receive comparable model-aware controls.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
