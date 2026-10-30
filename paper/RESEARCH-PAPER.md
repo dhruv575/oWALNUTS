@@ -671,3 +671,28 @@ default initialization and different adaptation schedules remain limitations.
 Failed controls receive no efficiency credit. The frozen four-seed analysis must
 finish before deciding whether a larger replication is warranted. No application
 value or submission readiness is established by these interim results.
+
+### Completed native comparison screen
+
+All four frozen fresh-seed chunks completed: 168 arm cells, with four local
+330-member archives passing read-back and cost/schedule audits. The independent
+scalar replay verifies all qualification decisions, 44 paired ratio estimates,
+and the final screen gate; bootstrap intervals are exploratory and were not
+independently replayed. The prespecified promising-efficiency criterion FAILS.
+There are no paired accuracy losses for fast scaled versus automatic WALNUTS.
+
+For GARCH, fast scaled / automatic geometric ESS-per-gradient and post-import
+ESS-per-second ratios are 1.611 and 1.404, but the ratios versus native diagonal
+are 1.063 and 0.865; versus native draw-diagonal they are 1.192 and 1.070.
+Neither native comparison meets the frozen 1.2 threshold in both measures.
+Native low-rank qualifies only two GARCH seeds, so receives no paired ratio.
+On arK and regression, native low-rank qualifies all four seeds and the candidate
+ratios are respectively 0.412/0.361 and 0.413/0.258. ARMA and GP have no fully
+qualified native arm, precluding a positive screen claim. All methods fail
+centered eight schools. See metric_blocks/NATIVE-SCREEN-REPORT.md and its JSON.
+
+This rejects promotion of the current policy on these exposed model families;
+it does not show that every possible metric or WALNUTS improvement fails. The
+next diagnostic should distinguish metric adaptation from kernel behavior,
+with pinned native metric export/replay qualification before any transplant.
+No default change, practical application, uniqueness or paper-readiness follows.

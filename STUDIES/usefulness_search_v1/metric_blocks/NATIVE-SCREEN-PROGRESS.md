@@ -1,5 +1,22 @@
 # Native comparison progress
 
+## Terminal update
+
+All four chunks have now completed and all archives verified. The screen FAILS:
+see NATIVE-SCREEN-REPORT.md, NATIVE-SCREEN-ANALYSIS.json and the independent
+NATIVE-SCREEN-REPLAY.json. No current policy promotion or additional replication
+of this policy is justified by the frozen criterion. Earlier progress below is
+historical. The manuscript records the negative result.
+
+Next mechanism diagnostic: distinguish metric adaptation from kernel behavior.
+The bounded exposed arK probe (seed940700001,200warmup/100draws) confirms exact
+retained trajectories when enabling native store_mass_matrix. However, pinned
+nutpie0.16.11 exposes scales and eigenvalues, not eigenvectors; these do not
+identify the full low-rank metric. Do not reconstruct or transplant a metric from
+this incomplete export. Next inspect the pinned backend source and determine
+whether a full frozen transform can be exported and validated. This is a
+diagnostic direction, not an algorithm or application claim.
+
 The frozen four-seed comparison is incomplete. No useful application or full
 sampler improvement has yet been established by this screen.
 
