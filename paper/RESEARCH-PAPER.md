@@ -1026,3 +1026,21 @@ explanation of the original sparse-case failure, but is not validation on new
 datasets and does not establish uniqueness or application value for WALNUTS.
 Concurrent AWS clocks are not compared with local MCMC clocks. Preserve the
 failed runtime attempt separately; it produced no inferential samples.
+
+Lower-cost WAL-pilot production confirmation completed all 48 fits. All 24
+WALNUTS fits qualified; one of 24 native fits (bounded diagonal,scenario3,
+seed950400008) had four retained divergences. Its other 24-functional gates
+passed (Rhat1.000294,min bulk6812.79,min tail9151.23). The frozen all-fit gate
+therefore failed and competitive ratios were withheld. No control failure is
+interpreted as inherent candidate superiority. Independent calculation/source
+audit passed; 324-member local archive SHA-256
+90ad59eed2f7d7179f4a0a9a05fde896f09b2ca232e31acaec61b8c3ea415261.
+
+The first AWS complete-workflow batch completed but all16 transformed runs
+failed the frozen map-replay equality gate before production. AWS pilot draws
+and target-call counts differ from local same-seed runs even with the same
+runner/model binaries; this is observed cross-runtime nonidentity, not a proven
+hardware cause. Refitting AWS draws locally also gives different maps, excluding
+map-fit arithmetic alone as the explanation. These failures are preserved; do
+not loosen the recorded tolerance or relabel the original study as successful.
+AWS-specific pilot qualification is required before any separate timing study.
