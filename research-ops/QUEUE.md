@@ -1,5 +1,24 @@
 # Active research queue
 
+## Latest: live-ensemble proposal correct but fails fresh mixing screen
+
+All 128 independent-ensemble mechanism jobs are TERMINAL (28.75s), inputs
+unchanged and groups drained. Known-target stationarity and restart integration
+passed, but all four frozen mixing configurations failed. Cold ensembles never
+found the missing region; covered ensembles estimated its mass at ~0.34 versus
+true 0.20. An occupancy audit supports a last-walker reverse-proposal bottleneck.
+See ensemble_moves/REPORT.md. Preserve the failed initial Lotka replay assumption:
+the historical chain had escaped by its final draw. The corrected exposed
+replay's early exit is mechanics evidence only, not a validated improvement.
+
+Next reviewed task: fixed proposal bank (ensemble_moves/NEXT-DESIGN.md), first
+an explicitly oracle-assisted mechanism diagnostic, then a separately costed
+discovery pilot with fresh seeds if warranted. Do not omit mode-discovery cost
+or use a synthetic success to claim novelty/application value. Give the same
+bank to NUTS and include cheap mixture approximation before competitive claims.
+Goal remains ACTIVE. No sampler/default changes. Private archive retains all
+raw evidence, failures, installed modules and dependencies; originals retained.
+
 ## Latest: bounded initialization rejected; exact ensemble move under review
 
 The 78-cell bounded-init screen is TERMINAL (491.56s); all jobs exited and groups

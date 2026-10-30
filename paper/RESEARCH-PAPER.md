@@ -296,3 +296,18 @@ with a normal step; it is not a frozen-chain case and its probability cannot be
 inferred from density height. This rejects the tested bound and does not justify
 a stronger uncorrected rescue rule. Complete failures, controls, derivation and
 archive receipts are in `usefulness_search_v1/bounded_init/REPORT.md`.
+
+An exact sequential live-ensemble independence-MH prototype passes known-target
+one-step stationarity and fixed-kernel integration checks but fails a fresh
+128-job mixing screen. In one and eight dimensions, all-broad starts miss a
+separated narrow region of probability 0.20; starts covering both regions
+estimate its probability at roughly 0.34. Each configuration uses 16 independent
+ensembles, with uncertainty computed across ensembles rather than coupled
+walkers. Observed occupancy remains between one and three positive walkers;
+the product target conditional on that restriction has probability 0.33697.
+This supports a finite-run occupancy bottleneck, not mathematical nonergodicity.
+An exposed Lotka replay improves departure from a discrepant density region,
+but this does not override the failed known-target gate. The first replay's
+incorrect starting-state assumption and all negative evidence are retained in
+`usefulness_search_v1/ensemble_moves/REPORT.md`. Correct invariance alone does
+not establish practical mixing or a novel sampler contribution.
