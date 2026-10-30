@@ -1,0 +1,11 @@
+# Fixed-settings fresh-data sampler comparison
+
+All four frozen datasets and independently fitted qualified maps are included. No sampler tuning on these datasets. Six previously selected settings: raw WAL dense/.9,raw native diagonal/.999,affine WAL dense/.9,affine native diagonal/.99,bounded WAL dense/.9,bounded native diagonal/.999. Four chains,1100 warmup,8000 retained; two new seeds949800001+2*scenario+rep per dataset. Total48 fits. Reference/pilot/production seeds are distinct. Compiled-target equivalence must pass before launch.
+
+All24 quantities evaluated against the qualified dataset-specific reference. Gates: finite results,Rhat<=1.01,bulk/tail ESS>=400,zero retained divergences,max combined-reference-MCSE z<=4,mean error<=.1 reference SD,relative SD error<=.1. Require all48 qualified before efficiency contrasts; retain every failure and dataset, no retries/extensions or exclusion. Failed generalization remains failed, even if later tuning is studied separately.
+
+Primary efficiency is minimum bulk ESS across24 quantities divided by total warmup+retained gradient calls plus the complete new dataset-specific pilot gradient cost for each transformed workflow; raw workflows have no pilot. Secondary omits pilot costs. Compare bounded WAL with all five controls using paired geometric ratios and10000 cluster bootstrap resamples of four datasets, preserving both replicates, seed949900001. Report95% percentile intervals. Advancement requires all primary lower bounds>1.2. Four deliberately chosen synthetic scenarios provide limited uncertainty and do not justify population-wide generality. Record per-dataset outcomes, not only aggregate results.
+
+Map fitting has nonzero time despite zero target calls; no runtime ranking from concurrent clocks. Independent reference cost and historical calibration cost remain disclosed separately. Conditional importance is a required subsequent baseline on these fresh data before practical claims. No novelty/application/goal-completion inference from sampler efficiency alone.
+
+At most four concurrent workers,four chains each,BLAS1;300s/2GiB/256MiB per fit,2GiB free disk. Preserve raw evidence, source/dependency hashes and failures, verify archives. No production deployment or trading.
