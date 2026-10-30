@@ -219,3 +219,10 @@ and diagnostic gates, but two miss precision; all NUTS runs meet error and
 precision gates, but one fails diagnostics. This does not support an exclusive
 WALNUTS advantage for the observed tail discrepancies. Details and authenticated
 inputs are in `STUDIES/usefulness_search_v1/mcmc-audit01`.
+
+A separate exposed-workload mechanism screen removed unused reverse-schedule
+allocation in an isolated build. Across eight alternated-order pairs, median
+baseline/candidate wall ratios were 1.053 (funnel), 0.971 (Gaussian), and 0.990
+(Eight Schools), with matching draw fingerprints and target-call counts. The
+change was not adopted; these short timings do not establish a substantive
+algorithm improvement. Full logs are in `usefulness_search_v1/kernel_profile`.

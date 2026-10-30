@@ -43,6 +43,12 @@ See usefulness_search_v1/mcmc-audit01; 82 archived dependencies verified.
 Prior WP39B already rejects untruncated reverse-check orbits as a general
 improvement. Profile with kernel_bench before selecting another mechanism.
 
+Kernel allocation screen complete (kernel_profile/REPORT.md). Eight paired
+runs show unused-schedule removal helps funnel ~5% but regresses Gaussian ~3%
+and leaves Eight Schools unchanged; calls/draw fingerprints match. Candidate
+not adopted. Inspect larger allocation and metric costs next. Compilation and
+runs used /dev/shm; originals remain, no inference jobs currently running.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
