@@ -506,3 +506,36 @@ policy and charge all gate/probe costs. See FISHER-NUMERICS-REPORT.md and
 LINEARITY-AUDIT-REPORT.md. All failures and source fixtures are preserved in
 verified private archives. General improvement, novelty and application claims
 remain open.
+
+## Fresh cross-chain score-gated hybrid: failed continuation gate (2026-10-30)
+
+A frozen16-fresh-seed, six-target, five-arm experiment completed672 bounded jobs
+and480 matched sampler stages. Sources and targets were identical across four
+chunks. The hybrid uses Fisher when every held-out chain has positive
+worst-direction affine-score predictive R2; otherwise it uses the previous
+stable-block/automatic policy. All pilot, score and curvature-probe calls are
+charged. Hybrid outputs exactly reproduce their selected branch apart from timing.
+
+The hybrid passes16/16 accuracy checks on five targets and0/16 on centered eight
+schools, where all arms fail. No paired loss against automatic adaptation or v4
+is observed; this does not prove noninferiority. Geometric ESS/total-call ratios
+against automatic adaptation are1.241 [1.196,1.280] for ARMA and1.490 [1.320,1.661]
+for GARCH. Intervals are exploratory per-target95% paired-seed bootstrap intervals.
+Against dense adaptation, GARCH is1.057 [.927,1.177], inconclusive. Fisher passes
+15/16 ARMA and13/16 GP compared with hybrid16/16; failed pairs receive no ratios.
+
+The overall prespecified gate FAILS: proper-prior regression hybrid/Fisher is
+.8066 [.6083,.9963], below the required .90 floor. Three score-gate rejections
+fall back to v4 and cause the loss. The target and threshold are retained.
+A cheap collapsed control already limits the regression application claim.
+Component timing excludes worker startup/model loading, so no end-to-end runtime
+claim is supported. High-precision Fisher also limits optimized-baseline timing
+comparisons. Automatic metric selection and Fisher estimators are prior work
+(Bales et al.,2019; Seyboldt et al.,2026); the gate's novelty is not established.
+
+All four721-member archives were independently restored from exact private S3
+versions and verified; redundant gzip reclamation has per-file audits. See
+HYBRID-REPORT.md, HYBRID-TIMING-AUDIT.md, HYBRID-RELATED-WORK.md and the frozen
+HYBRID-VALIDATION.md. Diagnose fallback scaling and compare established metric
+selection criteria before another fresh study. General usefulness, application
+value and manuscript completion remain unproven.

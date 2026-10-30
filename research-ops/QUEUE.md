@@ -1,6 +1,25 @@
 # Active research queue
 
-## Active: fresh hybrid validation, policy frozen
+## Latest: fresh hybrid gate FAILED; preserve useful signals and fallback loss
+
+All four chunks terminal:672 drained jobs,480 matched stages,96 exact branch
+equivalences; source/target hashes identical. Four721-member archives restored;
+251,365,930 bytes redundant result gzip copies reclaimed with exact audits.
+Hybrid16/16 on five targets,0/16 centered eight schools (all arms fail).
+No paired loss vs auto/v4. ARMA1.241 [1.196,1.280] and GARCH1.490 [1.320,1.661]
+ESS/call vs auto meet signal criteria. Regression hybrid/Fisher .807 [.608,.996]
+violates frozen .90 floor; overall continuation gate FAILS. See HYBRID-REPORT.md.
+Timing audit excludes end-to-end runtime claims; no production/default change.
+
+Next bounded task: diagnose three regression fallbacks using saved pilot/Fisher/
+v4 metrics and qualified reference covariance; assess scale reconstruction and
+established Bales Hessian/covariance selection criteria before another guard.
+Do not drop regression or tune thresholds to these outcomes. Any revised policy
+requires fresh seeds, same strong baselines, and complete timing accounting.
+Keep current EC2 running; root above1GiB, tmpfs ~2GiB/6GiB used. No active sampler
+jobs now; research queue continues. Application/general improvement remains open.
+
+## Historical launch: fresh hybrid validation, now terminal
 
 HYBRID-VALIDATION.md freezes16 fresh seeds929300001..16 across six models and
 five arms, four4-seed chunks. Prefer Fisher only when all held-out-chain

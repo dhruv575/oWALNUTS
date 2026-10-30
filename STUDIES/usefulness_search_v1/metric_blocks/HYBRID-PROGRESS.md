@@ -19,5 +19,9 @@ Chunk3 (seeds929300009--12) completed168 jobs/120 stages with all audits and
 721-member archive restore passing. Hybrid again passes4/4 on five targets and
 0/4 centered eight schools. Reclaimed168 redundant compressed results
 (62,741,606 bytes) after verification. Chunk4 is active unchanged.
-Do not tune based on intermediate results. Full gate
-and bootstrap intervals require all16 seeds and all four verified chunks.
+Chunk4 (seeds929300013--16) is now terminal too:168 jobs/120 stages, all audits,
+721-member archive restore pass;168 redundant gzip results reclaimed after
+verification. Full analysis of all16 seeds FAILS the frozen continuation gate
+because regression hybrid/Fisher efficiency .807 is below .90, despite ARMA and
+GARCH signals and no paired accuracy loss against auto/v4. See HYBRID-REPORT.md
+and HYBRID-COMPARISON.json. No threshold or policy changes made during validation.
