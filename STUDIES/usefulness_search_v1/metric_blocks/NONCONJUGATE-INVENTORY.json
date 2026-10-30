@@ -1,0 +1,183 @@
+[
+  {
+    "model": "arma-arma11",
+    "dimension": 4,
+    "coordinates": [
+      "mu",
+      "phi",
+      "theta",
+      "sigma"
+    ],
+    "model_source": "// ARMA(1, 1)\n\ndata {\n  int<lower=1> T; // number of observations\n  array[T] real y; // observed outputs\n}\nparameters {\n  real mu; // mean coefficient\n  real phi; // autoregression coefficient\n  real theta; // moving average coefficient\n  real<lower=0> sigma; // noise scale\n}\nmodel {\n  vector[T] nu; // prediction for time t\n  vector[T] err; // error for time t\n  \n  mu ~ normal(0, 10);\n  phi ~ normal(0, 2);\n  theta ~ normal(0, 2);\n  sigma ~ cauchy(0, 2.5);\n  \n  nu[1] = mu + phi * mu; // assume err[0] == 0\n  err[1] = y[1] - nu[1];\n  for (t in 2 : T) {\n    nu[t] = mu + phi * y[t - 1] + theta * err[t - 1];\n    err[t] = y[t] - nu[t];\n  }\n  \n  err ~ normal(0, sigma);\n}\n\n\n",
+    "reference_path": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/arma-arma11.json.zip",
+    "reference_exists": true,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/arma-arma11_model.so": "e3abcf4c7b7de12c0bd04e944eb130e0b10013ad85d8dc80e65fd6e6b9c8c346",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/arma-arma11.data.json": "ae8685d1aaaa3214d7edbe834d59cc6d2e35b4d47217ad1d821e17982c0bb7c5",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/arma-arma11.stan": "aa713e50a5154ab9efda30f2b5fe320d6a77510434ff73cef6708cbf72d1fae8",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/arma-arma11.json": "0d0cebcfc7310e4295f1541473a7c31e97591969f555bdda54d12270cb5389d8",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/arma-arma11.json.zip": "6de4bfe5263e09b0421b15368da42720b3ddc2559f81b35e178a18ce05e299b9"
+    }
+  },
+  {
+    "model": "arK-arK",
+    "dimension": 7,
+    "coordinates": [
+      "alpha",
+      "beta.1",
+      "beta.2",
+      "beta.3",
+      "beta.4",
+      "beta.5",
+      "sigma"
+    ],
+    "model_source": "data {\n  int<lower=0> K;\n  int<lower=0> T;\n  array[T] real y;\n}\nparameters {\n  real alpha;\n  array[K] real beta;\n  real<lower=0> sigma;\n}\nmodel {\n  alpha ~ normal(0, 10);\n  beta ~ normal(0, 10);\n  sigma ~ cauchy(0, 2.5);\n  \n  for (t in (K + 1) : T) {\n    real mu;\n    mu = alpha;\n    \n    for (k in 1 : K) {\n      mu = mu + beta[k] * y[t - k];\n    }\n    \n    y[t] ~ normal(mu, sigma);\n  }\n}\n\n\n",
+    "reference_path": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/arK-arK.json.zip",
+    "reference_exists": true,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/arK-arK_model.so": "14fd3d4df3fa3a25b586461820c4ac035219af550a3a147ec251b0f70093729a",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/arK-arK.data.json": "aa2e638f24ddb4a7cf41f38917df2be3fffcb86e5d128c1a6b217247a8a4d798",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/arK-arK.stan": "fd5c71a891f648de3b9b65e2a65885c974fd9478b0a137b6b229f76ff4e01de6",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/arK-arK.json": "b1875b9c423623bab2193adde1dd855f760537a698823b23c7762169a4021b9f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/arK-arK.json.zip": "7ddb947e6c1ac5380f9c1e1fa101833a1236ef03de30f2cf5ece7b5b71841530"
+    }
+  },
+  {
+    "model": "sblrc-blr",
+    "dimension": 6,
+    "coordinates": [
+      "beta.1",
+      "beta.2",
+      "beta.3",
+      "beta.4",
+      "beta.5",
+      "sigma"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  int<lower=0> D;\n  matrix[N, D] X;\n  vector[N] y;\n}\nparameters {\n  vector[D] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // prior\n  target += normal_lpdf(beta | 0, 10);\n  target += normal_lpdf(sigma | 0, 10);\n  // likelihood\n  target += normal_lpdf(y | X * beta, sigma);\n}\n\n\n",
+    "reference_path": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/sblrc-blr.json.zip",
+    "reference_exists": true,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/sblrc-blr_model.so": "66da5df44ae27b935c792aa8de5f7c7175517acfbed497188f9de275b750084d",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/sblrc-blr.data.json": "2227de01d39e50560dd8341a84ed176a2a081cc8c8a841261dd4d6c38b47dc9c",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/sblrc-blr.stan": "e6407c4391ab11c0b59f17f3a04132df87aa69b7dae459e173036f16f9e8b161",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/sblrc-blr.json": "7ffa016f31c8bab0ef0a1be2d5d876be27cc0b337f30c4a9d063caa482f6fe6a",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/sblrc-blr.json.zip": "44f876cf35a038fcd1fd13fb19bbadf04b4308618ad41390050ae8b014a4592d"
+    }
+  },
+  {
+    "model": "eight_schools-eight_schools_centered",
+    "dimension": 10,
+    "coordinates": [
+      "theta.1",
+      "theta.2",
+      "theta.3",
+      "theta.4",
+      "theta.5",
+      "theta.6",
+      "theta.7",
+      "theta.8",
+      "mu",
+      "tau"
+    ],
+    "model_source": "data {\n  int<lower=0> J; // number of schools\n  array[J] real y; // estimated treatment\n  array[J] real<lower=0> sigma; // std of estimated effect\n}\nparameters {\n  array[J] real theta; // treatment effect in school j\n  real mu; // hyper-parameter of mean\n  real<lower=0> tau; // hyper-parameter of sdv\n}\nmodel {\n  tau ~ cauchy(0, 5); // a non-informative prior\n  theta ~ normal(mu, tau);\n  y ~ normal(theta, sigma);\n  mu ~ normal(0, 5);\n}\n\n\n",
+    "reference_path": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/eight_schools-eight_schools_noncentered.json.zip",
+    "reference_exists": true,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/eight_schools-eight_schools_centered_model.so": "70640f6fbecf9e271d78465c949e7e69c2372de8ad19e5db82cf1284cf4b2199",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/eight_schools-eight_schools_centered.data.json": "ffab95db56309c4e06102ad6d5900bf0d7be71a19b41206dc8ff67670c6c0071",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/eight_schools-eight_schools_centered.stan": "ccaf2d7beed22602f62f276cd4096194ab5de5b5c1d6bb2bae9a3655a3845c05",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/eight_schools-eight_schools_centered.json": "d7f70a3138629d74a20890142ac6737e5bcf8d70c0221cf1cfe2a4470b3ef7cc",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/eight_schools-eight_schools_noncentered.json.zip": "0858641e630c877103dba2b78beaf6bc1f39435fc43d2894c4dff5d609c7a264"
+    }
+  },
+  {
+    "model": "garch-garch11",
+    "dimension": 4,
+    "coordinates": [
+      "mu",
+      "alpha0",
+      "alpha1",
+      "beta1"
+    ],
+    "model_source": "data {\n  int<lower=0> T;\n  array[T] real y;\n  real<lower=0> sigma1;\n}\nparameters {\n  real mu;\n  real<lower=0> alpha0;\n  real<lower=0, upper=1> alpha1;\n  real<lower=0, upper=(1 - alpha1)> beta1;\n}\nmodel {\n  array[T] real sigma;\n  sigma[1] = sigma1;\n  for (t in 2 : T) {\n    sigma[t] = sqrt(alpha0 + alpha1 * square(y[t - 1] - mu)\n                    + beta1 * square(sigma[t - 1]));\n  }\n  \n  y ~ normal(mu, sigma);\n}\n\n\n",
+    "reference_path": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/garch-garch11.json.zip",
+    "reference_exists": true,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/garch-garch11_model.so": "0754183d4a26f8a9403ba5cb7aeff326447e2de38aab683e208ddd41b25ac7c1",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/garch-garch11.data.json": "ebc889b8eba76fc9d752b3887273a3d3f77955506c0e27a37acbf7cf8677e6d8",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/garch-garch11.stan": "bbfe1929a9dbf6f5a4066f6099d90fc8c3e1bf1c65e1072b47af19534c60a679",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/garch-garch11.json": "7043c8f387028b70ab69705a4abb9293c48dcfbea6273ed1c279502aaa1443fd",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/garch-garch11.json.zip": "5a56df72455394fec4bca2b8186432be76c8b8ecabfa43eff15bf19308edbf18"
+    }
+  },
+  {
+    "model": "gp_pois_regr-gp_pois_regr",
+    "dimension": 13,
+    "coordinates": [
+      "rho",
+      "alpha",
+      "f_tilde.1",
+      "f_tilde.2",
+      "f_tilde.3",
+      "f_tilde.4",
+      "f_tilde.5",
+      "f_tilde.6",
+      "f_tilde.7",
+      "f_tilde.8",
+      "f_tilde.9",
+      "f_tilde.10",
+      "f_tilde.11"
+    ],
+    "model_source": "data {\n  int<lower=1> N;\n  array[N] real x;\n  array[N] int k;\n}\nparameters {\n  real<lower=0> rho;\n  real<lower=0> alpha;\n  vector[N] f_tilde;\n}\ntransformed parameters {\n  vector[N] f;\n  {\n    matrix[N, N] cov = gp_exp_quad_cov(x, alpha, rho)\n                       + diag_matrix(rep_vector(1e-10, N));\n    matrix[N, N] L_cov = cholesky_decompose(cov);\n    f = L_cov * f_tilde;\n  }\n}\nmodel {\n  rho ~ gamma(25, 4);\n  alpha ~ normal(0, 2);\n  f_tilde ~ normal(0, 1);\n  \n  k ~ poisson_log(f);\n}\n\n\n",
+    "reference_path": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/gp_pois_regr-gp_pois_regr.json.zip",
+    "reference_exists": true,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/gp_pois_regr-gp_pois_regr_model.so": "fdd2d3b6c6fb5dad145ed49349070ae11930120f4c39f847ea9a41831f6e1d70",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/gp_pois_regr-gp_pois_regr.data.json": "eaa2d74dc1925adede775571b324fa1d00445659153345d2a5142804b6acd75f",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/gp_pois_regr-gp_pois_regr.stan": "d44142b5a950cfa68302de8d14c57e0ef0f9bcb7069375d22a74f84b7f78c270",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/gp_pois_regr-gp_pois_regr.json": "b3d6a27dc2a76a2d807c0d3b7cf35879b3bd251556e7fd14daa6e13eb41f01a8",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/gp_pois_regr-gp_pois_regr.json.zip": "0e8b39f525d6723ac6b0972fcf27d54185893825174ed8e7eec468d25fa8b7e8"
+    }
+  },
+  {
+    "model": "seeds_data-seeds_centered_model",
+    "dimension": 26,
+    "coordinates": [
+      "alpha0",
+      "alpha1",
+      "alpha12",
+      "alpha2",
+      "c.1",
+      "c.2",
+      "c.3",
+      "c.4",
+      "c.5",
+      "c.6",
+      "c.7",
+      "c.8",
+      "c.9",
+      "c.10",
+      "c.11",
+      "c.12",
+      "c.13",
+      "c.14",
+      "c.15",
+      "c.16",
+      "c.17",
+      "c.18",
+      "c.19",
+      "c.20",
+      "c.21",
+      "sigma"
+    ],
+    "model_source": "data {\n  int<lower=0> I;\n  array[I] int<lower=0> n;\n  array[I] int<lower=0> N;\n  vector[I] x1; // seed type\n  vector[I] x2; // root extract\n}\ntransformed data {\n  vector[I] x1x2;\n  x1x2 = x1 .* x2;\n}\nparameters {\n  real alpha0;\n  real alpha1;\n  real alpha12;\n  real alpha2;\n  vector[I] c;\n  real<lower=0> sigma;\n}\ntransformed parameters {\n  vector[I] b;\n  b = c - mean(c);\n}\nmodel {\n  alpha0 ~ normal(0.0, 1.0); // Narrower priors\n  alpha1 ~ normal(0.0, 1.0);\n  alpha2 ~ normal(0.0, 1.0);\n  alpha12 ~ normal(0.0, 1.0);\n  sigma ~ cauchy(0, 1);\n  \n  c ~ normal(0.0, sigma);\n  n ~ binomial_logit(N,\n                     alpha0 + alpha1 * x1 + alpha2 * x2 + alpha12 * x1x2 + b);\n}\n\n\n",
+    "reference_path": null,
+    "reference_exists": false,
+    "hashes": {
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/seeds_data-seeds_centered_model_model.so": "3a193a6aa5ce4531488e2c52a606e2994e2e3e23a6e9ad85c4a7a0864be1145c",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/seeds_data-seeds_centered_model.data.json": "515c2225f72cf4a82186ebf12670e86f61416e01144284c0a2c85261b1e74a35",
+      "/home/ubuntu/lanes/metric_autoselect_confirmation_v1/models/seeds_data-seeds_centered_model.stan": "37512dcebf0e156a8c186637dbdbfd1fb9fee18bcda2a9c5a47be2d0fc2867eb",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/seeds_data-seeds_centered_model.json": "f8d0c70cb8ca7a71bfe40b4d6da59295c2be2acb3bcb8f6345e41cd0f5a68a23"
+    }
+  }
+]

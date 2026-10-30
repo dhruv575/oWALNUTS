@@ -1,5 +1,17 @@
 # Active research queue
 
+## Latest: full-shape matched mechanism gate PASSES; broader validation pending
+
+All96 jobs terminal/drained; all five arms pass16/16 fresh seeds. Curvature
+ESS/total-call geometric ratio3.36 [2.61,4.15] vs adaptive dense and8.29
+[5.46,13.57] vs fixed empirical covariance. Worst dense ratio .900; no universal
+dominance. Matched schedule/cost/backup audits pass,423-member archive verified.
+See FULL-SHAPE-VALIDATION-REPORT.md. Earnings is not an MCMC application.
+Next freeze a broader nonconjugate/reference-qualified screen using the saved
+inventory. Treat adaptive fallback as an explicit new policy if adopted, not a
+retroactive change. Dense Fisher numerical baseline remains unqualified.
+Production unchanged; general usefulness/novelty and paper completion remain open.
+
 ## Parallel baseline preflight: dense Fisher implementation NOT qualified
 
 While fullshape02 continues unchanged, nine ill-conditioned Gaussian recovery
@@ -9,7 +21,7 @@ errors. Preserve this as implementation failure, not evidence against prior work
 See FISHER-REPORT.md and verified10-member archive. Need stable factor-based
 numerics and unchanged-fixture revalidation before any model/sampler comparison.
 
-## Running: full block shape fresh validation after passing mechanism preflight
+## Historical launch: full block shape validation (now terminal)
 
 V3 passes 47 analytic/exposed checks; prior failed geometries improve condition
 proxies by2748--21056x, not performance. Preserve v2 failed gate. Preflight's

@@ -446,3 +446,15 @@ not evidence against the published estimator or complete sampler. No baseline
 performance claim follows. Raw matrices and unchanged thresholds are archived;
 stable factor-based numerics and further verification remain required. The
 concurrent full-shape validation protocol is unchanged. See FISHER-REPORT.md.
+
+The reconstruction-only revision passed its fresh sixteen-seed matched gate:
+all five arms met all accuracy requirements. Minimum bulk ESS per charged target
+call improved by a geometric mean3.36 versus adaptive dense (paired-bootstrap
+95% interval2.61--4.15) and8.29 versus fixed empirical covariance (5.46--13.57).
+Worst adaptive-dense ratio remained .900. These intervals concern seed variation
+on one model; they are not model-general uncertainty or end-to-end speedups.
+The earlier failed candidate remains failed. Earnings has a direct sampler, so
+this is mechanism evidence only. Broader nonconjugate controls, qualified strong
+baselines and a distinct novel contribution remain outstanding. All96 jobs and
+matched-schedule/cost audits passed; the423-member evidence archive was restored
+and verified. See FULL-SHAPE-VALIDATION-REPORT.md.
