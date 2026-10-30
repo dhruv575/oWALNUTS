@@ -20,7 +20,8 @@ For the corrected run overlay files in `forecast_fix/` onto `source/`.
 The archived ENVIRONMENT.json records exact installed versions; compiled
 model and adapter binaries are archived, with source and build-command logs.
 
-Build adapter with `g++ -O3 -std=c++17 -shared -fPIC -pthread adapter.cpp -ldl`.
+Build adapter with
+`g++ -O3 -std=c++17 -shared -fPIC -pthread source/adapter.cpp -ldl -o build/adapter.so`.
 Build model using BridgeStan 2.9.0's make target `<root>/build/model_model.so`,
 from `<root>/build/model.stan`, without STAN_THREADS. Use one BLAS/OpenMP/MKL
 thread per worker. `prepare.py` creates shared MAP/Hessian/initial points;
@@ -37,7 +38,12 @@ Resource bounds, seeds and all qualification rules are specified in protocol.
 
 `test_analysis.py` runs with source on PYTHONPATH, outside the frozen source
 tree. It verifies reference/precision gates, selection ordering and censoring.
+`audit_campaign.py` independently checks snapshot hashes, observation partitions,
+seed separation, selection/source freezes and every terminal resource receipt.
 `check_progress.py` is read-only. `receive_archive.py` streams the complete
 remote evidence and verifies each member and source freeze; no second remote
 tar is needed. Raw evidence stays outside Git; compact reports/receipts belong
 in Git. Preserve legacy forecast failures and the aborted path-bug attempt.
+One-time model compilation is recorded separately and is not charged to each
+fit's cold worker total. See [related-work context](RELATED-WORK.md) for limits
+on novelty and practical-advantage claims.
