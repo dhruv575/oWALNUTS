@@ -1,3 +1,31 @@
+# Current reviewed research queue: 2026-10-30
+
+1. Active: serial AWS complete-workflow comparison at
+   /home/ubuntu/lanes/gp-qualified-cost-20261030. Twenty-eight frozen jobs across
+   four datasets; pilots/maps/grid rebuilt per workflow. Last live observation
+   17/28 complete, one raw native mixing failure; no restarts or gate changes.
+   This entry is a snapshot, not a watcher: inspect the process before acting.
+2. On terminal completion: transfer and hash-verify the complete evidence,
+   independently reconstruct raw-draw functionals and all diagnostics, retain
+   every failure and suppress competitive summaries if the all-fit gate fails.
+   Audit/archive scripts: analyze_gp_aws_qualified_workflow.py and
+   archive_gp_aws_qualified_workflow.py under metric_blocks.
+3. Storage: approximately1.4GiB free recently. Active batch enforces1GiB floor.
+   After serial timing finishes, audit further Git-identical historical checkout
+   files and archive completed studies to private S3 with exact-version restore
+   verification before reclaiming redundant evidence. Do not perturb timing
+   with large archive/cleanup jobs on the AWS host during the serial study.
+4. Research decision: examine full cost and achieved accuracy, including strong
+   repaired conditional importance. Do not infer a useful WALNUTS application
+   from failed native controls, gradient-only gains, or setup-only savings.
+   No new tuning campaign is authorized by a favorable partial result. Freeze
+   any follow-up separately, preserve exposed-data limitations and negatives,
+   and use fresh validation before substantive improvement claims.
+5. Paper/checkpoints: retain reviewed pushes and negative results; publication,
+   deployment and trading remain outside scope. No verified AMM success yet.
+
+## Historical queue snapshots (not live status)
+
 # Active research queue
 
 ## Current: counted native controls and six target builds qualified
@@ -660,7 +688,7 @@ BridgeStan adapter are in `STUDIES/pharma_ode_v1`. Three backend/solver tests
 passed, including independent integration, gradient checks and both samplers.
 Initial batch: 32 calibration fits, 14 reference fits and seven Laplace controls.
 Then freeze calibration-only selection for 64 fresh-seed validation fits.
-Observed Theoph subjects 1–3 are chosen by ID; final two measurements held out.
+Observed Theoph subjects 1â€“3 are chosen by ID; final two measurements held out.
 Public Stan fixture is a computational benchmark of unverified clinical origin.
 Compare nonlinear ODE to exact linear elimination; no clinical/business claims.
 
