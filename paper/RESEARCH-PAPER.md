@@ -578,3 +578,13 @@ scale-repaired block branch and therefore cannot validate the proposed repair.
 All arms still fail the centered eight-schools accuracy gates. Aggregate
 validation remains pending; no new application or novelty claim is supported.
 See STUDIES/usefulness_search_v1/metric_blocks/LOCAL-RECOVERY-REPORT.md.
+
+Local validation interim checkpoint: four of eight chunks now complete with
+336 supervised jobs and 288 matched stages. The first fresh scale-repaired
+fallback (regression seed 929600008) meets all accuracy gates, with ESS per total
+target call ratios 6.664 against the old fallback and 1.026 against Fisher.
+Its measured full invocation time is higher (1.486s versus 1.279s and 1.178s),
+so the call-efficiency result must not be presented as lower elapsed time.
+The full frozen comparison remains pending. SCORE-GATE-METHODS.md provides the
+implemented worst-direction diagnostic's definition, exact-arithmetic affine
+invariance argument and limitations; it offers no posterior-accuracy guarantee.

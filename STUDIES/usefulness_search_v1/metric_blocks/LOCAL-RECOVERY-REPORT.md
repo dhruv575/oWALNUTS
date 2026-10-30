@@ -37,3 +37,22 @@ Chunk archive:569 members, SHA256
 Every member was read back and verified. Remaining seven immutable chunks run
 sequentially; an audit and local archive verification gate each next chunk.
 All negative results and raw files are preserved. AWS remains budget-stopped.
+
+## Interim checkpoint after four chunks
+
+Chunks1--4 complete:336 jobs,288 matched stages; all source, cost, timing,
+durable-copy and branch-reconstruction audits pass. Each local archive contains
+569 verified members. Archive receipts for chunks2/3/4 record SHA256 respectively:
+
+    09ccdc53419870af54a35a1a86ab441172e63c2404375fc201fb814fcb186660
+    7d1abd6d52900b7e5cf5e4be165d386aaa5a358b86e5bfeae599ffa5f09c3fba
+    98edbdd8077214d6ac833dc2a01e6a5e4b2c19ceaf03c32e1d6a0802466fe906
+
+The first fresh scaled-block selection occurs on sblrc seed929600008. Every
+comparison arm passes that cell's accuracy gates. Candidate ESS/total-call is
+.076897 versus .011539 old hybrid and .074952 Fisher: ratios6.664 and1.026.
+Supervised shared-pilot-plus-policy invocation time is1.486s versus1.279s old
+hybrid and1.178s Fisher. Thus the call-efficiency gain is not a lower elapsed
+time claim; full effective-sample/time comparisons remain necessary. This is
+one interim repair case, not a completed aggregate, independent model family,
+or application validation. Chunks5--8 remain queued without protocol changes.

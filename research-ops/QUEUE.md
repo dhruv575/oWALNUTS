@@ -28,6 +28,16 @@ Bounded run_local_queue.py2 is running chunks2--8 sequentially, auditing and
 archiving each before admission of the next. Inspect local_recovery/QUEUE-02.log
 and QUEUE-02.jsonl; do not duplicate its workers. Each job180s/2GiB/64MiB,
 four sampler chains, BLAS1. Run analyze_local_scaled.py after all eight verify.
+Chunks1--4 now complete/verified:336 jobs,288 stages, four569-member local
+archives read back. First fresh scaled-block case sblrc seed929600008 passes,
+ESS/call scaled/oldhybrid6.664, scaled/Fisher1.026; this is one case, not aggregate
+success. Queue continues with chunks5--8 under the same frozen source hashes.
+After terminal queue/analysis, a separate numerical test is prepared at
+local_recovery/fisherqr01 (NOT executed):80-digit solve on float64 QR factors.
+FISHER-QR-MP-PREFLIGHT.md preserves original16 stress checks before24 exposed
+pilot/oracle comparisons. run_fisher_qr_mp.py refuses before chunk8 archive.
+Do not replace the running algorithm. Solver source/protocol are not yet qualified.
+SCORE-GATE-METHODS.md derives the diagnostic and explicitly limits its claims.
 Local work does not require an AWS budget override. Archives remain local, not
 off-device backups; all raw evidence retained. Never claim a local/S3 upload.
 
