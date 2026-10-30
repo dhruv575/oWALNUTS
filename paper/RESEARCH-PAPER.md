@@ -422,3 +422,17 @@ geometries show condition-proxy reductions of 2748--21056 times, but these are
 neither mixing nor runtime improvements. A new sixteen-seed matched experiment
 is frozen separately; the prior candidate remains failed. Broader nonconjugate
 validation and useful-application evidence remain absent. See FULL-SHAPE-REPORT.md.
+
+Metric adaptation is established prior art. Bales et al. (2019),
+[Selecting the Metric in Hamiltonian Monte Carlo](https://arxiv.org/html/1905.11916v3),
+already studies automatic selection and low-rank Hessian adaptation. Hird and
+Livingstone (2025), [Quantifying the Effectiveness of Linear Preconditioning in
+Markov Chain Monte Carlo](https://www.jmlr.org/papers/v26/23-1633.html), analyzes
+several common preconditioners and limitations of diagonal scaling. Seyboldt,
+Carlson and Carpenter (2026 preprint), [Preconditioning Hamiltonian Monte Carlo
+by minimizing Fisher Divergence](https://arxiv.org/html/2603.18845v1), supplies
+position/score-based dense and low-rank alternatives that remain relevant
+comparison baselines. The repository's failed WP71 diagonal estimator screen is
+not a test of those complete methods. These sources preclude a generic novelty
+claim based solely on Hessian-informed selection or improved conditioning;
+method-specific comparative evidence is still needed. See RELATED-WORK-AUDIT.md.
