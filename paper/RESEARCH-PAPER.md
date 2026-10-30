@@ -367,3 +367,15 @@ This is development evidence on exposed states, not fresh sampling validation.
 Online timing, probe cost and posterior fidelity remain untested. Unit invariance
 was checked only for exactly proportional curvature. Both versions are preserved
 in the verified archive documented in metric_blocks/SELECTOR-REPORT.md.
+
+A subsequent staged integration preflight discarded a diagonal pilot, estimated
+curvature at sixteen states, and installed the inverse selector covariance as
+momentum mass through the existing fixed-matrix interface. All eight fresh
+Gaussian candidate replicates and sixteen diagonal/dense controls passed frozen
+accuracy gates. Candidate maximum rank Rhat was 1.00173 and maximum mean error
+.0287 target SD. Charged pilot and probe cost yields 68,259--80,921 target calls
+on the correlated target, compared with 64,854--67,282 for full dense adaptation.
+Thus the mechanism passes this limited correctness check but demonstrates no
+advantage over full dense. Nonlinear and actual-model usefulness remain open;
+the staged restart is not a validated single-run warmup policy. Raw evidence and
+protocol are in metric_blocks/ONLINE-REPORT.md and its verified archive.

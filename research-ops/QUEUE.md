@@ -1,5 +1,17 @@
 # Active research queue
 
+## Latest: staged curvature integration passes Gaussian fidelity; dense still cheaper
+
+Eight candidate and sixteen control replicates pass frozen known-Gaussian gates;
+all 32 jobs including pilots drained. Correct matrix convention verified: invert
+selector covariance before installation as momentum mass. Candidate saves calls
+against diagonal, but full dense is cheaper on every correlated replicate. No
+advantage claim. See metric_blocks/ONLINE-REPORT.md; 190-member archive verified.
+Next: extend the staged harness to actual models and automatic controls, freeze
+fresh seeds and reference-qualified functionals. Probe/pilot costs count. This
+does not replace the single-run warmup handoff and does not change defaults.
+Goal ACTIVE; practical usefulness and paper novelty remain unproven.
+
 ## Latest: name-free curvature preflight passes after preserved structural failure
 
 V1 incorrectly absorbed independent coordinates into maximal blocks. V2 adds
