@@ -1044,3 +1044,14 @@ hardware cause. Refitting AWS draws locally also gives different maps, excluding
 map-fit arithmetic alone as the explanation. These failures are preserved; do
 not loosen the recorded tolerance or relabel the original study as successful.
 AWS-specific pilot qualification is required before any separate timing study.
+
+AWS full-workflow failure audit: all28 outcomes independently checked, with
+12 qualified raw/importance workflows and16 transformed workflows blocked by
+map replay. Exact transferred archive and235 members verified, SHA-256
+40172aa47ddd1fbf02a4c0b6f57534bd10ed1f6721b2de9d6977e304744539ab.
+A separate saved-pilot qualification on AWS found all four pilots meet the
+unchanged24-functional gates, and each pilot's draws/call counts replay exactly
+across its four AWS workflows. Thus the observed failure is cross-runtime
+nonidentity rather than within-AWS replay failure. No hardware cause is proven.
+AWS-specific target equivalence and a separately frozen production study remain
+required. The original failed full-workflow study is not repaired retroactively.
