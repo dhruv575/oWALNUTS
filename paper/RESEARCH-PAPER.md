@@ -588,3 +588,31 @@ so the call-efficiency result must not be presented as lower elapsed time.
 The full frozen comparison remains pending. SCORE-GATE-METHODS.md provides the
 implemented worst-direction diagnostic's definition, exact-arithmetic affine
 invariance argument and limitations; it offers no posterior-accuracy guarantee.
+
+### Completed local scale-repair validation and negative outcome
+
+All eight chunks completed (672 supervised jobs, 576 matched stages). The frozen
+continuation criterion failed: GARCH candidate/Fisher ESS-per-call ratio was
+0.801 [0.696, 0.908], below the 0.90 floor. There were no paired accuracy losses
+against automatic, v4 or the old hybrid, and the candidate passed 16/16 seeds
+on five targets, but all arms failed centered eight-schools. The repair was
+selected twice on regression; its aggregate candidate/Fisher ratio there was
+0.992 [0.977, 1.002]. This does not establish general usefulness. Operational
+ESS/second against automatic adaptation was 0.708 on arK, 0.823 on ARMA, 0.751
+on GARCH, 0.810 on GP-Poisson and 3.721 on the regression with a cheap collapsed
+control. These times include supervised invocations and shared pilot, excluding
+common diagnostics/controller IO. LOCAL-SCALED-REPORT.md gives all intervals,
+branches, limitations and failure records; exact numeric archive replay passed.
+
+A separate numerical preflight used float64 QR factors with an 80-digit small
+matrix solve for the existing Fisher estimator. It passed all 16 original
+stress checks and 24 saved-model comparisons against the full-sample oracle
+(maximum whitened covariance error 1.624e-14). Geometric fitting-time gain was
+4.467x across three alternating paired fits per cell. This is a representation
+optimization, not a new estimator, fresh sampler validation or runtime speedup
+for the complete algorithm. The failed local sampling gate is unchanged.
+
+RELATED-WORK-CHECK.md records checked primary sources and a remaining comparator
+gap: fixed dense Fisher in our staged schedule is not full published Fisher-HMC
+adaptation. Native nutpie controls must be qualified before claiming practical
+superiority. The current evidence does not support paper-readiness or uniqueness.

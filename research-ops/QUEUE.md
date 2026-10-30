@@ -1,5 +1,36 @@
 # Active research queue
 
+## Current: local scaled gate FAILED; numerical solver qualified
+
+All eight local chunks terminal:672 drained jobs,576 stages, eight569-member
+archives verified. Exact aggregate replay50-member archive passes. Source/target
+hashes agree. Candidate16/16 five targets,0/16centered eight-schools; no paired
+accuracy loss vs auto/v4/oldhybrid. Scale repair selected twice in regression,
+but GARCH/Fisher ESS-call ratio.801 [.696,.908] violates.90floor. GateFAILS.
+Operational ESS/sec vsauto below1 on arK,ARMA,GARCH,GP; regression3.721x has cheap
+collapsed control. See LOCAL-SCALED-REPORT.md; do not relax threshold or claimuse.
+
+fisherqr01 completed: unchanged16 algebra checks pass;24 exposed pilot/oracle
+comparisons pass, max whitened error1.624e-14, paired fittinggain4.467x. No new
+target calls/sampling.105-member local archive verified. This numerical change
+does not reverse the failed sampler gate or establish practical novelty.
+
+Next native full-schedule comparator: nutpie0.16.11 wheel downloaded and SHA
+checked; NUTPIE-NATIVE-PREFLIGHT.md frozen. setup_nutpie_local.py is installing a
+SEPARATE local_recovery/nutpie_env, preserving the qualified existing venv.
+Inspect current process/session and nutpie_baseline/INSTALL.log before any retry.
+Then implement/qualify direct BridgeStan library wrapper on regression with
+draw_diag/diag/low_rank modes before six-target native comparison. Latest web
+docs differ from pinned wheel (no with_init_point_fn in0.16.11); use inspected
+pinned source. Do not call integrator-step counts complete target-call counts.
+Fisher-QR implementation is not installed in production or frozen sampler runs.
+AWS remains budget-stopped; no override, no cloud sampling, no S3 writes.
+
+Resource audit: max jobRSS91,054,080bytes, max finaloutput2,334,021bytes,
+max invocation6.111s. Local runner tested WSL root free space rather than Windows
+workspace mount; independent df verified workspace223GiBfree. Correct future
+local guards to disk_usage(workspace); no cap/floor violation was observed.
+
 ## Current infrastructure constraint: AWS budget stop; continue local work
 
 AWS Budgets stopped existing instance at11:11:55/11:12:36 UTC2026-10-30:USD63.09

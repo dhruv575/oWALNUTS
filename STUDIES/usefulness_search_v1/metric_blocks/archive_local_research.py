@@ -3,9 +3,13 @@ import hashlib,io,json,sys,tarfile
 from pathlib import Path
 
 study=Path(__file__).resolve().parent;local=study/'local_recovery'
-name=sys.argv[1];assert name=='compat01' or name in [f'localscaled{i:02d}' for i in range(1,9)]
+name=sys.argv[1];assert name in ['compat01','fisherqr01'] or name in [f'localscaled{i:02d}' for i in range(1,9)]
 root=local/name;summary=json.loads((root/'SUMMARY.json').read_text())
-if name!='compat01':assert json.loads((root/'VERIFICATION.json').read_text())['passed']
+if name=='fisherqr01':
+    for supfile in root.glob('*-SUPERVISION.json'):
+        sup=json.loads(supfile.read_text());assert sup['group_drained'] and sup['exit_code'] in [0,1]
+    assert (root/'ALGEBRA-SUPERVISION.json').exists()
+elif name!='compat01':assert json.loads((root/'VERIFICATION.json').read_text())['passed']
 else:
     assert summary['passed']
     sup=json.loads((root/'SUPERVISION.json').read_text());assert sup['exit_code']==0 and sup['group_drained']

@@ -26,13 +26,14 @@ for model in sorted(set(r['model'] for r in rows)):
             c=next(r for r in rr if r['seed']==h['seed'] and r['arm']==arm)
             pair=dict(seed=h['seed'],scaled_passed=h['passed'],control_passed=c['passed'],qualified=h['passed'] and c['passed'])
             if arm in ['hybrid','v4','auto'] and c['passed'] and not h['passed']:losses.append(dict(model=model,seed=h['seed'],control=arm))
-            if pair['qualified']:pair.update(ratio=h['efficiency']/c['efficiency'],operational_time_ratio=c['seconds']/h['seconds'])
+            if pair['qualified']:pair.update(ratio=h['efficiency']/c['efficiency'],operational_time_ratio=c['seconds']/h['seconds'],operational_ess_rate_ratio=(h['bulk']/h['seconds'])/(c['bulk']/c['seconds']))
             pairs.append(pair)
         e=dict(pairs=pairs)
         if all(p['qualified'] for p in pairs):
             log=np.log([p['ratio'] for p in pairs]);indices=rng.integers(0,16,(10000,16));boots=np.exp(log[indices].mean(1))
             timing=np.log([p['operational_time_ratio'] for p in pairs]);tb=np.exp(timing[indices].mean(1))
-            e.update(geomean=float(np.exp(log.mean())),ci95=np.quantile(boots,[.025,.975]).tolist(),worst=float(np.exp(log.min())),operational_time_geomean=float(np.exp(timing.mean())),operational_time_ci95=np.quantile(tb,[.025,.975]).tolist())
+            rate=np.log([p['operational_ess_rate_ratio'] for p in pairs]);rb=np.exp(rate[indices].mean(1))
+            e.update(geomean=float(np.exp(log.mean())),ci95=np.quantile(boots,[.025,.975]).tolist(),worst=float(np.exp(log.min())),operational_time_geomean=float(np.exp(timing.mean())),operational_time_ci95=np.quantile(tb,[.025,.975]).tolist(),operational_ess_rate_geomean=float(np.exp(rate.mean())),operational_ess_rate_ci95=np.quantile(rb,[.025,.975]).tolist())
             if arm=='fisher' and e['geomean']<.9:fisher_losses.append(model)
         entry['comparisons'][arm]=e
     signal=model in ['arma-arma11','garch-garch11','gp_pois_regr-gp_pois_regr','eight_schools-eight_schools_centered'] and all(entry['comparisons'][a].get('geomean',0)>=1.2 and entry['comparisons'][a].get('ci95',[0])[0]>1 for a in ['auto','v4'])
