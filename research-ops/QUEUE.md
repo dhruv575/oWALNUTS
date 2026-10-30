@@ -1,5 +1,30 @@
 # Active research queue
 
+## Current: native baseline qualification PASSES; no active jobs
+
+nutpie0.16.11 separate nutpie_env installed successfully. nativepreflight01
+failed pre-sampling because original libraries lack STAN_THREADS; preserved21-
+member archive. Threaded regression rebuild passed64 old/new density/gradient
+checks with0 differences;15-member archive includes exact BridgeStan2.9.0 release.
+Build39.949s/1.962GB RSS within2GiB cap. nativepreflight02 serialization failed
+after sampling (Dataset versus DataTree); preserved27-member failure archive.
+nativepreflight03 corrects only dispatch and passes all three native reference
+gates, same exposedseed929800001: draw_diag/diag/low_rank bulkESS1898/1372/8978,
+no retained divergences.41-member success archive verified. See NUTPIE-NATIVE-REPORT.md.
+
+No current samplers/installers/builds. Next qualify threaded builds of remaining
+five targets from unchanged source, with old/new gradient parity. Existing
+toolchain cache is recorded in threaded_build01/SUPERVISION.json; reuse it with
+bounded jobs rather than downloading repeatedly. Preserve originals; do not
+replace previous frozen run libraries. Then freeze a native baseline comparison.
+Timing must distinguish full invocation (~7.8s here) from sampling+conversion
+(~.15s); align post-startup work across engines rather than exploit import costs.
+Native diagnostics are NOT complete target-call counts. Consider a verified
+C-ABI gradient counter shim before call-efficiency comparisons, otherwise report
+only suitably scoped timing/accuracy and label counts unavailable. Require raw
+trajectory parity if instrumentation is introduced. No further score-threshold
+tuning to rescue failed GARCH gate. AWS remains budget-stopped and untouched.
+
 ## Current: local scaled gate FAILED; numerical solver qualified
 
 All eight local chunks terminal:672 drained jobs,576 stages, eight569-member

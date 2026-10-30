@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/nutpie_native_worker.py", line 13, in <module>
+    compiled=CompiledStanModel(code=paths['source'].read_text(),library=library,dims=None,_coords=None,model=None,data=None).with_data(**json.loads(paths['data'].read_text()))
+  File "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/local_recovery/nutpie_env/lib/python3.14/site-packages/nutpie/compile_stan.py", line 69, in with_data
+    model = _lib.StanModel(
+        self.library, dim_sizes, dims, coords, seed, data_json, make_adapter
+    )
+RuntimeError: The Stan library was compiled without threading support. Config was BridgeStan version: 2.9.0
+Stan version: 2.39.0
+Stan C++ Defines:
+	STAN_THREADS=false
+	STAN_MPI=false
+	STAN_OPENCL=false
+	STAN_NO_RANGE_CHECKS=false
+	BRIDGESTAN_AD_HESSIAN=false
+Stan Compiler Details:
+	stanc_version = stanc3 v2.39.0
+	stancflags = 
+

@@ -616,3 +616,21 @@ RELATED-WORK-CHECK.md records checked primary sources and a remaining comparator
 gap: fixed dense Fisher in our staged schedule is not full published Fisher-HMC
 adaptation. Native nutpie controls must be qualified before claiming practical
 superiority. The current evidence does not support paper-readiness or uniqueness.
+
+### Native baseline integration qualification
+
+Pinned nutpie 0.16.11 now passes the same regression reference gates for native
+covariance-diagonal, Fisher-diagonal and low-rank Fisher adaptation. This is
+backend qualification on one exposed seed, not a comparative performance study.
+The original nonthreaded Stan library was rejected before sampling; an exact
+source rebuild with STAN_THREADS=true matched the original density and gradient
+at 64 fixed points with zero observed difference. A subsequent result-format
+integration error and the initial rejection are both archived. The successful
+retry changes only serialization dispatch and retains all accuracy thresholds.
+Minimum bulk ESS was 1898, 1372 and 8978, with zero retained divergences.
+Full invocations were about 7.8 seconds, whereas sampling plus conversion was
+about 0.15 seconds. Future engine comparisons must align timing scopes; those
+numbers must not be mixed with WALNUTS timings of different scope. Complete
+native target calls are not yet instrumented. Stronger six-target comparison,
+application value and a substantive validated general improvement remain open.
+See NUTPIE-NATIVE-REPORT.md for exact versions, failures, artifacts and bounds.
