@@ -1,0 +1,75 @@
+{
+  "passed": true,
+  "rows": [
+    {
+      "arm": "raw",
+      "passed": true,
+      "command": [
+        "g++",
+        "-shared",
+        "-fPIC",
+        "-O2",
+        "-std=c++17",
+        "/home/ubuntu/lanes/gp-portable-runtime-20261030/preflight/raw/count_target.cpp",
+        "-Wl,--no-as-needed",
+        "/home/ubuntu/lanes/gp-portable-runtime-20261030/models/raw.so",
+        "-Wl,--as-needed",
+        "-ldl",
+        "-o",
+        "/home/ubuntu/lanes/gp-portable-runtime-20261030/preflight/raw/counted_model.so"
+      ],
+      "shim_sha256": "36d06eca26b2a2bfc1f92aa6180b1b226ce3d50221e95966d2d3d6c8d2910ec8",
+      "probe_counts": {
+        "value": 0,
+        "gradient": 1,
+        "hessian": 0,
+        "hvp": 0
+      },
+      "native_calls": {
+        "value": 0,
+        "gradient": 6346,
+        "hessian": 0,
+        "hvp": 0
+      },
+      "wal_calls": 43109
+    },
+    {
+      "arm": "bounded",
+      "passed": true,
+      "command": [
+        "g++",
+        "-shared",
+        "-fPIC",
+        "-O2",
+        "-std=c++17",
+        "/home/ubuntu/lanes/gp-portable-runtime-20261030/preflight/bounded/count_target.cpp",
+        "-Wl,--no-as-needed",
+        "/home/ubuntu/lanes/gp-portable-runtime-20261030/models/bounded.so",
+        "-Wl,--as-needed",
+        "-ldl",
+        "-o",
+        "/home/ubuntu/lanes/gp-portable-runtime-20261030/preflight/bounded/counted_model.so"
+      ],
+      "shim_sha256": "59ddd0767324998f5002329f9de12651e73f112ae7450ca6a26bee170725ec9f",
+      "probe_counts": {
+        "value": 0,
+        "gradient": 1,
+        "hessian": 0,
+        "hvp": 0
+      },
+      "native_calls": {
+        "value": 0,
+        "gradient": 2743,
+        "hessian": 0,
+        "hvp": 0
+      },
+      "wal_calls": 5694
+    }
+  ],
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "platform": "Linux-7.0.0-1014-aws-x86_64-with-glibc2.39",
+  "numpy": "2.5.4",
+  "nutpie": "0.16.11",
+  "bridgestan": "2.9.0",
+  "scope": "Runtime/counter/finite-draw smoke only; no posterior qualification or timing comparison"
+}
