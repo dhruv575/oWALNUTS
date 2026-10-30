@@ -1,0 +1,7 @@
+# Component allocation attribution
+
+Frozen2026-10-30 before execution. Copy unchanged production src into an isolated research crate. Add thread-local scoped integer labels around eleven kernel functions: pooled_state, generate_reverse_schedule, record_histogram, merge_histogram, traced/untraced subtree construction, macro_leaf_in_workspace, integrate, spans_make_u_turn_observed, traced/untraced transition construction. Attribute each allocator request to the innermost active scope; label0 covers everything else. Labels restore on scope exit, never allocate, and do not change sampler arithmetic, random choices or target evaluation. This is dynamic scope attribution, not stack-sampling timing or ownership of deallocations.
+
+Extend the existing System allocator probe with per-label requested-event/byte counters. Test direct and latent diagonal banana with the previous four-chain1,000-warmup/4,000-retained inputs. Require exact draws, metadata, telemetry and actual target calls against the preserved pristine run. Require stage sums reconcile with global events/bytes; compare global totals against the earlier audit but report any discrepancy rather than silently forcing equality. Instrumented times are not performance evidence. If requests concentrate, inspect that code before proposing a bounded optimization; reduced counts alone cannot establish usefulness.
+
+Build300s/4GiB; each serial sampling worker180s/2GiB/64MiB; free disk1GiB. No production edits, new statistical seeds, package installation or paid cloud.

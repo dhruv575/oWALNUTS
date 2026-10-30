@@ -1,0 +1,19 @@
+const MOMENTUM_POOL_MAX_ENTRIES:usize=64;
+const MOMENTUM_POOL_MAX_BYTES:usize=1024*1024;
+#[derive(Default)] struct MomentumPool{buffers:Vec<Vec<f64>>,bytes:usize}
+thread_local!{static MOMENTUM_POOL:RefCell<MomentumPool>=const{RefCell::new(MomentumPool{buffers:Vec::new(),bytes:0})};}
+fn acquire_momentum_sum(values:&[f64])->Vec<f64>{
+ if values.is_empty(){return Vec::new();}
+ let mut buffer=MOMENTUM_POOL.try_with(|pool|{let mut pool=pool.borrow_mut();let buffer=pool.buffers.pop();if let Some(ref b)=buffer{pool.bytes-=b.capacity()*std::mem::size_of::<f64>();}buffer}).ok().flatten().unwrap_or_default();
+ buffer.resize(values.len(),0.);buffer.copy_from_slice(values);buffer
+}
+fn release_momentum_sum(buffer:Vec<f64>){
+ let bytes=buffer.capacity().saturating_mul(std::mem::size_of::<f64>());if bytes==0||bytes>MOMENTUM_POOL_MAX_BYTES{return;}
+ let _=MOMENTUM_POOL.try_with(|pool|{let mut pool=pool.borrow_mut();if pool.buffers.len()<MOMENTUM_POOL_MAX_ENTRIES&&pool.bytes<=MOMENTUM_POOL_MAX_BYTES-bytes{pool.bytes+=bytes;pool.buffers.push(buffer);}});
+}
+#[cfg(test)] mod momentum_pool_tests{
+ use super::*;
+ fn clear(){MOMENTUM_POOL.with(|p|*p.borrow_mut()=MomentumPool::default());}
+ #[test] fn exact_copy_and_dimension_change(){clear();let x=acquire_momentum_sum(&[-0.,3.,-7.]);assert_eq!(x[0].to_bits(),(-0.0_f64).to_bits());release_momentum_sum(x);let y=acquire_momentum_sum(&[2.,-4.]);assert_eq!(y,vec![2.,-4.]);assert!(acquire_momentum_sum(&[]).is_empty());clear();}
+ #[test] fn bounded_retention(){clear();for _ in 0..100{release_momentum_sum(vec![1.;256]);}MOMENTUM_POOL.with(|p|{let p=p.borrow();assert!(p.buffers.len()<=64&&p.bytes<=MOMENTUM_POOL_MAX_BYTES);assert_eq!(p.bytes,p.buffers.iter().map(|v|v.capacity()*8).sum::<usize>());});clear();release_momentum_sum(vec![0.;MOMENTUM_POOL_MAX_BYTES/8+1]);MOMENTUM_POOL.with(|p|assert!(p.borrow().buffers.is_empty()));release_momentum_sum(Vec::new());clear();}
+}
