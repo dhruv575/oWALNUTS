@@ -1,5 +1,23 @@
 # Active research queue
 
+## Current experiment: 2026-10-29 pharmacokinetic ODE pilot
+
+User authorized the practical follow-up. Frozen protocol and common native
+BridgeStan adapter are in `STUDIES/pharma_ode_v1`. Three backend/solver tests
+passed, including independent integration, gradient checks and both samplers.
+Initial batch: 32 calibration fits, 14 reference fits and seven Laplace controls.
+Then freeze calibration-only selection for 64 fresh-seed validation fits.
+Observed Theoph subjects 1–3 are chosen by ID; final two measurements held out.
+Public Stan fixture is a computational benchmark of unverified clinical origin.
+Compare nonlinear ODE to exact linear elimination; no clinical/business claims.
+
+Root `/home/ubuntu/lanes/pharma-ode-20261029`. Twelve exclusive cores, 900 seconds
+per job, 1 GiB RSS and 64 MiB output caps, 1 GiB free-disk admission floor.
+Reclaimed 528,659,221 bytes of three redundant transfer archives after matching
+remote/local/restored SHA256 and reading every local tar member. Originals and
+local backups remain. Receipt in the new study; local AWS login still expired.
+Prior storage entry below is historical. Verify live STATUS before reporting.
+
 ## Latest checkpoint: 2026-10-29 measured likelihood-cost advantage
 
 Completed 80 primary fits, 16 analytic IID controls, and 24 fresh-seed depth11
