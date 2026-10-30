@@ -1,0 +1,7 @@
+# Independently tuned leaf criteria
+
+Frozen before new runs. Follow-up to the failed equal-refinement-pressure screen; retain its negative result. Use the same hash-verified mathematical leaf implementation and targets, macro lengths, eight refinement levels and exact stationary phase sampling. This remains a leaf MH surrogate, not full-chain or application evidence.
+
+For each target use 4096 new calibration phase points, seed 947400001+target index. Each arm gets nine tolerances: H uses 2**k, k=-4,...,4; RKNF uses the earlier calibration-only tolerance times 2**k. Select highest calibration mean accepted normalized jump divided by mean actual calls, ties favor smaller tolerance. Save all calibration scores and costs; selected tolerance cannot change after validation. Both arms receive equal search counts, not necessarily equal calls. No macro-length tuning.
+
+Validate on 16384 new phase points, seed 947500001+index. Paired 2000 bootstrap, seed 947600001+index. Primary banana lower 95% score/call ratio must exceed 1.1, reverse rejection must decrease, and funnel point ratio must be at least .9. Gaussian alone cannot advance. Check accepted-leaf reversal on first 256 accepted points per arm and target, tolerance 1e-7 and identical selected level. Count verification separately. Preserve exhausted leaves as zero movement. Report calibration work separately. Bound worker 180 seconds, 2 GiB RSS, 128 MiB evidence; no production changes.
