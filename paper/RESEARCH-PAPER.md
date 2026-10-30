@@ -741,3 +741,16 @@ requested settings and all statistical criteria remain unchanged. All raw
 cells and the negative result are locally archived and read-back verified.
 Next consider an observation-only exact duplicate-evaluation audit; no cache
 improvement is assumed. Existing initial-evaluation caching is already present.
+
+### Exact repeated-evaluation audit: no cache opportunity established
+
+An observation-only exact-coordinate audit preserves draws and evaluation
+counts in all10 enabled/disabled comparisons against the old runner. No repeated
+finite coordinate evaluations or output-bit mismatches were observed. At the
+original step size four targets have complete finite-call coverage; centered
+eight schools exceeds the32768-position-per-chain cap. All factor4 stress cases
+also exceed capacity, so no upper bound is claimed for unrecorded keys. The
+frozen cache-experiment criterion fails. No caching change is implemented.
+Two instrument unit tests cover signed zero, altered outputs, capacity and
+nonfinite accounting. The local91-member evidence archive verifies. Next inspect
+existing forward/refinement/reverse work counters; no optimization is assumed.
