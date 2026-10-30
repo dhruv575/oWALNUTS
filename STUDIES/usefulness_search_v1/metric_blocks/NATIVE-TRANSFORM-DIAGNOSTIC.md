@@ -40,3 +40,24 @@ Next steps before a mechanism comparison:
    completion. Native pilots and all discarded recovery draws are real costs.
 
 Cloud remains stopped under the budget constraint. Work is bounded and local.
+
+## Six-target qualification update
+
+The identical reconstruction check now passes the other five targets as well:
+24/24 chains across all six targets. Each model worker exits successfully and
+drains; raw enabled/disabled traces and source hashes are preserved. These are
+exposed short runs, including models whose posterior accuracy screen failed.
+
+An independent algebra/target-gradient check verifies 72 transformed versus
+original-coordinate leapfrog steps (24 maps, step sizes .0001/.001/.01), using
+momentum covariance M=(A*A^T)^-1 and p=A^-T*r. Maximum normalized kinetic,
+position or momentum discrepancy is 2.226e-12 under a frozen1e-8 tolerance.
+This Python check does not execute the WALNUTS kernel.
+
+Five existing Rust dense-metric tests also pass in an isolated offline locked
+build: deterministic precision-metric accounting, sequential/parallel physical
+coordinate parity, error ordering, inactive budget-control parity and rotated
+geometry adaptation. The build/test took31.46s, peakRSS862MB and638MB cache.
+This checks existing implementation coverage, not native metric-transfer parity.
+The next needed artifact is a frozen per-chain-metric/step-size research runner
+and an analytic-target injection check before a matched-geometry comparison.
