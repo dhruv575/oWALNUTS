@@ -1,0 +1,5 @@
+# Finite-difference diagnostic repair
+
+Attempt01 failed at the first checked point of fold0: the central-difference perturbation1e-5 gave scaled gradient discrepancy1.9604e-4, above the frozen1e-4 tolerance. The determinant check was accurate to1.54e-10. No full diagnostic verdict was produced; its arrays, map, source and supervisor log remain preserved.
+
+An explicit five-step-size audit at all three fold0 points found gradient discrepancies at1e-3 of1.25e-6,1.22e-6,1.46e-7, whereas very small perturbations generally worsened agreement. This is evidence of finite-difference numerical noise, not proof of its exact source. The GP covariance factor is known to be ill-conditioned. Attempt02 uses one fixed1e-3 perturbation at every coordinate and fold, preserving the1e-4 error threshold, model, maps, folds and advancement gates. No adaptive selection of the best derivative check at each point. This is a numerical verification repair, not statistical retuning. A failure at the new fixed step must remain a failure.
