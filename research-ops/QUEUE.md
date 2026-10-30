@@ -1,5 +1,19 @@
 # Active research queue
 
+## Running: matched staged ablation, 16 fresh paired seeds
+
+ABLATION-PROTOCOL.md freezes fixed diagonal/empirical/curvature and adaptive
+dense/auto arms with shared pilots and stage-two schedules. Earnings remains
+only a mechanism target; direct posterior qualification is not revoked.
+Controller PID421717 verified live, SSH exec session27983. Workspace
+metric-blocks-recovery-20261030/work/ablation01, durable compressed per-job copies
+under evidence/ablation01 with raw/compressed hashes. Inspect process and SUMMARY
+before resuming; do not restart from missing progress alone. All jobs bounded.
+Original 76 redundant model result copies (62,944,768 bytes) were hash-verified
+against the restored S3 archive before reclamation; originals remain in tmpfs.
+Next run analyze_ablation.py after terminal summary, inspect all failures/worst
+ratios, archive_ablation.py, and verify exact-version S3 restore. No result yet.
+
 ## Latest: earnings direct posterior qualifies; not an application needing WALNUTS
 
 Four independent 32,768-draw replicates pass frozen reference/exact-moment gates.
