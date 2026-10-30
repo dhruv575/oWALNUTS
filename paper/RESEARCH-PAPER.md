@@ -1015,3 +1015,14 @@ A subsequent descriptive AWS audit found that alpha below the proposal grid's
 0.1 lower bound carried 9.85% and 10.25% of normalized weight from only 27 and
 29 proposals. This motivates a separately frozen stronger proposal, not an
 intrinsic MCMC superiority claim. The original eight outcomes remain unchanged.
+
+The wider-grid conditional-importance repair passed all eight runs on the four
+exposed datasets using fresh seeds. Independent raw-weight recomputation passed;
+all 138 archive members verified, SHA-256
+c420ffad92d9d5dbc694cf06762db5731e69f887156db890310167d23d259e29.
+Only the alpha grid lower endpoint changed (.1 to .0001); the 41x41 grid and
+remaining proposal settings stayed fixed. This supports a grid-coverage
+explanation of the original sparse-case failure, but is not validation on new
+datasets and does not establish uniqueness or application value for WALNUTS.
+Concurrent AWS clocks are not compared with local MCMC clocks. Preserve the
+failed runtime attempt separately; it produced no inferential samples.
