@@ -245,3 +245,13 @@ geometric mean versus existing automatic selection is 1.0 (required 1.2).
 Eleven unaffected paths match draws and work exactly. The common GP failure
 is preserved. The research opt-in is not promoted; see
 `STUDIES/usefulness_search_v1/reconsider/REPORT.md` and its verified archive.
+
+A hierarchical PK preflight on all 12 Theoph subjects compared linear (43
+unconstrained parameters) and nonlinear elimination (57). Of four starts per
+model, two linear and one nonlinear fit qualified; false optimizer convergence
+was rejected using gradient checks. Selected modes passed numerical audits.
+On 24 observations withheld from fitting, exposed-data plug-in log-concentration
+RMSE was 0.249 versus 0.535, favoring linear elimination. Parameter uncertainty
+is omitted, so this is preliminary model evidence rather than posterior or
+clinical validation. Full failures and reproducible artifacts are in
+`STUDIES/usefulness_search_v1/population_pk`.

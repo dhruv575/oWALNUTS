@@ -100,6 +100,16 @@ with identifiability/numerical preflight and a simpler linear population model.
 Do not assume extra dimensionality, expensive ODEs or synthetic GP establish
 usefulness. Prior patient reference failures remain failures.
 
+Population PK preflight COMPLETE (8 fits). Initial nonlinear gradient check at
+1e-8 tolerance failed; fixed 1e-4 gradient-error gate passes with 1e-10 solver.
+Qualified starts linear2/4, nonlinear1/4; other optimizer success flags rejected
+by gradient gate. Selected modes pass tighter/alternate-solver audit. Exposed
+withheld-from-fit log RMSE .2489 linear vs .5353 nonlinear, no posterior/clinical
+claim. Complete 47-member archive verified locally and through exact S3 restore.
+No jobs live. Next: shared native hierarchical linear target and posterior
+comparison with tuned NUTS and Laplace/defensive IS, frozen functionals and
+reference gates. Do not force an ODE application against the stronger simple model.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
