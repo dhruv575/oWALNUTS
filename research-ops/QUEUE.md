@@ -110,6 +110,26 @@ No jobs live. Next: shared native hierarchical linear target and posterior
 comparison with tuned NUTS and Laplace/defensive IS, frozen functionals and
 reference gates. Do not force an ODE application against the stronger simple model.
 
+Shared native population target implemented and verified: 12 raw points agree
+with Python density/gradients (<4e-15 scaled gradient error); analytic value-only
+density differences agree within2e-13; whitening parity passes. Source in
+usefulness_search_v1/population_pk/population.cpp and native.py. This enables
+fair native WALNUTS/NUTS and gradient-free importance baselines.
+
+Identifiability preflight finds an alternate rate-order mode. Rate exchange
+is exact for nine zero-baseline subjects, not for the three nonzero baselines.
+Initial overbroad symmetry assertion and false unscaled optimizer convergence
+preserved; objective divided by96 finds a qualified second mode (gradient .000378).
+Approximate Laplace log mass ratio -21.87 is NOT verified posterior mode mass.
+
+Two sampler pilots RUNNING at /dev/shm/population-posterior-20261029/pilot01;
+last verified workers393654(WALNUTS),393655(NUTS), supervisor393651. Four chains
+1000/1000, white/.99, two starts per mode; 300s/2GiB/16MiB each. Pinned Python
+run_pilot.py, launch.log. Not references or comparative validation. Inspect
+FINAL/PIDs before restart. Freeze full uncertainty/calibration/validation rules
+only after implementation/mixing pilot, with distinct fresh seeds. All earlier
+model/preflight failures retained. No useful-application success established.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
