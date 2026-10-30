@@ -1,16 +1,20 @@
 # Active research queue
 
-## Running: 2026-10-30 bounded initial-metric mechanism screen
+## Latest: bounded initialization rejected; exact ensemble move under review
 
-A 78-cell frozen screen is active at /dev/shm/bounded-init-20261030 on the existing
-instance. Candidate clips start-gradient masses to [0.1,1000] with the shipped
-restart guard; controls are current defaults and WP94's rejected unbounded rule.
-No sampler source/default changed. Six initial-metric and three fingerprint tests,
-plus exact control and clipping preflight checks, pass. Source is parent 2dbdc651.
-See usefulness_search_v1/bounded_init/PROTOCOL.md. Three four-core workers,
-600 seconds/2 GiB/64 MiB per job; continue monitoring the existing supervisor,
-then analyze every cell, archive/verify and update the paper. No verdict yet.
-The previous unbounded and conditional-metric failures remain negative results.
+The 78-cell bounded-init screen is TERMINAL (491.56s); all jobs exited and groups
+drained, inputs unchanged. Frozen verdict FAIL: overall descriptive efficiency
+1.172 and SV warmup 0.852 do not compensate for a Lotka pass loss and GP ratio
+0.788. In the failed Lotka cell, bounded/unbounded samples and calls are exactly
+identical because bounds never activate. The chain moves in a separate basin;
+it is not a zero-movement or small-step trap. See bounded_init/REPORT.md.
+
+Next reviewed task: implement and test the sequential ensemble independence-MH
+proposal in ensemble_moves/DESIGN.md. Verify the full mixture Hastings ratio and
+known-target stationarity, including a broad low-density mode, before applications.
+Use independent ensembles for uncertainty; walkers within an ensemble are not
+independent chains. No density-ranked rescue, no further blind bound sweep,
+no default change. Goal remains ACTIVE; archived negative results stay negative.
 
 ## Latest checkpoint: 2026-10-30 qualified PK posterior, no competitive advantage
 

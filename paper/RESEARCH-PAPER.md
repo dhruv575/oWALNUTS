@@ -284,3 +284,15 @@ bounded, and WALNUTS's unseparated callback errors remain a numerical limitation
 This candidate is therefore not a demonstrated WALNUTS advantage. Full negative
 and positive evidence, source correction, protocols and verified archive receipts
 are in `population_pk/QUALIFIED-REPORT.md`.
+
+
+Bounding gradient-informed starting masses to [0.1,1000] also fails its frozen
+78-cell mechanism screen. Its four-model efficiency statistic is 1.172 and SV
+median warmup calls are 0.852 of default, but Lotka--Volterra loses a diagnostic
+pass (3/4 versus 4/4) and the acceleration GP ratio is 0.788. An exact audit of
+the failed Lotka seed shows bounded and unbounded samples/work are identical:
+the bounds never activate. The discrepant chain moves within a separate basin
+with a normal step; it is not a frozen-chain case and its probability cannot be
+inferred from density height. This rejects the tested bound and does not justify
+a stronger uncorrected rescue rule. Complete failures, controls, derivation and
+archive receipts are in `usefulness_search_v1/bounded_init/REPORT.md`.

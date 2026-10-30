@@ -11,11 +11,13 @@ def stats(a):
 def good(s):return bool(all(np.isfinite(v).all() for v in s.values()) and s['rhat'].max()<=1.01 and s['bulk'].min()>=400 and s['tail'].min()>=400)
 def name(n):
  parts=n.split('.');return parts[0]+'['+','.join(parts[1:])+']' if len(parts)>1 and all(p.isdigit() for p in parts[1:]) else n
-manifest=read(RUN/'MANIFEST.json');final=read(RUN/'FINAL.json');rule=read(ROOT/'SV-RULE.json');cache={};rows=[];raws={};all_completed=len(final['jobs'])==78 and final['dependencies_unchanged']
+manifest=read(RUN/'MANIFEST.json');final=read(RUN/'FINAL.json');rule=read(ROOT/'SV-RULE.json');cache={};rows=[];bounds_valid=True;all_completed=len(final['jobs'])==78 and final['dependencies_unchanged']
 for i,(kind,model,arm,seed) in enumerate(manifest['jobs']):
  folder=RUN/f'{i:03d}';sup=read(folder/'SUPERVISION.json') if (folder/'SUPERVISION.json').exists() else {};base=dict(index=i,kind=kind,model=model,arm=arm,seed=seed)
  if sup.get('exit_code')!=0 or not sup.get('group_drained') or not (folder/'RESULT.json').exists():rows.append(dict(**base,passed=False,failure=sup));all_completed=False;continue
- r=read(folder/'RESULT.json');raws[(kind,model,arm,seed)]=r
+ r=read(folder/'RESULT.json')
+ if arm=='bounded':
+  masses=np.concatenate([c['initial_mass_diagonal'] for c in r['chains_data']]);bounds_valid &= bool(np.isfinite(masses).all() and masses.min()>=.1 and masses.max()<=1000.)
  if kind=='pdb':
   if model not in cache:
    meta=read(PDB/'posteriors'/f'{model}.json');rp=PDB/'reference_posteriors/draws/draws'/f"{meta['reference_posterior_name']}.json.zip";inputs[str(rp)]=hashlib.sha256(rp.read_bytes()).hexdigest()
@@ -38,7 +40,7 @@ for model in sorted(cache):
   if all('efficiency' in pair.get(a,{}) for a in ['defaults','bounded']):rr.append(pair['bounded']['efficiency']/pair['defaults']['efficiency'])
  median=statistics.median(rr) if len(rr)==4 else 0.;ratios.append(median);summary[model]=dict(passes=passes,candidate_default_ratios=rr,median_ratio=median)
 sv=[r for r in rows if r['kind']=='sv'];svwarm={a:statistics.median([r['warmup_calls'] for r in sv if r['arm']==a and 'warmup_calls' in r]) if any(r['arm']==a and 'warmup_calls' in r for r in sv) else float('inf') for a in ['defaults','gradinit','bounded']};traps={a:sum(len(r.get('trapped',list(range(4)))) for r in sv if r['arm']==a) for a in ['defaults','gradinit','bounded']};geomean=float(np.exp(np.mean(np.log(ratios)))) if len(ratios)==4 and min(ratios)>0 else 0.;funnel=all(r['passed'] for r in rows if r['kind']=='funnel' and r['arm']=='bounded');svratio=svwarm['bounded']/svwarm['defaults'] if np.isfinite(list(svwarm.values())).all() else float('inf')
-verdict=dict(all_completed=all_completed,no_pdb_pass_loss=quality,pdb_geomean=geomean,no_model_below_point9=bool(ratios and min(ratios)>=.9),sv_warmup_ratio=svratio,sv_trapped=traps,funnel_pass=funnel);verdict['passed']=bool(all_completed and quality and geomean>=1.1 and min(ratios)>=.9 and svratio<=.9 and traps['bounded']<=traps['defaults'] and funnel)
+verdict=dict(all_completed=all_completed,initial_mass_bounds_valid=bounds_valid,no_pdb_pass_loss=quality,pdb_geomean=geomean,no_model_below_point9=bool(ratios and min(ratios)>=.9),sv_warmup_ratio=svratio,sv_trapped=traps,funnel_pass=funnel);verdict['passed']=bool(all_completed and bounds_valid and quality and geomean>=1.1 and min(ratios)>=.9 and svratio<=.9 and traps['bounded']<=traps['defaults'] and funnel)
 out=ROOT/'analysis01';out.mkdir(exist_ok=False)
 def clean(v):
  if isinstance(v,float) and not np.isfinite(v):return None

@@ -1,6 +1,6 @@
-﻿# Bounded initial-metric screen
+# Bounded initial-metric screen
 
-Status: running; no verdict. Parent source checkpoint 2dbdc651. See PROTOCOL.md
+Status: complete; frozen verdict FAIL. See REPORT.md and analysis01/VERDICT.json. Parent source checkpoint 2dbdc651. See PROTOCOL.md
 for the frozen 78-cell design and gates. The candidate uses an existing
 research-only InitialMetric option with bounds [0.1,1000]; no sampler source or
 default changed. All three arm implementations are derived from the archived
@@ -20,4 +20,5 @@ and logs are retained. These are administrative failures, not sampler evidence.
 Evidence is on the existing EC2 instance under /dev/shm/bounded-init-20261030.
 Every job has a bounded supervisor and an immutable source/input manifest.
 Do not rerun an observation timeout or promote an incomplete result. Final
-analysis, verified archive, manuscript update and reviewed checkpoint are pending.
+analysis and a complete archive are available; see REPORT.md for failures and the
+subsequent exact Lotka parity audit. No sampler default changed.
