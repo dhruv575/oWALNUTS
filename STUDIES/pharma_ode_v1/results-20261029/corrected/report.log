@@ -1,0 +1,12 @@
+# Practical pharmacokinetic ODE pilot
+
+Observed-data scope: Theoph subjects 1–3 selected by numeric ID; eight post-baseline training observations and two heldout observations per subject. The public Stan fixture is a computational benchmark with unverified clinical provenance.
+
+Matched-accuracy validation is the primary comparison. An unqualified reference blocks a speed claim; failed seeds remain in the denominator. Speed ratios use only seed pairs that both qualify, so censored comparisons must not be generalized to all attempts.
+
+| Target | Qualified reference | WALNUTS accuracy /8 | NUTS accuracy /8 | WALNUTS diagnostics /8 | NUTS diagnostics /8 | Paired kernel speedup | Sampler gate |
+|---|---|---:|---:|---:|---:|---|---|
+| stan_public | True | 8 | 7 | 8 | 7 | 1.65x [1.58, 1.73], 7 pairs | True |
+| theoph_1 | False | 0 | 0 | 8 | 8 | Unavailable | False |
+| theoph_2 | False | 0 | 0 | 8 | 7 | Unavailable | False |
+| theoph_3 | False | 0 | 0 | 8 | 8 | Unavailable | False |

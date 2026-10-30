@@ -35,3 +35,13 @@ No instance-role permissions changed. The renewed account session also enabled
 private S3 upload and exact-version restore of the legacy archive: all 314
 members verified. See S3-VERIFICATION.json, which supersedes earlier pending
 S3 status in the historical local-archive receipt.
+
+Corrected campaign completed 117/117 jobs with no resource terminations. All
+seven numerical audits passed; four references qualified (public and three
+linear controls). All 64 fresh validation fits completed. The public sampler
+gate passes, but the full practical-success rule does not. See CONCLUSION.md.
+Corrected archive SHA256
+`224803068833648c67b37713fe0bf1de3e6b50085e3063f7ca032908ca8eccdf`
+verifies all 550 members, both campaign source freezes and selection hash.
+Its exact private S3 version was downloaded and all members verified again.
+No original run directories were removed; the instance remains running.

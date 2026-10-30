@@ -1,6 +1,35 @@
 # Active research queue
 
-## Current experiment: 2026-10-29 pharmacokinetic ODE pilot
+## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
+
+All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace
+and 64 fresh validation fits. Data partitions, disjoint seeds, source/selection
+freezes and process drain audit passed. Four backend/numerical and three
+analysis tests passed. See [conclusion](../STUDIES/pharma_ode_v1/results-20261029/corrected/CONCLUSION.md)
+and [full report](../STUDIES/pharma_ode_v1/results-20261029/corrected/REPORT.md).
+
+Public ODE benchmark: WALNUTS 8/8 versus NUTS 7/8 qualified seeds; seven matched
+pairs give 1.65x kernel speedup [1.58,1.73] and 1.61x cold-total speedup.
+The full practical-success rule fails: Laplace meets this benchmark's tested
+forecast tolerances, and all three nonlinear patient references fail the frozen
+qualification gate. Patient matched-accuracy claims are unavailable, not zero
+demonstrated accuracy. The simpler linear model has qualified references.
+
+Next reviewed research task: explain reference discrepancies and freeze a new
+uncertainty requirement that cheap methods genuinely miss before scaling ODE
+experiments. Preserve the current primary failures; do not extend this exposed
+pilot until it wins. Broader specialized-solver comparisons and clinical
+decision value remain unestablished. No further inference batch has been launched.
+
+The instance remains running. Last verified free disk: 1,413,148,672 bytes.
+AWS login was renewed with user permission; current-client /32 SSH access was
+restored without changing the instance role. Both legacy and corrected evidence
+have verified local archives (314/550 members); exact-version S3 restore receipts
+are stored alongside them. Retain originals and reclaim only verified redundant
+copies when preparing the next bounded job. Entries below are historical notes,
+not live running status or current AWS authentication status.
+
+### Historical launch and repair notes
 
 Current running root is `/home/ubuntu/lanes/pharma-ode-logforecast-20261029`.
 The original 53-job batch completed but 32 forecast evaluations crossed zero

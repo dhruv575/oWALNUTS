@@ -1,5 +1,21 @@
 # Research paper: working manuscript and evidence contract
 
+**Practical ODE pilot (2026-10-29):** 117 corrected jobs completed after a
+preserved forecast-solver failure and separately frozen log-state repair.
+On the public nonlinear pharmacokinetic ODE fixture, WALNUTS qualifies 8/8 fresh
+seeds versus tuned NUTS 7/8, with 1.65x matched kernel speedup (descriptive 95%
+bootstrap interval 1.58–1.73; seven pairs) and 1.61x cold-total speedup. This
+extends the evaluation-cost finding beyond the curved Gaussian construction,
+but does not establish clinical or application value. The fixture's clinical
+provenance is unverified. Laplace fails parameter-mean accuracy while meeting
+the tested forecast tolerances. All three observed-subject nonlinear references
+fail the frozen qualification gate, blocking patient matched-accuracy claims;
+their numerical audits pass, and R-hat/ESS alone do not override those gates.
+The exact linear-elimination controls have qualified references. No practical
+success or uniqueness claim follows. See [conclusion and limitations](../STUDIES/pharma_ode_v1/results-20261029/corrected/CONCLUSION.md),
+[full evidence tables](../STUDIES/pharma_ode_v1/results-20261029/corrected/REPORT.md)
+and [existing pharmacometric methods](../STUDIES/pharma_ode_v1/RELATED-WORK.md).
+
 **Measured likelihood-cost follow-up (2026-10-29):** the depth10 primary
 screen fails its strict depth qualification, while a separately frozen depth11
 follow-up qualifies all 8/8 fresh seeds per full-evaluator arm. On the controlled

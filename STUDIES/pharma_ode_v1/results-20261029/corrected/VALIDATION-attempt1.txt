@@ -1,0 +1,28 @@
+F...
+======================================================================
+FAIL: test_native_density_gradients_and_solver_tolerance (test_backend.Tests.test_native_density_gradients_and_solver_tolerance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ubuntu/lanes/pharma-ode-logforecast-20261029/source/test_backend.py", line 28, in test_native_density_gradients_and_solver_tolerance
+    np.testing.assert_allclose(b.predict(q),pred,rtol=1e-5,atol=1e-6)
+  File "/home/ubuntu/lanes/unified-readiness-20261027/installation02/work/env/lib/python3.12/site-packages/numpy/testing/_private/utils.py", line 1768, in assert_allclose
+    assert_array_compare(compare, actual, desired, err_msg=str(err_msg),
+  File "/home/ubuntu/lanes/unified-readiness-20261027/installation02/work/env/lib/python3.12/site-packages/numpy/testing/_private/utils.py", line 983, in assert_array_compare
+    raise AssertionError(msg)
+AssertionError: 
+Not equal to tolerance rtol=1e-05, atol=1e-06
+
+Mismatched elements: 1 / 10 (10%)
+Mismatch at index:
+ [9]: -0.036122381744560235 (ACTUAL), -0.03612069320842621 (DESIRED)
+Max absolute difference among violations: 1.68853613e-06
+Max relative difference among violations: 4.67470578e-05
+ ACTUAL: array([ 1.248505,  1.770526,  2.096808,  2.236557,  2.199346,  2.11915 ,
+        1.978352,  1.815018,  1.535129, -0.036122])
+ DESIRED: array([ 1.248505,  1.770526,  2.096808,  2.236557,  2.199346,  2.11915 ,
+        1.978352,  1.815019,  1.53513 , -0.036121])
+
+----------------------------------------------------------------------
+Ran 4 tests in 44.788s
+
+FAILED (failures=1)

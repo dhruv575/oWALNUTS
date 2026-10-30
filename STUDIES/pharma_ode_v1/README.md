@@ -1,5 +1,11 @@
 # Pharmacokinetic ODE pilot
 
+Completed: [conclusion](results-20261029/corrected/CONCLUSION.md),
+[tables](results-20261029/corrected/REPORT.md) and
+[audit](results-20261029/corrected/AUDIT.json). The public ODE sampler gate passes;
+the full practical-success rule does not. Patient matched-accuracy claims are
+blocked by unqualified references. Preserve both corrected and legacy evidence.
+
 See [protocol](PROTOCOL.md), [operations](OPERATIONS.md) and the
 [forecast numerical amendment](forecast_fix/AMENDMENT.md). This is a small
 research pilot, not a clinical evaluation, decision-policy trial or product.
