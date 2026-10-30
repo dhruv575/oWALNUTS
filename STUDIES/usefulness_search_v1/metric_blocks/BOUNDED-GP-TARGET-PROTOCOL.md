@@ -1,0 +1,5 @@
+# Bounded-feature compiled-target preflight
+
+This is an implementation preflight, not advancement under the failed bounded-feature screen. The rationale for a direct future full-chain test is recorded in BOUNDED-TRANSPORT-RESULT.md; both prior failed gates remain unchanged.
+
+Compile the same GP target template with only quadratic decoder features replaced by (4*tanh(e_i/4))*(4*tanh(e_k/4)), and use the four newly fitted bounded maps. Retain linear terms and exact constant map Jacobian. Include each affine-only control. Reuse the earlier384 diagnostic test points and equivalent-density/gradient/functionals checks:32 held-out physical points and16 fixed standard-normal transformed points per fold/control. Reuse is deliberate implementation testing, not independent statistical evidence. Density absolute error<=1e-6, chain-rule gradient scaled error<=1e-5, decoder relative error<=1e-9, functionals scaled error<=1e-6. No tolerance changes after results. Same existing BridgeStan compiler, threads enabled, one compile thread,300s/4 GiB/1 GiB build bound. Preserve source, map data, compiled library and all discrepancies. No production or sampling-performance claim.

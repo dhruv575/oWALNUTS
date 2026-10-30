@@ -1,0 +1,3 @@
+# Bounded GP compiled-target equivalence passed
+
+All eight map/control cells and384 points pass the unchanged equivalence gates. Maximum errors: {"roundtrip": 2.2757181269319556e-15, "density": 1.5987211554602254e-14, "gradient": 1.757422626858234e-14, "functionals": 0.0}. Original-space functionals are checked against the original GP target. This verifies the implementation at those points, not full-chain behavior or an advantage. The earlier bounded-feature mechanism screen remains failed on its relative tail criterion. A separately frozen direct sampling experiment is required; no production change.

@@ -1,0 +1,19 @@
+import hashlib,json
+from pathlib import Path
+import numpy as np
+import bounded_transport as b,quadratic_transport as old
+p=Path(__file__).resolve().parent;l=p/'local_recovery';r=l/'bounded_transport01';r.mkdir(exist_ok=False);rows=[];hashes={str(p/n):hashlib.sha256((p/n).read_bytes()).hexdigest() for n in ['bounded_transport.py','quadratic_transport.py','screen_bounded_transport.py','BOUNDED-TRANSPORT-PROTOCOL.md']};models=[]
+for fold in range(4):
+    f=l/f'gp_transport_qualified02/fold-{fold}';inp=f/'INPUTS.npz';mf=f/'MAP.json'
+    for source in [inp,mf]:hashes[str(source)]=hashlib.sha256(source.read_bytes()).hexdigest()
+    a=np.load(inp);q=a['q'];g=a['gradient'];m=b.fit(a['train']);models.append(m);folder=r/f'fold-{fold}';folder.mkdir();(folder/'MAP.json').write_text(json.dumps(m,indent=2)+'\n');original=json.loads(mf.read_text());z=b.encode(q,m);gz=b.score(q,g,m);J=b.jacobian(q,m);bound=b.derivative_bound(m);assert np.isfinite(gz).all() and np.isfinite(J).all() and np.isfinite(bound).all();assert np.max(abs(b.decode(z,m)-q))/(1+np.max(abs(q)))<1e-9;assert (abs(J)<=bound[None]+1e-9).all();checks=[]
+    for index in [0,4000,7999]:
+        point=z[index:index+1];fd=[];grad=[]
+        for j in range(13):
+            delta=np.zeros_like(point);delta[0,j]=1e-5;qa=b.decode(point+delta,m);qb=b.decode(point-delta,m);fd.append((qa[0]-qb[0])/2e-5);grad.append((-.5*np.sum(qa*qa)+.5*np.sum(qb*qb))/2e-5)
+        jerr=float(np.max(abs(J[index]-np.asarray(fd).T)/(1+abs(J[index]))));gauss=b.score(q[index:index+1],-q[index:index+1],m)[0];gerr=float(np.max(abs(gauss-grad)/(1+abs(gauss))));derr=float(abs(np.linalg.det(J[index])/np.exp(b.logdet(m))-1));assert max(jerr,gerr,derr)<1e-6;checks.append(dict(jacobian=jerr,gradient=gerr,determinant=derr))
+    metrics={}
+    for label in ['affine','quadratic','bounded']:
+        zz=z if label=='bounded' else old.encode(q,original,label=='affine');gg=gz if label=='bounded' else old.score(q,g,original,label=='affine');ld=b.logdet(m) if label=='bounded' else old.logdet(original,label=='affine');metrics[label]=dict(discrepancy=float(np.mean((gg+zz)**2)),cross_entropy=float(.5*np.mean(zz*zz)+ld/13))
+    ratio=metrics['bounded']['discrepancy']/metrics['affine']['discrepancy'];retention=metrics['bounded']['discrepancy']/metrics['quadratic']['discrepancy'];loss=metrics['bounded']['cross_entropy']-metrics['quadratic']['cross_entropy'];row=dict(fold=fold,metrics=metrics,bounded_affine_ratio=ratio,bounded_quadratic_ratio=retention,cross_entropy_loss=loss,checks=checks,global_derivative_bound_norm=float(np.linalg.norm(bound,2)),bulk_passed=ratio<.8 and retention<=1.25 and loss<=.05);rows.append(row);np.savez_compressed(folder/'OUTPUT.npz',z=z,score=gz,bound=bound);print(json.dumps(row),flush=True)
+replay=l/'gp_transport_divergence_replay01/DRAWS-STATS.npz';hashes[str(replay)]=hashlib.sha256(replay.read_bytes()).hexdigest();a=np.load(replay);mask=a['sample_stats__diverging'].astype(bool);zz=a['sample_stats__divergence_end'][mask];original=json.loads((l/'gp_transport_qualified02/fold-2/MAP.json').read_text());q=old.decode(zz,original);oldJ=np.stack([old.score(np.repeat(point[None],13,axis=0),np.eye(13),original) for point in q]);newJ=b.jacobian(q,models[2]);osv=np.linalg.svd(oldJ,compute_uv=False);nsv=np.linalg.svd(newJ,compute_uv=False);ratio=nsv[:,0]/osv[:,0];quantiles=np.quantile(ratio,[0,.5,.95,1]).tolist();tail_passed=quantiles[1]<.5 and quantiles[2]<=.75;np.savez_compressed(r/'PROPOSAL-REGION.npz',q=q,old_singular_values=osv,new_singular_values=nsv,ratio=ratio);assert all(hashlib.sha256(Path(f).read_bytes()).hexdigest()==h for f,h in hashes.items());out=dict(completed=True,advance=all(x['bulk_passed'] for x in rows) and tail_passed,rows=rows,tail=dict(ratio_quantiles=quantiles,passed=tail_passed,points=len(q)),inputs=hashes);(r/'SUMMARY.json').write_text(json.dumps(out,indent=2,allow_nan=False)+'\n');print(json.dumps(out['tail']),flush=True)
