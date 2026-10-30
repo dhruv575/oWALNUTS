@@ -8,6 +8,11 @@ These are interim counts, not the full study's continuation-gate result.
 
 721-member archive restored from exact private S3 version and verified. Only then
 168 redundant compressed RESULT files (62,900,362 bytes) reclaimed; originals,
-private archive and historical manifests retained. Chunk2 is active unchanged;
-chunks3/4 not yet launched. Do not tune based on intermediate results. Full gate
+private archive and historical manifests retained.
+
+Chunk2 (seeds929300005--8) also completed168 jobs/120 stages; all audits and the
+721-member exact-version private archive restore pass. Hybrid again passes4/4
+on five targets and0/4 centered eight schools. Reclaimed168 redundant compressed
+results (62,818,448 bytes) only after archive verification. Chunk3 is active
+unchanged; chunk4 not launched. Do not tune based on intermediate results. Full gate
 and bootstrap intervals require all16 seeds and all four verified chunks.
