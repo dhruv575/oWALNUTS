@@ -1,5 +1,27 @@
 # Active research queue
 
+## Latest: metric mechanism audit complete; curvature prototype next
+
+The proposed per-coordinate R-squared block rule is contradicted: regression
+coefficient coordinates themselves fail the gate. Both passive instrumentations
+preserve every historical result field except elapsed time across 12 cells each.
+Offline curvature instead shows stable positive regression block shape despite
+changing scale; GP shape is variable and some full Hessians are indefinite.
+These are exposed, named-block diagnostics, not automatic selection or efficacy.
+Next: freeze and test the name-free rule in metric_blocks/CURVATURE-DESIGN.md on
+analytic controls and saved states before implementing a sampler change. Preserve
+the failed earlier screens; require fresh broad validation with charged overhead.
+
+An unexplained loss of /dev/shm erased the initial raw audit. All 24 replays were
+recovered from a verified 218-member baseline archive; the first analysis exactly
+matches its surviving local copy. Recovery is not independent replication. Use
+the dedicated metric-blocks-recovery-20261030 mount and durable per-job copies
+while the cleanup cause remains unknown. Recovered evidence is privately archived:
+15,554,032 bytes, 297 verified members, SHA256
+b28117c3e7033cf53478771a0f7dd382bd1184832907f26f0be4935edb7de6d3.
+See metric_blocks/REPORT.md and archive/S3-VERIFICATION.json. Goal remains ACTIVE;
+no sampler defaults changed and no application advantage has been established.
+
 ## Latest: conditional GP approximation passes; no application advantage shown
 
 The synthetic GP audit is TERMINAL: four global approximations fail, four fresh

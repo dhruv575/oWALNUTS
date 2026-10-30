@@ -338,3 +338,23 @@ evaluations, in addition to 16384 exact density evaluations. The result supports
 limited approximation adequacy, not an actual application or a sampler speed
 ranking. It removes failure of global Laplace as sufficient motivation for a
 WALNUTS campaign on this benchmark; see `usefulness_search_v1/gp_count/REPORT.md`.
+
+### Exposed metric-selection mechanism audit (2026-10-30)
+
+Passive instrumentation reproduced all non-timing result fields in twelve
+historical cells for each of two versions. The proposed explanation that one
+nonlinear noise coordinate vetoed an otherwise linear coefficient block was
+contradicted: coefficient force regressions themselves failed the gate. Offline
+finite-difference probes (5,184 separately charged gradient evaluations) instead
+found stable trace-normalized positive regression coefficient curvature across
+recorded states, despite precision-scale changes up to a factor of 3,168.
+The corresponding GP latent curvature changed substantially; several full
+Hessians were indefinite. Blocks were identified by parameter names, so this
+is mechanism diagnosis, not evidence for an automatic algorithm or speedup.
+A prospective name-free stable-curvature selector requires analytic preflight
+and fresh broad comparison before any usefulness claim. Earlier failed metric
+screens remain failed. Initial temporary raw files were lost for an unknown
+reason; the audit was reproduced from verified historical evidence, with exact
+agreement to the surviving first analysis. This recovery is not independent
+replication. The recovered 297-member archive passed exact-version restore and
+member-hash verification. See STUDIES/usefulness_search_v1/metric_blocks/REPORT.md.
