@@ -1,0 +1,620 @@
+[
+  {
+    "model": "bball_drive_event_1-hmm_drive_1",
+    "reported_dimension": 8,
+    "keywords": [
+      "stan examples",
+      "stan benchmark",
+      "pathfinder paper",
+      "hidden markov model",
+      "multimodal"
+    ],
+    "model_source": "// drive model (normal dist)\ndata {\n  int<lower=1> K; // number of states (1 = none, 2 = drive)\n  int<lower=1> N; // length of process\n  array[N] real u; // 1/speed\n  array[N] real v; // hoop distance\n  matrix<lower=0>[K, K] alpha; // transit prior\n  real<lower=0> tau; // sd u\n  real<lower=0> rho; // sd v\n}\nparameters {\n  simplex[K] theta1;\n  simplex[K] theta2;\n  // enforce an ordering: phi[1] <= phi[2]\n  ordered[K] phi; // emission parameter for 1/speed\n  ordered[K] lambda; // emission parameter for hoop dist\n}\ntransformed parameters {\n  array[K] simplex[K] theta; // transit probs\n  theta[1] = theta1;\n  theta[2] = theta2;\n}\nmodel {\n  // priors\n  for (k in 1 : K) {\n    target += dirichlet_lpdf(theta[k] | alpha[k,  : ]');\n  }\n  target += normal_lpdf(phi[1] | 0, 1);\n  target += normal_lpdf(phi[2] | 3, 1);\n  target += normal_lpdf(lambda[1] | 0, 1);\n  target += normal_lpdf(lambda[2] | 3, 1);\n  // forward algorithm\n  {\n    array[K] real acc;\n    array[N, K] real gamma;\n    for (k in 1 : K) {\n      gamma[1, k] = normal_lpdf(u[1] | phi[k], tau)\n                    + normal_lpdf(v[1] | lambda[k], rho);\n    }\n    for (t in 2 : N) {\n      for (k in 1 : K) {\n        for (j in 1 : K) {\n          acc[j] = gamma[t - 1, j] + log(theta[j, k])\n                   + normal_lpdf(u[t] | phi[k], tau)\n                   + normal_lpdf(v[t] | lambda[k], rho);\n        }\n        gamma[t, k] = log_sum_exp(acc);\n      }\n    }\n    target += log_sum_exp(gamma[N]);\n  }\n}\ngenerated quantities {\n  array[N] int<lower=1, upper=K> z_star;\n  real log_p_z_star;\n  // Viterbi algorithm\n  {\n    array[N, K] int back_ptr;\n    array[N, K] real best_logp;\n    for (k in 1 : K) {\n      best_logp[1, K] = normal_lpdf(u[1] | phi[k], tau)\n                        + normal_lpdf(v[1] | lambda[k], rho);\n    }\n    for (t in 2 : N) {\n      for (k in 1 : K) {\n        best_logp[t, k] = negative_infinity();\n        for (j in 1 : K) {\n          real logp;\n          logp = best_logp[t - 1, j] + log(theta[j, k])\n                 + normal_lpdf(u[t] | phi[k], tau)\n                 + normal_lpdf(v[t] | lambda[k], rho);\n          if (logp > best_logp[t, k]) {\n            back_ptr[t, k] = j;\n            best_logp[t, k] = logp;\n          }\n        }\n      }\n    }\n    log_p_z_star = max(best_logp[N]);\n    for (k in 1 : K) {\n      if (best_logp[N, k] == log_p_z_star) {\n        z_star[N] = k;\n      }\n    }\n    for (t in 1 : (N - 1)) {\n      z_star[N - t] = back_ptr[N - t + 1, z_star[N - t + 1]];\n    }\n  }\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/hmm_drive_1.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/bball_drive_event_1.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/bball_drive_event_1-hmm_drive_1.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/bball_drive_event_1-hmm_drive_1.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/hmm_drive_1.stan": "295e47fe6cf70adb9c16af0697fb6f3803aad993c3ee800a34e9b437883abb75",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/bball_drive_event_1-hmm_drive_1.json.zip": "ca7b6d8d5d7cbeaa669781b9ad596f6f3b6e6619d574aad5b0efed289b2529eb",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/bball_drive_event_1.json.zip": "5b4332702c475f94b2d1c651e9ae1bebf155e761f2cc6683879db50129c70f4d",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/bball_drive_event_1-hmm_drive_1.json": "a726aa57ce3606af2be7f4bed4f610d7ba7c8743930014416020b7b5e80c4a39"
+    }
+  },
+  {
+    "model": "earnings-earn_height",
+    "reported_dimension": 3,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] earn;\n  vector[N] height;\n}\nparameters {\n  vector[2] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  earn ~ normal(beta[1] + beta[2] * height, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/earn_height.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-earn_height.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-earn_height.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/earn_height.stan": "cabef66313b5b1568716951892387134a46d92865a84710445970cc69bda163a",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-earn_height.json.zip": "d70aad60517d530938f24d6841db87ce66ac1448e9f8d9a5bb5621edf53a4ced",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip": "06a67aa61a99d59aee057486dae51ffad6b4f887e7f8f17733739cf893af312f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-earn_height.json": "0186a78e616aadd82464e1ae6a7f9d7b563a17f01239e5680782f06bd9f49e1c"
+    }
+  },
+  {
+    "model": "earnings-log10earn_height",
+    "reported_dimension": 3,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] earn;\n  vector[N] height;\n}\ntransformed data {\n  // log 10 transformation\n  vector[N] log10_earn;\n  for (i in 1 : N) {\n    log10_earn[i] = log10(earn[i]);\n  }\n}\nparameters {\n  vector[2] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log10_earn ~ normal(beta[1] + beta[2] * height, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/log10earn_height.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-log10earn_height.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-log10earn_height.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/log10earn_height.stan": "69df8e51be53f4e4ac8a2756927a3b7dc2ca61cbaf4c6a65d790298287a049c2",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-log10earn_height.json.zip": "422234d96eb2f08e7134d19cdd167c7a4fe980e88c572deac4798c60a0d8151c",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip": "06a67aa61a99d59aee057486dae51ffad6b4f887e7f8f17733739cf893af312f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-log10earn_height.json": "ba6f3dc2665a148df0f21d6f90c81f56682e489cf7786e109b0de86629306413"
+    }
+  },
+  {
+    "model": "earnings-logearn_height",
+    "reported_dimension": 3,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] earn;\n  vector[N] height;\n}\ntransformed data {\n  // log transformation\n  vector[N] log_earn;\n  log_earn = log(earn);\n}\nparameters {\n  vector[2] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_earn ~ normal(beta[1] + beta[2] * height, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_height.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_height.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_height.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_height.stan": "2eca5eaba6ba31d6964eec624e819d84f7ba0a06a0289920b2276d933a31d64e",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_height.json.zip": "189e6eea02f9fa56c744fe080d58d9a1da873601fcb8aa0738681a1c8cf991eb",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip": "06a67aa61a99d59aee057486dae51ffad6b4f887e7f8f17733739cf893af312f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_height.json": "98a3114103a04d5fd5f1470a1b57e1ef41a733b0c718ab369180ac51f29662ec"
+    }
+  },
+  {
+    "model": "earnings-logearn_height_male",
+    "reported_dimension": 4,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] earn;\n  vector[N] height;\n  vector[N] male;\n}\ntransformed data {\n  // log transformation\n  vector[N] log_earn;\n  log_earn = log(earn);\n}\nparameters {\n  vector[3] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_earn ~ normal(beta[1] + beta[2] * height + beta[3] * male, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_height_male.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_height_male.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_height_male.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_height_male.stan": "ec123759efa70e17517de7512ab5e33f23bfd6c03b2d94515df6aec8ea490c47",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_height_male.json.zip": "9a19f3bc043903c58ea4a2713f79b1d5af93d59ebf572f95f6c0e4d0a351d4a0",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip": "06a67aa61a99d59aee057486dae51ffad6b4f887e7f8f17733739cf893af312f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_height_male.json": "7db2038e215ef613d4a10cb5958ba0b16159be985a771c01182cfb55e2b01317"
+    }
+  },
+  {
+    "model": "earnings-logearn_interaction_z",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples",
+      "interaction"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] earn;\n  vector[N] height;\n  vector[N] male;\n}\ntransformed data {\n  vector[N] log_earn; // log transformation\n  vector[N] z_height; // standardization\n  vector[N] inter; // interaction\n  log_earn = log(earn);\n  z_height = (height - mean(height)) / sd(height);\n  inter = z_height .* male;\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_earn ~ normal(beta[1] + beta[2] * z_height + beta[3] * male\n                    + beta[4] * inter, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_interaction_z.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_interaction_z.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_interaction_z.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_interaction_z.stan": "37e04ae7ae7e92d3d4fffc6720298a56d0a13d87f376ae34b19d3ba731551749",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_interaction_z.json.zip": "a98da5225e5cef14b00431aebfe7382a0ad8a22c88fad905a72e87a986ea710a",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip": "06a67aa61a99d59aee057486dae51ffad6b4f887e7f8f17733739cf893af312f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_interaction_z.json": "3d5f8e751f2c6e6cd98da2b2427b6608427bd30682e1eabe0c00f51b72e71cfd"
+    }
+  },
+  {
+    "model": "earnings-logearn_logheight_male",
+    "reported_dimension": 4,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] earn;\n  vector[N] height;\n  vector[N] male;\n}\ntransformed data {\n  vector[N] log_earn; // log transformations\n  vector[N] log_height;\n  log_earn = log(earn);\n  log_height = log(height);\n}\nparameters {\n  vector[3] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  log_earn ~ normal(beta[1] + beta[2] * log_height + beta[3] * male, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_logheight_male.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_logheight_male.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_logheight_male.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logearn_logheight_male.stan": "8855b00850ebc51d2ce10d58f0b8d212153e21f0b7c8bd5601e367282c798255",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/earnings-logearn_logheight_male.json.zip": "7541d1289703ac5416d4dda806c4d96383f43d4abd6392b584d90ce34178da5c",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/earnings.json.zip": "06a67aa61a99d59aee057486dae51ffad6b4f887e7f8f17733739cf893af312f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/earnings-logearn_logheight_male.json": "d5678b66f61e467c733181504efe597ea329dc327a24bf1524ea27a2a6003912"
+    }
+  },
+  {
+    "model": "gp_pois_regr-gp_regr",
+    "reported_dimension": 3,
+    "keywords": [
+      "stan benchmark",
+      "pathfinder paper",
+      "gaussian process model"
+    ],
+    "model_source": "data {\n  int<lower=1> N;\n  array[N] real x;\n  vector[N] y;\n}\nparameters {\n  real<lower=0> rho;\n  real<lower=0> alpha;\n  real<lower=0> sigma;\n}\nmodel {\n  matrix[N, N] cov = gp_exp_quad_cov(x, alpha, rho)\n                     + diag_matrix(rep_vector(sigma, N));\n  matrix[N, N] L_cov = cholesky_decompose(cov);\n  \n  rho ~ gamma(25, 4);\n  alpha ~ normal(0, 2);\n  sigma ~ normal(0, 1);\n  \n  y ~ multi_normal_cholesky(rep_vector(0, N), L_cov);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/gp_regr.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/gp_pois_regr.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/gp_pois_regr-gp_regr.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/gp_pois_regr-gp_regr.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/gp_regr.stan": "bfbba64339a06d6ca5e0619aa0e3bffee2865504ee00768dd999066182db9873",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/gp_pois_regr-gp_regr.json.zip": "df89f5011d9518b06c95a631c258ce03f4818b78deb40ed069cfd1d70074c8bb",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/gp_pois_regr.json.zip": "9aaaa9d5694b74e2aefa6d0bd2f0a48637fcb4d455a74b33985e58154f285da9",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/gp_pois_regr-gp_regr.json": "43430c9b72df8a985356b382de7ee814f216726f69c3b2962c12d3331c67c25d"
+    }
+  },
+  {
+    "model": "kidiq-kidscore_interaction",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples",
+      "interaction"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector<lower=0, upper=200>[N] kid_score;\n  vector<lower=0, upper=200>[N] mom_iq;\n  vector<lower=0, upper=1>[N] mom_hs;\n}\ntransformed data {\n  // interaction\n  vector[N] inter;\n  inter = mom_hs .* mom_iq;\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  sigma ~ cauchy(0, 2.5);\n  kid_score ~ normal(beta[1] + beta[2] * mom_hs + beta[3] * mom_iq\n                     + beta[4] * inter, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq-kidscore_interaction.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq-kidscore_interaction.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction.stan": "da69847f12b07ca3e1e77a7e9aa349497dbbe2f0251b94b46c24c51b5309ad91",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq-kidscore_interaction.json.zip": "acac3c394dfeb65ced6f14ddf20b5a5c075d7a80ae663d1d71f904c16d207065",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq.json.zip": "16d341a99ec8178231eab660d8fda084a44145f6a241daf35276d0192d13b92d",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq-kidscore_interaction.json": "81bb7e9e999b3bff79fe157e3b334c4c6c06367fb9413d67f368123824c30370"
+    }
+  },
+  {
+    "model": "kidiq-kidscore_momhs",
+    "reported_dimension": 3,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector<lower=0, upper=200>[N] kid_score;\n  vector<lower=0, upper=1>[N] mom_hs;\n}\nparameters {\n  vector[2] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  sigma ~ cauchy(0, 2.5);\n  kid_score ~ normal(beta[1] + beta[2] * mom_hs, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_momhs.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq-kidscore_momhs.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq-kidscore_momhs.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_momhs.stan": "555e35e50b5628fb981b5f0dafcf899feee4be0e4fcbbc5255f3d7df4128f15b",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq-kidscore_momhs.json.zip": "4140f0e3e2e3026a4a1628f2a4516380ee6f4f2a789f3915052b37a15943edaf",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq.json.zip": "16d341a99ec8178231eab660d8fda084a44145f6a241daf35276d0192d13b92d",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq-kidscore_momhs.json": "d1a901b0b74b9477d0327dcfdc94968afad77ff0bedbc74ac798438acd6152c6"
+    }
+  },
+  {
+    "model": "kidiq-kidscore_momiq",
+    "reported_dimension": 3,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector<lower=0, upper=200>[N] kid_score;\n  vector<lower=0, upper=200>[N] mom_iq;\n}\nparameters {\n  vector[2] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  sigma ~ cauchy(0, 2.5);\n  kid_score ~ normal(beta[1] + beta[2] * mom_iq, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_momiq.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq-kidscore_momiq.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq-kidscore_momiq.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_momiq.stan": "4a09d0baf54d23c5a9f2aebaaf212c4017b839ba5b9f04910ec98cb698593a2f",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq-kidscore_momiq.json.zip": "ee5deb23bf2dad804393c682b308da720825f9b099c37d774526c3a5a590e8d7",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq.json.zip": "16d341a99ec8178231eab660d8fda084a44145f6a241daf35276d0192d13b92d",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq-kidscore_momiq.json": "e4e6d666cbf0afead1d98769bb695e9dd3d62ccb964c4d1e0e4705f64f5ea8fe"
+    }
+  },
+  {
+    "model": "kidiq_with_mom_work-kidscore_interaction_c",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples",
+      "interaction"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] kid_score;\n  vector[N] mom_hs;\n  vector[N] mom_iq;\n}\ntransformed data {\n  // centered predictors\n  vector[N] c_mom_hs;\n  vector[N] c_mom_iq;\n  vector[N] inter;\n  c_mom_hs = mom_hs - mean(mom_hs);\n  c_mom_iq = mom_iq - mean(mom_iq);\n  inter = c_mom_hs .* c_mom_iq;\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  kid_score ~ normal(beta[1] + beta[2] * c_mom_hs + beta[3] * c_mom_iq\n                     + beta[4] * inter, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction_c.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_interaction_c.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_interaction_c.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction_c.stan": "ab4821a0785f15ebcdea112d6436db3c2433f26aca8d10798f2824f752406727",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_interaction_c.json.zip": "5cf2e956ada413797dbb40896a826d60a7c6b61d9e91209f6f4b0ace6c5c53c1",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip": "0c82d40ace4c75bba4bc8824d4ece044e1d5f8700d479ea672001ab475254913",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_interaction_c.json": "10bfd3bf34b30a288292df893df821231479e9a0ad0aab453d6ca2239b3e6fc9"
+    }
+  },
+  {
+    "model": "kidiq_with_mom_work-kidscore_interaction_c2",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples",
+      "interaction"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] kid_score;\n  vector[N] mom_hs;\n  vector[N] mom_iq;\n}\ntransformed data {\n  // centering on reference points\n  vector[N] c2_mom_hs;\n  vector[N] c2_mom_iq;\n  vector[N] inter;\n  c2_mom_hs = mom_hs - 0.5;\n  c2_mom_iq = mom_iq - 100;\n  inter = c2_mom_hs .* c2_mom_iq;\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  kid_score ~ normal(beta[1] + beta[2] * c2_mom_hs + beta[3] * c2_mom_iq\n                     + beta[4] * inter, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction_c2.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_interaction_c2.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_interaction_c2.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction_c2.stan": "f0e2de7b978b8ee263d3aa5fccdc4170e2f4d0678af5d6b8a0090162d084e9be",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_interaction_c2.json.zip": "e834dc37e4bc363ef9b6d50290692757e692d225fb5827ff5002f632fa4380de",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip": "0c82d40ace4c75bba4bc8824d4ece044e1d5f8700d479ea672001ab475254913",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_interaction_c2.json": "d66dd0065b817cfa0e4192c89cb24e499c82dc96fd41d44dd5ab35e715b3d26e"
+    }
+  },
+  {
+    "model": "kidiq_with_mom_work-kidscore_interaction_z",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples",
+      "interaction"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] kid_score;\n  vector[N] mom_hs;\n  vector[N] mom_iq;\n}\ntransformed data {\n  // standardizing\n  vector[N] z_mom_hs;\n  vector[N] z_mom_iq;\n  vector[N] inter;\n  z_mom_hs = (mom_hs - mean(mom_hs)) / (2 * sd(mom_hs));\n  z_mom_iq = (mom_iq - mean(mom_iq)) / (2 * sd(mom_iq));\n  inter = z_mom_hs .* z_mom_iq;\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  kid_score ~ normal(beta[1] + beta[2] * z_mom_hs + beta[3] * z_mom_iq\n                     + beta[4] * inter, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction_z.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_interaction_z.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_interaction_z.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_interaction_z.stan": "af2ebd6cd04a66deaf879899b548cb6401c7d250dd6cae7f55c726a8e7f734d6",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_interaction_z.json.zip": "e02c52c6455d5fcd60cccc44b5bcd1749a34abd7b27183b412904e088bf0e4f0",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip": "0c82d40ace4c75bba4bc8824d4ece044e1d5f8700d479ea672001ab475254913",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_interaction_z.json": "fc6e391f928779683b47ad83cbdd809c2dcf978db0f84228445fed833522d7b8"
+    }
+  },
+  {
+    "model": "kidiq_with_mom_work-kidscore_mom_work",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] kid_score;\n  array[N] int mom_work;\n}\ntransformed data {\n  vector[N] work2;\n  vector[N] work3;\n  vector[N] work4;\n  for (i in 1 : N) {\n    work2[i] = mom_work[i] == 2;\n    work3[i] = mom_work[i] == 3;\n    work4[i] = mom_work[i] == 4;\n  }\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  kid_score ~ normal(beta[1] + beta[2] * work2 + beta[3] * work3\n                     + beta[4] * work4, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_mom_work.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_mom_work.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_mom_work.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/kidscore_mom_work.stan": "fe41ba28792cddf91df4f46e5b48c2bcf33c0f1a193148fc36b4a52483640d27",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/kidiq_with_mom_work-kidscore_mom_work.json.zip": "78cafeca0b54277c5dc4c1889d6f55b5a81c93d3f066fbf8d6eda728eff9dfea",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/kidiq_with_mom_work.json.zip": "0c82d40ace4c75bba4bc8824d4ece044e1d5f8700d479ea672001ab475254913",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/kidiq_with_mom_work-kidscore_mom_work.json": "01779e7c402f0707a976d9481b383ff8a220b703a8670a09e9393226bc074261"
+    }
+  },
+  {
+    "model": "low_dim_gauss_mix-low_dim_gauss_mix",
+    "reported_dimension": 5,
+    "keywords": [
+      "stan benchmark",
+      "pathfinder paper",
+      "mixture model"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] y;\n}\nparameters {\n  ordered[2] mu;\n  array[2] real<lower=0> sigma;\n  real<lower=0, upper=1> theta;\n}\nmodel {\n  sigma ~ normal(0, 2);\n  mu ~ normal(0, 2);\n  theta ~ beta(5, 5);\n  for (n in 1 : N) {\n    target += log_mix(theta, normal_lpdf(y[n] | mu[1], sigma[1]),\n                      normal_lpdf(y[n] | mu[2], sigma[2]));\n  }\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/low_dim_gauss_mix.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/low_dim_gauss_mix.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/low_dim_gauss_mix-low_dim_gauss_mix.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/low_dim_gauss_mix-low_dim_gauss_mix.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/low_dim_gauss_mix.stan": "b94ee44ab73502a0053c4a52b7e9d582ca4f466994d7beef4a4e606ff8582344",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/low_dim_gauss_mix-low_dim_gauss_mix.json.zip": "422de750b20aef29c7b86f6bfa88dd9759050b6ffeb3588c004d6a4861c1e776",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/low_dim_gauss_mix.json.zip": "9b5ea284321417a7816b0426a0c96788a6824e6ceb4ec4ecd89493779720b8f9",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/low_dim_gauss_mix-low_dim_gauss_mix.json": "deac2d6d6b4fe746821c9acc58c4fe9e2deb07537f9790d7d8f55c85acf019a3"
+    }
+  },
+  {
+    "model": "mesquite-logmesquite",
+    "reported_dimension": 8,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] weight;\n  vector[N] diam1;\n  vector[N] diam2;\n  vector[N] canopy_height;\n  vector[N] total_height;\n  vector[N] density;\n  vector[N] group;\n}\ntransformed data {\n  // log transformations\n  vector[N] log_weight;\n  vector[N] log_diam1;\n  vector[N] log_diam2;\n  vector[N] log_canopy_height;\n  vector[N] log_total_height;\n  vector[N] log_density;\n  log_weight = log(weight);\n  log_diam1 = log(diam1);\n  log_diam2 = log(diam2);\n  log_canopy_height = log(canopy_height);\n  log_total_height = log(total_height);\n  log_density = log(density);\n}\nparameters {\n  vector[7] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_weight ~ normal(beta[1] + beta[2] * log_diam1 + beta[3] * log_diam2\n                      + beta[4] * log_canopy_height\n                      + beta[5] * log_total_height + beta[6] * log_density\n                      + beta[7] * group, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite.stan": "fdeda33c27e66799a4e3a3da6f74c16c6bbf58ab7bf568bce0d5999d120498d3",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite.json.zip": "741ddf71cad063821af0549ac78987f9f1d834848aeb180ce4edd083b02c8d62",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip": "ec9db3a2e390892473e6172d76386ba9b26c3633a9682532eb34217189dcb0ac",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite.json": "ec8ae52218a538735ed948a78bcb51823f2df2321d9b842d83524cb56b35373a"
+    }
+  },
+  {
+    "model": "mesquite-logmesquite_logva",
+    "reported_dimension": 5,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] weight;\n  vector[N] diam1;\n  vector[N] diam2;\n  vector[N] canopy_height;\n  vector[N] group;\n}\ntransformed data {\n  vector[N] log_weight;\n  vector[N] log_canopy_volume;\n  vector[N] log_canopy_area;\n  log_weight = log(weight);\n  log_canopy_volume = log(diam1 .* diam2 .* canopy_height);\n  log_canopy_area = log(diam1 .* diam2);\n}\nparameters {\n  vector[4] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_weight ~ normal(beta[1] + beta[2] * log_canopy_volume\n                      + beta[3] * log_canopy_area + beta[4] * group, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite_logva.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite_logva.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite_logva.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite_logva.stan": "f21fbceb941f04848fe7a1385e5b5f331e08a259db0fa8655fc724e91f94f7fb",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite_logva.json.zip": "f076ffb2113b40644f41fea152798274d1a1b0fd37d4c9a268d8087aa671a3d6",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip": "ec9db3a2e390892473e6172d76386ba9b26c3633a9682532eb34217189dcb0ac",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite_logva.json": "4bfeda865e0ef52086b75df78f16879e920e888e9ad104473cb687b144ca16bb"
+    }
+  },
+  {
+    "model": "mesquite-logmesquite_logvas",
+    "reported_dimension": 8,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] weight;\n  vector[N] diam1;\n  vector[N] diam2;\n  vector[N] canopy_height;\n  vector[N] total_height;\n  vector[N] density;\n  vector[N] group;\n}\ntransformed data {\n  vector[N] log_weight;\n  vector[N] log_canopy_volume;\n  vector[N] log_canopy_area;\n  vector[N] log_canopy_shape;\n  vector[N] log_total_height;\n  vector[N] log_density;\n  log_weight = log(weight);\n  log_canopy_volume = log(diam1 .* diam2 .* canopy_height);\n  log_canopy_area = log(diam1 .* diam2);\n  log_canopy_shape = log(diam1 ./ diam2);\n  log_total_height = log(total_height);\n  log_density = log(density);\n}\nparameters {\n  vector[7] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_weight ~ normal(beta[1] + beta[2] * log_canopy_volume\n                      + beta[3] * log_canopy_area\n                      + beta[4] * log_canopy_shape\n                      + beta[5] * log_total_height + beta[6] * log_density\n                      + beta[7] * group, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite_logvas.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite_logvas.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite_logvas.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite_logvas.stan": "e0fdd63267a96b0701b09bdddf7b54256ea0850569d380b158d5864f780bd311",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite_logvas.json.zip": "3d5aead1b3a6e158dc17c3a097c77bb79031c702f413f65f721f4f30d196c81c",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip": "ec9db3a2e390892473e6172d76386ba9b26c3633a9682532eb34217189dcb0ac",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite_logvas.json": "b8c92a15a5fe0ca774dc84326f1542ac5d56a873202364f2f7dd946d8b966622"
+    }
+  },
+  {
+    "model": "mesquite-logmesquite_logvolume",
+    "reported_dimension": 3,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] weight;\n  vector[N] diam1;\n  vector[N] diam2;\n  vector[N] canopy_height;\n}\ntransformed data {\n  vector[N] log_weight;\n  vector[N] log_canopy_volume;\n  log_weight = log(weight);\n  log_canopy_volume = log(diam1 .* diam2 .* canopy_height);\n}\nparameters {\n  vector[2] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  log_weight ~ normal(beta[1] + beta[2] * log_canopy_volume, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite_logvolume.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite_logvolume.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite_logvolume.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/logmesquite_logvolume.stan": "14615192a3579e2b9bdfd474389da63fbd32a0a5e1cd392c897560b8886b8aad",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-logmesquite_logvolume.json.zip": "cdd09ec3d81effe763ba71eb7e37f437e099924feefea151dd5233472768d091",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip": "ec9db3a2e390892473e6172d76386ba9b26c3633a9682532eb34217189dcb0ac",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-logmesquite_logvolume.json": "df20ad3540e935cc8c45ae2df38ba132005000e1fad46fc3d660ef0c5fbe26e7"
+    }
+  },
+  {
+    "model": "mesquite-mesquite",
+    "reported_dimension": 8,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] weight;\n  vector[N] diam1;\n  vector[N] diam2;\n  vector[N] canopy_height;\n  vector[N] total_height;\n  vector[N] density;\n  vector[N] group;\n}\nparameters {\n  vector[7] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  weight ~ normal(beta[1] + beta[2] * diam1 + beta[3] * diam2\n                  + beta[4] * canopy_height + beta[5] * total_height\n                  + beta[6] * density + beta[7] * group, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/mesquite.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-mesquite.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-mesquite.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/mesquite.stan": "5233a18e3656e4239b9a5e1c4bddc31803d3ce69c2dbb46a80b50c67e5efa036",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/mesquite-mesquite.json.zip": "48f9a22ba3e5ae08c80fca3974a5db1341356bfd7eb3dc9f7df4c15ac1505ce4",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/mesquite.json.zip": "ec9db3a2e390892473e6172d76386ba9b26c3633a9682532eb34217189dcb0ac",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/mesquite-mesquite.json": "7af2f7f9afcc42aaa557e3110c9ebbeb6f600bf404c2cef9e37cd27559bb6e75"
+    }
+  },
+  {
+    "model": "nes1972-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1972.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1972-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1972-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1972-nes.json.zip": "59deb232b508701047fecfb8005e37995c6a5e446ca711ffe654d8dc0ded6697",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1972.json.zip": "8ccd9cb76d3259b331414a971958a4a6edfcb8897029d5999231bb7d5823197e",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1972-nes.json": "ec8b49587441c5da65874b595cf4bcae9cc6eaca288f0d56ee5f42d61e82a4f6"
+    }
+  },
+  {
+    "model": "nes1976-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1976.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1976-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1976-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1976-nes.json.zip": "4c4663da33bdc4fbde9903a6b7dc5155dc2edd90f8b70d382801e998923fb820",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1976.json.zip": "22198de6ae1a6f2f1002b7c25a2eb7bf1c78f473839b9e942e7b604c375fd1cf",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1976-nes.json": "055d863356ad4cccb6092d3815837c87c0550dc3a2a614a0c75d62f7a9302bb8"
+    }
+  },
+  {
+    "model": "nes1980-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1980.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1980-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1980-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1980-nes.json.zip": "cb531c8457ba9cf82b95e3f750dc710329e11adb8a6f065d3b3cf8e9794c7316",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1980.json.zip": "f2ebcdf394c82d3bcef169d311f43db88ae893159aff013d7d83b3af046f45d2",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1980-nes.json": "575591a36502915ad5c6fb7aa9b30834c27ac709772f9d86b233f95b7a912a9d"
+    }
+  },
+  {
+    "model": "nes1984-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1984.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1984-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1984-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1984-nes.json.zip": "dc2bf823feff0ab694c9ddbe05024737e6c9bed410649fdacd60bd6defd70e13",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1984.json.zip": "2a36f18365d5f9c2814fa81f53009fef0cc098a336450efde0e511d93b228214",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1984-nes.json": "6664c1e9850901818a4f9d9be3793bf7a407aa962c974c9bb82c2d6d64bbf2b9"
+    }
+  },
+  {
+    "model": "nes1988-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1988.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1988-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1988-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1988-nes.json.zip": "936b030514a58e4ad42aa42e1c296aafc6ed7aae2cc9a6c7443c241baf5a354a",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1988.json.zip": "9da3b6179d76806c9e8e07b9c932fc3909c0c3e949ed83a38969fe1f816b682c",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1988-nes.json": "3c313d0f1b81162b9496ded8e8db301851326bfc9c70171e3db5607ff5f2e8ee"
+    }
+  },
+  {
+    "model": "nes1992-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1992.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1992-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1992-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1992-nes.json.zip": "c851510e720247b7930ae56997685edce1cc947a2fe6cfcdff27b8c835bfbed2",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1992.json.zip": "e49b5add978ec2ecd95497849996a7789b466f372e68dd2f93cb11906431875b",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1992-nes.json": "8fec4dc540e163788f09e6d26d9628f3d86f613cfdf7f1443fbbfcacac4f168a"
+    }
+  },
+  {
+    "model": "nes1996-nes",
+    "reported_dimension": 10,
+    "keywords": [
+      "arm book",
+      "stan examples"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  vector[N] partyid7;\n  vector[N] real_ideo;\n  vector[N] race_adj;\n  vector[N] educ1;\n  vector[N] gender;\n  vector[N] income;\n  array[N] int age_discrete;\n}\ntransformed data {\n  vector[N] age30_44; // age as factor\n  vector[N] age45_64;\n  vector[N] age65up;\n  \n  for (n in 1 : N) {\n    age30_44[n] = age_discrete[n] == 2;\n    age45_64[n] = age_discrete[n] == 3;\n    age65up[n] = age_discrete[n] == 4;\n  }\n}\nparameters {\n  vector[9] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // vectorization\n  partyid7 ~ normal(beta[1] + beta[2] * real_ideo + beta[3] * race_adj\n                    + beta[4] * age30_44 + beta[5] * age45_64\n                    + beta[6] * age65up + beta[7] * educ1 + beta[8] * gender\n                    + beta[9] * income, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1996.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1996-nes.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1996-nes.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/nes.stan": "260e7acec9bef905cae306ff6defb97e525c116f018aba9c687af154c10c8e70",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/nes1996-nes.json.zip": "2642eef26e348dfcfc943548227ebab7c1054232b541ad847245aabd20fd65e1",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/nes1996.json.zip": "1ce70d32edefe5e612f2bef1cf2afa477150caa85eb4a5cddbfe53e664717672",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/nes1996-nes.json": "dc49abc5b1b48ada2bb32d4343d66d2135c081454f737e24de792a947e0be038"
+    }
+  },
+  {
+    "model": "sblri-blr",
+    "reported_dimension": 6,
+    "keywords": [
+      "linear regression"
+    ],
+    "model_source": "data {\n  int<lower=0> N;\n  int<lower=0> D;\n  matrix[N, D] X;\n  vector[N] y;\n}\nparameters {\n  vector[D] beta;\n  real<lower=0> sigma;\n}\nmodel {\n  // prior\n  target += normal_lpdf(beta | 0, 10);\n  target += normal_lpdf(sigma | 0, 10);\n  // likelihood\n  target += normal_lpdf(y | X * beta, sigma);\n}\n\n\n",
+    "paths": {
+      "stan": "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/blr.stan",
+      "data": "/home/ubuntu/infra/posteriordb/posterior_database/data/data/sblri.json.zip",
+      "reference": "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/sblri-blr.json.zip",
+      "info": "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/sblri-blr.json"
+    },
+    "hashes": {
+      "/home/ubuntu/infra/posteriordb/posterior_database/models/stan/blr.stan": "e6407c4391ab11c0b59f17f3a04132df87aa69b7dae459e173036f16f9e8b161",
+      "/home/ubuntu/infra/posteriordb/posterior_database/reference_posteriors/draws/draws/sblri-blr.json.zip": "4e1f20dc9ccc45e1b05d0b67ee83b9a2ffdd21c90ca576549571940b5c4369e8",
+      "/home/ubuntu/infra/posteriordb/posterior_database/data/data/sblri.json.zip": "e975f6641b5e08d65cb1e3519f1d0370939afbc82bfbeb3c1f5a07e5bbd717a7",
+      "/home/ubuntu/infra/posteriordb/posterior_database/posteriors/sblri-blr.json": "feb1153d2e7dbe52a557bcfd23451bdeb340b3a82144d24604090ca52743d30d"
+    }
+  }
+]

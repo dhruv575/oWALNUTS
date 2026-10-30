@@ -1,5 +1,25 @@
 # Active research queue
 
+## Latest: Fisher baseline removes the apparent regression advantage
+
+fisher02/03 both fail1/16 fixed numerical checks; preserve them. fisher04 uses
+80-digit arithmetic and passes16/16 without threshold changes; exact S3 restores
+verify11/12/12 members. Supplemental fishercompare01 is terminal:48 drained jobs,
+24 same-pilot Fisher arms, original broad01 controls reused, not replication.
+Candidate/Fisher ESS/call ratios .809 ARMA,.980 arK,.977 sblrc,.672 GARCH;
+Fisher fails2/4 GP and4/4 centered eight schools.239-member archive verified.
+See FISHER-NUMERICS-REPORT.md. No advantage or novelty claim from regression gains.
+
+linearity01 completed24-cell post-hoc audit: ARMA/arK worst-direction out-of-chain
+R2>.92, GARCH .088--.174, GP/eight-schools negative, sblrc one negative successful
+Fisher case. See LINEARITY-AUDIT-REPORT.md; no independent validation claim.
+Next freeze a target-name-free hybrid: Fisher when all held-out directions R2>0,
+otherwise existing v4 block/auto policy; compare fresh16 seeds against Fisher,
+v4, auto and dense. Audit storage headroom before launching larger batches.
+REMAINING-INVENTORY.json records available reference-backed
+small models; most remaining entries are Gaussian regressions. Wells has no
+supplied reference. Goal/application/general improvement remains unproven.
+
 ## Latest: broader gate passes; cheap collapsed control qualifies
 
 broad01 is terminal: 96 drained jobs, 72 matched stages, all six references

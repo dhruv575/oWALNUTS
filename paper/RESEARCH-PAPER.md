@@ -480,3 +480,29 @@ was qualified. The target therefore supplies mechanism evidence but a weak
 application case for MCMC. See metric_blocks/BROAD-REPORT.md and protocols.
 The 458-member screen and 14-member collapsed-control archives were independently
 restored from exact private S3 versions and verified. Negative results remain.
+
+## Stronger Fisher baseline and failed numerical implementations (2026-10-30)
+
+QR/SVD and Newton-refined double-precision implementations each fail one of16
+fixed algebra checks. Newton refinement misleadingly reduces equation residual
+while producing .203 relative forward error. An80-digit implementation of the
+same existing estimator passes all16 checks without relaxing thresholds.
+These are implementation results, not failures of the published estimator.
+
+A supplemental arm reuses24 broad-screen pilots and controls (not independent
+replication), charging400 score evaluations and all fitting time. Candidate over
+Fisher geometric ESS/total-call ratios are .809 ARMA,.980 arK,.977 proper-prior
+regression and .672 GARCH. Fisher passes all four runs on each of those targets,
+but fails two GP runs and all four centered eight-schools runs. No regression
+advantage over this stronger estimator is demonstrated. Wall-time comparisons
+against the expensive high-precision implementation cannot imply superiority
+over an optimized Fisher implementation. All48 jobs and cost/hash audits pass.
+
+A post-hoc leave-one-chain-out affine-score audit motivates a future reliability
+gate; it supplies no independent validation. Worst directional predictive R2 is
+positive for ARMA,arK,GARCH, negative for GP/eight schools and negative for one
+successful regression Fisher pilot. A fresh comparison must test any combined
+policy and charge all gate/probe costs. See FISHER-NUMERICS-REPORT.md and
+LINEARITY-AUDIT-REPORT.md. All failures and source fixtures are preserved in
+verified private archives. General improvement, novelty and application claims
+remain open.
