@@ -1,5 +1,16 @@
 # Active research queue
 
+## Latest: name-free curvature preflight passes after preserved structural failure
+
+V1 incorrectly absorbed independent coordinates into maximal blocks. V2 adds
+graph connectivity and passes seven analytic plus 120 permutation checks. It
+discovers all six exposed regression blocks and rejects all six GP/GARCH cells
+without parameter names. No efficacy claim: freeze online snapshot/install rules
+and integrate in an isolated copy, then known-target fidelity and fresh broad
+comparisons with charged probe overhead. See metric_blocks/SELECTOR-REPORT.md.
+Both bounded jobs drained; complete 17-member private archive restore verified.
+An incomplete earlier upload is preserved and superseded. Goal remains ACTIVE.
+
 ## Latest: metric mechanism audit complete; curvature prototype next
 
 The proposed per-coordinate R-squared block rule is contradicted: regression

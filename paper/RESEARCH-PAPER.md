@@ -358,3 +358,12 @@ reason; the audit was reproduced from verified historical evidence, with exact
 agreement to the surviving first analysis. This recovery is not independent
 replication. The recovered 297-member archive passed exact-version restore and
 member-hash verification. See STUDIES/usefulness_search_v1/metric_blocks/REPORT.md.
+
+The subsequent name-free offline selector preflight recovered all six exposed
+regression blocks and selected none in six GP/GARCH controls. An initial rule
+incorrectly absorbed independent coordinates; a connected-graph requirement
+repaired this analytic failure. Seven analytic and 120 permutation checks passed.
+This is development evidence on exposed states, not fresh sampling validation.
+Online timing, probe cost and posterior fidelity remain untested. Unit invariance
+was checked only for exactly proportional curvature. Both versions are preserved
+in the verified archive documented in metric_blocks/SELECTOR-REPORT.md.
