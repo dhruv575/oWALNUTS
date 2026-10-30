@@ -1,0 +1,9 @@
+# Prospective timing follow-up after the MSE screen
+
+The frozen screen finished all 96 workers. Its primary worker elapsed-time measure is not precise enough to establish a runtime gain: resource_monitor polls every .1 seconds, while each four-chain Gaussian batch spends only about .01-.02 seconds inside the sampler. Monitored costs below one for the observer conflict with sampler-internal overhead ratios around 1.19-1.21. Preserve the original report and advance flags, but do not treat them as a verified efficiency result.
+
+Before running this follow-up, freeze: replay every one of the same 48 target/batch input pairs three times per arm. Randomize arm order within each pair using PCG64 seed 941330001 plus target index. A supervised wrapper times subprocess.run directly with perf_counter, including process startup, computation, JSON serialization and file close, excluding supervisor polling/cleanup. File close is not an fsync guarantee. Reuse one output file per arm within the newly created timing directory to bound storage. Verify every replay against its preserved canonical output after excluding only sampler seconds. Preserve timings, input hashes, canonical hashes, final outputs and failures. These are timing replays, not additional statistical replicates.
+
+Bootstrap 16 paired batch totals (each averaged over three repetitions), 10,000 times using seed 941330101, to report observed/original cost with a 95% interval. Also report all three repetition ratios. Apply this independently measured cost to the original frozen MSE ratios. Report a conservative descriptive range using MSE lower/cost upper and MSE upper/cost lower; it is not a calibrated joint 95% interval. No promotion or objective completion from the original monitor-dominated numbers. No change to MSE estimates, seeds or original results.
+
+Three bounded timing workers, sequential, 180 seconds/2 GiB/64 MiB each. No recompilation, new target samples or cloud spending.
