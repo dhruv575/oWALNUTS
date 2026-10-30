@@ -1,9 +1,9 @@
 # Current reviewed research queue: 2026-10-30
 
-1. Active: real count-data fresh serial workflows at
-   /home/ubuntu/lanes/real-counts-fresh-workflows-20261030. Six workflows:
-   two fresh seeds each,WAL dense.9,native diagonal.99,conditional importance.
-   Frozen FRESH-WORKFLOW-PROTOCOL.md;300s/3GiB/128MiB per workflow.
+1. Active: transfer of verified real-count predictive evidence from
+   /home/ubuntu/lanes/real-counts-predictive-20261030-v2 to predictive_remote02.
+   Serial workflows completed5/6qualified; WAL rep1 missed precision. Prediction
+   and independent36-job raw replay plus score audit completed successfully.
    This entry is a snapshot, not a watcher: inspect the process before acting.
 2. Completed synthetic AWS comparison:26/28 qualified; all-fit gate failed.
    Independent raw audit and432-member archive verified; checkpoint4eb6fb32.
@@ -13,11 +13,14 @@
    audited. Both16384-proposal importance fits passed all160 training quantities;
    original-runtime density replay passed, local replay mismatch preserved.
    Native.9/.95 screen failed55/12 divergences;.99 andWAL.9 qualified.
-   Training archive172members verified locally; off-device S3 verification
-   active. No historical heldout scores yet; freeze predictive integration,
-   MCSE and strong approximate-inference controls before scoring.
-3. Storage: approximately1.6GiB free at fresh serial dispatch. Each workflow
-   capped128MiB;1GiB initial and512MiB per-job free floors. Audit further checkout
+   Training archive172members verified off-device in S3,exact version restored.
+   Prediction result NEGATIVE: GP mean log score-1.44693 vs exact changepoint
+   -1.40316;difference-.04377,block95%[-.13625,.05059]. No application advantage.
+   Both4096-proposal fits missed predictive precision;16384-proposal fits passed.
+   Finish combined fresh/predictive archive and exact-version S3 verification.
+   Then review a distinct candidate with justified posterior-exploration needs;
+   do not retune against these exposed scores to manufacture a successful use case.
+3. Storage: approximately1.1GiB free after predictive evidence. Audit further checkout
    files and archive completed studies to private S3 with exact-version restore
    verification before reclaiming redundant evidence. Do not perturb timing
    with large archive/cleanup jobs on the AWS host during timing studies.
