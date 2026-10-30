@@ -6,7 +6,7 @@ from sampling import CONFIGS
 from backend import ROOT
 
 def run(phase,root,selection=None):
-    root=Path(root);root.mkdir(parents=True,exist_ok=False);here=Path(__file__).resolve().parent
+    root=Path(root).resolve();root.mkdir(parents=True,exist_ok=False);here=Path(__file__).resolve().parent
     if phase=='initial':
         jobs=[('calibrate',case,c,0) for case in CASES[:4] for c in CONFIGS]
         jobs += [('reference',case,c,i) for case in CASES for i,c in enumerate(['nuts_raw_99','nuts_white_99'])]
