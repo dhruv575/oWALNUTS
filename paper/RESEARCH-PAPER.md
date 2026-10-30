@@ -392,3 +392,14 @@ fresh uncertainty analysis and broader controls. The earnings model admits direc
 Gaussian-regression posterior sampling, so this signal cannot establish an
 application requiring WALNUTS. See metric_blocks/MODEL-REPORT.md; both original
 and repaired raw evidence passed exact-version archive restore verification.
+
+The earnings model admits a direct posterior sampler under its actual flat
+priors. QR yields sigma squared inverse-gamma with shape (N-p-1)/2 and scale
+SSE/2, followed by a conditional Gaussian coefficient draw. At 64 states the
+unconstrained log-density differences agree with Stan within 8.53e-13 and scaled
+gradients within 6.24e-11. Four fresh 32,768-draw replicates pass the frozen
+reference and exact-moment gates. Generation takes .0029--.0043 seconds after
+.00063 seconds of QR setup, with zero sampling-time target calls; imports and
+diagnostics are excluded. This rules out that earnings model as an application
+requiring expensive MCMC. Its adaptation results remain development evidence,
+not practical superiority. See metric_blocks/DIRECT-REPORT.md and verified archive.

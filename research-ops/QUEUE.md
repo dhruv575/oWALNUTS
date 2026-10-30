@@ -1,5 +1,15 @@
 # Active research queue
 
+## Latest: earnings direct posterior qualifies; not an application needing WALNUTS
+
+Four independent 32,768-draw replicates pass frozen reference/exact-moment gates.
+Density/gradient parity against Stan passes at 64 states; QR setup ~.00063s,
+generation .0029--.0043s, zero sampling target calls. See DIRECT-REPORT.md and
+verified 20-member archive. No application claim from the earlier metric signal.
+Next: matched staged adaptation ablation with at least 16 fresh paired seeds,
+then broader nonconjugate targets only if a curvature-specific gain survives.
+Preserve the .379 worst ratio and numerical-installation failure. Goal ACTIVE.
+
 ## Latest: model screen terminal; earnings signal needs ablation/direct baseline
 
 Original 80 jobs completed; four earnings candidate installs failed numerical
