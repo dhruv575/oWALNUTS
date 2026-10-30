@@ -1,0 +1,6 @@
+import hashlib,json,os,sys
+from pathlib import Path
+p=Path(__file__).resolve().parent;l=p/'local_recovery';r=l/'exact_banana_build01';r.mkdir(exist_ok=False);cache=Path('/home/dhruv/.cache/owalnuts/native-recycling01');os.environ['PATH']='/home/dhruv/.cargo/bin:'+os.environ['PATH'];os.environ['CARGO_TARGET_DIR']=str(cache);sys.path.insert(0,str(l/'inputs'));from resource_monitor import execute
+for label,cmd in [('lock',['cargo','+stable','generate-lockfile']),('fetch',['cargo','+stable','fetch','--locked']),('build',['cargo','+stable','build','--release','--offline','--locked','-j','1']),('test',['cargo','+stable','test','--release','--offline','--locked','-j','1'])]:
+    result=execute(cmd,str(p/'exact_banana_runner'),300,cache,4*1024**3,2*1024**3,r/(label+'.log'),output_scan_interval=2);(r/(label+'-SUPERVISION.json')).write_text(json.dumps(result,indent=2)+'\n');assert result['exit_code']==0 and result['group_drained']
+binary=cache/'release/exact-banana-runner';(r/'SUMMARY.json').write_text(json.dumps(dict(passed=True,package='exact_banana_runner',binary=str(binary),binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),compiler='rustc 1.99.1 (58cf8f9c3 2026-10-13)'),indent=2)+'\n')

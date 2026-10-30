@@ -1,0 +1,61 @@
+{
+  "post_hoc": true,
+  "rows": [
+    {
+      "control": "direct_wal_ordinary",
+      "mean_target_calls": 439372.703125,
+      "base_mean_target_calls": 439372.703125,
+      "target_call_ratio": 1.0,
+      "mse_times_target_calls_ratio": 1.0871699194740991,
+      "paired_bootstrap_interval": [
+        1.061110450098424,
+        1.115028802757811
+      ]
+    },
+    {
+      "control": "direct_native_ordinary",
+      "mean_target_calls": 321383.9375,
+      "base_mean_target_calls": 439372.703125,
+      "target_call_ratio": 0.7314608650336828,
+      "mse_times_target_calls_ratio": 4.0761984193858005,
+      "paired_bootstrap_interval": [
+        0.555388218445891,
+        10.94671085509132
+      ]
+    },
+    {
+      "control": "direct_native_recycled",
+      "mean_target_calls": 321383.9375,
+      "base_mean_target_calls": 439372.703125,
+      "target_call_ratio": 0.7314608650336828,
+      "mse_times_target_calls_ratio": 3.995015534146864,
+      "paired_bootstrap_interval": [
+        0.5006506264801694,
+        10.824060615762802
+      ]
+    }
+  ],
+  "error_concentration": {
+    "direct_wal_ordinary": {
+      "largest_replicate_index": 44,
+      "largest_replicate_error_share": 0.060974517743503966,
+      "top_four_error_share": 0.19067723523630423
+    },
+    "direct_wal_recycled": {
+      "largest_replicate_index": 44,
+      "largest_replicate_error_share": 0.05803188437498478,
+      "top_four_error_share": 0.18668918181598718
+    },
+    "direct_native_ordinary": {
+      "largest_replicate_index": 44,
+      "largest_replicate_error_share": 0.8512898317210668,
+      "top_four_error_share": 0.8699401845439702
+    },
+    "direct_native_recycled": {
+      "largest_replicate_index": 44,
+      "largest_replicate_error_share": 0.8632361428728454,
+      "top_four_error_share": 0.8804638551888578
+    }
+  },
+  "scope": "Finite-run second-moment MSE times actual density/gradient-call counts, including warmup. Above one favors recycled WAL. Not measured runtime, an expensive-likelihood speed projection, or an application advantage. Calibration not amortized in this work diagnostic. Replicate concentration is descriptive and no outlier is removed."
+}

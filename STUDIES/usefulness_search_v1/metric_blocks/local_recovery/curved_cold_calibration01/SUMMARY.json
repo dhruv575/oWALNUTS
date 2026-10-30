@@ -1,0 +1,121 @@
+{
+  "passed": true,
+  "rows": [
+    {
+      "representation": "direct",
+      "batch": 0,
+      "folder": "direct-00"
+    },
+    {
+      "representation": "direct",
+      "batch": 1,
+      "folder": "direct-01"
+    },
+    {
+      "representation": "direct",
+      "batch": 2,
+      "folder": "direct-02"
+    },
+    {
+      "representation": "direct",
+      "batch": 3,
+      "folder": "direct-03"
+    },
+    {
+      "representation": "latent",
+      "batch": 0,
+      "folder": "latent-00"
+    },
+    {
+      "representation": "latent",
+      "batch": 1,
+      "folder": "latent-01"
+    },
+    {
+      "representation": "latent",
+      "batch": 2,
+      "folder": "latent-02"
+    },
+    {
+      "representation": "latent",
+      "batch": 3,
+      "folder": "latent-03"
+    }
+  ],
+  "inputs": {
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/run_curved_calibration.py": "946670fc3c5b097ab6bafe2eaba4dae0fa82bf836b9905c261696642fd50ccab",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/select_curved_calibration.py": "48262fb93073a0ba8c4252511132597e93e56c66ab443db5334adb52bca46e55",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/CURVED-COLD-COMPARISON-PROTOCOL.md": "3a24f6cdf38f5d98667a5e74dbd53544f12aafd67c9eab1d543f772e2f731040",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/banana_core.rs": "77b4de3672c94a7c2dd0d19ddc6efa35dee329c0f4ea50ef16836ae32c143e59",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/local_recovery/banana_recycling_test01/EXACT-CONTROL.json": "2a3708bcd82120e006dd2ba5f1df71b03d833486c7717097a33c8b8374516742",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/cold_wal_original_runner/src/main.rs": "bc78d151a2bee05ef469cff4940a55a074d34fdd2c4202df57b34e6a1b26ea7c",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/cold_wal_recycling_runner/src/main.rs": "405650c3ffb31b85d9a0b35fa275185d04b98a306cb8d7a5a466f8d5c69ed42c",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/tuned_native_pristine_runner/src/main.rs": "96fb4be5c5add36ed651739dce2b024c2c83ca8978a9b1b856d0897528bde1a3",
+    "/mnt/c/dev/owalnuts/STUDIES/usefulness_search_v1/metric_blocks/tuned_native_recycling_runner/src/main.rs": "96fb4be5c5add36ed651739dce2b024c2c83ca8978a9b1b856d0897528bde1a3"
+  },
+  "unchanged": true,
+  "builds": {
+    "wal_ordinary": {
+      "package": "cold_wal_original_runner",
+      "binary": "/home/dhruv/.cache/owalnuts/native-recycling01/release/cold-wal-original-runner",
+      "binary_sha256": "8dbd19067a74ad6f8ed70d602c85a523dd04ae75e5913ebecfac506d51abf242"
+    },
+    "wal_recycled": {
+      "package": "cold_wal_recycling_runner",
+      "binary": "/home/dhruv/.cache/owalnuts/native-recycling01/release/cold-wal-recycling-runner",
+      "binary_sha256": "8d69b2d5ad7785d7e912c480e0d00bad7975db8ac9719e225c503952fed25d20"
+    },
+    "native_ordinary": {
+      "package": "tuned_native_pristine_runner",
+      "binary": "/home/dhruv/.cache/owalnuts/native-recycling01/release/tuned-native-pristine-runner",
+      "binary_sha256": "d5579909d775d4960647a7c8e70c79caa3ac0d14098713620d0cd1a7e67b6eec"
+    },
+    "native_recycled": {
+      "package": "tuned_native_recycling_runner",
+      "binary": "/home/dhruv/.cache/owalnuts/native-recycling01/release/tuned-native-recycling-runner",
+      "binary_sha256": "8d4fad6f3b08995d24024fccf620fea50be879da7714a059fa5b0ab1dc7920c1"
+    }
+  },
+  "configs": {
+    "wal": [
+      {
+        "target_accept": 0.9,
+        "max_error": 1.0,
+        "metric": "diagonal"
+      },
+      {
+        "target_accept": 0.9,
+        "max_error": 10.0,
+        "metric": "diagonal"
+      },
+      {
+        "target_accept": 0.99,
+        "max_error": 1.0,
+        "metric": "diagonal"
+      },
+      {
+        "target_accept": 0.99,
+        "max_error": 10.0,
+        "metric": "diagonal"
+      }
+    ],
+    "native": [
+      {
+        "target_accept": 0.9,
+        "adaptation": "diag"
+      },
+      {
+        "target_accept": 0.9,
+        "adaptation": "low_rank"
+      },
+      {
+        "target_accept": 0.99,
+        "adaptation": "diag"
+      },
+      {
+        "target_accept": 0.99,
+        "adaptation": "low_rank"
+      }
+    ]
+  }
+}
