@@ -1,0 +1,7 @@
+# Preserved prototype failures and correction
+
+The first build failed because the generated analytic-only runner had an extra closing brace. Its log and source are preserved in recycling_build01. Build02 fixed this generator error and passed the target-gradient and enumerated-selection tests.
+
+The first preflight had exact original/disabled/enabled draw and work parity, but failed known-truth moments on the dense rotated Gaussian: conditional second moments were about 1 instead of 2. Raw selected draws retained the correct approximately-2 variances. Inspection of DenseCoordinates and sample_dense_fixed in src/walnutpie.rs explains the discrepancy: the kernel sees z=L^T*x for M=L*L^T, while the facade restores x=L^-T*z after sampling. The original observer measured f(z). This is a coordinate bug in the observer, not evidence against the conditional-expectation identity or a successful improvement.
+
+Preserve recycling_source01, recycling_test01 and their hashes. The corrected source02 snapshot registers the actual fixed dense metric's Cholesky factor and applies the same upper-triangular solve before evaluating f(x), including nonlinear squares and indicators. Applying a linear map only after averaging would not repair nonlinear observables. A deterministic dense-coordinate test covers this explicitly. The corrected test02 keeps the same targets, seeds, budgets and accuracy thresholds. Diagonal metrics remain in original coordinates. This prototype supports fixed metrics only; adaptive metric changes are outside its tested scope.

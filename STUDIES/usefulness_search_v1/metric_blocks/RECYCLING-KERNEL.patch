@@ -1,0 +1,22 @@
+--- src/kernel.rs
++++ research/src/kernel.rs
+@@ -491,0 +492 @@
++    pub recycled: Vec<f64>,
+@@ -566,0 +568 @@
++        let recycled = crate::recycling::features(&state.theta);
+@@ -568,0 +571 @@
++            recycled,
+@@ -594,0 +598 @@
++            recycled: Vec::new(),
+@@ -1588,0 +1593 @@
++    let recycled=crate::recycling::merge(&old.recycled,&new.recycled,update_log_probability);
+@@ -1601 +1606 @@
+-        Span::from_subspans(earlier, later, selected, total),
++        { let mut span=Span::from_subspans(earlier, later, selected, total); span.recycled=recycled; span },
+@@ -3200,0 +3206 @@
++    let recycled=crate::recycling::merge(&old.recycled,&new.recycled,update_log_probability);
+@@ -3213 +3219 @@
+-        Span::from_subspans(earlier, later, selected, total),
++        { let mut span=Span::from_subspans(earlier, later, selected, total); span.recycled=recycled; span },
+@@ -3274,0 +3281 @@
++    crate::recycling::record(span.recycled.clone());

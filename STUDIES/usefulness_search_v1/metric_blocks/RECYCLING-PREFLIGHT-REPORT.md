@@ -1,0 +1,11 @@
+# Conditional-observable prototype preflight
+
+Corrected source02 passed all implementation gates. Across rotated Gaussian, independent-Gaussian/noncentered funnel and centered funnel, original, disabled-observer and enabled-observer runs had exact equality of draws, target calls and every emitted work counter. Gaussian cases used four chains of 10,000 transitions; the difficult centered funnel used four of 4,000. All 96,000 observed transitions produced one finite observable vector. The difficult funnel is a parity/stop-path case, not a claim of qualified funnel accuracy.
+
+Both Gaussian controls passed raw-coordinate Rhat/ESS and zero-divergence/depth-cap checks. Conditional estimates of means, second moments and probabilities below 0 and -2 passed the frozen known-truth tolerances. Three Rust tests passed: analytic gradients/change of variables, exhaustive small-tree selection weighting, and exact dense-coordinate restoration before evaluating nonlinear functions. The independent replay checks probability bounds, conditional second-moment Jensen inequalities, original-source hashes and draw/work parity.
+
+The initial failed build and failed dense-coordinate preflight are preserved separately. Source01 incorrectly observed whitened rather than original coordinates; source02 registers the actual fixed dense Cholesky map. No statistical criterion was relaxed. See RECYCLING-EXECUTION-AUDIT.md.
+
+This only establishes a research prototype within its tested fixed-metric, serial-chain scope. It does not show reduced MSE, better application decisions, uniqueness or improved asymptotic variance. The observer adds allocations, coordinate solves, locks and output storage; its total cost must be measured. No production source or defaults changed.
+
+Next freeze independent replicated MSE comparisons from analytically stationary initial states, for means, second moments and tail indicators. Keep one estimator per original transition; never treat weighted states as independent draws. Compare both conditional and ordinary estimates on the same underlying chains, report uncertainty across independent replicates and all functionals, include costs and antithetic-mean regressions, and require a comparably recycled strong NUTS baseline before a practical-superiority claim.
