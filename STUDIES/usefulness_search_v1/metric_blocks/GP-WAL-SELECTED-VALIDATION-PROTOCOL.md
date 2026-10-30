@@ -1,0 +1,9 @@
+# Fresh validation after equal-configuration GP calibration
+
+Frozen before validation execution; selection uses GP-WAL-CALIBRATION-PROTOCOL.md without changes. If no WALNUTS arm qualifies both calibration fits, do not run. Otherwise compare its selected metric/acceptance with repaired native low_rank,.99 on eight new seeds946500001..946500008. Four chains,1100 warmup,2000 retained, alternating arm order. Keep default initialization policies and all accuracy/reference gates from GP-FRESH-COMPARISON-PROTOCOL.md. This is a workflow comparison, not shared trajectories, starts or compiler builds. Native implementation/target settings unchanged; new WALNUTS driver is hash-verified and has passed pristine/default/explicit.8 replay.
+
+Require all sixteen fits to qualify, then compute geometric mean WALNUTS/native minimum bulkESS per total target call with paired10000-bootstrap percentile95% interval,seed946600001. Primary signal requires lower bound>1.2, unchanged from prior comparison. Withhold aggregate efficiency credit if any fit fails. No post-result threshold changes, seed exclusions or retuning. Report each method's calibration target calls separately; six configurations and two seeds were budgeted for each, but realized calls may differ. Do not claim full runtime superiority from post-import component timers.
+
+Passing is only a signal on a small exposed13D GP benchmark. Subsequent matched-geometry/refinement ablations, centered/reparameterized GP and approximate-inference baselines, more targets and independent replication remain necessary for useful/general/novel conclusions and the research goal. Negative default results and calibration failures stay preserved.
+
+Serial bounded workers180s/2GiB/64MiB,4 sampler cores,BLAS1,disk floor1GiB. Preserve all raw fits,source/selection hashes,reference diagnostics and receipts. No paid cloud,production change or deployment.

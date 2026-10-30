@@ -1,0 +1,4 @@
+from pathlib import Path
+p=Path(__file__).resolve().parent
+s=(p/'gp_wal_calibration_worker.py').read_text().replace('GP-WAL-CALIBRATION-PROTOCOL.md','GP-WAL-SELECTED-VALIDATION-PROTOCOL.md');(p/'gp_wal_selected_worker.py').write_text(s)
+s=(p/'run_gp_fresh_comparison.py').read_text().replace('gp_fresh_comparison01','gp_wal_selected_validation01').replace('gp_native_repair01','gp_wal_calibration01').replace("assert selected['mode']=='low_rank' and selected['target_accept']==.99","assert selected is not None").replace("arms=[('low_rank',.99),('walnuts_auto',.8)]","arms=[('low_rank',.99),(selected['mode'],selected['target_accept'])]").replace("x['mode']=='walnuts_auto'","x['mode']==selected['mode']").replace('gp_fresh_comparison_worker.py','gp_wal_selected_worker.py').replace('946200001','946500001').replace('946200009','946500009').replace('946300001','946600001');(p/'run_gp_wal_selected_validation.py').write_text(s)
