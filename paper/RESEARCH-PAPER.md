@@ -562,3 +562,19 @@ Sampler schedules/costs/binary/durable hashes pass. The audit output scanner cov
 only its monitor subdirectory; a separate whole-root audit verifies final output
 below64MiB. Future harnesses must monitor the full worker root. No end-to-end
 runtime claim is made. See FALLBACK-AUDIT-REPORT.md and SCALE-REPAIR-PREFLIGHT.md.
+
+### Local validation environment after budget interruption (2026-10-30)
+
+The AWS budget action interrupted the fresh scale-repair study; its incomplete
+cloud cells are not incorporated as completed evidence. A local Ubuntu WSL
+runtime was qualified against archive-verified Linux models and sampler: 64
+analytic regression density/gradient checks passed, and an exposed pilot plus
+automatic second stage reproduced all non-timing outputs exactly. Python and
+runtime provenance differ; local observations and timings are not pooled with
+EC2. A separate frozen protocol reserves fresh seeds 929600001--929600016.
+The first two-seed chunk completed 84 supervised jobs, passed the evidence audit,
+and was archived with member-by-member read-back verification. It selected no
+scale-repaired block branch and therefore cannot validate the proposed repair.
+All arms still fail the centered eight-schools accuracy gates. Aggregate
+validation remains pending; no new application or novelty claim is supported.
+See STUDIES/usefulness_search_v1/metric_blocks/LOCAL-RECOVERY-REPORT.md.

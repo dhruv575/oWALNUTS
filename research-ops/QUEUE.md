@@ -18,9 +18,18 @@ Local Ubuntu WSL is available,16CPUs/~15GiB; isolated local_recovery/venv instal
 pinned scientific package versions, Python3.14 differs from EC2's3.12. Extracted
 34 archive-verified binary/model/data/reference files (LOCAL-RECOVERY-INPUTS.json).
 Native model needs libtbb.so.2; pinned Intel tbb2020.3.254 supplies it in venv/lib.
-Next qualify local density/gradient and sampler compatibility under full-root
-monitoring, then freeze separate local validation with unused seeds and independent
-timing provenance. Local work does not require an AWS budget override.
+Local compatibility passed:64 analytic checks, exact exposed pilot/stage replay,
+original accuracy gates, full process drain. Verified52-member local archive.
+Frozen LOCAL-SCALED-VALIDATION.md uses fresh929600001--16; no cloud pooling.
+localscaled01 completed84 jobs/72 stages, costs/timing/durable hashes verified,
+569-member local archive read back. Candidate passed2/2 on five targets,0/2 on
+centered eight-schools; no repair branch selected yet. No aggregate conclusion.
+Bounded run_local_queue.py2 is running chunks2--8 sequentially, auditing and
+archiving each before admission of the next. Inspect local_recovery/QUEUE-02.log
+and QUEUE-02.jsonl; do not duplicate its workers. Each job180s/2GiB/64MiB,
+four sampler chains, BLAS1. Run analyze_local_scaled.py after all eight verify.
+Local work does not require an AWS budget override. Archives remain local, not
+off-device backups; all raw evidence retained. Never claim a local/S3 upload.
 
 ## Latest: fallback scale diagnosis and exposed repair qualify; fresh test pending
 
