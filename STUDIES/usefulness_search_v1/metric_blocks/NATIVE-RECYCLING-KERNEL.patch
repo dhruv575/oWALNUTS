@@ -1,0 +1,31 @@
+--- nuts-rs/src/nuts.rs
++++ research/src/nuts.rs
+@@ -60,0 +61 @@
++    recycled: Vec<f64>,
+@@ -94 +95,2 @@
+-    fn new(state: State<M, H::Point>) -> NutsTree<M, H, C> {
++    fn new(state: State<M, H::Point>, math: &mut M) -> NutsTree<M, H, C> {
++        let recycled=crate::research_recycling::features(math,&state);
+@@ -95,0 +98 @@
++            recycled,
+@@ -198,0 +202 @@
++        self.recycled=crate::research_recycling::merge(&self.recycled,&other.recycled,other.log_size-self_log_size);
+@@ -235,0 +240 @@
++        let recycled=crate::research_recycling::features(math,&end);
+@@ -236,0 +242 @@
++            recycled,
+@@ -298 +304 @@
+-    let mut tree = NutsTree::new(init.clone());
++    let mut tree = NutsTree::new(init.clone(), math);
+@@ -363 +369,2 @@
+-                            collector.register_draw(math, &tree.draw, &info);
++                            crate::research_recycling::record(&tree.recycled);
++                collector.register_draw(math, &tree.draw, &info);
+@@ -371,0 +379 @@
++                crate::research_recycling::record(&tree.recycled);
+@@ -376,0 +385 @@
++                crate::research_recycling::record(&tree.recycled);
+@@ -386 +395,2 @@
+-    collector.register_draw(math, &tree.draw, &info);
++    crate::research_recycling::record(&tree.recycled);
++                collector.register_draw(math, &tree.draw, &info);

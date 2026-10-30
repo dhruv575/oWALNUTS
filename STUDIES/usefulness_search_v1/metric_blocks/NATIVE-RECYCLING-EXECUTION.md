@@ -1,0 +1,3 @@
+# Native build execution audit
+
+Build01 stopped at dependency manifest resolution, before compiling or sampling. The preserved crate lived under a directory also containing nutpie's downloaded Cargo.toml (a provenance artifact without its library sources). Cargo mistook that artifact for a potential workspace and failed. Preserve the original crate and failed log. The pristine build now uses an identical source copy in native_pristine_source01 with only an explicit empty workspace stanza added to its manifest; no native source code changed. Build02 reuses the empty build cache and retains the same resource limits and qualification protocol.
