@@ -1,5 +1,25 @@
 # Active research queue
 
+## Latest: broader gate passes; cheap collapsed control qualifies
+
+broad01 is terminal: 96 drained jobs, 72 matched stages, all six references
+qualified. Candidate v4 passes continuation gate on sblrc (ESS/calls 15.40x
+dense, 14.10x auto; four seeds). No observed paired loss vs auto; eight-schools
+fails all arms, and 16 fallback cells exactly reproduce auto non-timing output.
+458-member private archive restored and verified. See BROAD-REPORT.md.
+
+collapsed01 is terminal and passes its frozen moment preflight: analytically
+integrated beta plus 1D quadrature matches sblrc reference moments in ~13--14ms.
+This weakens the application case; no IID sampler or rigorous tail bound claimed.
+14-member private archive restored and verified. Both reports preserve failures.
+192 redundant prior gzip copies reclaimed after archive and raw-file hash checks;
+audit broad01/RECLAIM-GZIP.json. Root ~1.1 GiB free, tmpfs ~5 GiB free.
+
+Next: repair dense Fisher baseline with factor/SVD numerics, preserving the
+original failed preflight and fixed forward-error gates. Then qualify less
+reducible non-Gaussian targets and fresh larger replication. Do not interpret
+regression gains as a demonstrated application, generic novelty or goal completion.
+
 ## Latest: full-shape matched mechanism gate PASSES; broader validation pending
 
 All96 jobs terminal/drained; all five arms pass16/16 fresh seeds. Curvature

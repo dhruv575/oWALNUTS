@@ -458,3 +458,25 @@ this is mechanism evidence only. Broader nonconjugate controls, qualified strong
 baselines and a distinct novel contribution remain outstanding. All96 jobs and
 matched-schedule/cost audits passed; the423-member evidence archive was restored
 and verified. See FULL-SHAPE-VALIDATION-REPORT.md.
+
+## Broad fallback screen and collapsed proper-prior control (2026-10-30)
+
+A frozen six-target, four-fresh-seed screen completed 96 supervised jobs. The
+full-shape candidate with adaptive automatic fallback passed the continuation
+gate on proper-prior Gaussian regression: geometric ESS/total-call ratios 15.40
+against adaptive dense and 14.10 against automatic adaptation. All four runs of
+all three arms passed that target. Sixteen fallback cells matched automatic
+adaptation exactly except timing and charged probe cost. No paired accuracy
+loss was observed against automatic adaptation; this small screen does not
+establish noninferiority. Centered eight schools failed all arms despite a
+qualified reference. General usefulness and strong-baseline comparison remain open.
+
+A separately frozen model-specific control then integrated regression coefficients
+analytically and log sigma by adaptive quadrature. Marginal moments qualified
+against the reference, with numerical-range agreement within 1.52e-9 reference
+SD and successful joint density/gradient parity. Integrations took ~13--14ms;
+this is not a sampling-time comparison. No IID generator or rigorous tail bound
+was qualified. The target therefore supplies mechanism evidence but a weak
+application case for MCMC. See metric_blocks/BROAD-REPORT.md and protocols.
+The 458-member screen and 14-member collapsed-control archives were independently
+restored from exact private S3 versions and verified. Negative results remain.
