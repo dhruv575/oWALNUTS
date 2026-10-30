@@ -1,0 +1,13 @@
+# Endpoint-only substitution audit
+
+Scope: replace the extra midpoint gradient in the existing RKNF embedded momentum formula with the arithmetic average of the two endpoint gradients. This is one specific cheap substitution, not an impossibility result for endpoint-only error control.
+
+Write a leapfrog micro-step as Q=q+h*p+h^2*g/2, P=p+h*(g+G)/2, with g=grad log pi(q), G=grad log pi(Q). The embedded position formula is Q3=q+h*p+h^2*(g/3+G/6), so Q-Q3=h^2*(g-G)/6. The reverse comparison gives the same norm. Replacing the midpoint gradient by (g+G)/2 makes the embedded momentum P3=p+h*(g/6+2*(g+G)/6+G/6)=P exactly. Its backward momentum difference also vanishes. The resulting symmetric indicator is therefore only h^2*||G-g||/6.
+
+For the unit harmonic oscillator at q=1,p=0, g=-q, leapfrog gives Q=1-h^2/2, P=-h+h^3/4. The exact solution is (cos(h),-sin(h)). Actual position error is -h^4/24+O(h^6), while momentum error is h^3/12+O(h^5). The cheap indicator is h^4/12: it underestimates the leading full phase-space local error by a factor tending to zero with h. At q=0,p=1 the position indicator instead has order h^3. Thus a blanket third-order phase-space error claim is false, even on this smooth quadratic target.
+
+For a general smooth force, G-g=h*Dg*p+O(h^2), so the indicator is ordinarily O(h^3), but loses the leading momentum error at turning points. Symmetry alone does not make it a faithful local error estimate. Conversely this counterexample does not prove that a reversible refinement selector based on it would sample incorrectly; that separate claim would require a kernel argument and full-chain validation.
+
+Decision: do not port this midpoint-average shortcut or advertise it as an equivalent cheaper RKNF criterion. The independent numerical audit checks the exact oscillator solution, the algebraic cancellation, time reversal, and convergence orders at both starting phases. Preserve this failed construction rather than spending a full-chain experiment on an unsupported error-equivalence claim. No production changes or novel-method claim.
+
+Next reviewed queue: examine state-independent macro-step jitter for the GP tail-exploration issue, comparing it with the existing fixed-step WAL configuration. Jitter must be fixed throughout each transition and independent of state; account for its random stream separately and prove zero-jitter output parity before sampling. Use new calibration/validation seeds, all GP functionals and prior tail-accuracy gates; never condition evaluation on removal of the observed excursion. This is established HMC practice, so success would be a tested implementation improvement, not novelty by itself. A full-chain experiment requires an explicit new protocol and source audit first.
