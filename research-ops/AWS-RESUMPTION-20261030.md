@@ -51,3 +51,14 @@ LD_LIBRARY_PATH points only to this second directory's models folder. The new
 batch launched with the original unused seeds after the administrative failure;
 no posterior draws were produced in the first attempt. Verify its handle before
 any restart. Supplemental runtime library must be included in final archive.
+
+AWS map-equivalence audit passed384 points with near-roundoff errors. Operational
+note: that audit used the180-second timeout and BLAS1, but its stated RSS/output
+caps were not enforced by resource_monitor. No memory-bound compliance claim is
+made for this audit; scientific checks and saved errors remain valid evidence.
+The new full-cost run uses the scoped resource_monitor caps as specified.
+New root /home/ubuntu/lanes/gp-qualified-cost-20261030; fresh production seeds
+950900001..4; all28 workflows, AWS-qualified maps, unchanged replay tolerance.
+Bundle SHA256 5aadc0df3e6cf0b1ef38cae8ac0fa64153a1fb2279ab14e0f8e2c20fa1b1f3bd.
+Original failed timing batch stays at gp-full-cost-20261030. Disk was1.6GiB free
+at launch; monitor the1GiB floor. No evidence cleanup occurred in this step.

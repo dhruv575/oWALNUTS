@@ -1055,3 +1055,11 @@ across its four AWS workflows. Thus the observed failure is cross-runtime
 nonidentity rather than within-AWS replay failure. No hardware cause is proven.
 AWS-specific target equivalence and a separately frozen production study remain
 required. The original failed full-workflow study is not repaired retroactively.
+
+AWS-specific setup was independently audited locally from raw saved pilot draws:
+all24 statistics were recomputed, all16 within-AWS pilot copies matched, original
+physical quantities were regenerated from the compiled model, fitted maps were
+checked against saved positions, and all384 compiled density/gradient/coordinate
+checks passed. Local setup archive receipt is in gp_aws_setup_archive01. The
+new serial full-cost study is active; no partial timing comparison is treated
+as a result while the all28 qualification gate remains unresolved.
