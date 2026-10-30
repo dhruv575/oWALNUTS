@@ -46,6 +46,6 @@ def run(arm,n,rep,out):
     for i in np.unique(np.r_[np.argsort(w)[-16:],np.linspace(0,n-1,8,dtype=int)]):
         if np.isfinite(lp[i]):posterior_checks.append(abs((lp[i]-base)-(original.value(q[i])[0]-baseline)))
     original.close()
-    result=dict(arm=arm,n=n,rep=rep,seed=seed,status='ok',seconds=seconds,preparation_seconds=prep['seconds'],weight_ess=float(1/(w@w)),max_weight=float(w.max()),pareto_k=float(k),mean=mean.tolist(),mcse=mcse.tolist(),density_errors=errors,value_gradient_difference_checks=checks,posterior_density_max_difference=max(posterior_checks),density_accuracy_pass=max(posterior_checks)<=.001,total_seconds=time.monotonic()-START+prep['seconds'])
+    result=dict(arm=arm,n=n,rep=rep,seed=seed,status='ok',seconds=seconds,preparation_seconds=prep['seconds'],weight_ess=float(1/(w@w)),max_weight=float(w.max()),pareto_k=float(k),mean=mean.tolist(),mcse=mcse.tolist(),density_errors=errors,value_gradient_difference_checks=checks,posterior_density_max_difference=max(posterior_checks),density_accuracy_pass=bool(max(posterior_checks)<=.001),total_seconds=time.monotonic()-START+prep['seconds'])
     (out/'RESULT.json').write_text(json.dumps(result,indent=2,allow_nan=False)+'\n')
 if __name__=='__main__':run(*sys.argv[1:])
