@@ -724,3 +724,20 @@ This one exposed seed does not isolate optimal tuning or prove general kernel
 superiority. Wall times are incomparable because chain parallelism differs.
 A bounded exposed step-size diagnostic is next; any signal needs fresh whole-
 pilot validation. No practical success or production change is established.
+
+### Exposed step-size ladder: no advancement
+
+Twenty new bounded cells evaluated global native-step multipliers0.5,2,4,8 on
+all five recoverable targets; multiplier1 reused the preserved baseline. No
+factor met the frozen criterion for fresh replication. Core full-workflow
+ESS/gradient geometric means versus native NUTS were .6621,.7958,.4955,.3375,
+and .05384 for factors0.5,1,2,4,8. No paired baseline accuracy losses occurred,
+but this is exposed tuning, not confirmation. The ladder is closed.
+
+The initial exact settings-output audit failed because Rust JSON round-trips
+changed some values by at most one float64 ULP. The original analyzer is
+preserved. The administrative audit now allows one ULP only at that boundary;
+requested settings and all statistical criteria remain unchanged. All raw
+cells and the negative result are locally archived and read-back verified.
+Next consider an observation-only exact duplicate-evaluation audit; no cache
+improvement is assumed. Existing initial-evaluation caching is already present.
