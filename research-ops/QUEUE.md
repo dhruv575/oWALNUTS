@@ -18,7 +18,7 @@
 4. Research decision: examine full cost and achieved accuracy, including strong
    repaired conditional importance. Do not infer a useful WALNUTS application
    from failed native controls, gradient-only gains, or setup-only savings.
-   No new tuning campaign is authorized by a favorable partial result. Freeze
+   Do not select follow-up tuning from a favorable partial result. Freeze
    any follow-up separately, preserve exposed-data limitations and negatives,
    and use fresh validation before substantive improvement claims.
 5. Paper/checkpoints: retain reviewed pushes and negative results; publication,
@@ -688,7 +688,7 @@ BridgeStan adapter are in `STUDIES/pharma_ode_v1`. Three backend/solver tests
 passed, including independent integration, gradient checks and both samplers.
 Initial batch: 32 calibration fits, 14 reference fits and seven Laplace controls.
 Then freeze calibration-only selection for 64 fresh-seed validation fits.
-Observed Theoph subjects 1â€“3 are chosen by ID; final two measurements held out.
+Observed Theoph subjects 1Ã¢â‚¬â€œ3 are chosen by ID; final two measurements held out.
 Public Stan fixture is a computational benchmark of unverified clinical origin.
 Compare nonlinear ODE to exact linear elimination; no clinical/business claims.
 

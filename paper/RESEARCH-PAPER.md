@@ -1063,3 +1063,17 @@ checked against saved positions, and all384 compiled density/gradient/coordinate
 checks passed. Local setup archive receipt is in gp_aws_setup_archive01. The
 new serial full-cost study is active; no partial timing comparison is treated
 as a result while the all28 qualification gate remains unresolved.
+
+The AWS-qualified serial workflow study completed26/28 qualified fits. All12
+WALNUTS and all4 repaired-importance fits passed. Raw native scenario1 failed
+mixing/reference gates despite zero divergences; bounded native scenario3 had
+2 divergences. The all28 gate failed and competitive summaries remain withheld.
+Independent audit reconstructed physical quantities from every raw sample,
+recomputed MCMC/importance statistics and checked charged pilot costs. The
+432-member local archive including runtime models/shims verified, SHA-256
+2ec91d898515e98d1faff87ea2e1b232ff552dc40b720c9ca35709358feef47e.
+Per-workflow time and precision remain descriptive table entries; they are not
+an efficiency ranking, precision-matched result or demonstrated application.
+The next application hypothesis should prioritize raw WALNUTS on real count
+data with strong exact/model/approximation controls. Further map tuning on these
+four exposed synthetic datasets is not evidence of general utility.
