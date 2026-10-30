@@ -90,6 +90,16 @@ Disk 1,223,712,768 free, tmpfs 15.88GB free. Source/build hashes and test logs
 committed; preserve complete evidence and analyze exact early-dense/final-diagonal
 matches before any efficiency claim. No proven improvement or goal completion.
 
+Conditional reconsideration screen COMPLETE: 36 terminal jobs, 11/12 diagnostic
+passes per arm, 11 unaffected candidate paths exact. One kidiq recovery (~5.49x)
+but median-based geomean versus auto2 1.0 <1.2: FAIL. Keep research-only, no
+promotion or broader confirmation. Seventeen targeted tests total passed.
+Complete evidence locally verified (218 members); S3 receipt in reconsider/archive.
+No inference jobs live. Next review: population PK on preserved Theoph data,
+with identifiability/numerical preflight and a simpler linear population model.
+Do not assume extra dimensionality, expensive ODEs or synthetic GP establish
+usefulness. Prior patient reference failures remain failures.
+
 ## Latest completed checkpoint: 2026-10-29 pharmacokinetic ODE pilot
 
 All 117 corrected jobs completed: 32 calibration, 14 reference, seven Laplace

@@ -237,3 +237,11 @@ not imply improvement over the stronger incumbent. An earlier 36-fit batch
 was invalidated by a configuration bug and retained as administrative evidence.
 The repaired protocol, results and full archive receipts are in
 `STUDIES/usefulness_search_v1/late_metric`. No default change was made.
+
+Conditional reconsideration of early diagonal metric choices also fails its
+frozen improvement screen: 36 fresh-seed fits produce 11/12 diagnostic passes
+per arm and one recovered dense choice on kidiq, but the median-based efficiency
+geometric mean versus existing automatic selection is 1.0 (required 1.2).
+Eleven unaffected paths match draws and work exactly. The common GP failure
+is preserved. The research opt-in is not promoted; see
+`STUDIES/usefulness_search_v1/reconsider/REPORT.md` and its verified archive.
