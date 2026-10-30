@@ -1,5 +1,20 @@
 # Active research queue
 
+## Running: frozen staged curvature model screen
+
+MODEL-SCREEN.md freezes four targets, four fresh seeds and candidate/diagonal/
+dense/automatic arms, with 16 additional discarded pilots. Candidate cost includes
+probes and pilots. Reference qualification precedes efficiency interpretation.
+Isolated BridgeStan harness built successfully (19.34s); production unchanged.
+At launch/checkpoint controller PID 418558 is live; local SSH exec session 89174.
+Remote workspace: metric-blocks-recovery-20261030/work/model01; durable per-job
+copies: metric-blocks-recovery-20261030/evidence/model01. Do not restart based on
+stale logs: inspect live process/session and terminal SUMMARY.json first.
+Sequential four-thread sampler jobs bounded at 180s, 2GiB RSS, 64MiB output.
+Next: finish monitoring; run analyze_models.py only after SUMMARY.json exists;
+archive_models.py preserves raw jobs/source/models/reference, then S3 exact-version
+restore verification. No outcomes or advantage claimed while batch is running.
+
 ## Latest: staged curvature integration passes Gaussian fidelity; dense still cheaper
 
 Eight candidate and sixteen control replicates pass frozen known-Gaussian gates;
