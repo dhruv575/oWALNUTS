@@ -771,3 +771,20 @@ results. Next use a single-level/permissive-error ablation to separate active
 refinement from remaining NUTS implementation differences; no default change
 or improvement is inferred. The68-member local source/binary/evidence archive
 passes read-back verification.
+
+### Corrected refinement/error-threshold ablation
+
+The initial setup confused the lower-level API's two refinement levels with
+sampler::Tuning's eight-level default. Its15 cells and original protocol are
+preserved. Ten additional cells establish exact8/1 baseline draw/call parity on
+all five targets and complete the one-versus-eight,1-versus1000 factorial.
+The easy analytic replay alone was insufficient to establish default identity.
+
+At8/1000, continuation ESS/gradient versus baseline8/1 improves1.382x on arK,
+1.457x on regression and1.241x on GARCH. Against native NUTS the ratios are
+1.107,.949,1.014. One- and eight-level permissive runs are exactly identical on
+these three qualified targets with no reverse calls: this does not demonstrate
+beneficial within-orbit refinement. Eight schools and GP remain unqualified.
+This exposed tuning lead needs fresh known-truth tail guards and cold-workflow
+validation before any default recommendation. No application or novelty claim
+follows; the original setup error and its correction remain in the evidence.
