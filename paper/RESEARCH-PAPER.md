@@ -634,3 +634,23 @@ numbers must not be mixed with WALNUTS timings of different scope. Complete
 native target calls are not yet instrumented. Stronger six-target comparison,
 application value and a substantive validated general improvement remain open.
 See NUTPIE-NATIVE-REPORT.md for exact versions, failures, artifacts and bounds.
+
+### Native cost accounting and model-build parity
+
+A thin BridgeStan C-ABI counter now preserves exact retained native trajectories
+for all three qualified regression controls. Explicit value/gradient/Hessian/HVP
+checks, a failed-call check and 256 concurrent gradient calls pass. Observed
+native gradient counts were 78822/70991/55355; warmup-plus-retained step totals
+were 78778/70921/55286. Step diagnostics therefore omit gradient work and must
+not be used as complete target-call counts. No value-only, Hessian or HVP calls
+occurred in those sampling replays. This is exposed instrumentation qualification,
+not comparative sampler evidence; future times must include counter overhead.
+
+The remaining five threaded target builds also match the original density and
+gradient at 64 saved-pilot points each with zero observed difference and matching
+parameter names. All 20536 regular files of the reused BridgeStan release remain
+byte-identical. Archives preserve source, binaries, raw parity evidence and
+supervision. NATIVE-COMPARISON-SCREEN.md freezes the next stronger comparison
+using actual evaluation counts and aligned post-import operation clocks. It has
+not run and does not alter the previous failed continuation result. General
+usefulness, application value and paper-readiness remain unproven.

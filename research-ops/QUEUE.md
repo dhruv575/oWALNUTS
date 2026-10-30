@@ -1,5 +1,32 @@
 # Active research queue
 
+## Current: counted native controls and six target builds qualified
+
+counter01 terminal/pass: explicit4 API counters, failed-call count, concurrent
+256-gradient count all exact; all three native regression retained trajectories
+and divergences exactly match uninstrumented parent. Actual gradients78822/
+70991/55355 vs step proxies78778/70921/55286; no value/Hessian/HVP calls.27.56s,
+328.84MBpeakRSS, full output5.34MB, group drained.46-member archive verified.
+
+threaded_targets01 terminal: five remaining model builds pass all64 old/new
+density/gradient comparisons with zero differences. All parameter names agree.
+All20,536 regular release files in cached BridgeStan source remain byte-identical.
+67-member local archive verified. Regression build remains in threaded_build01;
+other five are in threaded_targets01/<model>. Use same qualified threaded library
+for both engines in future comparisons; preserve older frozen run libraries.
+
+No active workers. Next execute NATIVE-COMPARISON-SCREEN.md: generic per-target
+counter+short native parity qualification (seed940500001), then seven-arm,
+six-target, four fresh-seed screen940600001--4. Protocol is frozen, NOT executed.
+Need implement shared-import cell worker so post-import operation timing aligns
+model construction, fitting, sampling and draws-ready costs across engines.
+Keep whole-cell supervision separate; do not manufacture per-arm cold-start times.
+Include WALNUTSauto, originalscaled, QR-scaled, QR-fixedFisher and native3 modes.
+No score-threshold tuning; previous16-seed scaled continuation remains FAILED.
+If this screen has no signal, choose another research direction rather than
+lowering its gates. Candidate signal still requires larger fresh replication and
+application/model-family evidence. All archives local; AWS budget stop unchanged.
+
 ## Current: native baseline qualification PASSES; no active jobs
 
 nutpie0.16.11 separate nutpie_env installed successfully. nativepreflight01
