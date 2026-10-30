@@ -1,5 +1,14 @@
 # Active research queue
 
+## Parallel baseline preflight: dense Fisher implementation NOT qualified
+
+While fullshape02 continues unchanged, nine ill-conditioned Gaussian recovery
+tests failed the initial dense Fisher numerical implementation; three invalid/
+regularized-input checks passed. Tiny equation residuals can mask large forward
+errors. Preserve this as implementation failure, not evidence against prior work.
+See FISHER-REPORT.md and verified10-member archive. Need stable factor-based
+numerics and unchanged-fixture revalidation before any model/sampler comparison.
+
 ## Running: full block shape fresh validation after passing mechanism preflight
 
 V3 passes 47 analytic/exposed checks; prior failed geometries improve condition

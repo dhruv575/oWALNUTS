@@ -436,3 +436,13 @@ comparison baselines. The repository's failed WP71 diagonal estimator screen is
 not a test of those complete methods. These sources preclude a generic novelty
 claim based solely on Hessian-informed selection or improved conditioning;
 method-specific comparative evidence is still needed. See RELATED-WORK-AUDIT.md.
+
+A standalone dense Fisher estimator implementation failed its numerical stress
+preflight before any model comparison. Nine ill-conditioned Gaussian recovery
+fixtures failed; three invalid/regularized-input checks passed. One returned
+matrix had relative forward error .986 despite an equation residual1.23e-13.
+These are failures of this implementation under the stated stress conditions,
+not evidence against the published estimator or complete sampler. No baseline
+performance claim follows. Raw matrices and unchanged thresholds are archived;
+stable factor-based numerics and further verification remain required. The
+concurrent full-shape validation protocol is unchanged. See FISHER-REPORT.md.
