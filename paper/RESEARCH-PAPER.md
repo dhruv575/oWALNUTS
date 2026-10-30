@@ -788,3 +788,11 @@ beneficial within-orbit refinement. Eight schools and GP remain unqualified.
 This exposed tuning lead needs fresh known-truth tail guards and cold-workflow
 validation before any default recommendation. No application or novelty claim
 follows; the original setup error and its correction remain in the evidence.
+
+### Fresh permissive-error funnel guard (2026-10-30)
+
+Following the corrected refinement factorial, a frozen known-truth guard compared max_error 1 and 1000 with the sampler facade's eight refinement levels, diagonal adaptation, 2,000 warmup and 20,000 retained draws in four chains. Four fresh seeds were used for a ten-dimensional centered funnel and its independent-Gaussian noncentered representation (16 fits). All eight Gaussian controls qualified. Neither threshold qualified on the centered funnel under the exact transformed-moment, tail-MCSE, diagnostic and depth-cap criteria.
+
+For exact P(omega < -5)=0.04779035, default estimates were 0.0565875, 0.0462375, 0.051325 and 0.0388625; permissive estimates were 0.017225, 0, 0.004525 and 0. The fourth permissive run had raw-coordinate Rhat <=1.00372, bulk ESS >=667.84, tail ESS >=563.14 and zero divergences, but eight depth caps and no visits to this tail. Exact-moment checks rejected it. Default tail MCSE remained above the prespecified .005 limit. These results reject promoting the exposed permissive efficiency lead as a general default; they do not establish that the existing default solves the funnel at this budget.
+
+The original strict JSON analysis writer could not serialize NaN diagnostics from constant tail indicators. Its immutable source is retained; a separately recorded output-only repair serializes nonfinite values as null after the unchanged failure gates. Independent replay verified 320 moment estimates, qualification decisions, call accounting, source hashes and process cleanup. Source, binary and raw draws are archived locally with member hash readback. See STUDIES/usefulness_search_v1/metric_blocks/FUNNEL-ERROR-GUARD-PROTOCOL.md, FUNNEL-ERROR-GUARD-REPORT.md and FUNNEL-ERROR-GUARD-INTERPRETATION.md. No production default, application claim or novelty claim is changed. Next distinguish adaptation selection from retained-transition behavior through an explicitly exploratory crossed fixed-geometry diagnostic.
