@@ -1005,3 +1005,13 @@ c1b26f77c8fda91858e72e91da98af3eadc0ca38a2955d14138a3f1ac3734a34.
 The historical worker/protocol filenames were restored byte-for-byte from
 revision a74dd1be after verification; exact executed new sources and the
 relocation mapping are preserved. This archive is local, not yet off-device.
+
+Fresh-data conditional importance validation (2026-10-30): six of eight runs
+qualified. Both sparse-count scenario runs failed only Pareto k (1.30734 and
+1.28524, frozen limit 0.7); means, SDs, combined MCSE and importance ESS passed.
+The independently recomputed audit and 124-member local archive passed;
+archive SHA-256 8b73650b004e31bcbbfcca6e371f31e01f038f4ca63bf34b170499dea1a37fb8.
+A subsequent descriptive AWS audit found that alpha below the proposal grid's
+0.1 lower bound carried 9.85% and 10.25% of normalized weight from only 27 and
+29 proposals. This motivates a separately frozen stronger proposal, not an
+intrinsic MCMC superiority claim. The original eight outcomes remain unchanged.
