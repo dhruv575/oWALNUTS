@@ -1,0 +1,7 @@
+# Compiled transport preflight passed
+
+Eight map/control cells,48 points each, pass the frozen equivalence gates. Maximum errors: {"roundtrip": 1.796619573893644e-15, "density": 1.5987211554602254e-14, "gradient": 3.507864235207495e-14, "functionals": 0.0}. The density includes both the original log-positive-parameter Jacobian and the constant transport Jacobian. Original-space functionals match exactly at the checked points. This does not certify unseen-tail numerical behavior.
+
+Both samplers also completed execution/accounting smoke runs for every map/control cell:16 runs,4 chains,128 warmup and128 retained draws. These short runs are not posterior qualification or performance evidence. Native uses low-rank/.99; WAL uses diagonal/.9. Their default initialization workflows differ. All draws and constrained outputs are finite. Native counted gradient totals cover recorded integration steps; other counted derivative categories are zero. Retained divergences total: 0.
+
+The compiled template is shared by both engines. Separate-map data files, source, library, native counter shim and raw smoke outputs are preserved. No production change. Next required step is fresh full-chain calibration/validation with original-space all-functional gates, raw and affine controls, transformed native NUTS, all four maps and explicitly accounted pilot/fitting costs. The earlier successful conditional importance method remains a practical comparator. No application advantage or goal completion is established.
