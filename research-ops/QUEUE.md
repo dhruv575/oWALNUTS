@@ -1,20 +1,22 @@
 # Current reviewed research queue: 2026-10-30
 
-1. Active: serial AWS complete-workflow comparison at
-   /home/ubuntu/lanes/gp-qualified-cost-20261030. Twenty-eight frozen jobs across
-   four datasets; pilots/maps/grid rebuilt per workflow. Last live observation
-   17/28 complete, one raw native mixing failure; no restarts or gate changes.
+1. Active: real count-data posterior references at
+   /home/ubuntu/lanes/real-counts-reference-20261030. Four groups (two native,
+   two WAL), four chains each,2000 warmup/8000 retained,1200s worker caps.
+   Training only:79 observations,81 parameters,160 physical functionals.
    This entry is a snapshot, not a watcher: inspect the process before acting.
-2. On terminal completion: transfer and hash-verify the complete evidence,
-   independently reconstruct raw-draw functionals and all diagnostics, retain
-   every failure and suppress competitive summaries if the all-fit gate fails.
-   Audit/archive scripts: analyze_gp_aws_qualified_workflow.py and
-   archive_gp_aws_qualified_workflow.py under metric_blocks.
-3. Storage: approximately1.4GiB free recently. Active batch enforces1GiB floor.
-   After serial timing finishes, audit further Git-identical historical checkout
+2. Completed synthetic AWS comparison:26/28 qualified; all-fit gate failed.
+   Independent raw audit and432-member archive verified; checkpoint4eb6fb32.
+   No formal ranking or practical advantage established. Real-data source,
+   split and exact constant/change-point controls frozen at b2afee9b.
+   Runtime preflight passed; reference qualification and independent raw audit
+   are next. No historical heldout scores yet; freeze predictive integration,
+   MCSE and strong approximate-inference controls before scoring.
+3. Storage: approximately2.1GiB free at reference dispatch. Four workers capped
+   256MiB each;1.5GiB initial free floor. Audit further Git-identical checkout
    files and archive completed studies to private S3 with exact-version restore
    verification before reclaiming redundant evidence. Do not perturb timing
-   with large archive/cleanup jobs on the AWS host during the serial study.
+   with large archive/cleanup jobs on the AWS host during timing studies.
 4. Research decision: examine full cost and achieved accuracy, including strong
    repaired conditional importance. Do not infer a useful WALNUTS application
    from failed native controls, gradient-only gains, or setup-only savings.

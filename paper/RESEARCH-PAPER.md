@@ -1077,3 +1077,5 @@ an efficiency ranking, precision-matched result or demonstrated application.
 The next application hypothesis should prioritize raw WALNUTS on real count
 data with strong exact/model/approximation controls. Further map tuning on these
 four exposed synthetic datasets is not evidence of general utility.
+
+Real count-data follow-up (2026-10-30): source-pinned public historical disaster counts have79 observed training years through1930 and30 heldout observations through1961 (two missing years retained as missing). The public series is exposed; the chronological holdout is not blinded new data. Exact constant-rate and enumerated single-change-point Gamma-Poisson training posteriors passed quadrature checks. The81-parameter raw GP runtime smoke passed both engines; its10-member archive verified SHA256 dbc127fbc199260d53380989cb1e282304c733194a61abed70fb9a3cb8c3bb1c. Four independent reference groups are running under the frozen real_counts_v1/REFERENCE-PROTOCOL.md; no reference qualification or predictive advantage is yet claimed. Heldout scoring remains pending a separately frozen predictive-integration and uncertainty protocol.
