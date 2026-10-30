@@ -1,0 +1,9 @@
+import hashlib,json,sys
+from pathlib import Path
+import numpy as np
+p=Path(__file__).resolve().parent;l=p/'local_recovery';r=l/'gp_transport_divergence_replay01';r.mkdir(exist_ok=False);sys.path.insert(0,str(l/'inputs'));from resource_monitor import execute
+s=(p/'gp_transport_validation_worker.py').read_text();needle='step_size_jitter=0.)';assert s.count(needle)==1;s=s.replace(needle,'step_size_jitter=0.,store_divergences=True)').replace('GP-TRANSPORT-VALIDATION-PROTOCOL.md','GP-TRANSPORT-DIVERGENCE-REPLAY-PROTOCOL.md');worker=r/'worker.py';worker.write_text(s);command=[sys.executable,str(worker),str(r),'diag','.999','948400006','2','quadratic']
+# The worker imports study helpers; keep its directory-specific artifact source
+# while explicitly making the unchanged study modules importable.
+command=['env','PYTHONPATH='+str(p)]+command
+supervision=execute(command,str(p),180,r,2*1024**3,64*1024**2,r/'worker.log',output_scan_interval=2);(r/'SUPERVISION.json').write_text(json.dumps(supervision,indent=2)+'\n');assert supervision['exit_code']==0 and supervision['group_drained'];old=l/'gp_transport_validation01/2-1-quadratic-diag';a=np.load(old/'DRAWS-STATS.npz');b=np.load(r/'DRAWS-STATS.npz');parity={key:bool(np.array_equal(a[key],b[key],equal_nan=True)) for key in a.files};old_summary=json.loads((old/'SUMMARY.json').read_text());new_summary=json.loads((r/'SUMMARY.json').read_text());same_counts=old_summary['calls']==new_summary['calls'];extra={key:list(b[key].shape) for key in b.files if key not in a.files};out=dict(passed=all(parity.values()) and same_counts,common_arrays=parity,same_calls=same_counts,additional_arrays=extra,inputs={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in [old/'DRAWS-STATS.npz',old/'SUMMARY.json',worker,p/'GP-TRANSPORT-DIVERGENCE-REPLAY-PROTOCOL.md']});(r/'REPLAY.json').write_text(json.dumps(out,indent=2)+'\n');print(json.dumps(out));assert out['passed']

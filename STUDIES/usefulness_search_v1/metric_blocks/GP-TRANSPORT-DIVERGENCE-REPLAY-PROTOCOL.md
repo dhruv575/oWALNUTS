@@ -1,0 +1,5 @@
+# Exact native divergence replay
+
+Replay the exposed failing fold2/replicate1 native quadratic validation fit, seed948400006, diagonal adaptation/.999,1100 warmup/2000 retained/four chains. Use identical frozen model/data and native settings, adding only nutpie store_divergences=True, supported by installed sample.py. This records divergence_start/end/momentum/start_gradient for forensic inspection. No retuning or new independent evidence.
+
+Require every common retained/warmup numerical sampler-stat array (including NaNs in the same locations) and all actual gradient counts to match the original fit exactly. Preserve the raw replay even if equality fails. If it matches, these extra records may describe the original divergences, still not prove a unique cause. The original posterior qualification remains failed. Save all additional arrays and their shapes, source/library hashes and supervisor outcome.180 seconds/2 GiB/64 MiB, BLAS1. Do not time this instrumented run as a performance comparator.
