@@ -1,0 +1,7 @@
+# Independent reference candidates for frozen fresh data
+
+For each of four frozen datasets, run two independently seeded groups of four chains using raw native diagonal NUTS, target acceptance .999,2000 warmup and8000 retained per chain, maxdepth10,no jitter. Seeds949500001+2*scenario+rep. Eight fits total. Never read TRUTH.json. Preserve every failure; no selective extensions or replacements under this protocol.
+
+Evaluate rho,alpha,11 log intensities and11 intensities. Each four-chain group must have finite diagnostics, zero retained divergences, max rank Rhat<=1.01, minimum bulk/tail ESS>=1000. To combine groups require maximum mean difference divided by combined group MCSE<=4, maximum mean difference/combined posterior SD<=.05, and maximum relative group SD difference (denominator average SD)<=.1. Combined eight-chain diagnostics must have Rhat<=1.01, bulk ESS>=4000, tail ESS>=2000 and maximum mean MCSE/SD<=.02. This is a practical checked-functional reference, not proof of complete posterior exploration. Failed cases remain without a qualified reference.
+
+At most four concurrent workers/four chains each,BLAS1;300s/2GiB/256MiB per fit and2GiB free disk. Record all raw unconstrained and functional draws, warmup/retained numeric sampler statistics, exact target-call counts and dependency hashes. Reference expense is separate from production/pilot expense. Subsequent pilots and comparisons require distinct seeds and their own frozen budgets. Four new controlled synthetic datasets do not establish a real-world use case or novelty.
