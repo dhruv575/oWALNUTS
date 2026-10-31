@@ -1,11 +1,39 @@
-# Current reviewed research queue: 2026-10-30
+# Current reviewed research queue: 2026-10-31
 
-1. Active: spatial sampler runtime smoke at
+## Live continuation checkpoint
+
+- Active spatial reference: original group0 at
+  /home/ubuntu/lanes/spatial-counts-reference-20261031; groups1..3 at the same
+  path with suffix -v2. Four groups,16chains, all16 CPUs observed utilized.
+  2000warmup/2000retained;2400s/4GiB/128MiB per group;1GiB disk floor.
+  Original groups1..3 failed before sampling on ArviZ's shared warning-cache
+  rename. Separately frozen repair isolates caches; no inferential retries.
+- Terminal watcher: /home/ubuntu/lanes/spatial-counts-reference-audit-20261031.
+  Finite45-minute wait from repaired launch, then bounded10-minute raw audit.
+  Inspect live STATUS/LIVE/WATCHER files; these queue entries are snapshots.
+- Completed: terrain-only posterior quadrature and independent131072-proposal
+  audit pass all403 quantities. Local calculation1.570s; invocation16.501s.
+  Four cheap controls prepared with training-only settings selection. No heldout
+  scores, no spatial reference qualification and no matched speed claim yet.
+- Next: inspect reference/audit outcome; qualify spatial approximation controls
+  before a separately frozen predictive evaluation. Do not relax failed gates.
+- Storage:1.61GiB free observed under full load. AWS CLI session expired; SSH
+  works. No deletion or new S3 upload. All19 smoke files verified off-host.
+
+See [research status](../STUDIES/usefulness_search_v1/spatial_counts_v1/RESEARCH-STATUS-20261031.md).
+
+## Prior checkpoint and scientific context
+
+1. Completed (live verified 2026-10-31 22:55 UTC): spatial sampler runtime smoke at
    /home/ubuntu/lanes/spatial-counts-preflight-20261030. Native/WAL4chains,
    50warmup/30retained;300s/4GiB/128MiB. No posterior or speed qualification.
    All8 independent60/80-digit model checks PASSED;maximum scaled AD error
    2.54e-5. Original double finite-difference failure remains preserved.
    Qualified posterior references and approximation controls are not yet launched.
+   SUPERVISION.json: exit 0, group drained, 183.700 seconds; SUMMARY.json passed.
+   No research workers or watcher were running at inspection. Host load 0.00,
+   29 GiB available memory, 1.7 GiB free root disk (98% used). AWS CLI session
+   expired; SSH remains available. See LIVE-AUDIT-20261031.md.
    This entry is a snapshot, not a watcher: inspect the process before acting.
 2. Completed synthetic AWS comparison:26/28 qualified; all-fit gate failed.
    Independent raw audit and432-member archive verified; checkpoint4eb6fb32.

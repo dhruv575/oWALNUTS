@@ -1,5 +1,14 @@
 # Research paper: working manuscript and evidence contract
 
+**Spatial partial-census controls (2026-10-31):** the terrain-only Poisson
+control has a numerically qualified training posterior for403 functionals;
+independent quadrature and131072 raw importance proposals agree. Computation
+took1.570s after imports on local WSL (16.501s supervised invocation), not a
+matched sampler benchmark. Homogeneous, independent-cell, empirical-Bayes and
+training-selected spatial-smoothing controls are prepared. The spatial GP
+reference attempt is active; no heldout scores or application benefit are
+established. See [checkpoint and limitations](../STUDIES/usefulness_search_v1/spatial_counts_v1/RESEARCH-STATUS-20261031.md).
+
 **Practical ODE pilot (2026-10-29):** 117 corrected jobs completed after a
 preserved forecast-solver failure and separately frozen log-state repair.
 On the public nonlinear pharmacokinetic ODE fixture, WALNUTS qualifies 8/8 fresh
