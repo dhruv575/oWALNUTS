@@ -1,6 +1,32 @@
 # Current reviewed research queue: 2026-10-31
 
+## Physics pilot completed
+
+User-authorized physics experiment completed55 jobs (44pilot+11separately
+frozen precision follow-up). All drained, raw/numerical audits passed, exact
+archives verified locally. Small-angle cheap controls suffice. Large-angle
+full posterior improves the specified approximation accuracy, but both samplers
+pass4/4 only in fresh-seed precision follow-up and NUTS is faster in every pair.
+Paired median NUTS/WAL full-cost ratio .8655; no WAL usefulness advancement.
+See [physics conclusion](../STUDIES/physics_pendulum_v1/CONCLUSION.md).
+
+No automatic further pendulum runs are justified. Preserve the negative result
+and the original precision failures. Next scientific queue remains spatial
+approximation controls and diagnosis of the failed independent reference gate,
+not a larger physics campaign selected solely to force a sampler win.
+Before a next launch inspect live processes/disk; physics paths are terminal:
+/home/ubuntu/lanes/physics-pendulum-20261031 and
+/home/ubuntu/lanes/physics-pendulum-precision-20261031. Instance remains on.
+
 ## Live continuation checkpoint
+
+Terminal update: spatial reference and independent raw audit have completed.
+All four groups finished with zero retained divergences. Both WAL groups pass
+individual gates (minimum bulk ESS1735/1807); both native groups miss the1000
+bulk-ESS floor (940/808). Therefore the full reference gate FAILS. No heldout
+scores or matched-efficiency winner established; reference configurations differ.
+Terminal audit retrieved to spatial_counts_v1/reference_audit_remote01.
+The active/waiting descriptions below record the prior launch, not live jobs.
 
 - Active spatial reference: original group0 at
   /home/ubuntu/lanes/spatial-counts-reference-20261031; groups1..3 at the same

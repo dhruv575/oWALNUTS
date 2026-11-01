@@ -1,5 +1,13 @@
 # Research paper: working manuscript and evidence contract
 
+**Physics pilot (2026-10-31):** two synthetic damped-pendulum cases completed
+44 initial jobs and11 separately frozen precision-follow-up jobs. At higher
+precision on the exposed large-angle case, both samplers qualify4/4 fresh seeds;
+NUTS is faster in every pair (median NUTS/WAL full-cost ratio .8655). Gaussian
+approximation and linear dynamics miss the specified forecast tolerances, but
+this does not establish a WALNUTS advantage. Both raw numerical audits pass;
+original precision/integration failures remain. See [full conclusion](../STUDIES/physics_pendulum_v1/CONCLUSION.md).
+
 **Spatial partial-census controls (2026-10-31):** the terrain-only Poisson
 control has a numerically qualified training posterior for403 functionals;
 independent quadrature and131072 raw importance proposals agree. Computation
