@@ -87,3 +87,17 @@ Next research question: does the benefit survive real data and coupled
 hierarchical effects where simple conditional marginalization is less effective?
 Require tuned/reparameterized NUTS and a strong approximate or marginalized
 baseline. No uniqueness claim until that comparison succeeds.
+
+## Fresh serial confirmation update
+
+The subsequent 96-fit serial01 campaign used new seeds and froze NUTS .99 for
+weak data and .999 for mixed data. At 4000 draws, weak-data runs passed 8/8 for
+both engines. Mixed-data runs passed 7/8 for NUTS and 6/8 for installed WAL.
+Median sampling times were .737 and .517 seconds respectively. Thus the earlier
+8/8 reliability result did not reproduce perfectly; a sampling-time advantage
+alone does not establish an advantage at matched accuracy. All 589 archived
+files were SHA256-verified locally. See SERIAL-CONFIRMATION.md for the protocol.
+
+LATEST-BUILD-PROTOCOL.md specifies a separate comparison of installed WAL,
+rebuilt committed WAL and conservative NUTS with larger budgets and increasing
+likelihood concentration. Its results must not be conflated with serial01.
