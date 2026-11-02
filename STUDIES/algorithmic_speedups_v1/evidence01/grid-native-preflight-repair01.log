@@ -1,0 +1,13 @@
+/home/ubuntu/venv/lib/python3.12/site-packages/arviz/__init__.py:50: FutureWarning: 
+ArviZ is undergoing a major refactor to improve flexibility and extensibility while maintaining a user-friendly interface.
+Some upcoming changes may be backward incompatible.
+For details and migration guidance, visit: https://python.arviz.org/en/latest/user_guide/migration_guide.html
+  warn(
+Traceback (most recent call last):
+  File "/home/ubuntu/lanes/algorithmic-speedups-20261101/grid_native_preflight.py", line 8, in <module>
+    data=json.loads((BASE/'GP-TRAIN.json').read_text());native=Native(data);model=native.model;rng=np.random.default_rng(954000003)
+                                                               ^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/algorithmic-speedups-20261101/grid_backend.py", line 22, in __init__
+    self.compiled=CompiledPyMCModel(dims=None,compiled_logp_func=wrap(self.lib.grid_nuts),compiled_expand_func=wrap(self.lib.grid_expand),initial_point_func=initial,shared_data={},user_data=np.array([self.ptr],dtype=np.uint64),n_expanded=d,shape_info=(['q'],None,[(d,)]),logp_func=None,expand_func=None,_n_dim=d,_shapes={'q':(d,)},_coords={})
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: CompiledPyMCModel.__init__() missing 1 required positional argument: 'shared_var_keys'

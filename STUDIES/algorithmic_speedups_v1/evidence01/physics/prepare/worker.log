@@ -1,0 +1,28 @@
+/home/ubuntu/lanes/unified-readiness-20261027/installation02/work/env/lib/python3.12/site-packages/arviz/__init__.py:50: FutureWarning: 
+ArviZ is undergoing a major refactor to improve flexibility and extensibility while maintaining a user-friendly interface.
+Some upcoming changes may be backward incompatible.
+For details and migration guidance, visit: https://python.arviz.org/en/latest/user_guide/migration_guide.html
+  warn(
+Traceback (most recent call last):
+  File "/home/ubuntu/lanes/algorithmic-speedups-20261101/physics_worker.py", line 104, in <module>
+    if __name__=='__main__':main(*sys.argv[1:])
+                            ^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/algorithmic-speedups-20261101/physics_worker.py", line 58, in main
+    (out/'TRANSPORT.json').write_text(json.dumps(transport,indent=2));(out/'SUMMARY.json').write_text(json.dumps(checks,indent=2))
+                                                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/encoder.py", line 202, in encode
+    chunks = list(chunks)
+             ^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/encoder.py", line 432, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+  File "/usr/lib/python3.12/json/encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "/usr/lib/python3.12/json/encoder.py", line 439, in _iterencode
+    o = _default(o)
+        ^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type bool is not JSON serializable

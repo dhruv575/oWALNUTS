@@ -1,0 +1,19 @@
+/home/ubuntu/venv/lib/python3.12/site-packages/arviz/__init__.py:50: FutureWarning: 
+ArviZ is undergoing a major refactor to improve flexibility and extensibility while maintaining a user-friendly interface.
+Some upcoming changes may be backward incompatible.
+For details and migration guidance, visit: https://python.arviz.org/en/latest/user_guide/migration_guide.html
+  warn(
+Traceback (most recent call last):
+  File "/home/ubuntu/lanes/algorithmic-speedups-20261101/spatial_worker.py", line 101, in <module>
+    if __name__=='__main__':main(*sys.argv[1:])
+                            ^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/algorithmic-speedups-20261101/spatial_worker.py", line 87, in main
+    shim=old/'evidence/counted_model.so';counter=counter_handle(shim);counter.ow_reset_target_calls()
+                                                 ^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/lanes/gp-portable-runtime-20261030/native_common.py", line 17, in counter_handle
+    c=ctypes.CDLL(str(so));c.ow_target_calls.argtypes=[ctypes.c_uint];c.ow_target_calls.restype=ctypes.c_uint64;c.ow_reset_target_calls.argtypes=[];c.ow_reset_target_calls.restype=None
+      ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: libtbb.so.2: cannot open shared object file: No such file or directory
