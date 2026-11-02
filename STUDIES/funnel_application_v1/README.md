@@ -101,3 +101,9 @@ files were SHA256-verified locally. See SERIAL-CONFIRMATION.md for the protocol.
 LATEST-BUILD-PROTOCOL.md specifies a separate comparison of installed WAL,
 rebuilt committed WAL and conservative NUTS with larger budgets and increasing
 likelihood concentration. Its results must not be conflated with serial01.
+
+That comparison is now complete: see [LATEST-BUILD-RESULTS.md](LATEST-BUILD-RESULTS.md).
+The rebuild gave only a median1.8% sampling speedup over the installed binary.
+A hybrid rewrite gave both samplers reliable concentrated-case results, with
+WAL about1.4x faster at10x concentration but NUTS about1.8x faster at100x.
+There is no demonstrated broad or order-of-magnitude advantage.
