@@ -355,9 +355,7 @@ impl PyWarmSession {
             Inner::Callable(session) => {
                 py.detach(|| session.refresh_functionals(draws, &functionals))
             }
-            Inner::CFunc(session) => {
-                py.detach(|| session.refresh_functionals(draws, &functionals))
-            }
+            Inner::CFunc(session) => py.detach(|| session.refresh_functionals(draws, &functionals)),
         }
         .map_err(facade_error)?;
         functional_chunk_dict(py, chunk, start.elapsed().as_secs_f64())
