@@ -9,6 +9,7 @@
 use crate::types::{State, ValidationError};
 use rand::RngCore;
 use rand_distr::{Distribution, StandardNormal};
+use smallvec::SmallVec;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -62,10 +63,34 @@ pub(crate) struct GeneratedLeafOutcome {
 
 #[cfg(feature = "research")]
 thread_local! {
+    static CAPTURE_MOMENTUM: Cell<bool> = const { Cell::new(true) };
+    static CAPTURE_COMPARISON: Cell<bool> = const { Cell::new(true) };
     static GENERATED_REVERSE_SCHEDULES: std::cell::RefCell<Vec<GeneratedReverseSchedule>> =
         const { std::cell::RefCell::new(Vec::new()) };
     static GENERATED_LEAF_OUTCOMES: std::cell::RefCell<Vec<GeneratedLeafOutcome>> =
         const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Scoped observation requirements; direct kernel callers retain full capture.
+#[cfg(feature = "research")]
+pub(crate) struct ResearchObservationScope(bool, bool);
+
+#[cfg(feature = "research")]
+impl ResearchObservationScope {
+    pub(crate) fn new(momentum: bool, comparison: bool) -> Self {
+        Self(
+            CAPTURE_MOMENTUM.replace(momentum),
+            CAPTURE_COMPARISON.replace(comparison),
+        )
+    }
+}
+
+#[cfg(feature = "research")]
+impl Drop for ResearchObservationScope {
+    fn drop(&mut self) {
+        CAPTURE_MOMENTUM.set(self.0);
+        CAPTURE_COMPARISON.set(self.1);
+    }
 }
 
 #[cfg(feature = "research")]
@@ -90,6 +115,9 @@ fn record_generated_leaf_outcome<S>(
     direction: Direction,
     outcome: &MacroLeafOutcome<S>,
 ) {
+    if !CAPTURE_COMPARISON.get() {
+        return;
+    }
     GENERATED_LEAF_OUTCOMES.with(|records| {
         records.borrow_mut().push(GeneratedLeafOutcome {
             leaf_attempt,
@@ -106,6 +134,9 @@ fn record_generated_reverse_schedule(
     accepted_forward_level: usize,
     entries: &[ReverseScheduleEntry],
 ) {
+    if !CAPTURE_COMPARISON.get() {
+        return;
+    }
     GENERATED_REVERSE_SCHEDULES.with(|records| {
         records.borrow_mut().push(GeneratedReverseSchedule {
             leaf_attempt,
@@ -179,8 +210,14 @@ fn set_evaluation_context(context: EvaluationContext) {
 
 #[cfg(feature = "research")]
 fn set_evaluation_momentum(momentum: &[f64]) {
+    if !CAPTURE_MOMENTUM.get() {
+        return;
+    }
     EVALUATION_MOMENTUM.with(|stored| {
-        *stored.borrow_mut() = Some(momentum.to_vec());
+        let mut stored = stored.borrow_mut();
+        let buffer = stored.get_or_insert_with(Vec::new);
+        buffer.clear();
+        buffer.extend_from_slice(momentum);
     });
 }
 
@@ -199,6 +236,20 @@ pub(crate) trait MassOperator {
     fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
         let velocity = self.velocity(momentum);
         out.copy_from_slice(&velocity);
+    }
+    fn scratch_len(&self) -> usize {
+        0
+    }
+    fn velocity_with_scratch(&self, momentum: &[f64], out: &mut [f64], _scratch: &mut [f64]) {
+        self.velocity_into(momentum, out);
+    }
+    fn kinetic_with_scratch(
+        &self,
+        momentum: &[f64],
+        _out: &mut [f64],
+        _scratch: &mut [f64],
+    ) -> f64 {
+        self.kinetic_energy(momentum)
     }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64;
     fn is_valid(&self) -> bool;
@@ -356,6 +407,7 @@ where
 
 /// Per-transition scratch storage reused by every leaf and micro-step.
 struct Workspace {
+    metric_scratch: Vec<f64>,
     candidate: State,
     reversed: State,
     velocity: Vec<f64>,
@@ -363,15 +415,12 @@ struct Workspace {
     scaled_difference: Vec<f64>,
 }
 
-/// Leaf states of this thread. The ring holds one strong reference to each
-/// state it has handed out, so a state whose spans have all been dropped is
-/// uniquely owned again and is reused in place by the next accepted leaf
-/// without allocating. Entries are scanned from a moving cursor; the number
-/// of simultaneously live states is a few times the tree depth, so the ring
-/// stays small.
+/// Leaf states of this thread. A slot's final external handle returns its
+/// index to the free list, so reuse takes constant time without scanning.
+/// The pool retains state buffers; live handles prevent slot reuse.
 struct StateRing {
     entries: Vec<Rc<State>>,
-    cursor: usize,
+    free: Vec<usize>,
 }
 
 // Most recently released workspace and the leaf-state ring of this thread.
@@ -382,7 +431,7 @@ thread_local! {
     static STATE_RING: RefCell<StateRing> = const {
         RefCell::new(StateRing {
             entries: Vec::new(),
-            cursor: 0,
+            free: Vec::new(),
         })
     };
 }
@@ -399,6 +448,7 @@ impl Workspace {
             grad: vec![0.0; dimension],
         };
         Self {
+            metric_scratch: Vec::new(),
             candidate: blank(),
             reversed: blank(),
             velocity: vec![0.0; dimension],
@@ -431,50 +481,94 @@ fn copy_state(into: &mut State, from: &State) {
 /// A shared copy of `from`, placed in a ring entry that no span references
 /// any more when one exists, otherwise freshly allocated (and, while the
 /// ring is below its limit, retained by the ring for later reuse).
-fn pooled_state(from: &State) -> Rc<State> {
+fn pooled_state(from: &State) -> StateHandle {
     STATE_RING.with(|ring| {
         let mut ring = ring.borrow_mut();
-        let len = ring.entries.len();
-        let mut index = if ring.cursor < len { ring.cursor } else { 0 };
-        for _ in 0..len {
-            let reusable = match Rc::get_mut(&mut ring.entries[index]) {
-                Some(state) if state.theta.len() == from.theta.len() => {
-                    copy_state(state, from);
-                    true
-                }
-                Some(_) => {
-                    // Uniquely owned but of another dimension: replace it.
-                    ring.entries[index] = Rc::new(from.clone());
-                    true
-                }
-                None => false,
-            };
-            if reusable {
-                ring.cursor = index + 1;
-                return Rc::clone(&ring.entries[index]);
+        if let Some(index) = ring.free.pop() {
+            let state =
+                Rc::get_mut(&mut ring.entries[index]).expect("free state must be unreferenced");
+            if state.theta.len() == from.theta.len() {
+                copy_state(state, from);
+            } else {
+                *state = from.clone();
             }
-            index += 1;
-            if index == len {
-                index = 0;
+            StateHandle {
+                state: Some(Rc::clone(&ring.entries[index])),
+                slot: Some(
+                    std::num::NonZeroU32::new(
+                        u32::try_from(index).expect("state slot exceeds u32") + 1,
+                    )
+                    .unwrap(),
+                ),
             }
+        } else if ring.entries.len() < STATE_RING_LIMIT {
+            let index = ring.entries.len();
+            let state = Rc::new(from.clone());
+            ring.entries.push(Rc::clone(&state));
+            StateHandle {
+                state: Some(state),
+                slot: Some(
+                    std::num::NonZeroU32::new(
+                        u32::try_from(index).expect("state slot exceeds u32") + 1,
+                    )
+                    .unwrap(),
+                ),
+            }
+        } else {
+            StateHandle::new(from.clone())
         }
-        let fresh = Rc::new(from.clone());
-        if len < STATE_RING_LIMIT {
-            ring.entries.push(Rc::clone(&fresh));
-            ring.cursor = 0;
-        }
-        fresh
     })
 }
 
-/// One physical endpoint of a span, including its cached joint log density.
-///
-/// The state is shared: a fresh leaf span's two endpoints and its selected
-/// candidate are the same allocation, and merging spans moves the surviving
-/// endpoints without copying.
+/// Slot-indexed state ownership. Rust's Rc still guards the payload lifetime;
+/// the last external handle returns the slot in O(1), without scanning states.
+#[derive(Debug, Clone)]
+pub(crate) struct StateHandle {
+    state: Option<Rc<State>>,
+    slot: Option<std::num::NonZeroU32>,
+}
+impl StateHandle {
+    fn new(state: State) -> Self {
+        Self {
+            state: Some(Rc::new(state)),
+            slot: None,
+        }
+    }
+    fn ptr_eq(a: &Self, b: &Self) -> bool {
+        Rc::ptr_eq(a.state.as_ref().unwrap(), b.state.as_ref().unwrap())
+    }
+    #[cfg(test)]
+    fn strong_count(a: &Self) -> usize {
+        Rc::strong_count(a.state.as_ref().unwrap())
+    }
+    fn try_unwrap(mut self) -> Result<State, Self> {
+        if self.slot.is_none() && Rc::strong_count(self.state.as_ref().unwrap()) == 1 {
+            Ok(Rc::try_unwrap(self.state.take().unwrap()).unwrap())
+        } else {
+            Err(self)
+        }
+    }
+}
+impl std::ops::Deref for StateHandle {
+    type Target = State;
+    fn deref(&self) -> &State {
+        self.state.as_ref().unwrap()
+    }
+}
+impl Drop for StateHandle {
+    fn drop(&mut self) {
+        if let (Some(slot), Some(state)) = (self.slot, self.state.as_ref()) {
+            if Rc::strong_count(state) == 2 {
+                let _ = STATE_RING
+                    .try_with(|ring| ring.borrow_mut().free.push(slot.get() as usize - 1));
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Endpoint {
-    pub state: Rc<State>,
+    pub state: StateHandle,
     pub log_joint: f64,
 }
 
@@ -493,7 +587,7 @@ pub struct Span {
     pub forward: Endpoint,
     /// The position-valued candidate retained by progressive sampling; its
     /// `rho` is incidental and never read.
-    pub selected: Rc<State>,
+    pub selected: StateHandle,
     /// Log of the sum of the leaves' unnormalized joint densities.
     pub log_weight: f64,
     /// Sum of the leaf momenta, kept only under [`UTurnRule::MomentumSum`];
@@ -514,7 +608,7 @@ impl Span {
     ) -> Result<Self, ValidationError> {
         validate_state_and_mass(&state, mass)?;
         let log_joint = joint_log_density(&state, mass);
-        Self::from_leaf_state(Rc::new(state), log_joint, mass.dimension(), true)
+        Self::from_leaf_state(StateHandle::new(state), log_joint, mass.dimension(), true)
     }
 
     /// Build a one-state span from a leaf produced under an already validated
@@ -527,7 +621,7 @@ impl Span {
     /// (a callback that returns finite values at a nonfinite position), and
     /// that is rejected exactly as [`Span::from_state`] rejects it.
     fn from_leaf_state(
-        state: Rc<State>,
+        state: StateHandle,
         log_joint: f64,
         mass_dimension: usize,
         momentum_sum: bool,
@@ -540,7 +634,7 @@ impl Span {
     /// [`ReverseCoarserPolicy::ZeroWeightBeyond`], otherwise the joint log
     /// density.
     fn from_leaf_state_weighted(
-        state: Rc<State>,
+        state: StateHandle,
         log_joint: f64,
         mass_dimension: usize,
         momentum_sum: bool,
@@ -567,7 +661,7 @@ impl Span {
         let endpoint = Endpoint { state, log_joint };
         Ok(Self {
             backward: endpoint.clone(),
-            selected: Rc::clone(&endpoint.state),
+            selected: StateHandle::clone(&endpoint.state),
             forward: endpoint,
             log_weight,
             rho_sum,
@@ -576,8 +670,8 @@ impl Span {
         })
     }
 
-    fn from_subspans(earlier: Span, later: Span, selected: Rc<State>, log_weight: f64) -> Self {
-        let selected_offset = if Rc::ptr_eq(&selected, &later.selected) {
+    fn from_subspans(earlier: Span, later: Span, selected: StateHandle, log_weight: f64) -> Self {
+        let selected_offset = if StateHandle::ptr_eq(&selected, &later.selected) {
             earlier.states.saturating_add(later.selected_offset)
         } else {
             earlier.selected_offset
@@ -796,8 +890,8 @@ fn generate_reverse_schedule(
     accepted_micro_steps: usize,
     accepted_step: f64,
     min_micro_steps: usize,
-) -> Vec<ReverseScheduleEntry> {
-    let mut schedule = Vec::with_capacity(accepted_level);
+) -> SmallVec<[ReverseScheduleEntry; 8]> {
+    let mut schedule = SmallVec::with_capacity(accepted_level);
     let mut coarse_steps = accepted_micro_steps;
     let mut coarse_step = accepted_step;
     let mut coarse_level = accepted_level;
@@ -1589,9 +1683,9 @@ fn combine_barker_observed<R: Uniform01>(
     let draw = rng.uniform_01()?;
     let update = draw.ln() < update_log_probability;
     let selected = if update {
-        Rc::clone(&new.selected)
+        StateHandle::clone(&new.selected)
     } else {
-        Rc::clone(&old.selected)
+        StateHandle::clone(&old.selected)
     };
     let (earlier, later) = match direction {
         Direction::Forward => (old, new),
@@ -1778,7 +1872,7 @@ fn increment(value: &mut usize) -> Result<(), ValidationError> {
 }
 
 fn record_histogram(
-    bins: &mut Vec<WorkHistogramBin>,
+    bins: &mut SmallVec<[WorkHistogramBin; 8]>,
     micro_steps: usize,
 ) -> Result<(), ValidationError> {
     match bins.binary_search_by_key(&micro_steps, |bin| bin.micro_steps) {
@@ -1797,7 +1891,7 @@ fn record_histogram(
 }
 
 fn merge_histogram(
-    target: &mut Vec<WorkHistogramBin>,
+    target: &mut SmallVec<[WorkHistogramBin; 8]>,
     source: &[WorkHistogramBin],
 ) -> Result<(), ValidationError> {
     let mut missing = 0usize;
@@ -2081,11 +2175,11 @@ pub struct WorkHistogramBin {
 /// Attempt histograms. Refinement levels are zero based.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WorkHistogram {
-    pub refinement_level_attempts: Vec<usize>,
+    pub refinement_level_attempts: SmallVec<[usize; 8]>,
     /// Built leaves by the refinement level at which they were accepted.
-    pub refinement_level_built: Vec<usize>,
-    pub forward_micro_steps: Vec<WorkHistogramBin>,
-    pub reverse_micro_steps: Vec<WorkHistogramBin>,
+    pub refinement_level_built: SmallVec<[usize; 8]>,
+    pub forward_micro_steps: SmallVec<[WorkHistogramBin; 8]>,
+    pub reverse_micro_steps: SmallVec<[WorkHistogramBin; 8]>,
 }
 
 /// Additive exact work performed by one transition.
@@ -2135,10 +2229,10 @@ impl TransitionWorkTelemetry {
         let levels = tuning.max_refinement_levels.min(8);
         Self {
             histograms: WorkHistogram {
-                refinement_level_attempts: Vec::with_capacity(levels),
-                refinement_level_built: Vec::with_capacity(levels),
-                forward_micro_steps: Vec::with_capacity(levels),
-                reverse_micro_steps: Vec::with_capacity(levels.saturating_sub(1)),
+                refinement_level_attempts: SmallVec::with_capacity(levels),
+                refinement_level_built: SmallVec::with_capacity(levels),
+                forward_micro_steps: SmallVec::with_capacity(levels),
+                reverse_micro_steps: SmallVec::with_capacity(levels.saturating_sub(1)),
             },
             ..Self::default()
         }
@@ -2714,7 +2808,7 @@ where
     validate_state_and_mass(&state, mass)?;
     let initial_log_joint = joint_log_density(&state, mass);
     let mut span_accum = Span::from_leaf_state(
-        Rc::new(state),
+        StateHandle::new(state),
         initial_log_joint,
         mass.dimension(),
         tuning.leaf.options.u_turn == UTurnRule::MomentumSum,
@@ -2831,7 +2925,11 @@ where
     workspace.release();
     let (orbit_states, selected_index) = (span_accum.states, span_accum.selected_offset);
     #[cfg(feature = "research")]
-    let selected_rho = span_accum.selected.rho.clone();
+    let selected_rho = if CAPTURE_COMPARISON.get() {
+        span_accum.selected.rho.clone()
+    } else {
+        Vec::new()
+    };
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
             selected: take_selected(span_accum),
@@ -2922,7 +3020,7 @@ where
     validate_state_and_mass(&state, mass)?;
     let initial_log_joint = joint_log_density(&state, mass);
     let mut span_accum = Span::from_leaf_state(
-        Rc::new(state),
+        StateHandle::new(state),
         initial_log_joint,
         mass.dimension(),
         tuning.leaf.options.u_turn == UTurnRule::MomentumSum,
@@ -3179,7 +3277,11 @@ where
     work.validate_invariants()?;
     workspace.release();
     #[cfg(feature = "research")]
-    let selected_rho = span_accum.selected.rho.clone();
+    let selected_rho = if CAPTURE_COMPARISON.get() {
+        span_accum.selected.rho.clone()
+    } else {
+        Vec::new()
+    };
     Ok(TelemetryTransitionResult {
         result: TransitionResult {
             selected: take_selected(span_accum),
@@ -3201,9 +3303,9 @@ fn combine_metropolis_observed<R: Uniform01>(
     let draw = rng.uniform_01()?;
     let update = draw.ln() < update_log_probability;
     let selected = if update {
-        Rc::clone(&new.selected)
+        StateHandle::clone(&new.selected)
     } else {
-        Rc::clone(&old.selected)
+        StateHandle::clone(&old.selected)
     };
     let (earlier, later) = match direction {
         Direction::Forward => (old, new),
@@ -3280,7 +3382,7 @@ fn take_selected(span: Span) -> SelectedState {
     } = span;
     drop(backward);
     drop(forward);
-    match Rc::try_unwrap(selected) {
+    match StateHandle::try_unwrap(selected) {
         Ok(state) => SelectedState {
             theta: state.theta,
             grad: state.grad,
@@ -3373,10 +3475,13 @@ where
         candidate,
         reversed,
         velocity,
+        metric_scratch,
         ..
     } = workspace;
 
-    let initial_h = -joint_log_density(start, mass);
+    metric_scratch.resize(mass.scratch_len(), 0.0);
+    let initial_h =
+        -(start.log_prob - mass.kinetic_with_scratch(&start.rho, velocity, metric_scratch));
     observe_initial_energy(work, initial_h);
     let leaf_attempt = work.leaves_attempted.saturating_sub(1);
     let continue_beyond = tuning.reverse_coarser_policy.continues_beyond();
@@ -3425,6 +3530,7 @@ where
             None,
             eval,
             velocity,
+            metric_scratch,
         );
         last_integration = Some(integration);
         let attempted = integration.attempted;
@@ -3507,8 +3613,19 @@ where
                 // Complete the repeated-arithmetic schedule before either arm
                 // traverses it. The incumbent below intentionally retains its
                 // source-baseline loop; conformance telemetry records this list.
-                let reverse_schedule =
-                    generate_reverse_schedule(level, micro_steps, step, tuning.min_micro_steps);
+                #[cfg(feature = "research")]
+                let capture_schedule = CAPTURE_COMPARISON.get();
+                #[cfg(not(feature = "research"))]
+                let capture_schedule = false;
+                let reverse_schedule = if capture_schedule
+                    || matches!(
+                        tuning.reverse_coarsening_order,
+                        ReverseCoarseningOrder::CoarsestToFinest
+                    ) {
+                    generate_reverse_schedule(level, micro_steps, step, tuning.min_micro_steps)
+                } else {
+                    SmallVec::new()
+                };
                 #[cfg(feature = "research")]
                 record_generated_reverse_schedule(leaf_attempt, level, &reverse_schedule);
                 match tuning.reverse_coarsening_order {
@@ -3551,6 +3668,7 @@ where
                                 Some(schedule_index),
                                 eval,
                                 velocity,
+                                metric_scratch,
                             );
                             schedule_index += 1;
                             let attempted = integration.attempted;
@@ -3675,6 +3793,7 @@ where
                                 Some(schedule_index),
                                 eval,
                                 velocity,
+                                metric_scratch,
                             );
                             let attempted = integration.attempted;
                             let valid = integration.valid;
@@ -3956,6 +4075,7 @@ fn integrate<E, M: MassOperator + ?Sized>(
     reverse_schedule_index: Option<usize>,
     eval: &mut E,
     velocity: &mut [f64],
+    metric_scratch: &mut [f64],
 ) -> IntegrationObservation
 where
     E: FusedEval,
@@ -3971,7 +4091,7 @@ where
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        mass.velocity_into(&state.rho, velocity);
+        mass.velocity_with_scratch(&state.rho, velocity, metric_scratch);
         for (position, velocity) in state.theta.iter_mut().zip(&*velocity) {
             *position += step * velocity;
         }
@@ -3984,7 +4104,11 @@ where
             micro_steps: Some(count),
             step: Some(step),
             reverse_schedule_index,
-            kinetic: context_kinetic(&state.rho, mass),
+            kinetic: if CONTEXT_KINETIC_REQUIRED.get() {
+                mass.kinetic_with_scratch(&state.rho, velocity, metric_scratch)
+            } else {
+                f64::NAN
+            },
             initial_hamiltonian: Some(initial_hamiltonian),
         });
         #[cfg(feature = "research")]
@@ -4019,7 +4143,8 @@ where
         for (momentum, gradient) in state.rho.iter_mut().zip(&state.grad) {
             *momentum += half_step * gradient;
         }
-        let log_joint = joint_log_density(state, mass);
+        let log_joint =
+            state.log_prob - mass.kinetic_with_scratch(&state.rho, velocity, metric_scratch);
         let energy = -log_joint;
         if energy.is_nan() {
             return IntegrationObservation {
@@ -4098,11 +4223,11 @@ mod tests {
         assert!(same_selected(&first, &one));
         assert_eq!(first.rho, one.rho);
         // The ring keeps its own reference so the entry can be reused later.
-        assert_eq!(Rc::strong_count(&first), 2);
+        assert_eq!(StateHandle::strong_count(&first), 2);
         drop(first);
         let again = pooled_state(&one);
         assert!(same_selected(&again, &one));
-        assert_eq!(Rc::strong_count(&again), 2);
+        assert_eq!(StateHandle::strong_count(&again), 2);
         let two = State {
             theta: vec![1.0, 2.0],
             rho: vec![0.5, -0.5],
@@ -4112,9 +4237,25 @@ mod tests {
         let other = pooled_state(&two);
         assert!(same_selected(&other, &two));
         assert_eq!(other.rho, two.rho);
-        assert_eq!(Rc::strong_count(&other), 2);
+        assert_eq!(StateHandle::strong_count(&other), 2);
         // Live entries are never handed out twice.
-        assert!(!Rc::ptr_eq(&again, &other));
+        assert!(!StateHandle::ptr_eq(&again, &other));
+    }
+
+    #[test]
+    fn indexed_pool_does_not_reuse_a_live_clone() {
+        let source = state(0.25, -0.5);
+        let first = pooled_state(&source);
+        let slot = first.slot;
+        let retained = first.clone();
+        drop(first);
+        let second = pooled_state(&state(0.7, 0.1));
+        assert_ne!(second.slot, slot);
+        assert!(same_selected(&retained, &source));
+        drop(retained);
+        let recycled = pooled_state(&source);
+        assert_eq!(recycled.slot, slot);
+        assert!(same_selected(&recycled, &source));
     }
 
     #[test]
@@ -4204,6 +4345,7 @@ mod tests {
             None,
             &mut eval,
             &mut velocity,
+            &mut [],
         );
         assert!(forward.valid);
         let reverse_h = -joint_log_density(&state, &mass);
@@ -4220,6 +4362,7 @@ mod tests {
             Some(0),
             &mut eval,
             &mut velocity,
+            &mut [],
         );
         assert!(reverse.valid);
         for (actual, expected) in state.theta.iter().zip(&initial.theta) {
@@ -5549,9 +5692,12 @@ mod tests {
         assert_eq!(work.fused_calls.reverse, 1);
         assert_eq!(work.reverse_coarsening_attempts, 1);
         assert_eq!(work.reverse_coarsening_accepted, 1);
-        assert_eq!(work.histograms.refinement_level_attempts, vec![1, 1]);
         assert_eq!(
-            work.histograms.forward_micro_steps,
+            work.histograms.refinement_level_attempts.as_slice(),
+            &[1, 1]
+        );
+        assert_eq!(
+            work.histograms.forward_micro_steps.as_slice(),
             vec![
                 WorkHistogramBin {
                     micro_steps: 1,
@@ -5564,7 +5710,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            work.histograms.reverse_micro_steps,
+            work.histograms.reverse_micro_steps.as_slice(),
             vec![WorkHistogramBin {
                 micro_steps: 1,
                 attempts: 1
@@ -6213,14 +6359,15 @@ mod tests {
         let a = Span::from_state(state(0.0, 1.0), &[1.0]).unwrap();
         let b = Span::from_state(state(0.5, 0.25), &[1.0]).unwrap();
         assert_eq!(a.rho_sum, vec![1.0]);
-        let selected = Rc::clone(&a.selected);
+        let selected = StateHandle::clone(&a.selected);
         let merged = Span::from_subspans(a, b, selected, 0.0);
         assert_eq!(merged.rho_sum, vec![1.25]);
         // A span built without the momentum sum stays empty after merging.
-        let empty = Span::from_leaf_state(Rc::new(state(0.0, 1.0)), -0.5, 1, false).unwrap();
+        let empty =
+            Span::from_leaf_state(StateHandle::new(state(0.0, 1.0)), -0.5, 1, false).unwrap();
         assert!(empty.rho_sum.is_empty());
         let b = Span::from_state(state(0.5, 0.25), &[1.0]).unwrap();
-        let selected = Rc::clone(&empty.selected);
+        let selected = StateHandle::clone(&empty.selected);
         assert!(
             Span::from_subspans(empty, b, selected, 0.0)
                 .rho_sum
@@ -6243,7 +6390,7 @@ mod tests {
         let a = Span::from_state(make([0.0, 0.0], [1.0, 1.0]), &mass[..]).unwrap();
         let b = Span::from_state(make([1.0, 0.5], [1.0, -2.0]), &mass[..]).unwrap();
         let c = Span::from_state(make([2.0, -0.4], [1.0, -0.2]), &mass[..]).unwrap();
-        let selected = Rc::clone(&a.selected);
+        let selected = StateHandle::clone(&a.selected);
         let earlier = Span::from_subspans(a, b, selected, 0.0);
         let mut workspace = Workspace::new(2);
 
@@ -6313,9 +6460,9 @@ mod tests {
         let b = Span::from_state(state(1.0, 1.0), &mass[..]).unwrap();
         let c = Span::from_state(state(1.5, -0.5), &mass[..]).unwrap();
         let d = Span::from_state(state(2.0, 3.0), &mass[..]).unwrap();
-        let selected = Rc::clone(&a.selected);
+        let selected = StateHandle::clone(&a.selected);
         let earlier = Span::from_subspans(a, b, selected, 0.0);
-        let selected = Rc::clone(&c.selected);
+        let selected = StateHandle::clone(&c.selected);
         let later = Span::from_subspans(c, d, selected, 0.0);
         let mut workspace = Workspace::new(1);
         // Full: rho = 1 + 1 - 0.5 + 3 = 4.5; p_D . rho > 0, p_A . rho > 0.

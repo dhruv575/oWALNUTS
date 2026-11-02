@@ -95,6 +95,44 @@ impl MassOperator for DirectOriginalQMass {
             Self::LowRankArrowhead(value) => MassOperator::velocity(value, momentum),
         }
     }
+    fn scratch_len(&self) -> usize {
+        match self {
+            Self::Dense(value) => MassOperator::scratch_len(value),
+            Self::BlockDiagonal(value) => MassOperator::scratch_len(value),
+            Self::StructuredPath(value) => MassOperator::scratch_len(value),
+            Self::LowRankArrowhead(value) => MassOperator::scratch_len(value),
+        }
+    }
+    fn velocity_with_scratch(&self, momentum: &[f64], out: &mut [f64], scratch: &mut [f64]) {
+        match self {
+            Self::Dense(value) => {
+                MassOperator::velocity_with_scratch(value, momentum, out, scratch)
+            }
+            Self::BlockDiagonal(value) => {
+                MassOperator::velocity_with_scratch(value, momentum, out, scratch)
+            }
+            Self::StructuredPath(value) => {
+                MassOperator::velocity_with_scratch(value, momentum, out, scratch)
+            }
+            Self::LowRankArrowhead(value) => {
+                MassOperator::velocity_with_scratch(value, momentum, out, scratch)
+            }
+        }
+    }
+    fn kinetic_with_scratch(&self, momentum: &[f64], out: &mut [f64], scratch: &mut [f64]) -> f64 {
+        match self {
+            Self::Dense(value) => MassOperator::kinetic_with_scratch(value, momentum, out, scratch),
+            Self::BlockDiagonal(value) => {
+                MassOperator::kinetic_with_scratch(value, momentum, out, scratch)
+            }
+            Self::StructuredPath(value) => {
+                MassOperator::kinetic_with_scratch(value, momentum, out, scratch)
+            }
+            Self::LowRankArrowhead(value) => {
+                MassOperator::kinetic_with_scratch(value, momentum, out, scratch)
+            }
+        }
+    }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         match self {
             Self::Dense(value) => MassOperator::kinetic_energy(value, momentum),

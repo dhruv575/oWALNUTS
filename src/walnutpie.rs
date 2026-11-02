@@ -4514,11 +4514,10 @@ impl DenseMass {
                 "momentum must match dense mass dimension and be finite",
             ));
         }
-        let velocity: Vec<f64> = self
+        let velocity = self
             .inverse
             .chunks_exact(self.dimension)
-            .map(|row| row.iter().zip(momentum).map(|(a, p)| a * p).sum())
-            .collect();
+            .map(|row| row.iter().zip(momentum).map(|(a, p)| a * p).sum::<f64>());
         let energy = 0.5
             * momentum
                 .iter()
@@ -4560,6 +4559,19 @@ impl MassOperator for DenseMass {
     fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
         self.drift(momentum)
             .expect("validated dense mass and momentum dimensions")
+    }
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        assert!(
+            momentum.len() == self.dimension && momentum.iter().all(|x| x.is_finite()),
+            "validated mass and finite momentum required"
+        );
+        assert_eq!(out.len(), self.dimension);
+        for (value, row) in out
+            .iter_mut()
+            .zip(self.inverse.chunks_exact(self.dimension))
+        {
+            *value = row.iter().zip(momentum).map(|(a, p)| a * p).sum();
+        }
     }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         DenseMass::kinetic_energy(self, momentum)
@@ -4693,6 +4705,19 @@ impl MassOperator for BlockDiagonalMass {
         self.drift(momentum)
             .expect("validated block mass and momentum dimensions")
     }
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        assert!(
+            momentum.len() == self.dimension && momentum.iter().all(|x| x.is_finite()),
+            "validated mass and finite momentum required"
+        );
+        assert_eq!(out.len(), self.dimension);
+        for (block, bounds) in self.blocks.iter().zip(self.offsets.windows(2)) {
+            block.velocity_into(
+                &momentum[bounds[0]..bounds[1]],
+                &mut out[bounds[0]..bounds[1]],
+            );
+        }
+    }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         BlockDiagonalMass::kinetic_energy(self, momentum)
             .expect("validated block mass and momentum dimensions")
@@ -4798,6 +4823,64 @@ impl StructuredCovarianceBlock {
                     out[i] = if i == 0 { suffix } else { innovation * suffix };
                 }
                 out
+            }
+        }
+    }
+    fn solve_lower_in_place(&self, out: &mut [f64]) {
+        match self {
+            Self::BidiagonalCholesky {
+                diagonal,
+                subdiagonal,
+            } => {
+                for i in 0..out.len() {
+                    out[i] = (out[i]
+                        - if i > 0 {
+                            subdiagonal[i - 1] * out[i - 1]
+                        } else {
+                            0.0
+                        })
+                        / diagonal[i];
+                }
+            }
+            Self::ScaledAr1 { scale, rho } => {
+                let innovation = (1.0 - rho * rho).sqrt();
+                let mut previous = out[0];
+                out[0] /= scale[0];
+                for i in 1..out.len() {
+                    let current = out[i];
+                    out[i] = (current / scale[i] - rho * previous / scale[i - 1]) / innovation;
+                    previous = current;
+                }
+            }
+        }
+    }
+    fn solve_upper_in_place(&self, out: &mut [f64]) {
+        match self {
+            Self::BidiagonalCholesky {
+                diagonal,
+                subdiagonal,
+            } => {
+                for i in (0..out.len()).rev() {
+                    out[i] = (out[i]
+                        - if i + 1 < out.len() {
+                            subdiagonal[i] * out[i + 1]
+                        } else {
+                            0.0
+                        })
+                        / diagonal[i];
+                }
+            }
+            Self::ScaledAr1 { scale, rho } => {
+                let innovation = (1.0 - rho * rho).sqrt();
+                for i in 0..out.len() {
+                    let z = (if i == 0 { out[i] } else { out[i] / innovation })
+                        - if i + 1 < out.len() {
+                            rho * out[i + 1] / innovation
+                        } else {
+                            0.0
+                        };
+                    out[i] = z / scale[i];
+                }
             }
         }
     }
@@ -4986,6 +5069,28 @@ impl MassOperator for StructuredBlockMass {
     fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
         self.drift(momentum)
             .expect("validated structured mass and momentum dimensions")
+    }
+    fn velocity_into(&self, momentum: &[f64], out: &mut [f64]) {
+        assert!(
+            momentum.len() == self.dimension && momentum.iter().all(|x| x.is_finite()),
+            "validated mass and finite momentum required"
+        );
+        assert_eq!(out.len(), self.dimension);
+        out.copy_from_slice(momentum);
+        for (block, bounds) in self.blocks.iter().zip(self.offsets.windows(2)) {
+            let part = &mut out[bounds[0]..bounds[1]];
+            block.solve_lower_in_place(part);
+            block.solve_upper_in_place(part);
+        }
+    }
+    fn kinetic_with_scratch(&self, momentum: &[f64], out: &mut [f64], _: &mut [f64]) -> f64 {
+        self.velocity_into(momentum, out);
+        let energy = 0.5 * momentum.iter().zip(out).map(|(p, v)| p * *v).sum::<f64>();
+        assert!(
+            energy.is_finite() && energy >= 0.0,
+            "structured kinetic energy is not representable"
+        );
+        energy
     }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         StructuredBlockMass::kinetic_energy(self, momentum)
@@ -5344,6 +5449,112 @@ impl MassOperator for LowRankArrowheadMass {
     fn velocity(&self, momentum: &[f64]) -> Vec<f64> {
         self.drift(momentum)
             .expect("validated arrowhead mass and momentum dimensions")
+    }
+    fn scratch_len(&self) -> usize {
+        self.global_lower.len() + 3 * self.rank
+    }
+    fn velocity_with_scratch(&self, momentum: &[f64], out: &mut [f64], scratch: &mut [f64]) {
+        assert!(
+            momentum.len() == self.dimension() && momentum.iter().all(|x| x.is_finite()),
+            "validated arrowhead mass and finite momentum required"
+        );
+        assert_eq!(out.len(), self.dimension());
+        let ng = self.global_lower.len();
+        let (global_z, rest) = scratch.split_at_mut(ng);
+        let (latent, rest) = rest.split_at_mut(self.rank);
+        let (projected, solved) = rest.split_at_mut(self.rank);
+        global_z.copy_from_slice(&momentum[..ng]);
+        for i in 0..ng {
+            global_z[i] = (global_z[i]
+                - (0..i)
+                    .map(|j| self.global_lower[i][j] * global_z[j])
+                    .sum::<f64>())
+                / self.global_lower[i][i];
+        }
+        let (global_out, path_out) = out.split_at_mut(ng);
+        path_out.copy_from_slice(&momentum[ng..]);
+        self.path.solve_lower_in_place(path_out);
+        for k in 0..self.rank {
+            latent[k] = self
+                .global_factors
+                .iter()
+                .zip(&*global_z)
+                .map(|(row, x)| row[k] * x)
+                .sum();
+        }
+        for (value, row) in path_out.iter_mut().zip(&self.path_factors) {
+            *value -= row.iter().zip(&*latent).map(|(a, b)| a * b).sum::<f64>();
+        }
+        if let Some(factor) = &self.path_subspace {
+            for transpose in [false, true] {
+                for k in 0..self.rank {
+                    projected[k] = factor
+                        .basis
+                        .iter()
+                        .zip(&*path_out)
+                        .map(|(row, v)| row[k] * v)
+                        .sum();
+                }
+                solved.copy_from_slice(projected);
+                if transpose {
+                    for i in (0..self.rank).rev() {
+                        solved[i] = (solved[i]
+                            - (i + 1..self.rank)
+                                .map(|j| factor.lower[j][i] * solved[j])
+                                .sum::<f64>())
+                            / factor.lower[i][i];
+                    }
+                } else {
+                    for i in 0..self.rank {
+                        solved[i] = (solved[i]
+                            - (0..i).map(|j| factor.lower[i][j] * solved[j]).sum::<f64>())
+                            / factor.lower[i][i];
+                    }
+                }
+                for (i, value) in path_out.iter_mut().enumerate() {
+                    *value += (0..self.rank)
+                        .map(|k| factor.basis[i][k] * (solved[k] - projected[k]))
+                        .sum::<f64>();
+                }
+            }
+        }
+        for k in 0..self.rank {
+            latent[k] = self
+                .path_factors
+                .iter()
+                .zip(&*path_out)
+                .map(|(row, x)| row[k] * x)
+                .sum();
+        }
+        self.path.solve_upper_in_place(path_out);
+        for i in 0..ng {
+            global_out[i] = global_z[i]
+                - self.global_factors[i]
+                    .iter()
+                    .zip(&*latent)
+                    .map(|(a, b)| a * b)
+                    .sum::<f64>();
+        }
+        for i in (0..ng).rev() {
+            global_out[i] = (global_out[i]
+                - (i + 1..ng)
+                    .map(|j| self.global_lower[j][i] * global_out[j])
+                    .sum::<f64>())
+                / self.global_lower[i][i];
+        }
+        assert!(
+            out.iter().all(|x| x.is_finite()),
+            "arrowhead velocity is not representable"
+        );
+    }
+    fn kinetic_with_scratch(&self, momentum: &[f64], out: &mut [f64], scratch: &mut [f64]) -> f64 {
+        self.velocity_with_scratch(momentum, out, scratch);
+        let energy = 0.5 * momentum.iter().zip(out).map(|(p, v)| p * *v).sum::<f64>();
+        assert!(
+            energy.is_finite() && energy >= 0.0,
+            "arrowhead kinetic energy is not representable"
+        );
+        energy
     }
     fn kinetic_energy(&self, momentum: &[f64]) -> f64 {
         LowRankArrowheadMass::kinetic_energy(self, momentum)
@@ -9463,6 +9674,11 @@ impl<'a, T: Target> ChainRun<'a, T> {
             ..
         } = *self;
         let (rng, cached_state) = rng_slot.parts();
+        #[cfg(feature = "research")]
+        let _research_observations = crate::kernel::ResearchObservationScope::new(
+            control.public.proposal_observations.is_some(),
+            control.public.comparison_observer.is_some(),
+        );
         while *next_transition < end.min(*transitions) {
             let transition_index = *next_transition;
             #[cfg(feature = "research")]
@@ -9684,18 +9900,19 @@ impl<'a, T: Target> ChainRun<'a, T> {
                         control,
                         stopped: &mut rng_stop,
                     };
-                    let cached_input = use_persistent_cache
-                        .then_some(cached_state.as_ref())
-                        .flatten()
-                        .map(|state| EvaluatedTransitionInput {
-                            theta: position.clone(),
-                            rho: momentum.clone(),
-                            log_prob: state.log_prob,
-                            grad: state.grad.clone(),
-                        });
-                    let input = TransitionInput {
+                    let mut input = TransitionInput {
                         theta: std::mem::take(position),
                         rho: momentum,
+                    };
+                    let cached_input = if use_persistent_cache {
+                        cached_state.take().map(|state| EvaluatedTransitionInput {
+                            theta: std::mem::take(&mut input.theta),
+                            rho: std::mem::take(&mut input.rho),
+                            log_prob: state.log_prob,
+                            grad: state.grad,
+                        })
+                    } else {
+                        None
                     };
                     if (config.warmup.is_some() && transition_index < *discarded)
                         || config.capture_acceptance
@@ -9912,12 +10129,16 @@ impl<'a, T: Target> ChainRun<'a, T> {
                 })
                 .collect::<Vec<_>>();
             let unrefined_fraction = unrefined_leaf_fraction(&work);
-            if use_persistent_cache {
-                *cached_state = Some(result.selected.clone());
-            }
             let selected_log_density = result.selected.log_prob;
             let selected_gradient = (gradient_variance.is_some() || auto_fit.is_some())
                 .then(|| result.selected.grad.clone());
+            if use_persistent_cache {
+                *cached_state = Some(SelectedState {
+                    theta: result.selected.theta.clone(),
+                    grad: result.selected.grad,
+                    log_prob: selected_log_density,
+                });
+            }
             *position = result.selected.theta;
             let internal = result.diagnostics;
             let public = TransitionDiagnostics {
@@ -10570,6 +10791,11 @@ fn run_chain<T: Target>(
     // Only proposal observers read the per-call kinetic energy the kernel
     // attaches to each evaluation; skip it when none is attached.
     let _context_kinetic = ContextKineticScope::new(control.public.proposal_observations.is_some());
+    #[cfg(feature = "research")]
+    let _research_observations = crate::kernel::ResearchObservationScope::new(
+        control.public.proposal_observations.is_some(),
+        control.public.comparison_observer.is_some(),
+    );
     let mut run = ChainRun::start(
         target,
         dimension,
@@ -13868,6 +14094,11 @@ fn sample_chains_rescued<'a, T: Target>(
         let result = catch_unwind(AssertUnwindSafe(|| {
             let _context_kinetic =
                 ContextKineticScope::new(control.public.proposal_observations.is_some());
+            #[cfg(feature = "research")]
+            let _research_observations = crate::kernel::ResearchObservationScope::new(
+                control.public.proposal_observations.is_some(),
+                control.public.comparison_observer.is_some(),
+            );
             if slot.run.is_none() {
                 control.check().map_err(control_error)?;
                 slot.run = Some(ChainRun::start(
@@ -14013,6 +14244,11 @@ fn sample_chains_restartable<'a, T: Target>(
         let result = catch_unwind(AssertUnwindSafe(|| {
             let _context_kinetic =
                 ContextKineticScope::new(control.public.proposal_observations.is_some());
+            #[cfg(feature = "research")]
+            let _research_observations = crate::kernel::ResearchObservationScope::new(
+                control.public.proposal_observations.is_some(),
+                control.public.comparison_observer.is_some(),
+            );
             if slot.run.is_none() {
                 control.check().map_err(control_error)?;
                 slot.run = Some(ChainRun::start(
@@ -14155,6 +14391,11 @@ fn sample_chains_auto_selected<'a, T: Target>(
         let result = catch_unwind(AssertUnwindSafe(|| {
             let _context_kinetic =
                 ContextKineticScope::new(control.public.proposal_observations.is_some());
+            #[cfg(feature = "research")]
+            let _research_observations = crate::kernel::ResearchObservationScope::new(
+                control.public.proposal_observations.is_some(),
+                control.public.comparison_observer.is_some(),
+            );
             if slot.run.is_none() {
                 control.check().map_err(control_error)?;
                 let mut run = ChainRun::start(
@@ -14511,6 +14752,11 @@ fn trapped_chain_restart_boundary<'a, T: Target>(
         let started = catch_unwind(AssertUnwindSafe(|| {
             let _context_kinetic =
                 ContextKineticScope::new(control.public.proposal_observations.is_some());
+            #[cfg(feature = "research")]
+            let _research_observations = crate::kernel::ResearchObservationScope::new(
+                control.public.proposal_observations.is_some(),
+                control.public.comparison_observer.is_some(),
+            );
             control.check().map_err(control_error)?;
             ChainRun::start_from(
                 target,
@@ -17172,25 +17418,25 @@ mod tests {
         assert_eq!(unrefined_leaf_fraction(&work), None);
         // Eight leaves attempted, all invalid at the coarsest level: nothing
         // was built, so no statistic (this previously read as 1.0).
-        work.histograms.refinement_level_attempts = vec![8];
+        work.histograms.refinement_level_attempts = vec![8].into();
         work.leaves_attempted = 8;
         work.rejections.invalid_forward_evaluation = 8;
         assert_eq!(unrefined_leaf_fraction(&work), None);
         // Eight built at the coarsest level.
         work.rejections.invalid_forward_evaluation = 0;
         work.leaves_built = 8;
-        work.histograms.refinement_level_built = vec![8];
+        work.histograms.refinement_level_built = vec![8].into();
         assert_eq!(unrefined_leaf_fraction(&work), Some(1.0));
         // Six built at level 0, one at level 1, one rejected: the rejected
         // attempt is in neither numerator nor denominator.
-        work.histograms.refinement_level_attempts = vec![8, 2, 1];
+        work.histograms.refinement_level_attempts = vec![8, 2, 1].into();
         work.leaves_built = 7;
-        work.histograms.refinement_level_built = vec![6, 1];
+        work.histograms.refinement_level_built = vec![6, 1].into();
         assert_eq!(unrefined_leaf_fraction(&work), Some(6.0 / 7.0));
         // A missing built histogram never yields a fraction above one.
-        work.histograms.refinement_level_built = vec![];
+        work.histograms.refinement_level_built = vec![].into();
         assert_eq!(unrefined_leaf_fraction(&work), Some(0.0));
-        work.histograms.refinement_level_built = vec![9];
+        work.histograms.refinement_level_built = vec![9].into();
         assert_eq!(unrefined_leaf_fraction(&work), Some(1.0));
     }
 
@@ -17267,5 +17513,71 @@ mod tests {
                 .kind(),
             ErrorKind::Configuration
         );
+    }
+}
+
+#[cfg(test)]
+mod performance_parity_tests {
+    use super::*;
+    fn check(mass: &dyn MassOperator) {
+        let mut out = vec![0.0; mass.dimension()];
+        let mut scratch = vec![0.0; mass.scratch_len()];
+        for seed in 0..40 {
+            let momentum: Vec<f64> = (0..mass.dimension())
+                .map(|i| ((i * 17 + seed * 7) as f64).sin())
+                .collect();
+            let expected = mass.velocity(&momentum);
+            mass.velocity_with_scratch(&momentum, &mut out, &mut scratch);
+            assert_eq!(
+                out.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                expected.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                mass.kinetic_with_scratch(&momentum, &mut out, &mut scratch)
+                    .to_bits(),
+                mass.kinetic_energy(&momentum).to_bits()
+            );
+        }
+    }
+    #[test]
+    fn allocation_free_metrics_match_original_arithmetic() {
+        check(&DenseMass::from_matrix(vec![2.0, 0.3, 0.3, 1.5], 2).unwrap());
+        check(
+            &BlockDiagonalMass::from_blocks(vec![(vec![2.0, 0.3, 0.3, 1.5], 2), (vec![1.3], 1)])
+                .unwrap(),
+        );
+        let paths = [
+            StructuredCovarianceBlock::BidiagonalCholesky {
+                diagonal: vec![1.1, 0.8],
+                subdiagonal: vec![0.3],
+            },
+            StructuredCovarianceBlock::ScaledAr1 {
+                scale: vec![1.1, 0.8],
+                rho: -0.4,
+            },
+        ];
+        for path in paths {
+            check(&StructuredBlockMass::new(vec![path.clone()]).unwrap());
+            check(
+                &LowRankArrowheadMass::new(
+                    vec![vec![1.2]],
+                    path.clone(),
+                    vec![vec![0.6], vec![0.8]],
+                    vec![vec![0.3]],
+                )
+                .unwrap(),
+            );
+            check(
+                &LowRankArrowheadMass::new_with_path_subspace(
+                    vec![vec![1.2]],
+                    path,
+                    vec![vec![0.6], vec![0.8]],
+                    vec![vec![0.3]],
+                    vec![vec![0.6], vec![0.8]],
+                    vec![vec![1.4]],
+                )
+                .unwrap(),
+            );
+        }
     }
 }

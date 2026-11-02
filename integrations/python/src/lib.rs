@@ -2149,18 +2149,11 @@ fn chain_warnings<'py>(
         .map(window_from_dict)
         .collect::<PyResult<Vec<_>>>()?;
     let warnings = py.detach(|| {
-        let columns: Vec<Vec<Vec<f64>>> = (0..dimension)
-            .map(|index| {
-                (0..chains)
-                    .map(|chain| (0..draws).map(|draw| view[[chain, draw, index]]).collect())
-                    .collect()
-            })
-            .collect();
-        let views: Vec<Vec<&[f64]>> = columns
-            .iter()
-            .map(|c| c.iter().map(Vec::as_slice).collect())
-            .collect();
-        let disagreement = ChainDisagreement::compute(&views);
+        let disagreement = ChainDisagreement::compute_streaming(dimension, chains, |index| {
+            (0..chains)
+                .map(|chain| (0..draws).map(|draw| view[[chain, draw, index]]).collect())
+                .collect()
+        });
         let mut warnings = ChainWarning::detect(
             &warmup.iter().map(Option::as_ref).collect::<Vec<_>>(),
             &sampling.iter().map(Option::as_ref).collect::<Vec<_>>(),

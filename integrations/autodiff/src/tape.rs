@@ -46,6 +46,128 @@ pub(crate) enum Node {
     Cumsum { first: u32, len: u32, scale: f64 },
 }
 
+/// Compact operation stream, with payloads grouped by kind.
+/// Entries use checked indices; unused large-variant payload space is not stored.
+#[cfg(feature = "compact-tape")]
+#[derive(Debug, Default)]
+struct NodeStore {
+    entries: Vec<(u32, u32)>,
+    unary: Vec<(u32, f64)>,
+    binary: Vec<(u32, u32, f64, f64)>,
+    ternary: Vec<(u32, u32, u32, f64, f64, f64)>,
+    nary: Vec<(u32, u32)>,
+    cumsum: Vec<(u32, u32, f64)>,
+}
+#[cfg(feature = "compact-tape")]
+impl NodeStore {
+    const fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+            unary: Vec::new(),
+            binary: Vec::new(),
+            ternary: Vec::new(),
+            nary: Vec::new(),
+            cumsum: Vec::new(),
+        }
+    }
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.unary.clear();
+        self.binary.clear();
+        self.ternary.clear();
+        self.nary.clear();
+        self.cumsum.clear();
+    }
+    fn push(&mut self, node: Node) {
+        fn index(n: usize) -> u32 {
+            u32::try_from(n).expect("autodiff payload exceeds u32 capacity")
+        }
+        let entry = match node {
+            Node::Filler => (0, 0),
+            Node::Unary { a, da } => {
+                let i = index(self.unary.len());
+                self.unary.push((a, da));
+                (1, i)
+            }
+            Node::Binary { a, b, da, db } => {
+                let i = index(self.binary.len());
+                self.binary.push((a, b, da, db));
+                (2, i)
+            }
+            Node::Ternary {
+                a,
+                b,
+                c,
+                da,
+                db,
+                dc,
+            } => {
+                let i = index(self.ternary.len());
+                self.ternary.push((a, b, c, da, db, dc));
+                (3, i)
+            }
+            Node::Nary { start, len } => {
+                let i = index(self.nary.len());
+                self.nary.push((start, len));
+                (4, i)
+            }
+            Node::Cumsum { first, len, scale } => {
+                let i = index(self.cumsum.len());
+                self.cumsum.push((first, len, scale));
+                (5, i)
+            }
+        };
+        self.entries.push(entry);
+    }
+    fn extend(&mut self, nodes: impl IntoIterator<Item = Node>) {
+        for node in nodes {
+            self.push(node);
+        }
+    }
+    fn iter(&self) -> impl DoubleEndedIterator<Item = Node> + ExactSizeIterator + '_ {
+        self.entries.iter().map(|&(kind, index)| {
+            let i = index as usize;
+            match kind {
+                0 => Node::Filler,
+                1 => {
+                    let (a, da) = self.unary[i];
+                    Node::Unary { a, da }
+                }
+                2 => {
+                    let (a, b, da, db) = self.binary[i];
+                    Node::Binary { a, b, da, db }
+                }
+                3 => {
+                    let (a, b, c, da, db, dc) = self.ternary[i];
+                    Node::Ternary {
+                        a,
+                        b,
+                        c,
+                        da,
+                        db,
+                        dc,
+                    }
+                }
+                4 => {
+                    let (start, len) = self.nary[i];
+                    Node::Nary { start, len }
+                }
+                5 => {
+                    let (first, len, scale) = self.cumsum[i];
+                    Node::Cumsum { first, len, scale }
+                }
+                _ => unreachable!("invalid tape operation"),
+            }
+        })
+    }
+}
+
 /// One operand of a fused node.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Segment {
@@ -79,6 +201,9 @@ pub struct Tape {
     /// for the current evaluation; a slice inside it is contiguous on the
     /// tape by construction.
     input_range: (usize, usize),
+    #[cfg(feature = "compact-tape")]
+    nodes: NodeStore,
+    #[cfg(not(feature = "compact-tape"))]
     nodes: Vec<Node>,
     adjoint: Vec<f64>,
     partials: Vec<f64>,
@@ -93,6 +218,9 @@ impl Tape {
         Self {
             n_inputs: 0,
             input_range: (0, 0),
+            #[cfg(feature = "compact-tape")]
+            nodes: NodeStore::new(),
+            #[cfg(not(feature = "compact-tape"))]
             nodes: Vec::new(),
             adjoint: Vec::new(),
             partials: Vec::new(),
@@ -168,7 +296,8 @@ impl Tape {
 
     #[inline]
     fn push(&mut self, node: Node) -> u32 {
-        let index = (self.n_inputs + 1 + self.nodes.len()) as u32;
+        let index = u32::try_from(self.n_inputs + 1 + self.nodes.len())
+            .expect("autodiff tape exceeds u32 capacity");
         self.nodes.push(node);
         index
     }
@@ -207,7 +336,8 @@ impl Tape {
     /// `first..first+len`; returns the tape index of the first output.
     #[inline]
     pub(crate) fn push_cumsum(&mut self, first: u32, len: usize, scale: f64) -> u32 {
-        let start = (self.n_inputs + 1 + self.nodes.len()) as u32;
+        let start = u32::try_from(self.n_inputs + 1 + self.nodes.len())
+            .expect("autodiff tape exceeds u32 capacity");
         self.nodes
             .extend(std::iter::repeat_n(Node::Filler, len - 1));
         self.nodes.push(Node::Cumsum {
@@ -320,9 +450,13 @@ impl Tape {
         let partials = &self.partials;
         let indices = &self.indices;
         let segments = &self.segments;
-        for (k, node) in self.nodes.iter().enumerate().rev() {
+        #[cfg(feature = "compact-tape")]
+        let nodes = self.nodes.iter();
+        #[cfg(not(feature = "compact-tape"))]
+        let nodes = self.nodes.iter().copied();
+        for (k, node) in nodes.enumerate().rev() {
             let a_out = adj[base + k];
-            if let Node::Cumsum { first, len, scale } = *node {
+            if let Node::Cumsum { first, len, scale } = node {
                 // Reverse scan: d/dx_j = scale * sum_{i >= j} adjoint(out_i).
                 let out_start = base + k + 1 - len as usize;
                 let mut acc = 0.0;
@@ -335,7 +469,7 @@ impl Tape {
             if a_out == 0.0 {
                 continue;
             }
-            match *node {
+            match node {
                 Node::Filler | Node::Cumsum { .. } => {}
                 Node::Unary { a, da } => {
                     adj[a as usize] += a_out * da;

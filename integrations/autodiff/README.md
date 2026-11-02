@@ -149,3 +149,19 @@ Build and test with the GNU toolchain used across the repository:
 RUSTUP_TOOLCHAIN=1.88.0-x86_64-pc-windows-gnu cargo test --release
 RUSTUP_TOOLCHAIN=1.88.0-x86_64-pc-windows-gnu cargo run --release --example bench
 ```
+
+### Experimental compact tape
+
+`--features compact-tape` stores a compact operation/index stream with payloads
+separated by operation kind. The default tape remains unchanged. The candidate
+preserves the gradient tests and benchmark fingerprints, but model-specific
+latency is mixed: the initial local comparison improved Funnel and Local Level
+while regressing Eight Schools. Benchmark your target before enabling it:
+
+```sh
+cargo run --release --example layout_bench
+cargo run --release --features compact-tape --example layout_bench
+```
+
+The comparison evidence and limitations are recorded in
+`../../research-ops/PERFORMANCE-IMPLEMENTATION-20261101.md`.

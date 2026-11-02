@@ -105,6 +105,10 @@ fn quantile_sorted_in_place(values: &mut [f64], prob: f64) -> f64 {
         return f64::NAN;
     }
     values.sort_by(|a, b| a.partial_cmp(b).expect("no NaN after check"));
+    quantile_presorted(values, prob)
+}
+
+fn quantile_presorted(values: &[f64], prob: f64) -> f64 {
     let position = (values.len() - 1) as f64 * prob;
     let lower = position.floor() as usize;
     let upper = (lower + 1).min(values.len() - 1);
@@ -348,27 +352,40 @@ fn fft(re: &mut [f64], im: &mut [f64], inverse: bool) {
 }
 
 /// Biased (`1/n`) autocovariance at every lag of one chain, via FFT.
+#[derive(Default)]
+struct FftWorkspace {
+    re: Vec<f64>,
+    im: Vec<f64>,
+}
+
+#[cfg(test)]
 fn autocovariance(chain: &[f64]) -> Vec<f64> {
+    autocovariance_with_workspace(chain, &mut FftWorkspace::default())
+}
+
+fn autocovariance_with_workspace(chain: &[f64], scratch: &mut FftWorkspace) -> Vec<f64> {
     let n = chain.len();
     let m = (2 * n).next_power_of_two();
     let mean = mean_slice(chain);
-    let mut re = vec![0.0; m];
-    let mut im = vec![0.0; m];
+    let FftWorkspace { re, im } = scratch;
+    re.resize(m, 0.0);
+    re.fill(0.0);
+    im.resize(m, 0.0);
+    im.fill(0.0);
     for (slot, value) in re.iter_mut().zip(chain) {
         *slot = value - mean;
     }
-    fft(&mut re, &mut im, false);
+    fft(re, im, false);
     for (r, i) in re.iter_mut().zip(im.iter_mut()) {
         *r = *r * *r + *i * *i;
         *i = 0.0;
     }
-    fft(&mut re, &mut im, true);
-    re.truncate(n);
+    fft(re, im, true);
     let scale = 1.0 / (m as f64 * n as f64);
-    for value in &mut re {
+    for value in &mut re[..n] {
         *value *= scale;
     }
-    re
+    re[..n].to_vec()
 }
 
 /// Geyer initial-monotone-sequence ESS of already-split chains (ArviZ `_ess`).
@@ -384,9 +401,13 @@ fn ess_raw(chains: &[&[f64]]) -> f64 {
     if hi - lo < 1e-15 {
         return size;
     }
-    let acov: Vec<Vec<f64>> = chains.iter().map(|chain| autocovariance(chain)).collect();
+    let mut scratch = FftWorkspace::default();
+    let acov: Vec<Vec<f64>> = chains
+        .iter()
+        .map(|chain| autocovariance_with_workspace(chain, &mut scratch))
+        .collect();
     let chain_means: Vec<f64> = chains.iter().map(|chain| mean_slice(chain)).collect();
-    let acov_mean = |lag: usize| mean_slice(&acov.iter().map(|row| row[lag]).collect::<Vec<_>>());
+    let acov_mean = |lag: usize| acov.iter().map(|row| row[lag]).sum::<f64>() / n_chain as f64;
     let n = n_draw as f64;
     let mean_var = acov_mean(0) * n / (n - 1.0);
     let mut var_plus = mean_var * (n - 1.0) / n;
@@ -459,6 +480,10 @@ pub fn ess_quantile(chains: &[&[f64]], prob: f64) -> f64 {
         return f64::NAN;
     }
     let threshold = quantile(chains, prob);
+    ess_threshold(chains, threshold)
+}
+
+fn ess_threshold(chains: &[&[f64]], threshold: f64) -> f64 {
     let indicator: Vec<Vec<f64>> = chains
         .iter()
         .map(|chain| {
@@ -504,14 +529,26 @@ pub struct ParameterSummary {
 impl ParameterSummary {
     /// Summarise one parameter from its chains.
     pub fn compute(name: impl Into<String>, chains: &[&[f64]]) -> Self {
+        let mut sorted = flatten(chains);
+        let quantiles = if sorted.is_empty() || sorted.iter().any(|v| v.is_nan()) {
+            [f64::NAN; 3]
+        } else {
+            sorted.sort_by(|a, b| a.partial_cmp(b).expect("no NaN after check"));
+            SUMMARY_QUANTILES.map(|prob| quantile_presorted(&sorted, prob))
+        };
+        let tail = if validate(chains, 1).is_some() {
+            ess_threshold(chains, quantiles[0]).min(ess_threshold(chains, quantiles[2]))
+        } else {
+            f64::NAN
+        };
         Self {
             name: name.into(),
             mean: mean(chains),
             sd: sd(chains),
             mcse_mean: mcse_mean(chains),
-            quantiles: SUMMARY_QUANTILES.map(|prob| quantile(chains, prob)),
+            quantiles,
             ess_bulk: ess_bulk(chains),
-            ess_tail: ess_tail(chains),
+            ess_tail: tail,
             rhat: rhat(chains),
         }
     }
@@ -682,6 +719,68 @@ pub struct ChainDisagreement {
 }
 
 impl ChainDisagreement {
+    /// Compute with one parameter's chain columns resident at a time.
+    /// The callback may be called twice per parameter and must return the same data.
+    pub fn compute_streaming(
+        parameters: usize,
+        chains: usize,
+        mut columns: impl FnMut(usize) -> Vec<Vec<f64>>,
+    ) -> Option<Self> {
+        if parameters == 0 || chains < 3 {
+            return None;
+        }
+        let mut max_rhat = f64::NAN;
+        for p in 0..parameters {
+            let values = columns(p);
+            if values.len() != chains {
+                return None;
+            }
+            max_rhat = max_rhat.max(rhat(&as_views(&values)));
+        }
+        if max_rhat.is_nan() || max_rhat <= RHAT_DISAGREEMENT_THRESHOLD {
+            return None;
+        }
+        let mut max_rhat_without = vec![f64::NAN; chains];
+        let mut pair_max_rhat = vec![vec![f64::NAN; chains]; chains];
+        for p in 0..parameters {
+            let values = columns(p);
+            if values.len() != chains {
+                return None;
+            }
+            let views = as_views(&values);
+            for (left_out, maximum) in max_rhat_without.iter_mut().enumerate() {
+                let subset: Vec<_> = views
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != left_out)
+                    .map(|(_, v)| *v)
+                    .collect();
+                *maximum = maximum.max(rhat(&subset));
+            }
+            for a in 0..chains {
+                for b in a + 1..chains {
+                    let value = pair_max_rhat[a][b].max(rhat(&[views[a], views[b]]));
+                    pair_max_rhat[a][b] = value;
+                    pair_max_rhat[b][a] = value;
+                }
+            }
+        }
+        let disagreeing = max_rhat_without
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| **value <= RHAT_DISAGREEMENT_THRESHOLD)
+            .map(|(i, _)| i)
+            .collect();
+        let agreement_clusters = agreement_clusters(&pair_max_rhat);
+        Some(Self {
+            max_rhat,
+            max_rhat_without,
+            chains: disagreeing,
+            pair_max_rhat,
+            agreement_clusters,
+        })
+    }
+
     /// Compute the diagnostic from per-parameter chain columns
     /// (`parameters[p][chain]`). `None` with fewer than three chains, with no
     /// parameter, or when the maximum R-hat is already below the threshold or
@@ -997,9 +1096,10 @@ impl ChainWarning {
         {
             return Vec::new();
         }
-        let columns = chain_columns(chains);
-        let views: Vec<Vec<&[f64]>> = columns.iter().map(|c| as_views(c)).collect();
-        Self::from_parts(chains, ChainDisagreement::compute(&views).as_ref())
+        let disagreement = ChainDisagreement::compute_streaming(dimension, chains.len(), |index| {
+            parameter_columns(chains, index)
+        });
+        Self::from_parts(chains, disagreement.as_ref())
     }
 
     fn from_parts(chains: &[ChainOutput], disagreement: Option<&ChainDisagreement>) -> Vec<Self> {
@@ -1289,21 +1389,16 @@ fn median_of(values: &[f64]) -> f64 {
     sorted[low] + (rank - low as f64) * (sorted[high] - sorted[low])
 }
 
-fn chain_columns(chains: &[ChainOutput]) -> Vec<Vec<Vec<f64>>> {
-    let dimension = chains.first().map_or(0, ChainOutput::dimension);
-    (0..dimension)
-        .map(|index| {
-            chains
+fn parameter_columns(chains: &[ChainOutput], index: usize) -> Vec<Vec<f64>> {
+    chains
+        .iter()
+        .map(|chain| {
+            chain
+                .samples()
                 .iter()
-                .map(|chain| {
-                    chain
-                        .samples()
-                        .iter()
-                        .skip(index)
-                        .step_by(dimension)
-                        .copied()
-                        .collect()
-                })
+                .skip(index)
+                .step_by(chain.dimension())
+                .copied()
                 .collect()
         })
         .collect()
@@ -1362,17 +1457,18 @@ impl Summary {
             Some(names) => names.to_vec(),
             None => default_parameter_names(dimension),
         };
-        let columns_by_parameter = chain_columns(chains);
-        let views: Vec<Vec<&[f64]>> = columns_by_parameter
-            .iter()
-            .map(|columns| as_views(columns))
-            .collect();
         let parameters = names
             .into_iter()
-            .zip(&views)
-            .map(|(name, columns)| ParameterSummary::compute(name, columns))
+            .enumerate()
+            .map(|(index, name)| {
+                let columns = parameter_columns(chains, index);
+                ParameterSummary::compute(name, &as_views(&columns))
+            })
             .collect();
-        let chain_disagreement = ChainDisagreement::compute(&views);
+        let chain_disagreement =
+            ChainDisagreement::compute_streaming(dimension, chains.len(), |index| {
+                parameter_columns(chains, index)
+            });
         let chain_warnings = ChainWarning::from_parts(chains, chain_disagreement.as_ref());
         Ok(Self {
             chains: chains.len(),
@@ -1824,5 +1920,41 @@ mod tests {
         }
         assert_eq!((cells, splits, split_reported), (96, 5, 5));
         assert_eq!((passing, passing_fired), (43, 0));
+    }
+}
+
+#[cfg(test)]
+mod performance_parity_tests {
+    use super::*;
+    #[test]
+    fn streaming_disagreement_and_summary_match_public_estimators() {
+        for separated in [false, true] {
+            let columns: Vec<Vec<Vec<f64>>> = (0..3)
+                .map(|p| {
+                    (0..4)
+                        .map(|c| {
+                            (0..100)
+                                .map(|i| {
+                                    ((i * 17 + c * 7 + p * 13) as f64).sin()
+                                        + if separated && c == 3 { 4.0 } else { 0.0 }
+                                })
+                                .collect()
+                        })
+                        .collect()
+                })
+                .collect();
+            let views: Vec<_> = columns.iter().map(|v| as_views(v)).collect();
+            let old = ChainDisagreement::compute(&views);
+            let new = ChainDisagreement::compute_streaming(3, 4, |p| columns[p].clone());
+            assert_eq!(format!("{old:?}"), format!("{new:?}"));
+            for c in views {
+                let summary = ParameterSummary::compute("x", &c);
+                assert_eq!(
+                    summary.quantiles,
+                    SUMMARY_QUANTILES.map(|p| quantile(&c, p))
+                );
+                assert_eq!(summary.ess_tail.to_bits(), ess_tail(&c).to_bits());
+            }
+        }
     }
 }

@@ -1,0 +1,33 @@
+   Compiling owalnuts v0.3.0 (/mnt/c/dev/owalnuts)
+warning: type `StateHandle` is more private than the item `Endpoint::state`
+   --> src/kernel.rs:519:5
+    |
+519 |     pub state: StateHandle,
+    |     ^^^^^^^^^^^^^^^^^^^^^^ field `Endpoint::state` is reachable at visibility `pub(crate)`
+    |
+note: but type `StateHandle` is only usable at visibility `pub(self)`
+   --> src/kernel.rs:491:1
+    |
+491 | struct StateHandle { state: Option<Rc<State>>, slot: Option<usize> }
+    | ^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `StateHandle` is more private than the item `Span::selected`
+   --> src/kernel.rs:538:5
+    |
+538 |     pub selected: StateHandle,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^ field `Span::selected` is reachable at visibility `pub(crate)`
+    |
+note: but type `StateHandle` is only usable at visibility `pub(self)`
+   --> src/kernel.rs:491:1
+    |
+491 | struct StateHandle { state: Option<Rc<State>>, slot: Option<usize> }
+    | ^^^^^^^^^^^^^^^^^^
+
+warning: `owalnuts` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 34.69s
+     Running `target/release/examples/kernel_bench --repeat 5`
+workload          wall ms      calls  target ns  overhead ns   alloc/cl   bytes/cl  fingerprint
+funnel-10d           29.7     182348        5.9        157.2       0.11       16.1  81a7dcdcd7371483
+gaussian-100d        40.4      63976       28.4        603.5       0.31      272.5  135d354514a081af
+eight-schools        37.3     111141       22.7        313.2       0.98     2570.4  c86b99d7fd11e30d

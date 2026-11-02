@@ -32,7 +32,7 @@ def grid(data,out):
         q=np.stack(np.meshgrid(a,d,indexing='ij'),axis=-1).reshape(-1,2)
         lw=(np.log(weights)[:,None]+np.log(weights)[None,:]+np.log(6)).ravel()
         if data['linear']:trajectory=linear_prediction(q,alltimes,data['theta'])
-        else:trajectory=np.asarray([b.predict(z,alltimes) for z in q])
+        else:trajectory=b.predict_batch(q,alltimes)
         pred=trajectory[:,6:];lp=-.5*np.sum(((trajectory[:,:6]-data['observed'])/.05)**2,axis=1)-.5*np.sum(((q-np.log([.2,2.]))/[.8,.5])**2,axis=1)
         lw=lw+lp;r=moment(q,pred,lw);r.update(order=n,log_normalizer=float(logsumexp(lw)));levels.append(r)
         print(json.dumps(dict(event='grid',order=n)),flush=True)
@@ -60,7 +60,7 @@ def main(phase,case,config,rep,destination):
             nodes,weights=roots_hermitenorm(order)
             z=np.stack(np.meshgrid(nodes,nodes,indexing='ij'),axis=-1).reshape(-1,2)@np.array(prep['L']).T+prep['mode']
             q=physical(z);lw=(np.log(weights)[:,None]+np.log(weights)[None,:]-np.log(2*np.pi)).ravel()
-            pred=linear_prediction(q,data['future_times'],data['theta']) if data['linear'] else np.asarray([b.predict(v) for v in q])
+            pred=linear_prediction(q,data['future_times'],data['theta']) if data['linear'] else b.predict_batch(q)
             row=moment(q,pred,lw);row['order']=order;levels.append(row)
         b.close();a,c=levels;sd=np.array(c['sd'])
         differences=dict(mean_sd=float(max(abs(np.array(c['mean'])-a['mean'])/sd)),sd_relative=float(max(abs(sd-a['sd'])/sd)),angle_mean=float(max(abs(np.array(c['mean'][4:])-a['mean'][4:]))),probability=abs(c['probability']-a['probability']))
@@ -76,7 +76,7 @@ def main(phase,case,config,rep,destination):
             seed=953100000+100*case+list(CONFIGS).index(config) if phase=='calibrate' else 953200000+100*case+rep
             draws,warmup=(400,300) if phase=='calibrate' else (1000,500)
             z,info=fit(data,prep,config,seed,draws,warmup)
-        q=physical(z);b=Backend(data);pred=np.asarray([b.predict(v) for v in q.reshape(-1,2)]).reshape(*q.shape[:2],5);b.close()
+        q=physical(z);b=Backend(data);pred=b.predict_batch(q.reshape(-1,2)).reshape(*q.shape[:2],5);b.close()
         summary=diagnose(q,pred,info)
         np.savez_compressed(out/'draws.npz',z=z,q=q,pred=pred)
         result.update(seed=seed,**info,summary=summary,postprocess_seconds=time.monotonic()-before-info['seconds'],shared_preparation_seconds=prep['seconds'])

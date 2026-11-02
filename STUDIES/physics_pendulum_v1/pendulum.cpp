@@ -60,11 +60,25 @@ int64_t nuts(uint64_t n,const double*x,double*g,double*v,void*p){return evaluate
 int64_t expand(uint64_t n,uint64_t m,const double*q,double*out,void*){if(n!=m)return -1;std::copy(q,q+n,out);return 0;}
 int predict(void*p,const double*q,int n,const double*t,double*out){
   auto*a=static_cast<Context*>(p);double c=std::exp(q[0]),k=std::exp(q[1]),now=0;
-  State s={a->theta,0,0,0,0,0};
+  std::array<double,2> s={a->theta,0};
+  auto f=[&](const std::array<double,2>& v) {
+    return std::array<double,2>{v[1],-c*v[1]-k*(a->linear?v[0]:std::sin(v[0]))};
+  };
   for(int i=0;i<n;i++){
     int steps=std::max(1,int(std::ceil((t[i]-now)/a->step)));double h=(t[i]-now)/steps;
-    for(int j=0;j<steps;j++)advance(s,h,c,k,a->linear);now=t[i];out[i]=s[0];
-    if(!std::isfinite(out[i]))return 1;
+    for(int j=0;j<steps;j++) {
+      auto b=f(s);std::array<double,2> v;
+      for(int z=0;z<2;z++)v[z]=s[z]+h*.5*b[z];auto d=f(v);
+      for(int z=0;z<2;z++)v[z]=s[z]+h*.5*d[z];auto e=f(v);
+      for(int z=0;z<2;z++)v[z]=s[z]+h*e[z];auto g=f(v);
+      for(int z=0;z<2;z++)s[z]+=h*(b[z]+2*d[z]+2*e[z]+g[z])/6;
+    }
+    now=t[i];out[i]=s[0];if(!std::isfinite(out[i]))return 1;
   }return 0;
+}
+int predict_batch(void*p,int rows,const double*q,int n,const double*t,double*out){
+  if(rows<0||n<0)return -1;
+  for(int i=0;i<rows;i++)if(predict(p,q+static_cast<size_t>(i)*2,n,t,out+static_cast<size_t>(i)*n))return 1;
+  return 0;
 }
 }

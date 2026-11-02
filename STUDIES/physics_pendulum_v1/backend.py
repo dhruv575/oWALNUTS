@@ -29,6 +29,7 @@ class Backend:
         self.lib.walnuts.argtypes=[ctypes.c_uint64,DP,DP,ctypes.c_void_p];self.lib.walnuts.restype=ctypes.c_double
         self.lib.expand.argtypes=[ctypes.c_uint64,ctypes.c_uint64,DP,DP,ctypes.c_void_p];self.lib.expand.restype=ctypes.c_int64
         self.lib.predict.argtypes=[ctypes.c_void_p,DP,ctypes.c_int,DP,DP];self.lib.predict.restype=ctypes.c_int
+        self.lib.predict_batch.argtypes=[ctypes.c_void_p,ctypes.c_int,DP,ctypes.c_int,DP,DP];self.lib.predict_batch.restype=ctypes.c_int
         self.lib.reset.argtypes=[ctypes.c_void_p];self.lib.counters.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_uint64)]
         t=np.ascontiguousarray(data['times'],dtype=float);y=np.ascontiguousarray(data['observed'],dtype=float)
         self.ptr=self.lib.create(data['theta'],data['sigma'],step,int(data.get('linear',False)),len(t),t.ctypes.data_as(DP),y.ctypes.data_as(DP),self.center.ctypes.data_as(DP),self.A.ctypes.data_as(DP))
@@ -44,6 +45,14 @@ class Backend:
     def predict(self,q,t=None):
         q=np.ascontiguousarray(q,dtype=float);t=np.ascontiguousarray(self.data['future_times'] if t is None else t,dtype=float);out=np.empty(len(t))
         if self.lib.predict(self.ptr,q.ctypes.data_as(DP),len(t),t.ctypes.data_as(DP),out.ctypes.data_as(DP)):raise ValueError('Prediction failure')
+        return out
+    def predict_batch(self,q,t=None):
+        q=np.ascontiguousarray(q,dtype=float)
+        if q.ndim!=2 or q.shape[1]!=2:raise ValueError('Expected (draws, 2) parameters')
+        t=np.ascontiguousarray(self.data['future_times'] if t is None else t,dtype=float)
+        if t.ndim!=1 or len(q)>2147483647 or len(t)>2147483647:raise ValueError('Invalid batch shape')
+        out=np.empty((len(q),len(t)))
+        if self.lib.predict_batch(self.ptr,len(q),q.ctypes.data_as(DP),len(t),t.ctypes.data_as(DP),out.ctypes.data_as(DP)):raise ValueError('Prediction failure')
         return out
     def reset(self):self.lib.reset(self.ptr)
     def counts(self):

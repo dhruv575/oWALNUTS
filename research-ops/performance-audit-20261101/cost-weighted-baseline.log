@@ -1,0 +1,47 @@
+   Compiling libc v0.2.189
+   Compiling getrandom v0.3.4
+   Compiling crossbeam-utils v0.8.22
+   Compiling zerocopy v0.8.56
+   Compiling cfg-if v1.0.4
+   Compiling crossbeam-epoch v0.9.20
+   Compiling libm v0.2.16
+   Compiling crossbeam-deque v0.8.7
+   Compiling autocfg v1.5.1
+   Compiling num-traits v0.2.19
+   Compiling rand_core v0.9.5
+   Compiling rayon-core v1.13.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling zmij v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling rand v0.9.5
+   Compiling serde_json v1.0.151
+   Compiling either v1.18.0
+   Compiling rand_distr v0.5.1
+   Compiling rayon v1.12.0
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling owalnuts v0.3.0 (/home/dhruv/.cache/owalnuts/performance-baseline-native)
+    Finished `test` profile [unoptimized] target(s) in 11.12s
+     Running tests/cost_weighted_acceptance.rs (/home/dhruv/.cache/owalnuts/performance-baseline-native/target/debug/deps/cost_weighted_acceptance-f0b0861954b54ae8)
+
+running 3 tests
+test off_by_default ... ok
+test single_level_is_bit_identical_to_the_default_statistic ... ok
+test refined_leaves_shrink_the_adapted_step ... FAILED
+
+failures:
+
+---- refined_leaves_shrink_the_adapted_step stdout ----
+
+thread 'refined_leaves_shrink_the_adapted_step' panicked at tests/cost_weighted_acceptance.rs:149:5:
+default [0.08396665748664595, 0.3157963363806775, 0.2512009345795449, 0.1960463689147533] vs cost-weighted [0.20574003527488172, 0.11215626878213006, 0.06425502410147302, 0.19919346161837034]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    refined_leaves_shrink_the_adapted_step
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+
+error: test failed, to rerun pass `--test cost_weighted_acceptance`
