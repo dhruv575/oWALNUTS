@@ -14578,26 +14578,26 @@ fn sample_chains_auto_selected<'a, T: Target>(
                 .ok_or_else(|| Error::new(ErrorKind::Internal, "chain never started"))?;
             hessian_auto_select_decision(&records, &auto, auto.select_window, select_end - 1)
         };
-        if !decision.chose_dense {
-            if let Some(window) = auto.reconsider_window {
-                for slot in &mut slots {
-                    let run = slot.run.as_mut().expect("started");
-                    let later = run
-                        .auto_fit
-                        .as_mut()
-                        .and_then(|fit| fit.reconsider.take())
-                        .ok_or_else(|| Error::new(ErrorKind::Internal, "later fit missing"))?;
-                    run.auto_fit = Some(*later);
-                }
-                let end = schedule.windows[window].end;
-                run_segment(&mut slots, end)?;
-                let records = slots
-                    .iter()
-                    .map(|slot| slot.run.as_ref().and_then(|run| run.auto_fit.as_ref()))
-                    .collect::<Option<Vec<_>>>()
-                    .ok_or_else(|| Error::new(ErrorKind::Internal, "later record missing"))?;
-                decision = hessian_auto_select_decision(&records, &auto, window, end - 1);
+        if !decision.chose_dense
+            && let Some(window) = auto.reconsider_window
+        {
+            for slot in &mut slots {
+                let run = slot.run.as_mut().expect("started");
+                let later = run
+                    .auto_fit
+                    .as_mut()
+                    .and_then(|fit| fit.reconsider.take())
+                    .ok_or_else(|| Error::new(ErrorKind::Internal, "later fit missing"))?;
+                run.auto_fit = Some(*later);
             }
+            let end = schedule.windows[window].end;
+            run_segment(&mut slots, end)?;
+            let records = slots
+                .iter()
+                .map(|slot| slot.run.as_ref().and_then(|run| run.auto_fit.as_ref()))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| Error::new(ErrorKind::Internal, "later record missing"))?;
+            decision = hessian_auto_select_decision(&records, &auto, window, end - 1);
         }
         for slot in &mut slots {
             let run = slot.run.as_mut().expect("started");

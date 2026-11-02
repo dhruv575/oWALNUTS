@@ -557,11 +557,11 @@ impl std::ops::Deref for StateHandle {
 }
 impl Drop for StateHandle {
     fn drop(&mut self) {
-        if let (Some(slot), Some(state)) = (self.slot, self.state.as_ref()) {
-            if Rc::strong_count(state) == 2 {
-                let _ = STATE_RING
-                    .try_with(|ring| ring.borrow_mut().free.push(slot.get() as usize - 1));
-            }
+        if let (Some(slot), Some(state)) = (self.slot, self.state.as_ref())
+            && Rc::strong_count(state) == 2
+        {
+            let _ =
+                STATE_RING.try_with(|ring| ring.borrow_mut().free.push(slot.get() as usize - 1));
         }
     }
 }

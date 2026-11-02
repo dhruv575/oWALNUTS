@@ -7,6 +7,18 @@ architecture and operating system (see the `walnutpie` module documentation).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-02
+
+### Release summary
+
+- Warm continuation, reusable warm sessions and streaming functionals.
+- Trapped-chain warmup safeguard, sampler storage and diagnostic optimizations.
+- Corrected the BridgeStan lockfile and platform-dependent adaptation test.
+- Research closeout: no broad speed advantage over well-tuned NUTS was established.
+  Fresh hybrid controls favor WAL on one concentration regime and NUTS on another;
+  see `STUDIES/funnel_application_v1/LATEST-BUILD-RESULTS.md`.
+
+
 ### Added
 
 - Streaming functionals on the warm path (WP95): `sampler::Functional`
