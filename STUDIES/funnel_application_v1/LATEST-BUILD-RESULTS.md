@@ -93,3 +93,24 @@ independent validation of a selection rule. Neither sampler wins universally.
 
 The evidence supports modest, geometry-dependent benefits. It does not support
 a 10x claim or the assumption that conservative NUTS must be much slower.
+
+## Final fresh-seed replication and research closeout
+
+All32 predeclared hybrid replication fits completed. Both engines passed all
+eight seeds on each case, with zero divergences. At8000 draws, median times:
+
+| Case | NUTS sampling / worker | Rebuilt WAL sampling / worker |
+|---|---|---|
+| Concentration10x | .796s / 3.351s | .628s / 3.176s |
+| Concentration100x | .795s / 3.342s | 1.405s / 3.956s |
+
+This confirms the direction of the exploratory comparison: WAL about1.27x
+faster in sampling at10x, NUTS about1.77x faster at100x. Worker-time gains are
+smaller. This is fresh-seed confirmation on the same synthetic datasets, not
+new-data validation. All206 evidence files were locally SHA256-verified and
+all32 raw summaries independently recomputed (maximum mean discrepancy
+2.22e-16). See hybrid-replication01 and its analysis/audit JSON files.
+
+Dhruv ended the research campaign after this replication. No further experiments
+are queued. Preserve this negative broad-performance result and the narrower
+positive cases without claiming unique practical value or AMM success.

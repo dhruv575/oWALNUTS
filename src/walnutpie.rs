@@ -14869,6 +14869,49 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize};
     use std::thread;
 
+    #[test]
+    fn cost_weighted_acceptance_uses_each_leaf_cost() {
+        use crate::kernel::TransitionTraceEvent;
+        let event = |name, evaluations, value| TransitionTraceEvent {
+            event: name,
+            depth: Some(0),
+            direction: None,
+            stop: None,
+            target_evaluations: evaluations,
+            direction_draws: 0,
+            uniform_draws: 0,
+            flag: None,
+            uniform_draw: None,
+            update_log_probability: None,
+            forward_dot: None,
+            backward_dot: None,
+            adaptation_value: value,
+            accepted_trajectory_adaptation_value: None,
+            trajectory_acceptance_value: None,
+        };
+        // Ignore the starting cumulative count and non-leaf adaptation values.
+        let trace = [
+            event("enter", 10, Some(0.0)),
+            event("leaf", 11, Some(0.8)),
+            event("enter", 11, None),
+            event("leaf", 14, Some(0.2)),
+        ];
+        let expected = (0.8 + 3.0 * 0.2) / 4.0;
+        assert_eq!(cost_weighted_coarse_mean(&trace), Some(expected));
+        assert!(expected < (0.8 + 0.2) / 2.0);
+        let uniform = [
+            event("enter", 10, None),
+            event("leaf", 12, Some(0.8)),
+            event("enter", 12, None),
+            event("leaf", 14, Some(0.2)),
+        ];
+        assert_eq!(
+            cost_weighted_coarse_mean(&uniform),
+            acceptance_summary([0.8, 0.2].into_iter()).mean
+        );
+        assert_eq!(cost_weighted_coarse_mean(&[]), None);
+    }
+
     struct TlsDropProbe(Arc<AtomicUsize>);
 
     impl Drop for TlsDropProbe {

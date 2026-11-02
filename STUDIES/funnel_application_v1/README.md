@@ -107,3 +107,8 @@ The rebuild gave only a median1.8% sampling speedup over the installed binary.
 A hybrid rewrite gave both samplers reliable concentrated-case results, with
 WAL about1.4x faster at10x concentration but NUTS about1.8x faster at100x.
 There is no demonstrated broad or order-of-magnitude advantage.
+
+The final fresh-seed hybrid replication also finished: both engines passed8/8
+per case. WAL was1.27x faster in sampling at10x concentration, while NUTS was
+1.77x faster at100x. The research campaign is now closed at Dhruv's request;
+no new experiments are queued. Full results and archived evidence are linked above.

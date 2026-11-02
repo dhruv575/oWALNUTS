@@ -1,5 +1,13 @@
 # AMM research operations
 
+Current instruction (2026-11-01 closeout): Dhruv has ended the research campaign.
+Finish and archive the already-running replication, preserve negative results,
+and stop the existing AWS research instance. Do not start new experiments,
+restart the instance, or maintain a research queue unless Dhruv explicitly
+reopens the work. This overrides the historical keep-running instructions below.
+The latest build is to be released to the destination Dhruv confirms; do not
+infer package publication from the historical Git-push authorization.
+
 Dhruv's standing preference (2026-10-27): keep the existing AWS research instance
 productive across experiments. Do not stop it merely because a study has finished
 or its evidence has been archived. Maintain a useful research queue and continue
