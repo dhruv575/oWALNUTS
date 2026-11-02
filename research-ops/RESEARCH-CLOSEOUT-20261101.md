@@ -20,13 +20,23 @@ Existing root-disk evidence must remain on EBS; stop, do not terminate/delete.
 AWS target: account712710405275, us-east-2, i-05c712c79c74ae7f8,
 18.223.111.36. CLI profile owalnuts is expired. The instance role is an archive
 role and cannot describe EC2 shutdown behavior. Browser host is unavailable.
-At this checkpoint shutdown is pending AWS login confirmation, not completed.
-Do not claim a disconnected SSH session alone verifies the EC2 stopped state.
+AWS login was explicitly approved and completed. EC2 StopInstances was issued,
+the instance-stopped waiter completed, and DescribeInstances confirmed stopped
+at2026-11-02T08:17:16Z. See AWS-SHUTDOWN-20261102.json. No instance termination,
+EBS deletion or new experiments occurred.
 
-Release destination clarification is pending (PyPI versus GitHub-only).
-Existing v0.3.0 is already published; do not overwrite or retag it. A v* tag
-automatically triggers the trusted PyPI publishing workflow after its checks.
-No release tag or package publication has been created during closeout.
+Dhruv explicitly authorized GitHub and PyPI publication. Version0.4.0 has a
+draft release and a tag; publication remains gated by tests. Its first package
+attempt failed a platform-dependent warning-test assertion and published
+nothing. The failed attempt and original tag object are recorded in
+RELEASE-v0.4.0-ATTEMPTS.json. Existing published v0.3.0 remains untouched.
+The release workflow now also requires successful core CI for the exact commit.
+
+All eight archives were uploaded to the private S3 research bucket using the
+refreshed local profile, downloaded by exact VersionId, and SHA256-verified.
+See FUNNEL-CLOSEOUT-S3-VERIFIED.json. An earlier attempt using the restricted
+instance role was denied; no IAM permissions were broadened. Local originals,
+restored copies and the existing EBS evidence are retained.
 
 Release preparation discovered existing CI failures: the BridgeStan integration
 lockfile omitted the root crate's smallvec dependency, and a stochastic

@@ -33,3 +33,8 @@ Build and test dependencies were isolated, existing environments preserved.
 No evidence deletion, new instances, trading or deployment. Raw draws, source
 archive and both extensions are retained locally but excluded from Git.
 Unrelated options-flow endpoint_exact_controls.py edit remains untouched.
+
+Closeout update: the replication completed all32 fits and is archived locally
+and in S3 with verified exact-version restoration. Both engines passed8/8 per
+case; no broad advantage emerged. Dhruv ended the campaign. EC2 is verified
+stopped; no queue remains. See RESEARCH-CLOSEOUT-20261101.md.

@@ -5,8 +5,8 @@ Finish and archive the already-running replication, preserve negative results,
 and stop the existing AWS research instance. Do not start new experiments,
 restart the instance, or maintain a research queue unless Dhruv explicitly
 reopens the work. This overrides the historical keep-running instructions below.
-The latest build is to be released to the destination Dhruv confirms; do not
-infer package publication from the historical Git-push authorization.
+Dhruv explicitly authorized GitHub and PyPI publication of the latest build and
+AWS login during closeout. Preserve evidence; do not reopen research afterward.
 
 Dhruv's standing preference (2026-10-27): keep the existing AWS research instance
 productive across experiments. Do not stop it merely because a study has finished

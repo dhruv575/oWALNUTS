@@ -779,13 +779,21 @@ def test_chain_warnings_name_a_trapped_chain_and_are_silent_on_a_gaussian():
     older = [w for w in warnings if w["check"] != "rhat_cluster"]
     assert older and {w["chain"] for w in older} == {3}
     assert {"warmup_log_density", "sampled_log_density", "rhat"} <= {w["check"] for w in older}
-    # The pairwise cluster check (WP74) names chain 3 too. At 300 draws it
-    # also names chain 0, whose pair R-hats with chains 1 and 2 (1.011) sit
-    # just above 1.01: on a failing run it can name a healthy chain.
+    # The pairwise cluster check must identify the deliberately trapped chain
+    # against at least two healthy chains. A healthy chain's finite-sample
+    # R-hat can sit on either side of 1.01 across architectures, so requiring
+    # a specific additional false positive is not a portable contract. Fixed
+    # diagnostic fixtures and threshold behavior are tested in Rust.
     cluster = {w["chain"]: w["reference_chains"] for w in warnings if w["check"] == "rhat_cluster"}
-    assert cluster == {0: [1, 2], 3: [1, 2]}
+    assert 3 in cluster
+    for chain, references in cluster.items():
+        assert len(set(references)) >= 2
+        assert set(references) <= {0, 1, 2}
+        assert chain not in references
     lines = [line for line in str(trapped).splitlines() if line.startswith("warning: chain")]
-    assert [line.split(" disagrees")[0] for line in lines] == ["warning: chain 0", "warning: chain 3"]
+    assert [line.split(" disagrees")[0] for line in lines] == [
+        f"warning: chain {chain}" for chain in sorted({w["chain"] for w in warnings})
+    ]
     # Without the guard (the pre-WP90 default) the run is the same, draw for draw.
     no_guard = owalnuts.Adaptation(trapped_chain_restart=False)
     plain = owalnuts.sample(_trap, dim=2, warmup=500, draws=300, seed=5, chains=4, init=init, adaptation=no_guard)

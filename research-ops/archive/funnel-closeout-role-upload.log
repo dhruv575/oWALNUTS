@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/dev/shm/owalnuts-closeout/funnel_closeout.py", line 53, in <module>
+    main()
+  File "/dev/shm/owalnuts-closeout/funnel_closeout.py", line 37, in main
+    response = client.put_object(Bucket=BUCKET, Key=key, Body=stream,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/dev/shm/owalnuts-closeout/sdk/botocore/client.py", line 606, in _api_call
+    return self._make_api_call(operation_name, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/dev/shm/owalnuts-closeout/sdk/botocore/context.py", line 123, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/dev/shm/owalnuts-closeout/sdk/botocore/client.py", line 1094, in _make_api_call
+    raise error_class(parsed_response, operation_name)
+botocore.errorfactory.AccessDenied: An error occurred (AccessDenied) when calling the PutObject operation: User: arn:aws:sts::712710405275:assumed-role/owalnuts-confirmation-archive/i-05c712c79c74ae7f8 is not authorized to perform: s3:PutObject on resource: "arn:aws:s3:::owalnuts-research-712710405275-us-east-2/evidence/sha256/0f16f55bd4e1f120b6aa170e06e496e87f2770e3f2229ae533ecb7cd2473082e/funnel-closeout-20261102.tar.gz" because no identity-based policy allows the s3:PutObject action
