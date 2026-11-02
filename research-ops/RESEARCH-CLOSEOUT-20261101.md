@@ -18,19 +18,23 @@ FUNNEL-CLOSEOUT-INVENTORY.json records the inventory. There is no ubuntu crontab
 Existing root-disk evidence must remain on EBS; stop, do not terminate/delete.
 
 AWS target: account712710405275, us-east-2, i-05c712c79c74ae7f8,
-18.223.111.36. CLI profile owalnuts is expired. The instance role is an archive
-role and cannot describe EC2 shutdown behavior. Browser host is unavailable.
+18.223.111.36. The expired CLI profile was refreshed through the approved
+AWS login. The restricted instance archive role was not broadened.
 AWS login was explicitly approved and completed. EC2 StopInstances was issued,
 the instance-stopped waiter completed, and DescribeInstances confirmed stopped
 at2026-11-02T08:17:16Z. See AWS-SHUTDOWN-20261102.json. No instance termination,
 EBS deletion or new experiments occurred.
 
-Dhruv explicitly authorized GitHub and PyPI publication. Version0.4.0 has a
-draft release and a tag; publication remains gated by tests. Its first package
-attempt failed a platform-dependent warning-test assertion and published
-nothing. The failed attempt and original tag object are recorded in
+Dhruv explicitly authorized GitHub and PyPI publication. Version 0.4.0 is now
+published on both services from commit d83226da95c6b935cd26c4c787a91eecde9c3ee8.
+All nine core CI jobs, five platform wheels, source-distribution installation,
+and full optional-backend suites on Python 3.10 and 3.13 passed. All six PyPI
+files match the tested CI artifacts by SHA256, and a fresh PyPI installation
+passed a sampling smoke test. GitHub carries the same six release files.
+See RELEASE-v0.4.0-PUBLISHED.json and RELEASE-v0.4.0-PYPI-SMOKE.json.
+The two unsuccessful prepublication attempts are preserved in
 RELEASE-v0.4.0-ATTEMPTS.json. Existing published v0.3.0 remains untouched.
-The release workflow now also requires successful core CI for the exact commit.
+The release workflow requires successful core CI for the exact commit.
 
 All eight archives were uploaded to the private S3 research bucket using the
 refreshed local profile, downloaded by exact VersionId, and SHA256-verified.
@@ -47,5 +51,5 @@ adaptation, finite positive steps, equal-cost parity and opt-in defaults.
 Production sampler behavior and research accuracy gates are unchanged.
 The targeted checks, full all-target/all-feature Rust suite, formatting,
 library Clippy and locked BridgeStan check pass on Windows GNU1.88. Cross-platform
-CI and package checks are required before publication. Preserve the unrelated
-options-flow local edit.
+CI and package checks subsequently passed before publication. The unrelated
+options-flow local edit is preserved.

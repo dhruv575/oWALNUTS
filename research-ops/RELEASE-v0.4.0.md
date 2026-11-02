@@ -12,13 +12,13 @@ trapped-chain warmup safeguard.
 Performance remains workload-dependent. The completed hierarchical-binomial
 study did not establish broad superiority over carefully tuned NUTS: one hybrid
 case favored WALNUTS and another favored NUTS. The rebuilt sampler was only
-slightly faster than the previously installed binary in that study. No10x,
+slightly faster than the previously installed binary in that study. No 10x,
 unique-application, profitability or general-purpose performance claim is made.
 
 See CHANGELOG.md for API details and
 STUDIES/funnel_application_v1/LATEST-BUILD-RESULTS.md for protocols, baselines,
 negative results and the final fresh-seed replication.
 
-Install with `pip install --upgrade owalnuts==0.4.0` after publication.
-Python3.10+ wheels and a source distribution are built and tested by the release
+Install with `pip install --upgrade owalnuts==0.4.0`.
+Python 3.10+ wheels and a source distribution are built and tested by the release
 workflow. Rust package publication is not part of this release operation.
